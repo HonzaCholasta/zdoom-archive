@@ -1,6 +1,16 @@
+Patch File for DeHackEd v3.0
+
+# Note: Use the pound sign ('#') to start comment lines.
+
+Doom version = 19
+Patch format = 6
+
+# Don't even try editing this in DeHackEd, since it's mostly
+# extensions that DeHackEd knows nothing about.
+
 [CODEPTR]
 Frame 77 = A_FireRailgun
-Frame 78 = A_RailWait
+Frame 78 = NULL
 
 # S_PLASMA1
 Frame 77
@@ -13,3 +23,6 @@ Frame 78
 Sprite subnumber = 1
 Duration = 50
 Next frame = 74
+
+Weapon 5 (Plasma Gun, now a rail gun)
+Decal = RailScorch

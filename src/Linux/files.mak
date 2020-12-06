@@ -21,7 +21,7 @@ HW_X_LDFLAGS = -L$(X_libs) -lX11 -lXext -lXxf86dga -lXxf86vm
 
 # libraries to link with
 #LIBS = -lm -ldl -lpthread midas/lib/linux/gcretail/libmidas.a
-LIBS = -lm -lfmod-3.4 -lz -lSDL -lpthread
+LIBS = -lm -lfmod-3.33 -lz -lSDL -lpthread
 
 SYSINT = $(INTDIR)/$(SYSTEM)
 

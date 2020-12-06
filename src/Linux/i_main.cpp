@@ -111,7 +111,6 @@ int main (int argc, char **argv)
 		*/
 
 		atexit (call_terms);
-		Z_Init();					// 1/18/98 killough: start up memory stuff first
 		atterm (I_Quit);
 
 		if (realpath (argv[0], progdir) == NULL)

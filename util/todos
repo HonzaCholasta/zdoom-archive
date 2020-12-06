@@ -1,29 +1,47 @@
 #!/bin/sh
 
-mkdir $1
-mkdir $1/docs
-mkdir $1/src
-mkdir $1/src/g_doom
-mkdir $1/src/g_heretic
-mkdir $1/src/g_hexen
-mkdir $1/src/g_raven
-mkdir $1/src/g_shared
-mkdir $1/src/linux
-mkdir $1/src/win32
-mkdir $1/src/fmodsound
+mkdir -p $1
+mkdir -p $1/docs
+mkdir -p $1/src
+mkdir -p $1/src/g_doom
+mkdir -p $1/src/g_heretic
+mkdir -p $1/src/g_hexen
+mkdir -p $1/src/g_raven
+mkdir -p $1/src/g_shared
+mkdir -p $1/src/linux
+mkdir -p $1/src/win32
+mkdir -p $1/src/fmodsound
 
-util/addremcr a README $1/docs/zdoom.txt
-for i in INSTALL Makefile; do util/addremcr a $i $1/$i; done
-util/addremcr a docs/Classes $1/docs/classes.txt
-util/addremcr a docs/DoomLicense $1/docs/doomlic.txt
-util/addremcr a docs/colors $1/docs/colors.txt
-util/addremcr a docs/commands $1/docs/commands.txt
-util/addremcr a docs/history $1/docs/history.txt
-util/addremcr a docs/rh-log $1/docs/rh-log.txt
-util/addremcr a docs/notes $1/docs/notes.txt
-for i in docs/README.*; do util/addremcr a $i $1/$i; done
+function yescr()
+{
+	if [ $2 -nt $1 -o ! -f $1 ]; then
+		util/addremcr a $2 $1
+		touch -r $2 $1
+echo $2 $1
+	fi
+}
 
-for i in src/*.cpp src/*.h src/*.ds? src/*.nas src/g_doom/* src/g_heretic/* src/g_hexen/* src/g_raven/* src/g_shared/* src/fmodsound/* src/linux/*; do util/addremcr a $i $1/$i; done
-cp src/win32/* $1/src/win32
-rm $1/src/linux/debug
-rm $1/src/linux/release
+yescr $1/docs/zdoom.txt README
+yescr $1/INSTALL INSTALL
+yescr $1/Makefile Makefile
+yescr $1/docs/classes.txt docs/Classes
+yescr $1/docs/doomlic.txt docs/DoomLicense
+yescr $1/docs/colors.txt docs/colors.txt
+yescr $1/docs/commands.txt docs/commands.txt
+yescr $1/docs/history.txt docs/history.txt
+yescr $1/docs/rh-log.txt docs/rh-log.txt
+yescr $1/docs/notes.txt docs/notes.txt
+yescr $1/docs/README.Carmack docs/README.Carmack
+yescr $1/docs/README.asm docs/README.asm
+yescr $1/docs/README.gl docs/README.gl
+
+for i in src/*.cpp src/*.h src/*.nas src/g_doom/* src/g_heretic/* src/g_hexen/* src/g_raven/* src/g_shared/* src/fmodsound/* src/Linux/*; do
+	yescr $1/$i $i
+done
+
+for i in src/win32/* src/*.ds?; do
+	if [ $i -ot $mydir/$i -o ! -f $i ]; then
+		cp $i $1/$i
+		touch -r $i $1/$i
+	fi
+done
