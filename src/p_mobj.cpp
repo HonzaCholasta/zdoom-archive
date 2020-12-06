@@ -82,7 +82,6 @@ static FRandom pr_bounce ("Bounce");
 static FRandom pr_reflect ("Reflect");
 static FRandom pr_nightmarerespawn ("NightmareRespawn");
 static FRandom pr_botspawnmobj ("BotSpawnActor");
-static FRandom pr_spawnmobj ("SpawnActor");
 static FRandom pr_spawnmapthing ("SpawnMapThing");
 static FRandom pr_spawnpuff ("SpawnPuff");
 static FRandom pr_spawnblood ("SpawnBlood");
@@ -95,6 +94,8 @@ static FRandom pr_slam ("SkullSlam");
 static FRandom pr_multiclasschoice ("MultiClassChoice");
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
+
+FRandom pr_spawnmobj ("SpawnActor");
 
 CUSTOM_CVAR (Float, sv_gravity, 800.f, CVAR_SERVERINFO|CVAR_NOSAVE)
 {
@@ -298,11 +299,18 @@ void AActor::Serialize (FArchive &arc)
 		touching_sectorlist = NULL;
 		LinkToWorld ();
 		AddToHash ();
-		if (player && playeringame[player - players])
-		{ // Give player back the skin
-			player->skin = &skins[player->userinfo.skin];
-		}
 		SetShade (alphacolor);
+		if (player)
+		{
+			if (playeringame[player - players])
+			{ // Give player back the skin
+				player->skin = &skins[player->userinfo.skin];
+			}
+			if (Speed == 0)
+			{
+				Speed = GetDefault()->Speed;
+			}
+		}
 	}
 }
 
@@ -338,6 +346,8 @@ AActor &AActor::operator= (const AActor &other)
 
 bool AActor::SetState (FState *newstate)
 {
+	if (debugfile && player && (player->cheats & CF_PREDICTING))
+		fprintf (debugfile, "for pl %d: SetState while predicting!\n", player-players);
 	do
 	{
 		if (newstate == NULL)
@@ -1139,7 +1149,7 @@ explode:
 		// if in a walking frame, stop moving
 		// killough 10/98:
 		// Don't affect main player when voodoo dolls stop:
-		if (player && player->mo == mo)
+		if (player && player->mo == mo && !(player->cheats & CF_PREDICTING))
 		{
 			player->mo->PlayIdle ();
 		}
@@ -1280,7 +1290,8 @@ void P_ZMovement (AActor *mo)
 //
 	if (mo->z <= mo->floorz)
 	{	// Hit the floor
-		if (mo->Sector->SecActTarget != NULL &&
+		if ((!mo->player || !(mo->player->cheats & CF_PREDICTING)) &&
+			mo->Sector->SecActTarget != NULL &&
 			mo->Sector->floorplane.ZatPoint (mo->x, mo->y) == mo->floorz)
 		{ // [RH] Let the sector do something to the actor
 			mo->Sector->SecActTarget->TriggerAction (mo, SECSPAC_HitFloor);
@@ -1384,7 +1395,8 @@ void P_ZMovement (AActor *mo)
 
 	if (mo->z + mo->height > mo->ceilingz)
 	{ // hit the ceiling
-		if (mo->Sector->SecActTarget != NULL &&
+		if ((!mo->player || !(mo->player->cheats & CF_PREDICTING)) &&
+			mo->Sector->SecActTarget != NULL &&
 			mo->Sector->ceilingplane.ZatPoint (mo->x, mo->y) == mo->ceilingz)
 		{ // [RH] Let the sector do something to the actor
 			mo->Sector->SecActTarget->TriggerAction (mo, SECSPAC_HitCeiling);
@@ -1428,6 +1440,10 @@ void P_ZMovement (AActor *mo)
 
 void P_CheckFakeFloorTriggers (AActor *mo, fixed_t oldz)
 {
+	if (mo->player && (mo->player->cheats & CF_PREDICTING))
+	{
+		return;
+	}
 	if (mo->Sector->heightsec != NULL && mo->Sector->SecActTarget != NULL)
 	{
 		sector_t *hs = mo->Sector->heightsec;
@@ -1484,10 +1500,17 @@ void P_CheckFakeFloorTriggers (AActor *mo, fixed_t oldz)
 
 static void PlayerLandedOnThing (AActor *mo, AActor *onmobj)
 {
-	if (mo->player && mo->player->mo == mo)
+	if (!mo->player)
+		return;
+
+	if (mo->player->mo == mo)
 	{
 		mo->player->deltaviewheight = mo->momz>>3;
 	}
+
+	if (mo->player->cheats & CF_PREDICTING)
+		return;
+
 	P_FallingDamage (mo);
 
 	// [RH] only make noise if alive
@@ -1808,6 +1831,10 @@ void AActor::Tick ()
 	bool bForceSlide;
 	AActor *onmo;
 	int i;
+
+	PrevX = x;
+	PrevY = y;
+	PrevZ = z;
 
 	if (flags & MF_UNMORPHED)
 	{
@@ -2138,6 +2165,12 @@ void AActor::Tick ()
 		P_HitWater (this, Sector);
 	}
 
+	// [RH] Don't advance if predicting a player
+	if (player && (player->cheats & CF_PREDICTING))
+	{
+		return;
+	}
+
 	// cycle through states, calling action functions at transitions
 	if (tics != -1)
 	{
@@ -2310,18 +2343,21 @@ AActor *AActor::StaticSpawn (const TypeInfo *type, fixed_t ix, fixed_t iy, fixed
 
 	actor = static_cast<AActor *>(const_cast<TypeInfo *>(type)->CreateNew ());
 
-	actor->x = ix;
-	actor->y = iy;
-	actor->z = iz;
+	actor->x = actor->PrevX = ix;
+	actor->y = actor->PrevY = iy;
+	actor->z = actor->PrevZ = iz;
 	actor->picnum = 0xffff;
 
 	FRandom &rng = bglobal.m_Thinking ? pr_botspawnmobj : pr_spawnmobj;
 
 	if (gameskill == sk_nightmare)
 		actor->reactiontime = 0;
-	
-	actor->LastLook.PlayerNumber = rng() % MAXPLAYERS;
-	actor->TIDtoHate = 0;
+
+	if (actor->flags3 & MF3_ISMONSTER)
+	{
+		actor->LastLook.PlayerNumber = rng() % MAXPLAYERS;
+		actor->TIDtoHate = 0;
+	}
 
 	// Set the state, but do not use SetState, because action
 	// routines can't be called yet.  If the spawnstate has an action
@@ -2942,7 +2978,7 @@ void P_SpawnMapThing (mapthing2_t *mthing, int position)
 				return;
 		}
 	}
-				
+
 	// don't spawn any monsters if -nomonsters
 	if (dmflags & DF_NO_MONSTERS
 		&& (i->IsDescendantOf (RUNTIME_CLASS(ALostSoul)) || (info->flags3 & MF3_ISMONSTER)) )
@@ -3211,6 +3247,9 @@ int P_GetThingFloorType (AActor *thing)
 bool P_HitWater (AActor *thing, sector_t *sec)
 {
 	if (thing->flags3 & MF3_DONTSPLASH)
+		return false;
+
+	if (thing->player && (thing->player->cheats & CF_PREDICTING))
 		return false;
 
 	AActor *mo = NULL;

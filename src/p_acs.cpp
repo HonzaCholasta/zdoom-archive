@@ -3,7 +3,7 @@
 ** General BEHAVIOR management and ACS execution environment
 **
 **---------------------------------------------------------------------------
-** Copyright 1998-2001 Randy Heit
+** Copyright 1998-2003 Randy Heit
 ** All rights reserved.
 **
 ** Redistribution and use in source and binary forms, with or without
@@ -1841,7 +1841,7 @@ void DLevelScript::ChangeFlat (int tag, int name, bool floorOrCeiling)
 	if (flatname == NULL)
 		return;
 
-	flat = R_FlatNumForName (flatname);
+	flat = TexMan.GetTexture (flatname, FTexture::TEX_Flat);
 
 	while ((secnum = P_FindSectorFromTag (tag, secnum)) >= 0)
 	{
@@ -1881,7 +1881,10 @@ void DLevelScript::SetLineTexture (int lineid, int side, int position, int name)
 
 	side = !!side;
 
-	texture = R_TextureNumForName (texname);
+	texture = TexMan.CheckForTexture (texname, FTexture::TEX_Wall);
+
+	if (texture < 0)
+		return;
 
 	while ((linenum = P_FindLineFromID (lineid, linenum)) >= 0)
 	{
@@ -2039,14 +2042,32 @@ void DLevelScript::DoSetFont (int fontnum)
 	activefont = FFont::FindFont (fontname);
 	if (activefont == NULL)
 	{
-		int lump = W_CheckNumForName (fontname);
-		if (lump != -1)
+		int num = W_CheckNumForName (fontname);
+		if (num != -1)
 		{
-			activefont = new FSingleLumpFont (fontname, lump);
+			const BYTE *data = (const BYTE *)W_MapLumpNum (num);
+			bool fon = data[0] == 'F' && data[1] == 'O' && data[2] == 'N';
+			W_UnMapLump (data);
+			if (fon)
+			{
+				activefont = new FSingleLumpFont (fontname, num);
+			}
 		}
-		else
+		if (activefont == NULL)
 		{
-			activefont = SmallFont;
+			num = TexMan.CheckForTexture (fontname, FTexture::TEX_Any);
+			if (num <= 0)
+			{
+				num = TexMan.AddPatch (fontname);
+			}
+			if (num > 0)
+			{
+				activefont = new FSingleLumpFont (fontname, -1);
+			}
+			else
+			{
+				activefont = SmallFont;
+			}
 		}
 	}
 	if (screen != NULL)

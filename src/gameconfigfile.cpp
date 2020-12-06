@@ -283,6 +283,15 @@ void FGameConfigFile::DoGlobalSetup ()
 					SetValueForKey ("5", "use ArtiInvulnerability");
 				}
 			}
+			if (last < 204)
+			{ // The old default for vsync was true, but with an unlimited framerate
+			  // now, false is a better default.
+				FBaseCVar *vsync = FindCVar ("vid_vsync", NULL);
+				if (vsync != NULL)
+				{
+					vsync->ResetToDefault ();
+				}
+			}
 		}
 	}
 }

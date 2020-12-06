@@ -257,6 +257,7 @@ static const char *MapInfoMapLevel[] =
 	"filterstarts",
 	"activateowndeathspecials",
 	"killeractivatesdeathspecials",
+	"noinventorybar",
 	NULL
 };
 
@@ -344,6 +345,7 @@ MapHandlers[] =
 	{ MITYPE_SETFLAG,	LEVEL_FILTERSTARTS, 0 },
 	{ MITYPE_SETFLAG,	LEVEL_ACTOWNSPECIAL, 0 },
 	{ MITYPE_CLRFLAG,	LEVEL_ACTOWNSPECIAL, 0 },
+	{ MITYPE_SETFLAG,	LEVEL_NOINVENTORYBAR, 0 },
 };
 
 static const char *MapInfoClusterLevel[] =
@@ -764,6 +766,7 @@ static void ParseEpisodeInfo ()
 	bool picisgfx;
 	bool remove;
 	char key = 0;
+	bool addedgfx = false;
 
 	// Get map name
 	SC_MustGetString ();
@@ -853,6 +856,15 @@ static void ParseEpisodeInfo ()
 		EpisodeMenu[i].alphaKey = tolower(key);
 		EpisodeMenu[i].fulltext = !picisgfx;
 		strncpy (EpisodeMaps[i], map, 8);
+
+		if (picisgfx)
+		{
+			if (TexMan.CheckForTexture (pic, FTexture::TEX_MiscPatch, false) == -1)
+			{
+				TexMan.AddPatch (pic);
+				addedgfx = true;
+			}
+		}
 	}
 }
 
@@ -1130,6 +1142,7 @@ void G_InitNew (char *mapname)
 	BorderNeedRefresh = screen->GetPageCount ();
 
 	strncpy (level.mapname, mapname, 8);
+	level.mapname[8] = 0;
 	G_DoLoadLevel (0, false);
 }
 
@@ -1380,13 +1393,13 @@ void G_DoLoadLevel (int position, bool autosave)
 	//	a flat. The data is in the WAD only because
 	//	we look for an actual index, instead of simply
 	//	setting one.
-	skyflatnum = R_FlatNumForName (SKYFLATNAME);
+	skyflatnum = TexMan.GetTexture (SKYFLATNAME, FTexture::TEX_Flat);
 
 	// DOOM determines the sky texture to be used
-	// depending on the current episode, and the game version.
+	// depending on the current episode and the game version.
 	// [RH] Fetch sky parameters from level_locals_t.
-	sky1texture = R_TextureNumForName (level.skypic1);
-	sky2texture = R_TextureNumForName (level.skypic2);
+	sky1texture = TexMan.GetTexture (level.skypic1, FTexture::TEX_Wall);
+	sky2texture = TexMan.GetTexture (level.skypic2, FTexture::TEX_Wall);
 
 	// [RH] Set up details about sky rendering
 	R_InitSkyMap ();
@@ -1451,7 +1464,7 @@ void G_DoLoadLevel (int position, bool autosave)
 
 		if (firstTime)
 		{
-			starttime = I_GetTimePolled ();
+			starttime = I_GetTime (false);
 			firstTime = false;
 		}
 	}
@@ -1622,10 +1635,14 @@ void G_InitLevelLocals ()
 
 		strncpy (level.level_name, info->level_name, 63);
 		strncpy (level.nextmap, info->nextmap, 8);
+		level.nextmap[8] = 0;
 		strncpy (level.secretmap, info->secretmap, 8);
+		level.secretmap[8] = 0;
 		strncpy (level.skypic1, info->skypic1, 8);
+		level.skypic1[8] = 0;
 		if (!level.skypic2[0])
 			strncpy (level.skypic2, level.skypic1, 8);
+		level.skypic2[8] = 0;
 	}
 	else
 	{
@@ -1634,8 +1651,8 @@ void G_InitLevelLocals ()
 		level.nextmap[0] =
 			level.secretmap[0] = 0;
 		level.music = NULL;
-		strncpy (level.skypic1, "SKY1", 8);
-		strncpy (level.skypic2, "SKY1", 8);
+		strcpy (level.skypic1, "SKY1");
+		strcpy (level.skypic2, "SKY1");
 		level.flags = 0;
 		level.levelnum = 1;
 	}
