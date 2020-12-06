@@ -84,7 +84,7 @@ void I_StartTic (void);
 // or calls a loadable driver to build it.
 // This ticcmd will then be modified by the gameloop
 // for normal input.
-ticcmd_t* I_BaseTiccmd (void);
+ticcmd_t *I_BaseTiccmd (void);
 
 
 // Called by M_Responder when quit is selected.
@@ -99,8 +99,7 @@ byte* I_AllocLow (int length);
 void I_Tactile (int on, int off, int total);
 
 
-//void I_Error (char *error, ...);
-#define I_Error I_FatalError
+void I_Error (char *error, ...);
 void I_FatalError (char *error, ...);
 
 
@@ -119,6 +118,12 @@ void I_SetTitleString (const char *title);
 // windowed modes.
 void I_PauseMouse (void);
 void I_ResumeMouse (void);
+
+// [RH] Returns millisecond-accurate time
+unsigned int I_MSTime (void);
+
+// [RH] Title string to display at bottom of console during startup
+extern char DoomStartupTitle[256];
 
 #endif
 //-----------------------------------------------------------------------------

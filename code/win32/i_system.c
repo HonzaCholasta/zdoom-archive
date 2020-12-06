@@ -23,6 +23,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <io.h>
+#include <direct.h>
 #include <string.h>
 
 #include <stdarg.h>
@@ -33,22 +35,27 @@
 #include <windows.h>
 #include <mmsystem.h>
 
+#include "version.h"
 #include "doomdef.h"
+#include "cmdlib.h"
 #include "m_argv.h"
 #include "m_misc.h"
 #include "i_video.h"
 #include "i_sound.h"
 #include "i_music.h"
 
+#include "d_main.h"
 #include "d_net.h"
 #include "g_game.h"
 #include "i_input.h"
-
 #include "i_system.h"
+#include "c_dispch.h"
 
 #ifdef USEASM
 BOOL STACK_ARGS CheckMMX (char *vendorid);
 #endif
+
+static void Cmd_Dir (void *plyr, int argc, char **argv);
 
 extern HWND 			Window;
 extern HDC				WinDC;
@@ -91,21 +98,51 @@ byte* I_ZoneBase (int *size)
 	i = M_CheckParm ("-heapsize");
 	if (i && i < myargc - 1)
 		mb_used = (float)atof (myargv[i + 1]);
-	Printf ("Heapsize: %g megabytes\n", mb_used);
 	*size = (int)(mb_used*1024*1024);
 	return (byte *) malloc (*size);
 }
 
+void I_BeginRead(void)
+{
+}
 
+void I_EndRead(void)
+{
+}
+
+byte*	I_AllocLow(int length)
+{
+	byte*		mem;
+
+	mem = (byte *)malloc (length);
+	if (mem) {
+		memset (mem,0,length);
+	}
+	return mem;
+}
+
+
+static DWORD basetime = 0;
+
+// [RH] Returns time in milliseconds
+unsigned int I_MSTime (void)
+{
+	DWORD tm;
+
+	tm = timeGetTime();
+	if (!basetime)
+		basetime = tm;
+
+	return tm - basetime;
+}
 
 //
 // I_GetTime
-// returns time in 1/70th second tics
+// returns time in 1/35th second tics
 //
 int I_GetTimeReally (void)
 {
 	DWORD tm;
-	static DWORD basetime = 0;
 
 	tm = timeGetTime();
 	if (!basetime)
@@ -114,7 +151,7 @@ int I_GetTimeReally (void)
 	return ((tm-basetime)*TICRATE)/1000;
 }
 
-// [RH] Increments the time count every time it gets.
+// [RH] Increments the time count every time it gets called.
 //		Used only by -fastdemo (just like BOOM).
 int I_GetTimeFake (void)
 {
@@ -147,7 +184,7 @@ void I_DetectOS (void)
 			break;
 		case VER_PLATFORM_WIN32_WINDOWS:
 			OSPlatform = os_Win95;
-			osname = "Windows 95";
+			osname = info.dwMinorVersion > 0 ? "Windows 98" : "Windows 95";
 			break;
 		case VER_PLATFORM_WIN32_NT:
 			OSPlatform = os_WinNT;
@@ -208,105 +245,80 @@ void I_Init (void)
 		I_GetTime = I_GetTimeReally;
 
 	I_InitSound();
-
 	I_InitInput (Window);
-	//	I_InitGraphics();
+	C_RegisterCommand ("dir", Cmd_Dir);
 }
 
 //
 // I_Quit
 //
+static int has_exited;
+
 void I_Quit (void)
 {
-	D_QuitNetGame ();
-	I_ShutdownSound ();
+	has_exited = 1;		/* Prevent infinitely recursive exits -- killough */
+
+	if (demorecording)
+		G_CheckDemoStatus();
 	M_SaveDefaults ();
-	I_ShutdownGraphics ();
 
-	exit(0);
-}
-
-void I_BeginRead(void)
-{
-}
-
-void I_EndRead(void)
-{
-}
-
-byte*	I_AllocLow(int length)
-{
-	byte*		mem;
-
-	mem = (byte *)malloc (length);
-	if (mem) {
-		memset (mem,0,length);
+	if (errortext[0]) {
+		if (Window)
+			ShowWindow (Window, SW_HIDE);
+		MessageBox (Window, errortext, "ZDOOM Fatal Error", MB_OK|MB_ICONSTOP|MB_TASKMODAL);
 	}
-	return mem;
 }
 
 
 //
 // I_Error
 //
-extern BOOL demorecording;
-/*
-void I_Error (char *error, ...)
-{
-	va_list 	argptr;
+extern FILE *Logfile;
+BOOL gameisdead;
 
-	// Message first.
-	va_start (argptr,error);
-	fprintf (stderr, "Error: ");
-	vfprintf (stderr,error,argptr);
-	fprintf (stderr, "\n");
-	va_end (argptr);
-
-	fflush( stderr );
-
-	// Shutdown. Here might be other errors.
-	if (demorecording)
-		G_CheckDemoStatus();
-
-	D_QuitNetGame ();
-	I_ShutdownGraphics();
-	
-	exit(-1);
-}
-*/
 void I_FatalError (char *error, ...)
 {
-	va_list 	argptr;
-	char errtext[1024];
-	int index;
+	gameisdead = true;
 
-	// Message first.
-	va_start (argptr,error);
-	index = sprintf (errtext, "Error: ");
-	index += vsprintf (&errtext[index],error,argptr);
-	sprintf (&errtext[index], "\nGetLastError() = %d", GetLastError());
-	va_end (argptr);
+	if (!errortext[0])		// ignore all but the first message -- killough
+	{
+		int index;
+		va_list argptr;
+		va_start (argptr, error);
+		index = vsprintf (errortext, error, argptr);
+		sprintf (errortext + index, "\nGetLastError = %d", GetLastError());
+		va_end (argptr);
+	}
 
-	// [RH] Record error to log (if logging)
-	Printf ("\n**** DIED WITH FATAL ERROR:\n%s\n", errtext);
+	if (!has_exited)	// If it hasn't exited yet, exit now -- killough
+	{
+		has_exited = 1;	// Prevent infinitely recursive exits -- killough
 
-	// Shutdown. Here might be other errors.
-	if (demorecording)
-		G_CheckDemoStatus();
+		// [RH] Record error to log (if logging)
+		if (Logfile)
+			fprintf (Logfile, "\n**** DIED WITH FATAL ERROR:\n%s\n", errortext);
 
-	D_QuitNetGame ();
-	I_ShutdownGraphics();
-
-	if (Window)
-		ShowWindow (Window, SW_HIDE);
-	MessageBox (Window, errtext, "DOOM Fatal Error", MB_OK|MB_ICONSTOP|MB_TASKMODAL);
-
-	exit(-1);
+		exit(-1);
+	}
 }
 
+void I_Error (char *error, ...)
+{
+	va_list argptr;
 
-static char Title[256] = { 0 };
+	va_start (argptr, error);
+	vsprintf (errortext, error, argptr);
+	va_end (argptr);
 
+	if (errorjmpable)
+		longjmp (errorjmp, 1);
+	else
+		I_FatalError (NULL);
+}
+
+char DoomStartupTitle[256] = { 0 };
+
+/*
 void I_PaintConsole (void)
 {
 	PAINTSTRUCT paint;
@@ -339,27 +351,17 @@ void I_PaintConsole (void)
 		EndPaint (Window, &paint);
 	}
 }
-
+*/
 void I_SetTitleString (const char *title)
 {
-	RECT rect;
-	char temp[80];
 	int i;
 
-	for (i = 0; i < ConCols; i++)
-		Title[i] = ' ';
-	Title[i] = 0;
-	sprintf (temp, "%s v%i.%i", title, VERSION/100, VERSION%100);
-	strcpy (Title + (ConCols - strlen (temp)) / 2, temp);
-
-	rect.top = rect.left = 0;
-	rect.bottom = WinHeight;
-	rect.right = WinWidth;
-	InvalidateRect (Window, &rect, TRUE);
+	for (i = 0; title[i]; i++)
+		DoomStartupTitle[i] = title[i] | 0x80;
 }
 
 void I_PrintStr (int xp, const char *cp, int count, BOOL scroll) {
-	MSG mess;
+/*	MSG mess;
 	RECT rect;
 
 	if (count)
@@ -374,8 +376,59 @@ void I_PrintStr (int xp, const char *cp, int count, BOOL scroll) {
 	}
 	while (PeekMessage (&mess, Window, 0, 0, PM_REMOVE)) {
 		if (mess.message == WM_QUIT)
-			I_Quit ();
+			exit (mess.wParam);
 		TranslateMessage (&mess);
 		DispatchMessage (&mess);
 	}
+*/
+}
+
+static void Cmd_Dir (void *plyr, int argc, char **argv)
+{
+	char dir[256], curdir[256];
+	char *match;
+	struct _finddata_t c_file;
+	long file;
+
+	if (!getcwd (curdir, 256)) {
+		Printf ("Current path too long\n");
+		return;
+	}
+
+	if (argc == 1 || chdir (argv[1])) {
+		match = argc == 1 ? "./*" : argv[1];
+
+		ExtractFilePath (match, dir);
+		if (dir[0]) {
+			match += strlen (dir);
+		} else {
+			dir[0] = '.';
+			dir[1] = '/';
+			dir[2] = '\0';
+		}
+		if (!match[0])
+			match = "*";
+
+		if (chdir (dir)) {
+			Printf ("%s not found\n", dir);
+			return;
+		}
+	} else {
+		match = "*";
+		strcpy (dir, argv[1]);
+		if (dir[strlen(dir) - 1] != '/')
+			strcat (dir, "/");
+	}
+
+	if ( (file = _findfirst (match, &c_file)) == -1)
+		Printf ("Nothing matching %s%s\n", dir, match);
+	else {
+		Printf ("Listing of %s%s:\n", dir, match);
+		do {
+			Printf ("%s%s\n", c_file.name, c_file.attrib & _A_SUBDIR ? " <dir>" : "");
+		} while (_findnext (file, &c_file) == 0);
+		_findclose (file);
+	}
+
+	chdir (curdir);
 }

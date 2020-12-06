@@ -1,4 +1,627 @@
+December 22, 1998
+- Fixed the thing spawners so that they don't spawn monsters if the
+  nomonsters dmflag is set.
+- Changed the imp fireball to be 75% opaque.
+- Replaced the am_key?color cvars with am_lockedcolor. Finally rewrote the
+  code in the automap that uses it, too. (Up until now, it was still using
+  the old Doom specials to determine locked doors, even though they all get
+  converted into Door_LockedRaise before the automap ever sees the line.
+
+December 21, 1998
+- Added ML_BLOCKEVERYTHING linedef flag.
+
+December 20, 1998
+- Added support for a ChangeCamera special.
+
+December 19, 1998
+- Added a fire effect to the player setup menu (which I had wanted to do
+  ever since I saw Unreal).
+
+December 15, 1998
+- Went through commands.txt, and documented new commands and cvars (and also
+  some that I had missed from 1.14). I still count 4 undocumented commands,
+  but I can't figure out what they are even when I compare it with the output
+  of the cmdlist command.
+- Fixed problem with V_BreakLines() not properly setting the pixels width
+  of lines that were broken.
+- Fixed problem of Plat_UpByValue not going back down.
+
+December 13, 1998
+- Fixed problem of lighting in hires modes lightening too quickly.
+- Added outsidefog key to MAPINFO lump parser to set the fog color for
+  any sectors with sky ceilings.
+- Removed the translucency on health bonuses.
+- Improved some of the error-handling code in the midi playback routines,
+  and the problem seems to have gone away.
+
+December 12, 1998
+- Started experiencing a strange midi problem: it works with the debug
+  build but not the release.
+- Added soundlist command to display the assignment of sounds.
+- Added dynamic sound linking so that sounds that refer to the same lump
+  use the same copy of the sound. Added the soundlinks command to view
+  the linking of sounds.
+- Fixed problem of punching someone to death being treated as an
+  unknown means of death in the obituaries.
+- Spawning players now telefrag things standing at their spawnpoint, so
+  it's no longer possible to get stuck inside another player when
+  spawning. Also relaxed the restriction on deathmatch starts so that
+  only one is needed to start a game.
+- Added nobfgaim cvar to disable freeaiming of the bfg. (suggested by
+  Tony Fabris)
+- Was trying to figure out why weapnext and weapprev only worked for
+  player 0 in network games, when they suddenly started working.
+  Hopefully it's permanent... [Now that I've thought about it a little
+  more, I probably just wasn't getting the mouse captured when I alt-tabbed
+  to the other player's window.]
+- Rewrote weapnext and weapprev commands to use the inventory "system."
+- Added a dir command.
+- Added support for the second joystick device because my joystick somehow
+  got assigned to it (and made me aware that it exists :-). Also added
+  joy_xthreshold, joy_ythreshold, joy_xsensitivity, joy_ysensitivity, and
+  joy_speedmultiplier cvars.
+- Added support for double bindings (for double clicking, but it works with
+  all keys, not just the mouse buttons) to C_DoKey() and some associated
+  console commands.
+- Changed C_DoKey() so that it takes an event as input.
+- Added some code to PTR_ShootTraverse so that bullet puffs can appear on
+  floors and ceilings.
+
+December 6, 1998
+- Fixed problem of monsters being slow to attack a player if they were
+  on a route: Their reactiontime was too high.
+- Added a gender option to the player setup menu.
+- If getsfx() tries to load a sexed sound, and it doesn't exist, it will
+  try to load a male version of the sound.
+- Added an empty sound (dsempty).
+- Changed sound handling slightly so that sounds are now loaded when
+  they are first used instead of during I_InitSound(). They still stick
+  around forever after that.
+- Changed the names of every sound in SNDINFO. It's no longer Hexen-
+  compatible, but it should at least be compatible with what I want to
+  do eventually. I also redid the way skin sounds are handled to better
+  fit my new sound naming conventions: Any gender/skin-specific sounds
+  can be used by prefacing them with a '*' and passing a player mobj to
+  a sound function. (If a player mobj is not passed, it defaults to male).
+- Fixed the problem of button sounds being played in the wrong place
+  when they're deactivated. For some reason, I had this line in
+  P_UpdateSpecials():
+		S_StartSound ((mobj_t *)&button->soundorg, "Switch1", 78);
+  but button->soundorg is an mobj_t *. I'm surprised it didn't crash.
+- Changed P_Thing_Spawn() and P_Thing_Projectile() so that they will only
+  spawn things at map spots and not just anything with a matching tid.
+- Fixed P_Thing_Projectile() so that it will still spawn missiles even if
+  there is something at their spawn spot.
+
+December 4, 1998
+- Was playing a dark level and noticed that the fog isn't "thick"
+  enough at higher resolutions: It transitions from darkness to fullbright
+  far too quickly.
+- Tweaked the falling damage some more using some code from Q2.
+- Rearranged the startup sequence slightly so that I_Init() gets called
+  before I_InitGraphics() (like it was before).
+- Added support for gendered death messages.
+- Rewrote portions of d_dehack.c so that it takes less space when compiled
+  and also added .bex support. (Tried it with a few .bex files, but didn't
+  do any extensive testing. Assuming it works. :-)
+- Added a check in Printf() to avoid drawing to the console too rapidly
+  during startup, because that can slow it down.
+- Changed P_LoadSegs so that it clears a line's ML_TWOSIDED flag if an
+  associated sidedef doesn't point to a back sector (otherwise the game
+  could crash in p_sight.c when the line came into view).
+- Removed foreign language "support." It's been broken for a while and was
+  too hard to add new strings.
+- Moved string names out of d_dehack.c and into dstrings.c (which is where
+  they should have been in the first place.)
+
+November 30, 1998
+- Had a flash of insight for how I could speed up the rendering of walls. A
+  quick test shows that filling the screen with columns of shorts is about
+  twice as fast as filling it with columns of bytes. If I draw wall columns
+  into memory in consecutive bytes, and then copy them to the screen in
+  another pass, I should be able to combine the writing of two or more
+  columns together, obtaining a speed boost that should, at the very least,
+  let me maintain 35 fps at 800x600 on my machine. I'll have to try it and
+  see if it actually works in practice. The overhead of writing the walls
+  twice might kill any performance boost this could offer. On 486s and slow
+  Pentiums, this will almost certainly be more of a hinderance than a help,
+  and it's not needed at low resolutions anyway, so I plan on keeping it
+  optional if it turns out to be benefitial.
+
+November 29, 1998
+- Tested a theory, and I was right. :-( Drawing vertical columns is
+  inherantly slower than drawing horizontal spans, probably because drawing
+  them vertically results in a whole lot more cache misses. What I did to
+  test it was replace most of D_Display() with a loop that filled the screen
+  a solid color. At 800x600, filling the screen by columns was no faster than
+  if I textured the walls (23 fps). Filling by rows, I could get 35 fps.
+  Apparently, any further optimizations in the renderer will have to focus
+  on drawing walls by rows instead of colums.
+
+November 28, 1998
+- Did some slight performance tuning in R_RenderSegLoop() by making more
+  variables local to only certain blocks in the function. In 800x600,
+  looking straight at a wall now gives ~23 fps vs ~20 fps before. (I really
+  wasn't expecting such a marked improvement. It might be worthwhile to try
+  and tweak this in assembly.)
+- Pulled some blending addition code from the Q2 DLL. I had been trying to
+  do the same thing myself, but couldn't quite manage it until I found
+  id's code.
+
+November 26, 1998
+- Added support for cancelling messagemode by pressing escape.
+- On the automap, a player with invulnerability is drawn with a color
+  slightly off from the background rather than being hard-coded to palette
+  entry 246 (which is almost black with the normal Doom palette).
+- Finally got around to working out the bugs in teamplay. (Missiles would
+  still hurt you even with friendly fire on.)
+- Disabled intermission texts in deathmatch.
+- Pretty sure I got a non-fatal version of I_Error working now. It uses
+  setjmp() and longjmp() to do its magic.
+- Removed the check for -statcopy in d_main.c.
+- Removed the system menu from the ZDoom window. Unfortunately, this also
+  means it doesn't get a minimize box. Oh well.
+- Removed the restriction on using messagemode only during a netgame.
+- Added mouse wheel support. Under Win95, it ought to work with DirectInput.
+  Under NT 4.0 and 98, it should always works.
+
+November 23, 1998
+- Changed the startup code so that the graphics mode is initialized as early
+  as possible, allowing us to use the in-game console for most startup text.
+- Moved all the functionality of I_StartGraphics() into I_InitGraphics()
+  because the game starts up in a fullscreen console now.
+- Added endgame to quit out of a game and drop to the fullscreen console.
+- Removed the ormask parameter from V_PrintStr() and V_PrintStr2(). It was
+  almost never used, and in those cases where it was, it was easy enough to
+  just or the string beforehand.
+- Adjusted the colors of the CONCHARS lumps and changed a few special
+  characters. With the fullscreen console, it was obvious that they were
+  all too dark.
+- Added a fullscreen console.
+- Changed handling of WM_DESTROY messages in i_input.c to call exit()
+  directly, because the WM_QUIT message didn't seem to be making its way
+  into the message stream.
+- Removed some unused #defines from doomdef.h
+- Removed the store demo check from D_ProcessEvents().
+
+November 22, 1998
+- Fixed saving of monster goals (was referencing the tracer field instead).
+- Made one-sided lines pushable.
+- Made P_PushSpecialLine aware of the side of the line that was pushed.
+- Moved the execution of deferred scripts out of P_StartOpenScripts so
+  that going to a level with a saved snapshot would not terminate the
+  script prematurely when the snapshot was loaded.
+
+November 21, 1998
+- Teleport_EndGame and Teleport_NewMap no longer execute if crossed
+  along a linedef's back side.
+- Discovered I had missed implementing Teleport_EndGame, so I added it.
+- Fixed problem with level snapshots where plats and ceilings that were
+  in stasis were saved incorrectly.
+
+November 15, 1998
+- Just tried listening to D_RUNNIN after a clean boot, and it didn't work
+  the first time. :-( At least it plays properly after I use iwinit now...
+
+November 14, 1998
+- Bumped the height of the three small torches up from 34 to 37 units so
+  that the player can't jump on top of them.
+- Tweaked the thing auto step up in PIT_CheckThing some more so that it
+  will only do the auto step up if you're not in the air. It seemed funny
+  to be able to jump on top of most monsters. Never mind. I can't seem to
+  get it to work only when I'm not jumping. :-(
+- Added code to mus2strm.c so that it generates a tempo event at the
+  beginning of the song. (The tempo used appears to be the default for
+  midiStreamOpen, but I felt like being safe anyway.) AddEventToStream() in
+  mid2strm.c also keeps track of all instruments used in a song now. This
+  way I can get around what appears to be a bug in the GUS PnP drivers
+  that would cause it not to play some instruments if they weren't already
+  loaded in the card's RAM. Just before I start playing the actual song, I
+  play each instrument very briefly and very quietly to get the instruments
+  into the card's RAM.
+
+November 2, 1998
+- Added snd_mididevice cvar to allow the user to select which MIDI device
+  to use and a snd_listmididevices cvar to enumerate the available devices.
+- Added MIDI volume cvar snd_midivolume and a corresponding menu item.
+- Finished mus2strm.c and made a few cleanups to the MIDI streaming code.
+  Now I just need to switch to MikMod, and I won't have to use temporary
+  files anywhere. (MIDAS can only load MODs from disk and not from memory.)
+
+November 1, 1998
+- Started cleaning up qmus2mid.c and transforming it into mus2strm.c.
+
+October 31, 1998
+- Took the mid2strm sample from the dx5sdk and used it to redo my MIDI
+  support so that I can use the MIDI stream API now, the primary benefit
+  being that it lets me set the MIDI volume for just that stream and not the
+  entire system.
+- Changed I_DetectOS() so that it doesn't identify Windows 98 as Windows 95.
+
+October 24, 1998
+- Discovered the blockmap generation wasn't actually working. Can't figure
+  out why, since the same code works just fine in BOOM...
+- Incorporated several of the changes from BOOM 2.02 such as "loose files",
+  fire trail elimination, and automatic blockmap generation for large maps.
+
+October 17, 1998
+- Implemented the Radius_Quake line special.
+- Removed limit on the size of recordable demos.
+- Changed P_SpawnPlayer() so that it always spawns players on the ground.
+- Created an MT_TELEPORTMAN2 that can be used to teleport things to points
+  above the ground and fixed MT_TELEPORTMAN so that it teleports things onto
+  the ground.
+- Updated the teleport code so that it finds destinations using P_FindGoal()
+  instead of searching through all the active thinkers.
+- Fixed a memory allocation problem with the -iwad parameter.
+
+October 16, 1998
+- Rewrote IdentifyVersion() so that it identifies IWADs by their contents
+  instead of their names. (except for tnt.wad and plutonia.wad, since I
+  don't know of any other way to distinguish them from doom2.wad)
+- Doors that needed yellow skull keys to be opened said they needed yellow
+  cards instead. Fixed.
+- Finally added proper support for substituting translucency for the fuzz
+  effect. Instead of using a NULL colormap to represent fuzz, it takes
+  advantage of the vissprite's flags field and sets MF_SHADOW. Then the
+  colormap points to the colormap that would be used if the sprite wasn't
+  shadow, so that it can be properly shaded when r_drawfuzz is 0.
+- Got the colormaps code working. I just wasn't allocating enough space for
+  the realcolormaps array. Oopsy.
+
+October 15, 1998
+- Decided to support changing of colormaps via Boom's 242 linedef after all
+  instead of just changing the blend, so I started adding some code to
+  support that. Unfortunately, now it doesn't work without any C_START/C_END
+  colormaps. :-( Will fix tomorrow.
+
+October 14, 1998
+- Added a callback for the splashfactor cvar that prevents it from being
+  set to illegal non-positive values and also computes the inverse of the
+  cvar for scaling of the thrust felt by things that chew on their own
+  missiles. That way, a player will always rocket jump the same height no
+  matter what their splashfactor is set to.
+- Fixed a problem with continuous sounds that prevented them from being
+  played. When I had consolidated to using a single mobj thinker for all
+  sounds instead of splitting them up as I had previously, I was erroneously
+  setting the activation time for continuous sounds to 0 because I wanted
+  their thinkers to get called right away. But the mobj thinker decrements
+  the tic counter and *then* compares it with 0, so it would decrement the
+  0, see -1, and then never doing anything with that mobj again.
+
+October 10, 1998
+- The button list gets saved in level snapshots now.
+- Added full support for activation types of projectile cross, projectile
+  hit, and push. Also added support for a few linedef types to be
+  monster-activatable depending on their activation type even if
+  ML_MONSTERSCANACTIVATE is not set. (So that, e.g. a monster can still
+  open a local door of type Door_Raise without the level designer
+  having to do anything special.)
+- Removed the MAXBUTTONS limit and also fixed a problem with the sound
+  origin used when activating switches/buttons.
+- Changed the error messages in V_DrawWrapper() and V_DrawSWrapper() to
+  use DPrintf() instead of Printf().
+- Fixed problem with invulnerability I introduced yesterday. (Walls were
+  still being drawn with the normal colormap.)
+
+October 9, 1998
+- Spent about an hour changing the rendering code so that each sector can
+  have its own colormap. The light tables are now indices into a colormap
+  rather than pointers into one. Spent about half an hour afterward
+  figuring out why it seemed to be merging visplanes that were alike in
+  everyway except for colormap. All in all, it was easier than I had
+  expected. Unfortunately, it's also too slow to build a colormap in the
+  middle of gameplay, so I guess an open script will have to be used to
+  build any colormaps before the level starts if anyone wants to change a
+  sector's color on the fly.
+
+Ocober 8, 1998
+- I had earlier changed PIT_RadiusAttack() to do only half damage to targets
+  that originated the explosion, so that rocket jumping didn't hurt so much.
+  The scale factor has now been moved into the cvar splashfactor and
+  defaults to 1.0. The former behavior can be restored by setting it to 0.5.
+
+October 5, 1998
+- Spent about 15 minutes writing a routine to build a colormap for non-
+  white lights. Tested it using an orange light for the entire level. It
+  worked nicely, so now I just need to make it possible to set the light
+  color on a sector-by-sector basis.
+- Issue: Teleport destinations need to be flush with the floor instead of
+  remembering the position they are spawned at. Discovered this while
+  playing MAP20. A teleport destination lowers a great distance the first
+  time you land on it. Going on it again will teleport you to its original
+  height, and you fall from there. Maybe another type for destinations that
+  remember their height, then?
+
+October 4, 1998
+- Added say_team and messagemode2 commands and team and teamplay cvars.
+- Externalized the obituary messages and added a "Strings" section to the
+  dehacked code. Since I'm pretty sure I'll be switching to scripted code
+  ala Quake, this is only temporary (along with everything else dehacked).
+- Added support for showing both skull and card keys in the status bar
+  ala Boom.
+- Added Sector_SetDamage and Sector_SetGravity line specials.
+- Added another mobj flag (MF2_NOADJUST) so that you can walk on floating
+  bridges without worrying about them getting bumped up above your head.
+- Adjused PIT_CheckThing() so that it allows stepping up on top of things
+  if their tops are no more than 24 units above the thing moving.
+
+October 3, 1998
+- Added an MT_AMBIENT mobj (doomed #14065). Its first argument determines
+  which ambient sound it represents. (And is valid in the range 0-255.) It
+  also subsumes the earlier MT_AMBIENT0 - MT_AMBIENT63 mobjs (doomed
+  #14001 - 14064), and P_SpawnMapThing translates them into an
+  instance of MT_AMBIENT. Also merged the world ambient thinker into the
+  mobj thinker so that all ambient sounds are controlled with a single
+  thinker function and not two.
+- Removed sounds.h. Everything necessary to use sounds is now found in
+  s_sound.h
+- Disabled the recognition of any display modes other than INDEX8 in
+  i_video.cpp. I'm no longer sure high/true color is such a good thing.
+  Without a major loss of performance, I can't see any way to avoid a
+  huge memory loss with more than a few palettes in those modes. :-(
+- Did some work with ARGB8888 modes: I_Blit can now blit from INDEX8 to
+  ARGB8888 surfaces. The console font now gets drawn on ARGB8888 surfaces
+  (pretty sure it was before, but it stopped working sometime).
+- Fixed the cast drawer so that the names don't get squashed together in
+  resolutions at least 640 pixels wide.
+- Fixed bug where pressing a key with a menu active would move the cursor
+  to a blank line if it wasn't assigned as a hotkey.
+- Added support for actually seeing skins as well as setting them in the
+  player setup menu.
+- Fixed bug with player colors for players 5-8.
+
+October 1, 1998
+- Continued work with "skins." Everything works now except actually
+  seeing them.
+- Did away with the spriteoffset[], spritewidth[], and spritetopoffset[]
+  arrays and moved their contents into the sprite frame structure.
+
+September 30, 1998
+- Started work on supporting Doom Legacy "skins." (Personally, I think
+  skin is a misnomer, but I'm afraid the term's probably here to stay.)
+- Removed the maskdraw_t structure from r_things.c since it wasn't used
+  anywhere. Here it is preserved for history:
+	typedef struct {
+		int x1, x2;
+		int column;
+		int topclip, bottomclip;
+	} maskdraw_t;
+  Wonder what it was for.
+
+September 27, 1998
+- Fixed long-standing bug in R_DrawSprite that could cause sprites to be
+  drawn through the floor of a cliff if you look down just the right amount
+  (when the top edge of the floor is exactly two pixels above the top of
+  the screen).
+- Added hacked-in support for colormaps with the Transfer_LightsHeights
+  special. ZDoom actually sets the blending through this special instead
+  of changing the colormap. To accomodate BOOM levels that use colormaps,
+  it will average all the colors in the colormap together and derive a
+  blend from that. Alternatively, you set the blend directly by setting
+  the appropriate texture name to a hex string of the format AARRGGBB.
+- Fixed barrels (again) so that barrel traps work as expected. Not sure if
+  this problem existed in 1.14a or not, but it's gone now.
+- Added ignoreInvisibility parameter to P_CheckSight(), because it is
+  occasionally used to determine if there is an unblocked line between two
+  things (not if one can see the other).
+- Switched to using a logarithmic scale for pain flashes.
+- Added support for Boom's push/pullers, wind, current, and friction effects.
+
+September 26, 1998
+- Saw this at the Team TNT message board:
+
+      the bug has been found and fixed. What was happening was that the fake
+	  sector was being passed instead of the real one, and this messed up
+	  the check for whether a sector had had its sprites added to the view
+	  already. As a result each sprite generated was being added once per
+	  subsector rather than just once.
+
+  So I went looking around in the code some and found this in R_Subsector():
+  "R_AddSprites (frontsector)". I replaced frontsector with sub->sector, and
+  that seems to have done the trick. A test level I made went from 15 fps to
+  35 fps (the max) with this fix.
+
+September 23, 1998
+- Using -cdrom creates the directory if it doesn't exist (like it used to).
+- When used with -cdrom, screenshots now get saved to C:\ZDOOMDAT instead of
+  the game directory.
+- Put back support for taking screenshots by pressing F1 with -devparm
+  active, since some people probably won't read the docs and realize there's
+  a screenshot command bound to the "Print Screen" key by default.
+- Added "ticker" cvar to control display of the -devparm ticker at the
+  bottom of the display (so that -devparm is now totally useless).
+- Changed the directory for -cdrom from C:\DOOMDATA to C:\ZDOOMDAT and added
+  support for using that directory to store zdoom.cfg.
+- Fixed bug that caused using -devparm or -cdrom to crash the game during
+  startup. (They referenced the Strings[] table before it was fully
+  initialized.)
+
+September 19, 1998
+- Turned off screenwiping when moving between levels in a hub (but only if
+  the level the player just left has LEVEL_NOINTERMISSION set).
+- Fixed a savegame bug I had added with hubs that caused the game to
+  forget the player's state.
+- Added noise cvar to control display of sound debugging info.
+- Added turn180 command to quickly turn the player around.
+- Added support for the ACS thingsound(), sectorsound(), and ambientsound()
+  commands.
+- Changed every reference to S_StartSound so that they refer to sounds
+  by name rather than id and specify priority information (since it's
+  no longer a part of the sfxinfo).
+
+September 18, 1998
+- Finished S_ParseSndInfo so that it has no maximum number of sounds it
+  can define and works with more than just ambient sounds.
+- Changed w_wad.c back to using the buffered I/O functions again. (I had
+  done this a long time ago, but thanks to some mistakes on my part, I
+  ended up putting taking it out. Now it's back for good. :-) It doesn't
+  seem to have any effect on disk performance, but it will let me use
+  MikMod functions to load samples and MODs directly from the wad.
+- Played around with MikMod some. With the assembly mixer, its
+  performance seems to be about the same as MIDAS', so I will
+  probably switch to it at some point.
+
+September 17, 1998
+- Improved support for analog joysticks by using their full range of
+  motion instead of treating them like digital devices.
+
+September 15, 1998
+- Added support for world vars and controlling scripts on other maps.
+- Added the hub clusterdef flag and supporting code.
+- Figured out what the problem with hub savegames was: Instead
+  of writing out a copy of the snapshots for each level with one,
+  I wrote out a copy of the current level's snapshot for each
+  level with a snapshot. Whoops! Easy fix.
+
+September 14, 1998
+- Worked with supporting hubs. For maps that belong to a hub,
+  whenever you exit the level, the game makes a mini-savegame
+  of the level. When you return, the world state is based on
+  the mini-savegame. Theoretically, saving games to disk should
+  be as simple as storing each of these "snapshots" along with
+  some extra info, but I couldn't get it to work. The current
+  level worked, but trying to go to a previously visited level
+  after loading the savegame crashed the game.
+
+September 13, 1998
+- Redid my ACS code a bit so that scripts are now kept track of
+  through a private linked list rather than thinkers. The only
+  real advantage this offers is that I have complete control
+  over when scripts get executed, so a script that executes a
+  scriptwait command will be guaranteed to run in the same tic
+  that the script it's waiting on terminates.
+
+September 12, 1998
+- Replaced my visplanes code with Lee Killough's hashing method
+  and got a noticable performance boost in high visplane areas
+  (even those with <128!).
+
+September 4, 1998
+- Added weapnext and weapprev commands courtesy of
+  Papst Johannes Jörg IV. [which were later completely
+  rewritten by me]
+- Add support for suspending and resuming scripts (easy when
+  you know you can only have one copy running at a time).
+- Added checks to ensure that only one instance of a script is
+  running at a time (like Hexen).
+
+September 3, 1998
+- Took out the stuff for sliding doors. You want it, then
+  fake it with a script.
+- Ran around in hexen.wad for a while and fixed a few bugs.
+- Added support for ACS scripts (except for the sound p-codes
+  and polywait).
+
+September 2, 1998
+- Added support for monsters remembering their previous target
+  from BOOM.
+- Made the mobj's targettic a counter that decrements to zero
+  instead of a time relative to gametic (so that it works properly
+  across savegames).
+- Added more mobj flags bits and consolidated invisible into it.
+- Implemented all the Thing_* line specials.
+- Added support for stairs that reset and/or have delays and the
+  sync stair builders.
+
+September 1, 1998
+- Fixed problem with several plat types that didn't deactivate
+  themselves.
+- Fixed bug that caused Plat_UpWaitDownStay to act like
+  Plat_PerpetualRaise.
+- Made NOINTERMISSION levels work by moving the check for it later
+  in G_DoCompleted().
+- Added HealThing special to match DamageThing.
+- Added full support for the Teleport_NewMap special. Levelnum is
+  actually used for something in the MAPINFO now, too.
+
+August 31, 1998
+- Implemented Hexen's thing specials that don't use tids.
+
+August 30, 1998
+- Added support for Hexen pillars.
+- Finished ceilings.
+- Finished floors.
+- Added compression of .tch files and significantly rewrote the
+  associated part of v_video.c in the process. Not quite the savings
+  I would have liked: only about 57%.
+- Tried using the LZ(77?) code from the Doom utilities to compress save
+  games, but it was too slow to be practical. I now use minilzo which
+  seems to compress about the same but is a *lot* faster. As an example
+  of the kind of savings this offers, the size of a savegame on one
+  level shrank to 20% of its original size.
+- Used BOOM's code to remove the savegame size limit and fix some other
+  savegame bugs.
+- Used Killough's global boss brain state.
+- Tweaked I_FatalError() so that if something really bad happens, you
+  shouldn't end up in an infinite recursion sequence because Printf()
+  gets called somewhere during the exit sequence.
+- Implemented Floor_Waggle. Unfortunately, it's not the same as Hexen's
+  since I couldn't find any decent documentation about it and also had
+  a hard time determining just how every different parameter affected it
+  by watching it in a test level. It's close, but not the same.
+
+August 29, 1998
+- Added support for normal (not sync) Hexen stairs.
+- Added support for Hexen's phased lighting.
+
+August 26, 1998
+- Continued on floors.
+
+August 25, 1998
+- Started getting moving floors working again.
+
+August 21, 1998
+- Got plats working again.
+- Switched to using a linked list to keep track of active ceilings and
+  plats. This is similar to the way BOOM does it, except I store the
+  list pointers in the active entities themselves rather than seperately.
+
+August 20, 1998
+- Fixed a savegame bug I had introduced. They got saved as "version 115"
+  instead of zdoomsv?.dsg.
+
+August 8, 1998 - August 15, 1998
+- Did some work converting to Hexen-like line specials. Sorry, I was too
+  lazy to record the specific changes.
+
+August 7, 1998
+- Incorporated BOOM's Pain Elemental Lost Soul shooting fix.
+- Incorporated some of BOOM's changes to p_map.c.
+- Incorporated Killough's changes to p_sight.c.
+
+August 6, 1998
+- Added snd_surround cvar to control use of surround sounds. If "0", then
+  anything that would otherwise have been played surround is played
+  identically from both speakers instead.
+- Added cvar_defflags variable to hold any flags automatically applied to
+  new cvars, the intended purpose being to allow all cvars in a config
+  file to be flagged as CVAR_ARCHIVE. Useful if one port of ZDoom has cvars
+  that another doesn't, but you still want them to share the same config
+  file.
+
+August 5, 1998
+- Finished keyboard handler and tried to create a mouse handler for the
+  DOS port.
+- Switched to using PTC Mode IDs to describe video modes instead of
+  bpp since the DOS version of PTC has multiple modes with the same bpp.
+
+August 4, 1998
+- Created partial keyboard handler for DOS port.
+
+July 28, 1998
+- Fixed use of config files in paths containing spaces. (I had forgotten to
+  enclose the pathname in quotes when constructing the exec command string.)
+- Added calls to FixPathSeperator() in a bunch of places where it was needed.
+
+July 27, 1998
+- Uploaded a quick fix to 1.14a that lets it load save games again.
+- Renamed the project and workspace to zdoom (rather than doom).
+- Created a version info resource for ZDoom and moved the system-specific
+  files into a new win32 directory in the code tree.
+
 July 26, 1998
+- Uploaded 1.14a to notgod.com along with a source patch for 1.14->1.14a.
 - If FONTA?? is available, it is now used in deference to STCFN??? (i.e.
   -file heretic)
 - Renamed all the WICHAR?? in zdoom.wad to FONTB?? to match the naming
@@ -9,7 +632,7 @@ July 23, 1998
   soon and stuck it into ZDoom without really thinking about it. In BOOM (and
   DOOM) lnames[] is dynamically allocated. In ZDoom, it's static since it
   only needs to contain two items (the patch of the level just left and the
-  patch of the level being entered).
+  patch of the level being entered). Fixed.
 - Using the changemap command no longer says you are leaving the map you're
   entering when no title patch is provided. (Unless they're one and the same.)
 
@@ -82,6 +705,8 @@ July 14, 1998
 - Fixed bug that caused the bunny scroller to crash: Using 0 instead of
   &screens[0] in the calls to F_DrawPatchCol().
 - Added support for the ML_PASSUSE flag from BOOM.
+- Decided using a default texture for unknowns was too complicated to bother
+  with at this point, so I took it back out. (Left in for flats, though.)
 
 July 13, 1998
 - Fixed IDKFA cheat to give the correct amount of armor.
@@ -246,7 +871,7 @@ June 23, 1998
 - Added spynext and spyprev commands. Spynext is equivalent to pressing F12
   in the original Doom.
 - Added +showscores action. It gets bound to \ by default.
-- Save games now hold copies of ever serverinfo cvar and the level locals.
+- Save games now hold copies of every serverinfo cvar and the level locals.
   With Doom 1, they also contain a list of visited levels.
 - The game now keeps a cumulative frag count for each player which is the same
   as what gets displayed on the status bar during a deathmatch.
@@ -1150,9 +1775,6 @@ March 16, 1998
   realize that ylookup and columnofs are now pointers instead of
   arrays.
 
-March 15, 1998
-- Nothing.
-
 March 14, 1998
 - mb_used changed to a float, so the heap doesn't need to be an
   integral number of megs in size.
@@ -1266,9 +1888,6 @@ March 9, 1998
   Now I rewrote it so that it doesn't need to calculate
   revealed at all. It ought to be marginally faster, too (although
   it probably won't make a bit of difference during gameplay).
-
-March 8, 1998
-- Did nothing. Stupid parental restrictions on Sunday activities.
 
 March 7, 1998
 - Still working on MaxVisPlanes bug. This is proving to be more

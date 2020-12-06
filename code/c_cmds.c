@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "version.h"
 #include "c_consol.h"
 #include "c_cmds.h"
 #include "c_dispch.h"
@@ -11,23 +12,32 @@
 
 #include "doomstat.h"
 #include "d_englsh.h"
-#include "sounds.h"
 #include "s_sound.h"
 #include "g_game.h"
 #include "d_items.h"
 #include "p_inter.h"
 #include "z_zone.h"
 #include "w_wad.h"
+#include "g_level.h"
 
 extern FILE *Logfile;
 
 cvar_t *sv_cheats;
 
 struct CmdDispatcher CmdList[] = {
+	{ "error",					Cmd_Error },
+	{ "endgame",				Cmd_Endgame },
+	{ "mem",					Cmd_Mem },
+	{ "pings",					Cmd_Pings },
+	{ "skins",					Cmd_Skins },
+	{ "turn180",				Cmd_Turn180 },
+	{ "puke",					Cmd_Puke },
 	{ "spynext",				Cmd_SpyNext },
 	{ "spyprev",				Cmd_SpyPrev },
 	{ "messagemode",			Cmd_MessageMode },
 	{ "say",					Cmd_Say },
+	{ "messagemode2",			Cmd_MessageMode2 },
+	{ "say_team",				Cmd_Say_Team },
 	{ "limits",					Cmd_Limits },
 	{ "screenshot",				Cmd_Screenshot },
 	{ "vid_setmode",			Cmd_Vid_SetMode },
@@ -42,10 +52,14 @@ struct CmdDispatcher CmdList[] = {
 	{ "sizedown",				Cmd_Sizedown },
 	{ "sizeup",					Cmd_Sizeup },
 	{ "impulse",				Cmd_Impulse },
+	{ "weapnext",				Cmd_WeapNext },
+	{ "weapprev",				Cmd_WeapPrev },
 	{ "alias",					Cmd_Alias },
 	{ "cmdlist",				Cmd_Cmdlist },
 	{ "unbind",					Cmd_Unbind },
 	{ "unbindall",				Cmd_Unbindall },
+	{ "undoublebind",			Cmd_UnDoubleBind },
+	{ "doublebind",				Cmd_DoubleBind },
 	{ "bind",					Cmd_Bind },
 	{ "binddefaults",			Cmd_BindDefaults },
 	{ "dumpheap",				Cmd_DumpHeap },
@@ -69,7 +83,7 @@ struct CmdDispatcher CmdList[] = {
 	{ "logfile",				Cmd_Logfile },
 	{ "noclip",					Cmd_Noclip },
 	{ "notarget",				Cmd_Notarget },
-	{ "quit",					I_Quit },
+	{ "quit",					Cmd_Quit },
 	{ "set",					Cmd_Set },
 	{ "menu_main",				Cmd_Menu_Main },
 	{ "menu_load",				Cmd_Menu_Load },
@@ -89,6 +103,8 @@ struct CmdDispatcher CmdList[] = {
 	{ "bumpgamma",				Cmd_Bumpgamma },
 	{ "togglemessages",			Cmd_ToggleMessages },
 	{ "stop",					Cmd_Stop },
+	{ "soundlist",				Cmd_Soundlist },
+	{ "soundlinks",				Cmd_Soundlinks },
 	{ NULL }
 };
 
@@ -105,6 +121,11 @@ BOOL CheckCheatmode (void)
 	} else {
 		return false;
 	}
+}
+
+void Cmd_Quit (player_t *plyr, int argc, char **argv)
+{
+	exit (0);
 }
 
 void Cmd_ChangeMus (player_t *plyr, int argc, char **argv)
@@ -341,24 +362,50 @@ void Cmd_Logfile (player_t *plyr, int argc, char **argv)
 void Cmd_Limits (player_t *plyr, int argc, char **argv)
 {
 	extern int MaxDeathmatchStarts;
-	extern int MaxPlats;
-	extern int MaxCeilings;
 	extern int MaxSpecialCross;
 	extern int MaxDrawSegs;
 	extern int MaxSegs;
-	extern int MaxVisPlanes;
 	extern int MaxVisSprites;
 	extern int maxopenings;
 
 	Printf_Bold ("Note that the following values are\n"
 				 "dynamic and will increase as needed.\n\n");
-	Printf ("MaxCeilings: %u\n", MaxCeilings);
 	Printf ("MaxDeathmatchStarts: %u\n", MaxDeathmatchStarts);
 	Printf ("MaxDrawSegs: %u\n", MaxDrawSegs);
-	Printf ("MaxPlats: %u\n", MaxPlats);
 	Printf ("MaxSegs: %u\n", MaxSegs);
 	Printf ("MaxSpecialCross: %u\n", MaxSpecialCross);
-	Printf ("MaxVisPlanes: %u\n", MaxVisPlanes);
 	Printf ("MaxVisSprites: %u\n", MaxVisSprites);
 	Printf ("MaxOpeninings: %u\n", maxopenings);
+}
+
+BOOL P_StartScript (void *who, void *where, int script, char *map, int lineSide,
+					int arg0, int arg1, int arg2, int always);
+void Cmd_Puke (player_t *plyr, int argc, char **argv)
+{
+	if (argc < 2 || argc > 5) {
+		Printf (" puke <script> [arg1] [arg2] [arg3]\n");
+	} else {
+		int script = atoi (argv[1]);
+		int arg0=0, arg1=0, arg2=0;
+
+		if (argc > 2) {
+			arg0 = atoi (argv[2]);
+			if (argc > 3) {
+				arg1 = atoi (argv[3]);
+				if (argc > 4) {
+					arg2 = atoi (argv[4]);
+				}
+			}
+		}
+		P_StartScript (plyr->mo, NULL, script, level.mapname, 0, arg0, arg1, arg2, false);
+	}
+}
+
+void Cmd_Error (player_t *plyr, int argc, char **argv)
+{
+	char *text = BuildString (argc - 1, argv + 1);
+	char *textcopy = Z_Malloc (strlen (text) + 1, PU_LEVEL, 0);
+	strcpy (textcopy, text);
+	free (text);
+	I_Error (textcopy);
 }

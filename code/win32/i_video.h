@@ -33,9 +33,6 @@ extern BOOL Fullscreen;
 
 
 // Called by D_DoomMain,
-// determines the hardware configuration
-// and available modes
-void I_StartGraphics (void);
 // Sets up the video mode
 void I_InitGraphics (void);
 
@@ -50,6 +47,7 @@ void I_SetPalette (unsigned int *palette);
 void I_BeginUpdate (void);		// [RH] Locks screen[0]
 void I_UpdateNoBlit (void);
 void I_FinishUpdate (void);
+void I_FinishUpdateNoBlit (void);
 
 // Wait for vertical retrace or pause a bit.
 void I_WaitVBL(int count);

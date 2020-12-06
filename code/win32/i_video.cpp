@@ -5,14 +5,6 @@
 ** There are two reasons why I switched from DirectDraw to PTC:
 **	  1. PTC makes windowed modes easy without any special work.
 **	  2. PTC makes it easy to support *all* hi- and true-color modes.
-**
-** If you wish to use this file, you need to be sure that the
-** PTC include files are in the include path and that you link
-** with the PTC library. If not, the old DirectDraw code can be found
-** in the file "oldvideo.c". Using it is a bit more complicating than
-** just building ZDoom with that file instead of this one, since all
-** new changes I've made since the switch to PTC have only been added
-** here and not oldvideo.c.
 */
 
 #include "ptc.h"
@@ -44,13 +36,14 @@ extern "C" {
 #include "z_zone.h"
 
 
-extern HWND		Window;
-
+extern HWND Window;
+extern BOOL vidactive;	// Checked to avoid annoying flashes on console
+						// during startup if developer is true.
 extern BOOL setmodeneeded;
-extern int	NewWidth, NewHeight, NewBpp;
+extern int	NewWidth, NewHeight, NewID;
 
 
-cvar_t *I_ShowFPS;
+cvar_t *I_ShowFPS, *ticker;
 cvar_t *win_stretchx;
 cvar_t *win_stretchy;
 cvar_t *fullscreen;
@@ -65,27 +58,44 @@ static char FullscreenIFace[8];
 BOOL Fullscreen;
 
 static struct CmdDispatcher VidCommands[] = {
-	"vid_describecurrentmode",	Cmd_Vid_DescribeCurrentMode,
-	"vid_describemodes",		Cmd_Vid_DescribeModes,
-	NULL
+	{ "vid_describecurrentmode",	Cmd_Vid_DescribeCurrentMode },
+	{ "vid_describemodes",			Cmd_Vid_DescribeModes },
+	{ NULL, }
 };
 
-}
+char *IdStrings[22] = {
+	"ARGB8888",
+	"ABGR8888",
+	"BGRA8888",
+	"RGBA8888",
+	"RGB888",
+	"BGR888",
+	"RGB565",
+	"BGR565",
+	"ARGB1555",
+	"ABGR1555",
+	"INDEX8",
+	"FAKEMODE1A",
+	"FAKEMODE1B",
+	"FAKEMODE1C",
+	"FAKEMODE2A",
+	"FAKEMODE2B",
+	"FAKEMODE2C",
+	"FAKEMODE3A",
+	"FAKEMODE3B",
+	"FAKEMODE3C",
+	"GREY8",
+	"RGB332"
+};
+
+byte IdTobpp[22] = {
+	32, 32, 32, 32, 24, 24, 16, 16, 15, 15, 8,
+	18, 18, 18, 14, 14, 14, 12, 12, 12, 8, 8
+};
 
 
 #define true TRUE
 #define false FALSE
-
-inline int ModeFromBPP (int bpp)
-{
-	if (bpp == 8)
-		return INDEX8;
-	else if (bpp == 16)
-		return VIRTUAL16;
-	else
-		return VIRTUAL32;
-}
-
 
 struct screenchain {
 	screen_t *scr;
@@ -101,12 +111,15 @@ typedef struct modelist_s {
 
 static modelist_t *Modes = NULL;
 
+int DisplayID;
 // Number of bits-per-pixel of output device
-static int DisplayBPP;
+int DisplayBPP;
 // Number of bits-per-pixel desired (might not match DisplayBPP)
 static int WantedBPP;
 // Display size
-static int DisplayWidth, DisplayHeight;
+int DisplayWidth, DisplayHeight;
+
+}
 
 static int nummodes = 0;
 
@@ -157,7 +170,7 @@ static void MakeModesList (void)
 			// Filter out modes taller than 1024 pixels since the
 			// assembly routines will choke on them. (Besides, they
 			// are really slow so why use them?)
-			if (ptcmode->y <= 1024) {
+			if (ptcmode->y <= 1024 && ptcmode->format.id == INDEX8) {
 				nummodes++;
 
 				addmode (ptcmode->x, ptcmode->y, ptcmode->format.bits, ptcmode->format.id, &lastmode);
@@ -186,35 +199,7 @@ static void MakeModesList (void)
 
 static char *GetFormatName (const int id)
 {
-	switch (id)
-	{
-		case ARGB8888:		return "ARGB8888";
-		case ABGR8888:		return "ABGR8888";
-		case BGRA8888:		return "BGRA8888";
-		case RGBA8888:		return "RGBA8888";
-		case RGB888:		return "RGB888";
-		case BGR888:		return "BGR888";
-		case RGB565:		return "RGB565";
-		case BGR565:		return "BGR565";
-		case ARGB1555:		return "ARGB1555";
-		case ABGR1555:		return "ABGR1555";
-		case INDEX8:		return "INDEX8";
-		
-		// Will the Win32 version of PTC support fakemodes?
-		// It doesn't on my machine.
-		case FAKEMODE1A:	return "FAKEMODE1A";
-		case FAKEMODE1B:	return "FAKEMODE1B";
-		case FAKEMODE1C:	return "FAKEMODE1C";
-		case FAKEMODE2A:	return "FAKEMODE2A";
-		case FAKEMODE2B:	return "FAKEMODE2B";
-		case FAKEMODE2C:	return "FAKEMODE2C";
-		case FAKEMODE3A:	return "FAKEMODE3A";
-		case FAKEMODE3B:	return "FAKEMODE3B";
-		case FAKEMODE3C:	return "FAKEMODE3C";
-		case GREY8:			return "GREY8";
-		case RGB332:		return "RGB332";
-		default:			return "(custom)";
-	}
+	return IdStrings[id-1000];
 }
 
 
@@ -222,8 +207,6 @@ extern "C" {
 
 void I_ShutdownGraphics (void)
 {
-	I_ShutdownInput ();
-
 	{
 		modelist_t *mode = Modes, *tempmode;
 
@@ -274,6 +257,14 @@ void I_UpdateNoBlit (void)
 }
 
 //
+// I_FinishUpdateNoBlit
+//
+void I_FinishUpdateNoBlit (void)
+{
+	V_UnlockScreen (&screens[0]);
+}
+
+//
 // I_FinishUpdate
 //
 void I_FinishUpdate (void)
@@ -292,12 +283,12 @@ void I_FinishUpdate (void)
 				 1000 / (ms - lastms));
 		chars = strlen (fpsbuff);
 		V_Clear (0, screens[0].height - 8, chars * 8, screens[0].height, &screens[0], 0);
-		V_PrintStr (0, screens[0].height - 8, (byte *)&fpsbuff[0], chars, 0);
+		V_PrintStr (0, screens[0].height - 8, (byte *)&fpsbuff[0], chars);
 	}
 	lastms = ms;
 
 	// draws little dots on the bottom of the screen
-	if (devparm) {
+	if (ticker->value) {
 		i = I_GetTime();
 		tics = i - lasttic;
 		lasttic = i;
@@ -352,7 +343,7 @@ void I_SetPalette (unsigned int *pal)
 		return;
 	}
 
-	memcpy (palentries, pal, 256*(sizeof uint));
+	memcpy (palentries, pal, 256*sizeof(uint));
 
 	DisPal->Unlock ();
 
@@ -370,79 +361,78 @@ void I_SetPalette (unsigned int *pal)
 
 static void ReinitPTC (char *iface)
 {
-	if (!ptc.Init (iface, Window))
+	if (!ptc.Init (iface, (WINDOW)Window))
 		I_FatalError ("Could not reinitialize PTC");
+#ifdef _DEBUG
 	// We don't want our priority class bumped up!
 	SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-	DPrintf ("PTC reinitialized to use %s\n\n", iface);
+#endif
+	if (developer->value && vidactive)
+		Printf ("PTC reinitialized to use %s\n\n", iface);
 }
 
-void I_SetMode (int width, int height, int Bpp)
+void I_SetMode (int width, int height, int id)
 {
-	static BOOL firsttime = true;
-
 	DisplayWidth = width;
 	DisplayHeight = height;
-	WantedBPP = Bpp;
+	DisplayID = id;
 
-	if (firsttime) {
-		firsttime = false;
+	ShowWindow (Window, SW_SHOW);
+
+	if (Fullscreen) {
+		if (!fullscreen->value) {
+			Fullscreen = FALSE;
+			// Get out of fullscreen mode
+			ptc.Close ();
+			//ReinitPTC (WindowedIFace);
+		}
 	} else {
-		if (Fullscreen) {
-			if (!fullscreen->value) {
-				Fullscreen = FALSE;
-				// Get out of fullscreen mode
-				ptc.Close ();
-				//ReinitPTC (WindowedIFace);
-			}
-		} else {
-			if (fullscreen->value) {
-				Fullscreen = TRUE;
-				ReinitPTC (FullscreenIFace);
-			}
+		if (fullscreen->value) {
+			Fullscreen = TRUE;
+			ReinitPTC (FullscreenIFace);
+			I_ResumeMouse ();	// Make sure mouse pointer is grabbed.
 		}
+	}
 
-		if (Fullscreen) {
-			ptc.SetMode (width, height, ModeFromBPP (Bpp));
-		} else {
-			width *= win_stretchx->value;
-			height *= win_stretchy->value;
+	if (Fullscreen) {
+		ptc.SetMode (width, height, id);
+	} else {
+		width *= win_stretchx->value;
+		height *= win_stretchy->value;
 
-			height += GetSystemMetrics (SM_CYFIXEDFRAME) * 2 +
-					  GetSystemMetrics (SM_CYCAPTION);
-			width  += GetSystemMetrics (SM_CXFIXEDFRAME) * 2;
+		height += GetSystemMetrics (SM_CYFIXEDFRAME) * 2 +
+				  GetSystemMetrics (SM_CYCAPTION);
+		width  += GetSystemMetrics (SM_CXFIXEDFRAME) * 2;
 
-			SetWindowPos (Window, NULL, 0, 0, width, height, SWP_DRAWFRAME|
-															 SWP_NOACTIVATE|
-															 SWP_NOCOPYBITS|
-															 SWP_NOMOVE|
-															 SWP_NOZORDER);
+		SetWindowPos (Window, NULL, 0, 0, width, height, SWP_DRAWFRAME|
+														 SWP_NOACTIVATE|
+														 SWP_NOCOPYBITS|
+														 SWP_NOMOVE|
+														 SWP_NOZORDER);
 
-			// Let PTC know about the new window size
-			ReinitPTC (WindowedIFace);
+		// Let PTC know about the new window size
+		ReinitPTC (WindowedIFace);
 
-			// If the menu is active, make sure the mouse is released.
-			if (menuactive)
-				I_PauseMouse ();
-		}
+		// If the menu is active, make sure the mouse is released.
+		if (menuactive || gamestate == GS_FULLCONSOLE)
+			I_PauseMouse ();
 	}
 	{
 		MODE mode = ptc.GetMode();
 
 		DisplayBPP = mode.format.bits;
-		if (developer->value) {
-			Printf ("Mode set: %dx%dx%d\n", mode.x, mode.y, DisplayBPP);
-		}
+		if (developer->value && vidactive)
+			Printf ("Mode set: %dx%d (%s)\n", mode.x, mode.y, IdStrings[DisplayID-1000]);
 	}
 
 	// cheapo hack to make sure current display BPP is stored in screens[0]
-	screens[0].Bpp = WantedBPP >> 3;
+	screens[0].Bpp = IdTobpp[DisplayID-1000] >> 3;
 }
 
 static void refreshDisplay (void) {
 	NewWidth = DisplayWidth;
 	NewHeight = DisplayHeight;
-	NewBpp = WantedBPP;
+	NewID = DisplayID;
 	setmodeneeded = true;
 }
 
@@ -458,20 +448,7 @@ static void fullChanged (cvar_t *var)
 		refreshDisplay ();
 }
 
-void I_InitGraphics(void)
-{
-
-	DisPal = new Palette;
-	if (!DisPal)
-		I_FatalError ("Could not create palette");
-
-	NewWidth = DisplayWidth;
-	NewHeight = DisplayHeight;
-	NewBpp = WantedBPP;
-	setmodeneeded = true;
-}
-
-void I_StartGraphics (void)
+void I_InitGraphics (void)
 {
 	char num[8], *iface;
 	modelist_t *mode = (modelist_t *)&Modes;
@@ -479,6 +456,9 @@ void I_StartGraphics (void)
 	I_DetectOS ();
 
 	I_ShowFPS = cvar ("vid_fps", "0", 0);
+	num[0] = '0' + !!M_CheckParm ("-devparm");
+	num[1] = 0;
+	ticker = cvar ("ticker", num, 0);
 	win_stretchx = cvar ("win_stretchx", "1.0", CVAR_ARCHIVE|CVAR_CALLBACK);
 	win_stretchy = cvar ("win_stretchy", "1.0", CVAR_ARCHIVE|CVAR_CALLBACK);
 	fullscreen = cvar ("fullscreen", "1", CVAR_ARCHIVE|CVAR_CALLBACK);
@@ -503,16 +483,23 @@ void I_StartGraphics (void)
 	if (!ptc.Init (iface, Window))
 		I_FatalError ("Could not initialize PTC");
 
+#ifdef _DEBUG
 	// We don't want our priority class bumped up!
 	SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+#endif
+
+	if (!(DisPal = new Palette))
+		I_FatalError ("Could not create palette");
+
+	atexit (I_ShutdownGraphics);
 }
 
-BOOL I_CheckResolution (int width, int height, int bpp)
+BOOL I_CheckResolution (int width, int height, int id)
 {
 	modelist_t *mode = Modes;
 
 	while (mode) {
-		if (mode->width == width && mode->height == height && mode->bpp == bpp)
+		if (mode->width == width && mode->height == height && mode->id == id)
 			return true;
 
 		mode = mode->next;
@@ -521,18 +508,18 @@ BOOL I_CheckResolution (int width, int height, int bpp)
 }
 
 static modelist_t *IteratorMode;
-static int IteratorBPP;
+static int IteratorID;
 
-void I_StartModeIterator (int bpp)
+void I_StartModeIterator (int id)
 {
 	IteratorMode = Modes;
-	IteratorBPP = bpp;
+	IteratorID = id;
 }
 
 BOOL I_NextMode (int *width, int *height)
 {
 	if (IteratorMode) {
-		while (IteratorMode && IteratorMode->bpp != IteratorBPP)
+		while (IteratorMode && IteratorMode->id != IteratorID)
 			IteratorMode = IteratorMode->next;
 
 		if (IteratorMode) {
@@ -556,7 +543,7 @@ void Cmd_Vid_DescribeModes ()
 				mode->width,
 				mode->height,
 				mode->bpp,
-				GetFormatName (mode->id));
+				IdStrings[mode->id-1000]);
 
 		// go to next mode
 		mode = mode->next;
@@ -565,7 +552,7 @@ void Cmd_Vid_DescribeModes ()
 
 void Cmd_Vid_DescribeCurrentMode ()
 {
-	Printf ("%dx%dx%d\n", screens[0].width, screens[0].height, screens[0].Bpp << 3);
+	Printf ("%dx%d (%s)\n", screens[0].width, screens[0].height, IdStrings[DisplayID-1000]);
 }
 
 
@@ -584,7 +571,7 @@ BOOL I_AllocateScreen (screen_t *scrn, int width, int height, int Bpp)
 	scrn->height = height;
 	scrn->is8bit = (Bpp == 8) ? true : false;
 	scrn->lockcount = 0;
-	scrn->Bpp = WantedBPP >> 3;
+	scrn->Bpp = IdTobpp[DisplayID-1000] >> 3;
 	scrn->palette = NULL;
 
 	if (scrn == &screens[0])
@@ -600,7 +587,7 @@ BOOL I_AllocateScreen (screen_t *scrn, int width, int height, int Bpp)
 		tracer->next = chain;
 		chain = tracer;
 
-		if (developer->value) {
+		if (developer->value && vidactive) {
 			Printf_Bold ("Allocated new surface. (%dx%dx%d)\n",
 					surface->GetWidth (),
 					surface->GetHeight (),
@@ -677,70 +664,94 @@ void I_UnlockScreen (screen_t *scrn)
 void I_Blit (screen_t *src, int srcx, int srcy, int srcwidth, int srcheight,
 			 screen_t *dest, int destx, int desty, int destwidth, int destheight)
 {
-	if (src->impdata && dest->impdata) {
+	if (!src->impdata || !dest->impdata)
+		return;
 /*
 	Funny problem with calling BitBlt() here. The more I do, the slower it gets.
 	It also doesn't give me quite the right dimensions. (?) For now, I just do
 	the conversion and copying myself.
-
-			RECTANGLE srcrect (srcx, srcy, srcx + srcwidth, srcy + srcheight);
-			RECTANGLE destrect (destx, desty, destx + destwidth, desty + destheight);
-
-			((Surface *)(src->impdata))->BitBlt (*(Surface *)(dest->impdata),
-												 srcrect, destrect);
-
 */
-			fixed_t fracxstep, fracystep;
-			fixed_t fracx, fracy;
-			int x, y;
-			byte *destline, *srcline;
+#if 0
+	RECTANGLE srcrect (srcx, srcy, srcx + srcwidth, srcy + srcheight);
+	RECTANGLE destrect (destx, desty, destx + destwidth, desty + destheight);
 
-			if (!src->lockcount)
-				I_LockScreen (src);
-			if (!dest->lockcount)
-				I_LockScreen (dest);
+	((Surface *)(src->impdata))->BitBlt (*(Surface *)(dest->impdata),
+										 srcrect, destrect);
+#else
+	fixed_t fracxstep, fracystep;
+	fixed_t fracx, fracy;
+	int x, y;
 
-			fracy = srcy << FRACBITS;
-			fracystep = (srcheight << FRACBITS) / destheight;
-			fracxstep = (srcwidth << FRACBITS) / destwidth;
+	if (!src->lockcount)
+		I_LockScreen (src);
+	if (!dest->lockcount)
+		I_LockScreen (dest);
 
-//			if (src->is8bit == dest->is8bit) {
-				if (!dest->is8bit) {
-					destwidth <<= 2;
-					srcwidth <<= 2;
-					srcx <<= 2;
-					destx <<= 2;
-				}
+	fracy = srcy << FRACBITS;
+	fracystep = (srcheight << FRACBITS) / destheight;
+	fracxstep = (srcwidth << FRACBITS) / destwidth;
 
-				if (fracxstep == FRACUNIT) {
-					for (y = desty; y < desty + destheight; y++, fracy += fracystep) {
-						memcpy (dest->buffer + y * dest->pitch + destx,
-								src->buffer + (fracy >> FRACBITS) * src->pitch + srcx,
-								destwidth);
-					}
-				} else {
-					for (y = desty; y < desty + destheight; y++, fracy += fracystep) {
-						srcline = src->buffer + (fracy >> FRACBITS) * src->pitch + srcx;
-						destline = dest->buffer + y * dest->pitch + destx;
-						for (x = fracx = 0; x < destwidth; x++, fracx += fracxstep) {
-							destline[x] = srcline[fracx >> FRACBITS];
-						}
-					}
-				}
-/*			} else if (!src->is8bit && dest->is8bit) {
-				I_FatalError ("Can't I_Blit() an ARGB8888 source to\nan INDEX8 destination");
-			} else {
-				RASTER raster;
-				uint templine[4096];		// Support lines as long as 4096 pixels
+	if (src->is8bit == dest->is8bit) {
+		// INDEX8 -> INDEX8 or ARGB8888 -> ARGB8888
 
-				if (src->is8bit && dest->is8bit)
+		byte *destline, *srcline;
 
-
-			if (!src->lockcount)
-				I_UnlockScreen (src);
-			if (!dest->lockcount)
-				I_UnlockScreen (dest);
+		if (!dest->is8bit) {
+			destwidth <<= 2;
+			srcwidth <<= 2;
+			srcx <<= 2;
+			destx <<= 2;
 		}
-*/	}
+
+		if (fracxstep == FRACUNIT) {
+			for (y = desty; y < desty + destheight; y++, fracy += fracystep) {
+				memcpy (dest->buffer + y * dest->pitch + destx,
+						src->buffer + (fracy >> FRACBITS) * src->pitch + srcx,
+						destwidth);
+			}
+		} else {
+			for (y = desty; y < desty + destheight; y++, fracy += fracystep) {
+				srcline = src->buffer + (fracy >> FRACBITS) * src->pitch + srcx;
+				destline = dest->buffer + y * dest->pitch + destx;
+				for (x = fracx = 0; x < destwidth; x++, fracx += fracxstep) {
+					destline[x] = srcline[fracx >> FRACBITS];
+				}
+			}
+		}
+	} else if (!src->is8bit && dest->is8bit) {
+		// ARGB8888 -> INDEX8
+		I_FatalError ("Can't I_Blit() an ARGB8888 source to\nan INDEX8 destination");
+	} else {
+		// INDEX8 -> ARGB8888 (Palette set in V_Palette)
+		uint *destline;
+		byte *srcline;
+
+		if (fracxstep == FRACUNIT) {
+			// No X-scaling
+			for (y = desty; y < desty + destheight; y++, fracy += fracystep) {
+				srcline = src->buffer + (fracy >> FRACBITS) * src->pitch + srcx;
+				destline = (uint *)(dest->buffer + y * dest->pitch) + destx;
+				for (x = 0; x < destwidth; x++) {
+					destline[x] = V_Palette[srcline[x]];
+				}
+			}
+		} else {
+			// With X-scaling
+			for (y = desty; y < desty + destheight; y++, fracy += fracystep) {
+				srcline = src->buffer + (fracy >> FRACBITS) * src->pitch + srcx;
+				destline = (uint *)(dest->buffer + y * dest->pitch) + destx;
+				for (x = fracx = 0; x < destwidth; x++, fracx += fracxstep) {
+					destline[x] = V_Palette[srcline[fracx >> FRACBITS]];
+				}
+			}
+		}
+	}
+
+	if (!src->lockcount)
+		I_UnlockScreen (src);
+	if (!dest->lockcount)
+		I_UnlockScreen (dest);
+#endif
 }
-}
+
+}	// extern "C"

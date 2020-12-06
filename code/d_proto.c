@@ -280,7 +280,7 @@ void ReadTicCmd (ticcmd_t *tcmd, byte **stream, int player)
 }
 
 
-static byte *lenspot;
+byte *lenspot;
 
 // Write the header of an IFF chunk and leave space
 // for the length field.

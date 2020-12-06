@@ -35,6 +35,7 @@
 #include "d_main.h"
 #include "i_system.h"
 #include "c_consol.h"
+#include "z_zone.h"
 
 LRESULT CALLBACK WndProc (HWND, UINT, WPARAM, LPARAM);
 
@@ -53,6 +54,8 @@ LONG			WinWidth, WinHeight;
 HFONT			OemFont;
 HDC				WinDC;
 
+extern float mb_used;
+
 int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int nCmdShow)
 {
 	int wantHeight, wantWidth, height, width;
@@ -63,12 +66,27 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 	myargc = __argc;
 	myargv = __argv;
 
+	/*
+	 killough 1/98:
+
+	 This fixes some problems with exit handling
+	 during abnormal situations.
+
+	 The old code called I_Quit() to end program,
+	 while now I_Quit() is installed as an exit
+	 handler and exit() is called to exit, either
+	 normally or abnormally.
+	*/
+
+	Z_Init ();					// 1/18/98 killough: start up memory stuff first
+	atexit (I_Quit);
+
 #ifdef USEASM
 	{
 		// Disable write-protection of code segment
 		// (from Win32 Demo Programming FAQ)
 		DWORD OldRights;
-		BYTE *pBaseOfImage = GetModuleHandle(0);
+		BYTE *pBaseOfImage = (BYTE *)GetModuleHandle(0);
 		IMAGE_OPTIONAL_HEADER *pHeader = (IMAGE_OPTIONAL_HEADER *)
 			(pBaseOfImage + ((IMAGE_DOS_HEADER*)pBaseOfImage)->e_lfanew +
 			sizeof(IMAGE_NT_SIGNATURE) + sizeof(IMAGE_FILE_HEADER));
@@ -76,6 +94,11 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 			I_FatalError ("Could not make code writable\n");
 	}
 #endif
+
+	// Figure out what directory the program resides in.
+    GetModuleFileName (NULL, progdir, 1024);
+    *(strrchr (progdir, '\\') + 1) = 0;
+	FixPathSeperator (progdir);
 
 	height = GetSystemMetrics (SM_CYFIXEDFRAME) * 2 +
 			 GetSystemMetrics (SM_CYCAPTION) + 12 * 32;
@@ -99,7 +122,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 	/* create window */
 	Window = CreateWindow((LPCTSTR)WinClassName,
 			(LPCTSTR) "ZDOOM (" __DATE__ ")",
-			WS_CAPTION | WS_OVERLAPPED | WS_MINIMIZEBOX | WS_SYSMENU,
+			WS_CAPTION | WS_OVERLAPPED,
 			CW_USEDEFAULT, CW_USEDEFAULT, width, height,
 			(HWND)   NULL,
 			(HMENU)  NULL,
@@ -130,13 +153,15 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 	if (wantWidth != cRect.right)
 		width += wantWidth = cRect.right;
 
-	SetWindowPos (Window, 0, 0, 0, width, height, SWP_NOMOVE|SWP_NOZORDER|SWP_SHOWWINDOW);
+	SetWindowPos (Window, 0, 0, 0, width, height, SWP_NOMOVE|SWP_NOZORDER);
 	GetClientRect (Window, &cRect);
 
 	WinWidth = cRect.right;
 	WinHeight = cRect.bottom;
 
 	C_InitConsole (((WinWidth / OemWidth) + 2) * 8, (WinHeight / OemHeight) * 8, false);
+
+	Printf ("Heapsize: %g megabytes\n", mb_used);
 
 	D_DoomMain ();
 

@@ -1,4 +1,5 @@
-#define DIRECTINPUT_VERSION 0x300
+#define DIRECTINPUT_VERSION 0x300	// We want to support DX 3.0, and
+#define _WIN32_WINNT 0x0400			// we want to support the mouse wheel
 
 #define WIN32_LEAN_AND_MEAN
 #define __BYTEBOOL__
@@ -10,13 +11,14 @@
 
 #include <dinput.h>
 
+#include "doomdef.h"
+#include "doomstat.h"
 #include "m_argv.h"
 #include "i_input.h"
 #include "v_video.h"
 
-#include "i_music.h"
-
 #include "d_main.h"
+#include "c_consol.h"
 #include "c_cvars.h"
 #include "i_system.h"
 #include "i_video.h"
@@ -24,9 +26,9 @@
 #include "s_sound.h"
 
 
-#define DINPUT_BUFFERSIZE           32
+#define DINPUT_BUFFERSIZE	32
 
-extern HINSTANCE		g_hInst;					/* My instance handle */
+extern HINSTANCE g_hInst;
 
 static void KeyRead (void);
 static BOOL DI_Init2 (void);
@@ -37,10 +39,12 @@ static void UngrabMouse_Win32 (void);
 static BOOL I_GetDIMouse (void);
 static void I_GetWin32Mouse (void);
 static void CenterMouse_Win32 (void);
+static void WheelMoved (void);
 
+static BOOL mousepaused;
 static BOOL WindowActive;
 static BOOL MakeMouseEvents;
-
+extern BOOL menuactive;
 extern BOOL vidactive;
 extern HWND Window;
 
@@ -64,24 +68,32 @@ static mousemode_t mousemode;
 extern BOOL paused;
 static BOOL havefocus = FALSE;
 static BOOL noidle = FALSE;
+static int WheelMove;
 
 // Used by the console for making keys repeat
 int KeyRepeatDelay;
 int KeyRepeatRate;
 
-LPDIRECTINPUT			g_pdi;
-LPDIRECTINPUTDEVICE		g_pKey;
-LPDIRECTINPUTDEVICE		g_pMouse;
+static LPDIRECTINPUT			g_pdi;
+static LPDIRECTINPUTDEVICE		g_pKey;
+static LPDIRECTINPUTDEVICE		g_pMouse;
 
 //Other globals
-int GDx,GDy;
+static int GDx,GDy;
 
-extern int ConsoleState;
+extern constate_e ConsoleState;
 
 cvar_t *i_remapkeypad;
-cvar_t *usejoystick;
+
 cvar_t *usemouse;
 cvar_t *in_mouse;
+
+cvar_t *usejoystick;
+cvar_t *joy_speedmultiplier;
+cvar_t *joy_ythreshold;
+cvar_t *joy_ysensitivity;
+cvar_t *joy_xthreshold;
+cvar_t *joy_xsensitivity;
 
 // Convert DIK_* code to ASCII using Qwerty keymap
 static const byte Convert []={
@@ -123,24 +135,16 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	switch(message) {
 		case WM_DESTROY:
-			PostQuitMessage (0);
+			SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+			//PostQuitMessage (0);
+			exit (0);
 			break;
 
 		case WM_HOTKEY:
 			break;
 
 		case WM_PAINT:
-			if (!vidactive) {
-				I_PaintConsole ();
-			} else {
-				return DefWindowProc (hWnd, message, wParam, lParam);
-			}
-			break;
-
-		case MM_MCINOTIFY:
-			if (wParam == MCI_NOTIFY_SUCCESSFUL)
-				I_RestartSong ();
-			break;
+			return DefWindowProc (hWnd, message, wParam, lParam);
 
 		case WM_KILLFOCUS:
 			if (g_pKey) IDirectInputDevice_Unacquire (g_pKey);
@@ -171,12 +175,15 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			break;
 
 		case WM_SETFOCUS:
+#ifdef _DEBUG
 			SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+#else
+			SetPriorityClass (GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+#endif
 			if (g_pKey) IDirectInputDevice_Acquire (g_pKey);
 			havefocus = TRUE;
-			if ((Fullscreen || (!paused && !menuactive)) && g_pMouse) {
-				IDirectInputDevice_Acquire (g_pMouse);
-			}
+			if (g_pMouse && (Fullscreen || !mousepaused))
+				I_ResumeMouse ();
 			if (!paused)
 				S_ResumeSound ();
 			break;
@@ -184,7 +191,8 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case WM_ACTIVATE:
 			if (LOWORD(wParam)) {
 				WindowActive = TRUE;
-				if (mousemode == win32 && MakeMouseEvents) {
+				if (mousemode == win32 && MakeMouseEvents &&
+					(!mousepaused || Fullscreen)) {
 					GrabMouse_Win32 ();
 				}
 			} else {
@@ -267,6 +275,13 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 			break;
 
+		case WM_MOUSEWHEEL:
+			if (MakeMouseEvents && mousemode == win32) {
+				WheelMove += (short) HIWORD(wParam);
+				WheelMoved ();
+			}
+			break;
+
 		default:
 			return DefWindowProc (hWnd, message, wParam, lParam);
 	}
@@ -293,35 +308,70 @@ static void BuildCvt2Table (void)
 
 /****** Stuff from Andy Bay's myjoy.c ******/
 
-struct {
+static struct {
 	int X,Y,Z,R,U,V;
-}			JoyBias;
-int 		JoyActive;
-JOYINFOEX	JoyStats;
-JOYCAPS 	JoyCaps;
-
+}					JoyBias;
+static int 			JoyActive;
+static int			JoyDevice;
+static JOYINFOEX	JoyStats;
+static JOYCAPS 		JoyCaps;
 
 void JoyFixBias (void)
 {
 	JoyBias.X = (JoyCaps.wXmin + JoyCaps.wXmax) >> 1;
 	JoyBias.Y = (JoyCaps.wYmin + JoyCaps.wYmax) >> 1;
-	JoyBias.Z = (JoyCaps.wZmin + JoyCaps.wZmax) >> 1;
-	JoyBias.R = (JoyCaps.wRmin + JoyCaps.wRmax) >> 1;
-	JoyBias.U = (JoyCaps.wUmin + JoyCaps.wUmax) >> 1;
-	JoyBias.V = (JoyCaps.wVmin + JoyCaps.wVmax) >> 1;
+//	JoyBias.Z = (JoyCaps.wZmin + JoyCaps.wZmax) >> 1;
+//	JoyBias.R = (JoyCaps.wRmin + JoyCaps.wRmax) >> 1;
+//	JoyBias.U = (JoyCaps.wUmin + JoyCaps.wUmax) >> 1;
+//	JoyBias.V = (JoyCaps.wVmin + JoyCaps.wVmax) >> 1;
 }
 
 void DI_JoyCheck (void)
 {
 	event_t joyevent;
+	fixed_t xscale, yscale;
+	int xdead, ydead;
 
 	if (JoyActive) {
 		JoyStats.dwFlags = JOY_RETURNALL;
-		if (joyGetPosEx (0, &JoyStats)) {
+		if (joyGetPosEx (JoyDevice, &JoyStats)) {
 			JoyActive = 0;
 			return;
 		}
+		joyevent.type = ev_joystick;
+		joyevent.data1 = 0;
+		joyevent.data2 = JoyStats.dwXpos - JoyBias.X;
+		joyevent.data3 = JoyStats.dwYpos - JoyBias.Y;
 
+		xdead = (int)((float)JoyBias.X * joy_xthreshold->value);
+		ydead = (int)((float)JoyBias.Y * joy_ythreshold->value);
+		xscale = (int)(16777216 / ((float)JoyBias.X * (1 - joy_xthreshold->value)) * joy_xsensitivity->value * joy_speedmultiplier->value);
+		yscale = (int)(16777216 / ((float)JoyBias.Y * (1 - joy_ythreshold->value)) * joy_ysensitivity->value * joy_speedmultiplier->value);
+
+		if (abs (joyevent.data2) < xdead)
+			joyevent.data2 = 0;
+		else if (joyevent.data2 > 0) {
+			joyevent.data2 = FixedMul (joyevent.data2 - xdead, xscale);
+		} else if (joyevent.data2 < 0) {
+			joyevent.data2 = FixedMul (joyevent.data2 + xdead, xscale);
+		}
+		if (joyevent.data2 > 256)
+			joyevent.data2 = 256;
+		else if (joyevent.data2 < -256)
+			joyevent.data2 = -256;
+
+		if (abs (joyevent.data3) < ydead)
+			joyevent.data3 = 0;
+		else if (joyevent.data3 > 0) {
+			joyevent.data3 = FixedMul (joyevent.data3 - ydead, yscale);
+		} else if (joyevent.data3 < 0) {
+			joyevent.data3 = FixedMul (joyevent.data3 + ydead, yscale);
+		}
+		if (joyevent.data3 > 256)
+			joyevent.data3 = 256;
+		else if (joyevent.data3 < -256)
+			joyevent.data3 = -256;
+/*
 		joyevent.type = ev_joystick;
 		joyevent.data1 = 0;
 		joyevent.data2 = JoyStats.dwXpos - JoyBias.X;
@@ -345,7 +395,7 @@ void DI_JoyCheck (void)
 		}
 		else
 			joyevent.data3 = 0;
-
+*/
 		D_PostEvent (&joyevent);
 
 		{	/* Send out button up/down events */
@@ -374,13 +424,29 @@ void DI_JoyCheck (void)
 
 BOOL DI_InitJoy (void)
 {
-	Printf ("DI_InitJoy: Initialize joystick\n");
+	int i;
+
 	JoyActive = joyGetNumDevs ();
-	if (JoyActive) {
-		JoyStats.dwSize = sizeof(JOYINFOEX);
-		joyGetDevCaps (0, &JoyCaps, sizeof(JOYCAPS));
-		JoyFixBias();
+	JoyStats.dwSize = sizeof(JOYINFOEX);
+	JoyDevice = -1;
+
+	for (i = JOYSTICKID1; i <= JOYSTICKID2; i++) {
+		if (joyGetDevCaps (i, &JoyCaps, sizeof(JOYCAPS)) != JOYERR_NOERROR)
+			continue;
+
+		JoyStats.dwFlags = JOY_RETURNALL;
+		if (joyGetPosEx (i, &JoyStats) != JOYERR_NOERROR)
+			continue;
+
+		JoyDevice = i;
+		break;
 	}
+
+	if (JoyDevice == -1)
+		JoyActive = 0;
+	else
+		JoyFixBias();
+
 	return TRUE;
 }
 
@@ -389,6 +455,7 @@ void I_PauseMouse (void)
 	if (Fullscreen)
 		return;
 
+	mousepaused = TRUE;
 	if (g_pMouse) {
 		IDirectInputDevice_Unacquire (g_pMouse);
 	} else {
@@ -398,6 +465,10 @@ void I_PauseMouse (void)
 
 void I_ResumeMouse (void)
 {
+	if (!Fullscreen && gamestate == GS_FULLCONSOLE)
+		return;
+
+	mousepaused = FALSE;
 	if (!g_pMouse) {
 		GrabMouse_Win32 ();
 	} else {
@@ -525,15 +596,20 @@ BOOL I_InitInput (void *hwnd)
 	DIRECTINPUTCREATE_FUNCTION DirectInputCreateFunction;
 	HRESULT hr;
 
+	atexit (I_ShutdownInput);
+
 	noidle = M_CheckParm ("-noidle");
 
 	in_mouse = cvar ("in_mouse", "0", CVAR_ARCHIVE|CVAR_CALLBACK);
 	in_mouse->u.callback = in_mouse_changed;
 
-	Printf ("I_InitInput: Initialize DirectInput\n");
+	joy_speedmultiplier = cvar ("joy_speedmultiplier", "1", CVAR_ARCHIVE);
+	joy_xsensitivity = cvar ("joy_xsensitivity", "1", CVAR_ARCHIVE);
+	joy_ysensitivity = cvar ("joy_ysensitivity", "-1", CVAR_ARCHIVE);
+	joy_xthreshold = cvar ("joy_xthreshold", "0.15", CVAR_ARCHIVE);
+	joy_ythreshold = cvar ("joy_ythreshold", "0.15", CVAR_ARCHIVE);
 
 	// [RH] Removed dependence on existance of dinput.lib when linking.
-
 	DirectInputInstance = (HMODULE)LoadLibrary ("dinput.dll");
 	if (!DirectInputInstance)
 		I_FatalError ("Sorry, you need Microsoft's DirectX installed.\n\n"
@@ -594,7 +670,18 @@ static void CenterMouse_Win32 (void) {
 	SetCursorPos (PrevX, PrevY);
 }
 
-static int showcount = 1;
+static void SetCursorState (int visible) {
+	int count;
+	BOOL direction = visible;
+	
+	do {
+		count = ShowCursor (direction);
+		if (visible && count > 0)
+			direction = FALSE;
+		else if (!visible && count < -1)
+			direction = TRUE;
+	} while (count != visible - 1);
+}
 
 static void GrabMouse_Win32 (void) {
 	RECT rect;
@@ -602,21 +689,37 @@ static void GrabMouse_Win32 (void) {
 	ClipCursor (NULL);		// helps with Win95?
 	GetWindowRect (Window, &rect);
 	ClipCursor (&rect);
-	if (showcount) {
-		ShowCursor (FALSE);
-		showcount--;
-	}
+	SetCursorState (FALSE);
 	CenterMouse_Win32 ();
 	MakeMouseEvents = TRUE;
 }
 
 static void UngrabMouse_Win32 (void) {
 	ClipCursor (NULL);
-	if (!showcount) {
-		ShowCursor (TRUE);
-		showcount++;
-	}
+	SetCursorState (TRUE);
 	MakeMouseEvents = FALSE;
+}
+
+static void WheelMoved (void)
+{
+	event_t event;
+	int dir;
+
+	event.data2 = event.data3 = 0;
+	if (WheelMove < 0) {
+		dir = WHEEL_DELTA;
+		event.data1 = KEY_MWHEELDOWN;
+	} else {
+		dir = -WHEEL_DELTA;
+		event.data1 = KEY_MWHEELUP;
+	}
+	while (abs (WheelMove) >= WHEEL_DELTA) {
+		event.type = ev_keydown;
+		D_PostEvent (&event);
+		event.type = ev_keyup;
+		D_PostEvent (&event);
+		WheelMove += dir;
+	}
 }
 
 static void MouseRead_Win32 (void) {
@@ -685,6 +788,12 @@ static void MouseRead_DI (void) {
 				GDy += od.dwData;
 				break;
 
+		/* DIMOFS_Z: Mouse wheel motion */
+			case DIMOFS_Z:
+				WheelMove += od.dwData;
+				WheelMoved ();
+				break;
+
 		/* [RH] Mouse button events now mimic keydown/up events */
 			case DIMOFS_BUTTON0:
 				if(od.dwData & 0x80) {
@@ -749,8 +858,6 @@ static BOOL DI_Init2 (void)
 			},
 			DINPUT_BUFFERSIZE,				// dwData
 		};
-
-	Printf ("DI_Init2: Initialize keyboard\n");
 
 	BuildCvt2Table ();
 
@@ -858,7 +965,7 @@ static void KeyRead (void) {
 					default:
 						// Don't remap the keypad if the console is accepting input.
 						if (i_remapkeypad->value &&
-							ConsoleState != 1 && ConsoleState != 2) {
+							ConsoleState != c_falling && ConsoleState != c_down) {
 							switch (key) {
 								case DIK_NUMPAD4:
 									key = DIK_LEFT;
@@ -916,7 +1023,7 @@ void I_GetEvent(void)
 //	while (1) {
 		while (PeekMessage (&mess, NULL, 0, 0, PM_REMOVE)) {
 			if (mess.message == WM_QUIT)
-				I_Quit ();
+				exit (mess.wParam);
 			TranslateMessage (&mess);
 			DispatchMessage (&mess);
 		}

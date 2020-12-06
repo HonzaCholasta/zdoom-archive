@@ -26,7 +26,7 @@
 #include "doomdef.h"
 
 #include "doomstat.h"
-#include "sounds.h"
+#include "s_sound.h"
 
 
 
@@ -48,14 +48,13 @@ void I_SetSfxVolume(int volume);
 // Initialize channels?
 void I_SetChannels();
 
-// Get raw data lump index for sound descriptor.
-int I_GetSfxLumpNum (sfxinfo_t* sfxinfo );
-
+// load a sound from disk
+void I_LoadSound (struct sfxinfo_struct *sfx);
 
 // Starts a sound in a particular sound channel.
 int
 I_StartSound
-( int			id,
+( struct sfxinfo_struct *sfx,
   int			vol,
   int			sep,
   int			pitch,

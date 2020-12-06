@@ -80,27 +80,26 @@ typedef int SOCKET;
 #	define IPPORT_USERRESERVED 5000
 #endif
 
-
-void	NetSend (void);
-BOOL	NetListen (void);
+static void	NetSend (void);
+static BOOL	NetListen (void);
 
 
 //
 // NETWORKING
 //
 
-int 	DOOMPORT =		(IPPORT_USERRESERVED +0x1d );
+static int 	DOOMPORT =		(IPPORT_USERRESERVED +0x1d );
 
-int 	sendsocket;
-int 	insocket;
+static int 	sendsocket;
+static int 	insocket;
 
-struct	sockaddr_in 	sendaddress[MAXNETNODES];
+static struct sockaddr_in 	sendaddress[MAXNETNODES];
 
 void	(*netget) (void);
 void	(*netsend) (void);
 
 #ifdef __WIN32__
-char *neterror (void);
+char	*neterror (void);
 #endif
 
 
@@ -115,10 +114,10 @@ int UDPsocket (void)
 	s = socket (PF_INET, SOCK_DGRAM, IPPROTO_UDP);
 #ifdef __WIN32__
 	if ( s == INVALID_SOCKET )
-		I_Error ("can't create socket: %s", neterror());
+		I_FatalError ("can't create socket: %s", neterror());
 #else
 	if (s<0)
-		I_Error ("can't create socket: %s",strerror(errno));
+		I_FatalError ("can't create socket: %s",strerror(errno));
 #endif	  
 				
 	return (int) s;
@@ -140,10 +139,10 @@ void BindToLocalPort (int s, int port)
 	v = bind ((SOCKET) s, (void *)&address, sizeof(address));
 #ifdef __WIN32__
 	if (v == -1)
-		I_Error ("BindToPort: bind: %s", neterror());
+		I_FatalError ("BindToPort: bind: %s", neterror());
 #else
 	if (v == -1)
-		I_Error ("BindToPort: bind: %s", strerror(errno));
+		I_FatalError ("BindToPort: bind: %s", strerror(errno));
 #endif	  
 }
 
@@ -234,19 +233,19 @@ int GetLocalAddress (void)
 	v = gethostname (hostname, sizeof(hostname));
 #ifdef __WIN32__
 	if (v == -1)
-		I_Error ("GetLocalAddress : gethostname: %s", neterror());
+		I_FatalError ("GetLocalAddress : gethostname: %s", neterror());
 #else
 	if (v == -1)
-		I_Error ("GetLocalAddress : gethostname: errno %d",errno);
+		I_FatalError ("GetLocalAddress : gethostname: errno %d",errno);
 #endif	  
 		
 	hostentry = gethostbyname (hostname);
 #ifdef __WIN32__
 	if (!hostentry)
-		I_Error ("GetLocalAddress : gethostbyname: %s", neterror());
+		I_FatalError ("GetLocalAddress : gethostbyname: %s", neterror());
 #else
 	if (!hostentry)
-		I_Error ("GetLocalAddress : gethostbyname: couldn't get local host");
+		I_FatalError ("GetLocalAddress : gethostbyname: couldn't get local host");
 #endif	  
 				
 	return *(int *)hostentry->h_addr_list[0];
@@ -297,9 +296,7 @@ void I_InitNetwork (void)
 	
 	// parse network game options,
 	//	-net <consoleplayer> <host> <host> ...
-	i = M_CheckParm ("-net");
-	if (!i)
-	{
+	if ( !(i = M_CheckParm ("-net")) ) {
 		// single player game
 		netgame = false;
 		doomcom->id = DOOMCOM_ID;
@@ -363,9 +360,9 @@ void I_InitNetwork (void)
 			hostentry = gethostbyname (myargv[i]);
 			if (!hostentry)
 #ifdef __WIN32__
-				I_Error ("gethostbyname: couldn't find %s\n%s", myargv[i], neterror());
+				I_FatalError ("gethostbyname: couldn't find %s\n%s", myargv[i], neterror());
 #else
-				I_Error ("gethostbyname: couldn't find %s\n%s", myargv[i], strerror(errno));
+				I_FatalError ("gethostbyname: couldn't find %s\n%s", myargv[i], strerror(errno));
 #endif
 			sendaddress[doomcom->numnodes].sin_addr.s_addr 
 				= *(int *)hostentry->h_addr_list[0];

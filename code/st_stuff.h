@@ -58,6 +58,9 @@ void ST_Init (void);
 // Draw the HUD (only if old status bar is not drawn)
 void ST_newDraw (void);
 
+// Called on init and whenever player's skin changes
+void ST_loadGraphics (void);
+
 
 // States for status bar code.
 typedef enum
@@ -80,6 +83,9 @@ typedef enum
 
 BOOL ST_Responder(event_t* ev);
 
+// [RH] Base blending values (for e.g. underwater)
+extern int BaseBlendR, BaseBlendG, BaseBlendB;
+extern float BaseBlendA;
 
 
 #endif

@@ -20,25 +20,11 @@
 //-----------------------------------------------------------------------------
 
 
-#ifndef __I_NET__
-#define __I_NET__
-
-
-
+#ifndef __I_NET_H__
+#define __I_NET_H__
 
 // Called by D_DoomMain.
-
-
 void I_InitNetwork (void);
 void I_NetCmd (void);
 
-
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log: i_net.h,v $
-// Revision 1.1.1.1  1997/12/28 12:59:02  pekangas
-// Initial DOOM source release from id Software
-//
-//
-//-----------------------------------------------------------------------------

@@ -11,7 +11,8 @@
 void I_InitMusic(void);
 void I_ShutdownMusic(void);
 // Volume.
-void I_SetMusicVolume(int volume);
+void I_SetMIDIVolume (float volume);
+void I_SetMusicVolume (int volume);
 // PAUSE game handling.
 void I_PauseSong(int handle);
 void I_ResumeSong(int handle);
@@ -29,8 +30,5 @@ I_PlaySong
 void I_StopSong(int handle);
 // See above (register), then think backwards
 void I_UnRegisterSong(int handle);
-
-// Called from WndProc when MIDI is finished
-void I_RestartSong (void);
 
 #endif //__I_MUSIC_H__

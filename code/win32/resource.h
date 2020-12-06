@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Developer Studio generated include file.
-// Used by doom.rc
+// Used by zdoom.rc
 //
 #define IDI_ICON1                       101
 #define IDD_MIDASINITERROR              108
