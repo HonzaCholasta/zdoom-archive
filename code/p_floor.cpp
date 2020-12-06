@@ -35,7 +35,7 @@
 // FLOORS
 //
 
-IMPLEMENT_SERIAL (DFloor, DMovingFloor)
+IMPLEMENT_CLASS (DFloor)
 
 DFloor::DFloor ()
 {
@@ -49,17 +49,17 @@ void DFloor::Serialize (FArchive &arc)
 		<< m_Direction
 		<< m_NewSpecial
 		<< m_Texture
-		<< m_FloorDestHeight
+		<< m_FloorDestDist
 		<< m_Speed
 		<< m_ResetCount
-		<< m_OrgHeight
+		<< m_OrgDist
 		<< m_Delay
 		<< m_PauseTime
 		<< m_StepTime
 		<< m_PerStepTime;
 }
 
-IMPLEMENT_SERIAL (DElevator, DMover)
+IMPLEMENT_CLASS (DElevator)
 
 DElevator::DElevator ()
 {
@@ -70,12 +70,12 @@ void DElevator::Serialize (FArchive &arc)
 	Super::Serialize (arc);
 	arc << m_Type
 		<< m_Direction
-		<< m_FloorDestHeight
-		<< m_CeilingDestHeight
+		<< m_FloorDestDist
+		<< m_CeilingDestDist
 		<< m_Speed;
 }
 
-IMPLEMENT_SERIAL (DFloorWaggle, DMovingFloor)
+IMPLEMENT_CLASS (DFloorWaggle)
 
 DFloorWaggle::DFloorWaggle ()
 {
@@ -84,7 +84,7 @@ DFloorWaggle::DFloorWaggle ()
 void DFloorWaggle::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	arc << m_OriginalHeight
+	arc << m_OriginalDist
 		<< m_Accumulator
 		<< m_AccDelta
 		<< m_TargetScale
@@ -111,7 +111,7 @@ void DFloor::RunThink ()
 			{
 				m_Type = resetStair;
 				m_Direction = (m_Direction > 0) ? -1 : 1;
-				m_FloorDestHeight = m_OrgHeight;
+				m_FloorDestDist = m_OrgDist;
 			}
 		}
 		if (m_PauseTime)
@@ -132,7 +132,7 @@ void DFloor::RunThink ()
 	if (m_Type == waitStair)
 		return;
 
-	res = MoveFloor (m_Speed, m_FloorDestHeight, m_Crush, m_Direction);
+	res = MoveFloor (m_Speed, m_FloorDestDist, m_Crush, m_Direction);
 	
 	if (res == pastdest)
 	{
@@ -228,15 +228,15 @@ void DElevator::RunThink ()
 
 	if (m_Direction < 0)	// moving down
 	{
-		res = MoveCeiling (m_Speed, m_CeilingDestHeight, m_Direction);
+		res = MoveCeiling (m_Speed, m_CeilingDestDist, m_Direction);
 		if (res == ok || res == pastdest)
-			MoveFloor (m_Speed, m_FloorDestHeight, m_Direction);
+			MoveFloor (m_Speed, m_FloorDestDist, m_Direction);
 	}
 	else // up
 	{
-		res = MoveFloor (m_Speed, m_FloorDestHeight, m_Direction);
+		res = MoveFloor (m_Speed, m_FloorDestDist, m_Direction);
 		if (res == ok || res == pastdest)
-			MoveCeiling (m_Speed, m_CeilingDestHeight, m_Direction);
+			MoveCeiling (m_Speed, m_CeilingDestDist, m_Direction);
 	}
 
 	if (res == pastdest)	// if destination height acheived
@@ -281,14 +281,17 @@ DFloor::DFloor (sector_t *sec)
 // HANDLE FLOOR TYPES
 // [RH] Added tag, speed, height, crush, change params.
 //
-BOOL EV_DoFloor (DFloor::EFloor floortype, line_t *line, int tag,
+bool EV_DoFloor (DFloor::EFloor floortype, line_t *line, int tag,
 				 fixed_t speed, fixed_t height, int crush, int change)
 {
-	int 				secnum;
-	BOOL 				rtn;
-	sector_t*			sec;
-	DFloor*				floor;
-	BOOL				manual = false;
+	int 		secnum;
+	bool 		rtn;
+	sector_t*	sec;
+	DFloor*		floor;
+	bool		manual = false;
+	fixed_t		ceilingheight;
+	fixed_t		newheight;
+	vertex_t	*spot, *spot2;
 
 	rtn = false;
 
@@ -319,7 +322,7 @@ manual_floor:
 		floor->m_Crush = -1;
 		floor->m_Speed = speed;
 		floor->m_ResetCount = 0;				// [RH]
-		floor->m_OrgHeight = sec->floorheight;	// [RH]
+		floor->m_OrgDist = sec->floorplane.d;	// [RH]
 
 		floor->StartFloorSound ();
 
@@ -327,91 +330,104 @@ manual_floor:
 		{
 		case DFloor::floorLowerToHighest:
 			floor->m_Direction = -1;
-			floor->m_FloorDestHeight = P_FindHighestFloorSurrounding(sec);
+			newheight = sec->FindHighestFloorSurrounding (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			// [RH] DOOM's turboLower type did this. I've just extended it
 			//		to be applicable to all LowerToHighest types.
-			if (floor->m_FloorDestHeight != sec->floorheight)
-				floor->m_FloorDestHeight += height;
+			if (floor->m_FloorDestDist != sec->floorplane.d)
+				floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight+height);
 			break;
 
 		case DFloor::floorLowerToLowest:
 			floor->m_Direction = -1;
-			floor->m_FloorDestHeight = P_FindLowestFloorSurrounding(sec);
+			newheight = sec->FindLowestFloorSurrounding (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			break;
 
 		case DFloor::floorLowerToNearest:
 			//jff 02/03/30 support lowering floor to next lowest floor
 			floor->m_Direction = -1;
-			floor->m_FloorDestHeight =
-				P_FindNextLowestFloor (sec, sec->floorheight);
+			newheight = sec->FindNextLowestFloor (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			break;
 
 		case DFloor::floorLowerInstant:
 			floor->m_Speed = height;
 		case DFloor::floorLowerByValue:
 			floor->m_Direction = -1;
-			floor->m_FloorDestHeight = sec->floorheight - height;
+			newheight = sec->floorplane.ZatPoint (0, 0) - height;
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (0, 0, newheight);
 			break;
 
 		case DFloor::floorRaiseInstant:
 			floor->m_Speed = height;
 		case DFloor::floorRaiseByValue:
 			floor->m_Direction = 1;
-			floor->m_FloorDestHeight = sec->floorheight + height;
+			newheight = sec->floorplane.ZatPoint (0, 0) + height;
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (0, 0, newheight);
 			break;
 
 		case DFloor::floorMoveToValue:
-			floor->m_Direction = (height - sec->floorheight) > 0 ? 1 : -1;
-			floor->m_FloorDestHeight = height;
+			sec->FindHighestFloorPoint (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, height);
+			floor->m_Direction = (floor->m_FloorDestDist > sec->floorplane.d) ? -1 : 1;
 			break;
 
 		case DFloor::floorRaiseAndCrush:
 			floor->m_Crush = crush;
 		case DFloor::floorRaiseToLowestCeiling:
 			floor->m_Direction = 1;
-			floor->m_FloorDestHeight = 
-				P_FindLowestCeilingSurrounding(sec);
-			if (floor->m_FloorDestHeight > sec->ceilingheight)
-				floor->m_FloorDestHeight = sec->ceilingheight;
+			newheight = sec->FindLowestCeilingSurrounding (&spot);
 			if (floortype == DFloor::floorRaiseAndCrush)
-				floor->m_FloorDestHeight -= 8 * FRACUNIT;
+				floor->m_FloorDestDist -= 8 * FRACUNIT;
+			ceilingheight = sec->FindLowestCeilingPoint (&spot2);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
+			if (sec->floorplane.ZatPointDist (spot2, floor->m_FloorDestDist) > ceilingheight)
+				floor->m_FloorDestDist = sec->floorplane.PointToDist (spot2,
+					floortype == DFloor::floorRaiseAndCrush ? ceilingheight - 8*FRACUNIT : ceilingheight);
 			break;
 
 		case DFloor::floorRaiseToHighest:
 			floor->m_Direction = 1;
-			floor->m_FloorDestHeight = P_FindHighestFloorSurrounding(sec);
+			newheight = sec->FindHighestFloorSurrounding (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			break;
 
 		case DFloor::floorRaiseToNearest:
 			floor->m_Direction = 1;
-			floor->m_FloorDestHeight = P_FindNextHighestFloor(sec,sec->floorheight);
+			newheight = sec->FindNextHighestFloor (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			break;
 
 		case DFloor::floorRaiseToLowest:
 			floor->m_Direction = 1;
-			floor->m_FloorDestHeight = P_FindLowestFloorSurrounding(sec);
+			newheight = sec->FindLowestFloorSurrounding (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			break;
 
 		case DFloor::floorRaiseToCeiling:
 			floor->m_Direction = 1;
-			floor->m_FloorDestHeight = sec->ceilingheight;
+			newheight = sec->FindLowestCeilingPoint (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			break;
 
 		case DFloor::floorLowerToLowestCeiling:
 			floor->m_Direction = -1;
-			floor->m_FloorDestHeight = P_FindLowestCeilingSurrounding(sec);
+			newheight = sec->FindLowestCeilingSurrounding (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			break;
 
 		case DFloor::floorLowerByTexture:
 			floor->m_Direction = -1;
-			floor->m_FloorDestHeight = sec->floorheight -
-				P_FindShortestTextureAround (secnum);
+			newheight = sec->floorplane.ZatPoint (0, 0) - sec->FindShortestTextureAround ();
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (0, 0, newheight);
 			break;
 
 		case DFloor::floorLowerToCeiling:
 			// [RH] Essentially instantly raises the floor to the ceiling
 			floor->m_Direction = -1;
-			floor->m_FloorDestHeight = sec->ceilingheight;
+			newheight = sec->FindLowestCeilingPoint (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			break;
 
 		case DFloor::floorRaiseByTexture:
@@ -420,21 +436,22 @@ manual_floor:
 			//		since the code is identical to what was here. (Oddly
 			//		enough, BOOM preserved the code here even though it
 			//		also had this function.)
-			floor->m_FloorDestHeight = sec->floorheight +
-				P_FindShortestTextureAround (secnum);
+			newheight = sec->floorplane.ZatPoint (0, 0) + sec->FindShortestTextureAround ();
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (0, 0, newheight);
 			break;
 
 		case DFloor::floorRaiseAndChange:
 			floor->m_Direction = 1;
-			floor->m_FloorDestHeight = sec->floorheight +	height;
+			newheight = sec->floorplane.ZatPoint (0, 0) + height;
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (0, 0, newheight);
 			sec->floorpic = line->frontsector->floorpic;
 			sec->special = line->frontsector->special;
 			break;
 		  
 		case DFloor::floorLowerAndChange:
 			floor->m_Direction = -1;
-			floor->m_FloorDestHeight = 
-				P_FindLowestFloorSurrounding (sec);
+			newheight = sec->FindLowestFloorSurrounding (&spot);
+			floor->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
 			floor->m_Texture = sec->floorpic;
 			// jff 1/24/98 make sure floor->m_NewSpecial gets initialized
 			// in case no surrounding sector is at floordestheight
@@ -442,7 +459,7 @@ manual_floor:
 			floor->m_NewSpecial = sec->special; 
 
 			//jff 5/23/98 use model subroutine to unify fixes and handling
-			sec = P_FindModelFloorSector (floor->m_FloorDestHeight,sec-sectors);
+			sec = sec->FindModelFloorSector (newheight);
 			if (sec)
 			{
 				floor->m_Texture = sec->floorpic;
@@ -460,18 +477,18 @@ manual_floor:
 			if (change & 4)
 			{
 				// Numeric model change
-				sector_t *sec;
+				sector_t *modelsec;
 
-				sec = (floortype == DFloor::floorRaiseToLowestCeiling ||
+				modelsec = (floortype == DFloor::floorRaiseToLowestCeiling ||
 					   floortype == DFloor::floorLowerToLowestCeiling ||
 					   floortype == DFloor::floorRaiseToCeiling ||
 					   floortype == DFloor::floorLowerToCeiling) ?
-					  P_FindModelCeilingSector (floor->m_FloorDestHeight, secnum) :
-					  P_FindModelFloorSector (floor->m_FloorDestHeight, secnum);
+					  sec->FindModelCeilingSector (-floor->m_FloorDestDist) :
+					  sec->FindModelFloorSector (-floor->m_FloorDestDist);
 
-				if (sec)
+				if (modelsec != NULL)
 				{
-					floor->m_Texture = sec->floorpic;
+					floor->m_Texture = modelsec->floorpic;
 					switch (change & 3)
 					{
 					case 1:
@@ -519,7 +536,7 @@ manual_floor:
 // EV_FloorCrushStop
 // Stop a floor from crushing!
 //
-BOOL EV_FloorCrushStop (int tag)
+bool EV_FloorCrushStop (int tag)
 {
 	int secnum = -1;
 
@@ -550,10 +567,10 @@ BOOL EV_FloorCrushStop (int tag)
 // jff 3/15/98 added to better support generalized sector types
 // [RH] Added tag parameter.
 //
-BOOL EV_DoChange (line_t *line, EChange changetype, int tag)
+bool EV_DoChange (line_t *line, EChange changetype, int tag)
 {
 	int			secnum;
-	BOOL		rtn;
+	bool		rtn;
 	sector_t	*sec;
 	sector_t	*secm;
 
@@ -577,7 +594,7 @@ BOOL EV_DoChange (line_t *line, EChange changetype, int tag)
 			}
 			break;
 		case numChangeOnly:
-			secm = P_FindModelFloorSector (sec->floorheight,secnum);
+			secm = sec->FindModelFloorSector (sec->CenterFloor());
 			if (secm)
 			{ // if no model, no change
 				sec->floorpic = secm->floorpic;
@@ -599,26 +616,27 @@ BOOL EV_DoChange (line_t *line, EChange changetype, int tag)
 //		by its special. If usespecials is 2, each sector stays in "sync" with
 //		the others.
 //
-BOOL EV_BuildStairs (int tag, DFloor::EStair type, line_t *line,
+bool EV_BuildStairs (int tag, DFloor::EStair type, line_t *line,
 					 fixed_t stairsize, fixed_t speed, int delay, int reset, int igntxt,
 					 int usespecials)
 {
 	int 				secnum;
 	int					osecnum;	//jff 3/4/98 save old loop index
 	int 				height;
+	fixed_t				stairstep;
 	int 				i;
 	int 				newsecnum;
 	int 				texture;
 	int 				ok;
 	int					persteptime;
-	BOOL 				rtn = false;
+	bool 				rtn = false;
 	
 	sector_t*			sec;
 	sector_t*			tsec;
 	sector_t*			prev = NULL;
 
 	DFloor*				floor;
-	BOOL				manual = false;
+	bool				manual = false;
 
 	if (speed == 0)
 		return false;
@@ -656,9 +674,10 @@ manual_stair:
 		rtn = true;
 		floor = new DFloor (sec);
 		floor->m_Direction = (type == DFloor::buildUp) ? 1 : -1;
+		stairstep = stairsize * floor->m_Direction;
 		floor->m_Type = DFloor::buildStair;	//jff 3/31/98 do not leave uninited
 		floor->m_ResetCount = reset;	// [RH] Tics until reset (0 if never)
-		floor->m_OrgHeight = sec->floorheight;	// [RH] Height to reset to
+		floor->m_OrgDist = sec->floorplane.d;	// [RH] Height to reset to
 		// [RH] Set up delay values
 		floor->m_Delay = delay;
 		floor->m_PauseTime = 0;
@@ -667,8 +686,8 @@ manual_stair:
 		floor->m_Crush = (!usespecials && speed == 4*FRACUNIT) ? 10 : -1; //jff 2/27/98 fix uninitialized crush field
 
 		floor->m_Speed = speed;
-		height = sec->floorheight + stairsize * floor->m_Direction;
-		floor->m_FloorDestHeight = height;
+		height = sec->floorplane.ZatPoint (0, 0) + stairstep;
+		floor->m_FloorDestDist = sec->floorplane.PointToDist (0, 0, height);
 
 		texture = sec->floorpic;
 		osecnum = secnum;				//jff 3/4/98 preserve loop index
@@ -684,13 +703,13 @@ manual_stair:
 			if (usespecials)
 			{
 				// [RH] Find the next sector by scanning for Stairs_Special?
-				tsec = P_NextSpecialSector (sec,
+				tsec = sec->NextSpecialSector (
 						(sec->special & 0xff) == Stairs_Special1 ?
 							Stairs_Special2 : Stairs_Special1, prev);
 
 				if ( (ok = (tsec != NULL)) )
 				{
-					height += floor->m_Direction * stairsize;
+					height += stairstep;
 
 					// if sector's floor already moving, look for another
 					//jff 2/26/98 special lockout condition for retriggering
@@ -723,7 +742,7 @@ manual_stair:
 					if (!igntxt && tsec->floorpic != texture)
 						continue;
 
-					height += floor->m_Direction * stairsize;
+					height += stairstep;
 
 					// if sector's floor already moving, look for another
 					//jff 2/26/98 special lockout condition for retriggering
@@ -753,7 +772,7 @@ manual_stair:
 				floor = new DFloor (sec);
 				floor->StartFloorSound ();
 				floor->m_Direction = (type == DFloor::buildUp) ? 1 : -1;
-				floor->m_FloorDestHeight = height;
+				floor->m_FloorDestDist = sec->floorplane.PointToDist (0, 0, height);
 				// [RH] Set up delay values
 				floor->m_Delay = delay;
 				floor->m_PauseTime = 0;
@@ -762,9 +781,8 @@ manual_stair:
 				if (usespecials == 2)
 				{
 					// [RH]
-					fixed_t rise = (floor->m_FloorDestHeight - sec->floorheight)
-									* floor->m_Direction;
-					floor->m_Speed = FixedDiv (FixedMul (speed, rise), stairsize);
+					fixed_t rise = height - sec->CenterFloor();
+					floor->m_Speed = Scale (speed, rise, stairstep);
 				}
 				else
 				{
@@ -774,7 +792,7 @@ manual_stair:
 				//jff 2/27/98 fix uninitialized crush field
 				floor->m_Crush = (!usespecials && speed == 4*FRACUNIT) ? 10 : -1;
 				floor->m_ResetCount = reset;	// [RH] Tics until reset (0 if never)
-				floor->m_OrgHeight = sec->floorheight;	// [RH] Height to reset to
+				floor->m_OrgDist = sec->floorplane.d;	// [RH] Height to reset to
 			}
 		} while (ok);
 		// [RH] make sure the first sector doesn't point to a previous one, otherwise
@@ -788,18 +806,20 @@ manual_stair:
 }
 
 // [RH] Added pillarspeed and slimespeed parameters
-int EV_DoDonut (int tag, fixed_t pillarspeed, fixed_t slimespeed)
+bool EV_DoDonut (int tag, fixed_t pillarspeed, fixed_t slimespeed)
 {
 	sector_t*			s1;
 	sector_t*			s2;
 	sector_t*			s3;
 	int 				secnum;
-	int 				rtn;
+	bool 				rtn;
 	int 				i;
 	DFloor*				floor;
+	vertex_t*			spot;
+	fixed_t				height;
 		
 	secnum = -1;
-	rtn = 0;
+	rtn = false;
 	while ((secnum = P_FindSectorFromTag(tag,secnum)) >= 0)
 	{
 		s1 = &sectors[secnum];					// s1 is pillar's sector
@@ -808,7 +828,7 @@ int EV_DoDonut (int tag, fixed_t pillarspeed, fixed_t slimespeed)
 		if (s1->floordata)
 			continue;
 						
-		rtn = 1;
+		rtn = true;
 		s2 = getNextSector (s1->lines[0], s1);	// s2 is pool's sector
 		if (!s2)								// note lowest numbered line around
 			continue;							// pillar must be two-sided
@@ -829,7 +849,8 @@ int EV_DoDonut (int tag, fixed_t pillarspeed, fixed_t slimespeed)
 			floor->m_Speed = slimespeed;
 			floor->m_Texture = s3->floorpic;
 			floor->m_NewSpecial = 0;
-			floor->m_FloorDestHeight = s3->floorheight;
+			height = s3->FindHighestFloorPoint (&spot);
+			floor->m_FloorDestDist = s2->floorplane.PointToDist (spot, height);
 			floor->StartFloorSound ();
 			
 			//	Spawn lowering donut-hole
@@ -839,7 +860,8 @@ int EV_DoDonut (int tag, fixed_t pillarspeed, fixed_t slimespeed)
 			floor->m_Direction = -1;
 			floor->m_Sector = s1;
 			floor->m_Speed = pillarspeed;
-			floor->m_FloorDestHeight = s3->floorheight;
+			height = s3->FindHighestFloorPoint (&spot);
+			floor->m_FloorDestDist = s1->floorplane.PointToDist (spot, height);
 			floor->StartFloorSound ();
 			break;
 		}
@@ -862,13 +884,16 @@ DElevator::DElevator (sector_t *sec)
 // jff 2/22/98 new type to move floor and ceiling in parallel
 // [RH] Added speed, tag, and height parameters and new types.
 //
-BOOL EV_DoElevator (line_t *line, DElevator::EElevator elevtype,
+bool EV_DoElevator (line_t *line, DElevator::EElevator elevtype,
 					fixed_t speed, fixed_t height, int tag)
 {
 	int			secnum;
-	BOOL		rtn;
+	bool		rtn;
 	sector_t*	sec;
 	DElevator*	elevator;
+	fixed_t		floorheight, ceilingheight;
+	fixed_t		newheight;
+	vertex_t*	spot;
 
 	if (!line && (elevtype == DElevator::elevateCurrent))
 		return false;
@@ -891,48 +916,53 @@ BOOL EV_DoElevator (line_t *line, DElevator::EElevator elevtype,
 		elevator->m_Speed = speed;
 		elevator->StartFloorSound ();
 
+		floorheight = sec->CenterFloor ();
+		ceilingheight = sec->CenterCeiling ();
+
 		// set up the fields according to the type of elevator action
 		switch (elevtype)
 		{
 		// elevator down to next floor
 		case DElevator::elevateDown:
 			elevator->m_Direction = -1;
-			elevator->m_FloorDestHeight =
-				P_FindNextLowestFloor (sec, sec->floorheight);
-			elevator->m_CeilingDestHeight =
-				elevator->m_FloorDestHeight + sec->ceilingheight - sec->floorheight;
+			newheight = sec->FindNextLowestFloor (&spot);
+			elevator->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
+			newheight += sec->ceilingplane.ZatPoint (spot) - sec->floorplane.ZatPoint (spot);
+			elevator->m_CeilingDestDist = sec->ceilingplane.PointToDist (spot, newheight);
 			break;
 
 		// elevator up to next floor
 		case DElevator::elevateUp:
 			elevator->m_Direction = 1;
-			elevator->m_FloorDestHeight =
-				P_FindNextHighestFloor (sec, sec->floorheight);
-			elevator->m_CeilingDestHeight =
-				elevator->m_FloorDestHeight + sec->ceilingheight - sec->floorheight;
+			newheight = sec->FindNextHighestFloor (&spot);
+			elevator->m_FloorDestDist = sec->floorplane.PointToDist (spot, newheight);
+			newheight += sec->ceilingplane.ZatPoint (spot) - sec->floorplane.ZatPoint (spot);
+			elevator->m_CeilingDestDist = sec->ceilingplane.PointToDist (spot, newheight);
 			break;
 
 		// elevator to floor height of activating switch's front sector
 		case DElevator::elevateCurrent:
-			elevator->m_FloorDestHeight = line->frontsector->floorheight;
-			elevator->m_CeilingDestHeight =
-				elevator->m_FloorDestHeight + sec->ceilingheight - sec->floorheight;
+			newheight = line->frontsector->floorplane.ZatPoint (line->v1);
+			elevator->m_FloorDestDist = sec->floorplane.PointToDist (line->v1, newheight);
+			newheight += sec->ceilingplane.ZatPoint (line->v1) - sec->floorplane.ZatPoint (line->v1);
+			elevator->m_CeilingDestDist = sec->ceilingplane.PointToDist (line->v1, newheight);
+
 			elevator->m_Direction =
-				elevator->m_FloorDestHeight>sec->floorheight ? 1 : -1;
+				elevator->m_FloorDestDist > sec->floorplane.d ? -1 : 1;
 			break;
 
 		// [RH] elevate up by a specific amount
 		case DElevator::elevateRaise:
 			elevator->m_Direction = 1;
-			elevator->m_FloorDestHeight = sec->floorheight + height;
-			elevator->m_CeilingDestHeight = sec->ceilingheight + height;
+			elevator->m_FloorDestDist = sec->floorplane.ZatPointDist (sec->soundorg[0], sec->soundorg[1], floorheight + height);
+			elevator->m_CeilingDestDist = sec->ceilingplane.ZatPointDist (sec->soundorg[0], sec->soundorg[1], ceilingheight + height);
 			break;
 
 		// [RH] elevate down by a specific amount
 		case DElevator::elevateLower:
 			elevator->m_Direction = -1;
-			elevator->m_FloorDestHeight = sec->floorheight - height;
-			elevator->m_CeilingDestHeight = sec->ceilingheight - height;
+			elevator->m_FloorDestDist = sec->floorplane.ZatPointDist (sec->soundorg[0], sec->soundorg[1], floorheight - height);
+			elevator->m_CeilingDestDist = sec->ceilingplane.ZatPointDist (sec->soundorg[0], sec->soundorg[1], ceilingheight - height);
 			break;
 		}
 	}
@@ -971,8 +1001,9 @@ void DFloorWaggle::RunThink ()
 	case WGLSTATE_REDUCE:
 		if ((m_Scale -= m_ScaleDelta) <= 0)
 		{ // Remove
-			dist = m_OriginalHeight - m_Sector->floorheight;
-			m_Sector->floorheight = m_OriginalHeight;
+			dist = FixedMul (m_OriginalDist - m_Sector->floorplane.d, m_Sector->floorplane.ic);
+			m_Sector->floortexz -= m_Sector->floorplane.HeightDiff (m_OriginalDist);
+			m_Sector->floorplane.d = m_OriginalDist;
 			P_ChangeSector (m_Sector, true, dist, 0);
 			m_Sector->floordata = NULL;
 			Destroy ();
@@ -990,10 +1021,11 @@ void DFloorWaggle::RunThink ()
 		break;
 	}
 	m_Accumulator += m_AccDelta;
-	dist = m_Sector->floorheight;
-	m_Sector->floorheight = m_OriginalHeight +
-		FixedMul (FloatBobOffsets[(m_Accumulator>>FRACBITS)&63], m_Scale);
-	dist = m_Sector->floorheight - dist;
+	dist = m_Sector->floorplane.d;
+	m_Sector->floorplane.d = m_OriginalDist + m_Sector->floorplane.PointToDist (0, 0,
+		FixedMul (FloatBobOffsets[(m_Accumulator>>FRACBITS)&63], m_Scale));
+	m_Sector->floortexz += m_Sector->floorplane.HeightDiff (dist);
+	dist = m_Sector->floorplane.HeightDiff (dist);
 	P_ChangeSector (m_Sector, true, dist, 0);
 }
 
@@ -1003,13 +1035,13 @@ void DFloorWaggle::RunThink ()
 //
 //==========================================================================
 
-BOOL EV_StartFloorWaggle (int tag, int height, int speed, int offset,
+bool EV_StartFloorWaggle (int tag, int height, int speed, int offset,
 	int timer)
 {
 	int sectorIndex;
 	sector_t *sector;
 	DFloorWaggle *waggle;
-	BOOL retCode;
+	bool retCode;
 
 	retCode = false;
 	sectorIndex = -1;
@@ -1022,7 +1054,7 @@ BOOL EV_StartFloorWaggle (int tag, int height, int speed, int offset,
 		}
 		retCode = true;
 		waggle = new DFloorWaggle (sector);
-		waggle->m_OriginalHeight = sector->floorheight;
+		waggle->m_OriginalDist = sector->floorplane.d;
 		waggle->m_Accumulator = offset*FRACUNIT;
 		waggle->m_AccDelta = speed<<10;
 		waggle->m_Scale = 0;

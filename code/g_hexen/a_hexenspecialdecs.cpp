@@ -15,56 +15,41 @@
 
 class ASwitchableDecoration : public AActor
 {
-	DECLARE_STATELESS_ACTOR (ASwitchableDecoration, AActor);
+	DECLARE_STATELESS_ACTOR (ASwitchableDecoration, AActor)
 public:
 	void Activate (AActor *activator);
 	void Deactivate (AActor *activator);
 };
 
-IMPLEMENT_DEF_SERIAL (ASwitchableDecoration, AActor);
-REGISTER_ACTOR (ASwitchableDecoration, Any);
-
-void ASwitchableDecoration::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-}
+IMPLEMENT_ABSTRACT_ACTOR (ASwitchableDecoration)
 
 void ASwitchableDecoration::Activate (AActor *activator)
 {
-	SetState (GetInfo (this)->seestate);
+	SetState (SeeState);
 }
 
 void ASwitchableDecoration::Deactivate (AActor *activator)
 {
-	SetState (GetInfo (this)->meleestate);
+	SetState (MeleeState);
 }
 
 // SwitchingDecoration: Only Activate changes state -------------------------
 
 class ASwitchingDecoration : public ASwitchableDecoration
 {
-	DECLARE_STATELESS_ACTOR (ASwitchingDecoration, AActor);
+	DECLARE_STATELESS_ACTOR (ASwitchingDecoration, AActor)
 public:
 	void Deactivate (AActor *activator) {}
 };
 
-IMPLEMENT_DEF_SERIAL (ASwitchingDecoration, ASwitchableDecoration);
-REGISTER_ACTOR (ASwitchingDecoration, Any);
-
-void ASwitchingDecoration::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-}
+IMPLEMENT_ABSTRACT_ACTOR (ASwitchingDecoration)
 
 // Winged Statue (no skull) -------------------------------------------------
 
 class AZWingedStatueNoSkull : public ASwitchingDecoration
 {
-	DECLARE_ACTOR (AZWingedStatueNoSkull, ASwitchingDecoration);
+	DECLARE_ACTOR (AZWingedStatueNoSkull, ASwitchingDecoration)
 };
-
-IMPLEMENT_DEF_SERIAL (AZWingedStatueNoSkull, ASwitchingDecoration);
-REGISTER_ACTOR (AZWingedStatueNoSkull, Hexen);
 
 FState AZWingedStatueNoSkull::States[] =
 {
@@ -72,27 +57,22 @@ FState AZWingedStatueNoSkull::States[] =
 	S_NORMAL (STWN, 'B', -1, NULL, NULL)
 };
 
-void AZWingedStatueNoSkull::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 9011;
-	info->radius = 10*FRACUNIT;
-	info->height = 62*FRACUNIT;
-	info->flags = MF_SOLID;
-	info->spawnstate = &States[0];
-	info->seestate = &States[0];
-	info->meleestate = &States[1];
-}
+IMPLEMENT_ACTOR (AZWingedStatueNoSkull, Hexen, 9011, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (62)
+	PROP_Flags (MF_SOLID)
+
+	PROP_SpawnState (0)
+	PROP_SeeState (0)
+	PROP_MeleeState (1)
+END_DEFAULTS
 
 // Gem pedestal -------------------------------------------------------------
 
 class AZGemPedestal : public ASwitchingDecoration
 {
-	DECLARE_ACTOR (AZGemPedestal, ASwitchingDecoration);
+	DECLARE_ACTOR (AZGemPedestal, ASwitchingDecoration)
 };
-
-IMPLEMENT_DEF_SERIAL (AZGemPedestal, ASwitchingDecoration);
-REGISTER_ACTOR (AZGemPedestal, Hexen);
 
 FState AZGemPedestal::States[] =
 {
@@ -100,30 +80,25 @@ FState AZGemPedestal::States[] =
 	S_NORMAL (GMPD, 'B', -1, NULL, NULL)
 };
 
-void AZGemPedestal::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 9012;
-	info->radius = 10*FRACUNIT;
-	info->height = 40*FRACUNIT;
-	info->flags = MF_SOLID;
-	info->spawnstate = &States[0];
-	info->seestate = &States[0];
-	info->meleestate = &States[1];
-}
+IMPLEMENT_ACTOR (AZGemPedestal, Hexen, 9012, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (40)
+	PROP_Flags (MF_SOLID)
+
+	PROP_SpawnState (0)
+	PROP_SeeState (0)
+	PROP_MeleeState (1)
+END_DEFAULTS
 
 // Tree (destructible) ------------------------------------------------------
 
 class ATreeDestructible : public AActor
 {
-	DECLARE_ACTOR (ATreeDestructible, AActor);
+	DECLARE_ACTOR (ATreeDestructible, AActor)
 public:
 	void GetExplodeParms (int &damage, int &distance, bool &hurtSource);
 	void Die (AActor *source, AActor *inflictor);
 };
-
-IMPLEMENT_DEF_SERIAL (ATreeDestructible, AActor);
-REGISTER_ACTOR (ATreeDestructible, Hexen);
 
 FState ATreeDestructible::States[] =
 {
@@ -151,20 +126,19 @@ FState ATreeDestructible::States[] =
 	S_NORMAL (TRDT, 'Q',   -1, NULL 					, NULL)
 };
 
-void ATreeDestructible::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8062;
-	info->spawnstate = &States[S_ZTREEDESTRUCTIBLE];
-	info->spawnhealth = 70;
-	info->deathstate = &States[S_ZTREEDES_D];
-	info->bdeathstate = &States[S_ZTREEDES_X];
-	info->deathsound = "TreeBreak";
-	info->painsound = "TreeExplode";
-	info->radius = 15*FRACUNIT;
-	info->height = 180*FRACUNIT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD;
-}
+IMPLEMENT_ACTOR (ATreeDestructible, Hexen, 8062, 0)
+	PROP_SpawnHealth (70)
+	PROP_RadiusFixed (15)
+	PROP_HeightFixed (180)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD)
+
+	PROP_SpawnState (S_ZTREEDESTRUCTIBLE)
+	PROP_DeathState (S_ZTREEDES_D)
+	PROP_BDeathState (S_ZTREEDES_X)
+
+	PROP_PainSound ("TreeExplode")
+	PROP_DeathSound ("TreeBreak")
+END_DEFAULTS
 
 void ATreeDestructible::GetExplodeParms (int &damage, int &distance, bool &hurtSource)
 {
@@ -186,13 +160,10 @@ void A_PotteryCheck (AActor *);
 
 class APottery1 : public AActor
 {
-	DECLARE_ACTOR (APottery1, AActor);
+	DECLARE_ACTOR (APottery1, AActor)
 public:
 	void HitFloor ();
 };
-
-IMPLEMENT_DEF_SERIAL (APottery1, AActor);
-REGISTER_ACTOR (APottery1, Hexen);
 
 FState APottery1::States[] =
 {
@@ -203,18 +174,16 @@ FState APottery1::States[] =
 	S_NORMAL (POT1, 'A',	0, A_PotteryExplode 		, NULL)
 };
 
-void APottery1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 104;
-	info->spawnstate = &States[S_ZPOTTERY];
-	info->spawnhealth = 15;
-	info->deathstate = &States[S_ZPOTTERY_EXPLODE];
-	info->radius = 10*FRACUNIT;
-	info->height = 32*FRACUNIT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD|MF_DROPOFF;
-	info->flags2 = MF2_SLIDE|MF2_PUSHABLE|MF2_TELESTOMP|MF2_PASSMOBJ;
-}
+IMPLEMENT_ACTOR (APottery1, Hexen, 104, 0)
+	PROP_SpawnHealth (15)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (32)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD|MF_DROPOFF)
+	PROP_Flags2 (MF2_SLIDE|MF2_PUSHABLE|MF2_TELESTOMP|MF2_PASSMOBJ)
+
+	PROP_SpawnState (S_ZPOTTERY)
+	PROP_DeathState (S_ZPOTTERY_EXPLODE)
+END_DEFAULTS
 
 void APottery1::HitFloor ()
 {
@@ -226,57 +195,42 @@ void APottery1::HitFloor ()
 
 class APottery2 : public APottery1
 {
-	DECLARE_ACTOR (APottery2, APottery1);
+	DECLARE_ACTOR (APottery2, APottery1)
 };
-
-IMPLEMENT_DEF_SERIAL (APottery2, APottery1);
-REGISTER_ACTOR (APottery2, Hexen);
 
 FState APottery2::States[] =
 {
 	S_NORMAL (POT2, 'A',   -1, NULL 					, NULL),
 };
 
-void APottery2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 105;
-	info->spawnstate = &States[0];
-	info->height = 25*FRACUNIT;
-}
+IMPLEMENT_ACTOR (APottery2, Hexen, 105, 0)
+	PROP_HeightFixed (25)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Pottery3 -----------------------------------------------------------------
 
 class APottery3 : public APottery1
 {
-	DECLARE_ACTOR (APottery3, APottery1);
+	DECLARE_ACTOR (APottery3, APottery1)
 };
-
-IMPLEMENT_DEF_SERIAL (APottery3, APottery1);
-REGISTER_ACTOR (APottery3, Hexen);
 
 FState APottery3::States[] =
 {
 	S_NORMAL (POT3, 'A',   -1, NULL 					, NULL),
 };
 
-void APottery3::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 106;
-	info->spawnstate = &States[0];
-	info->height = 25*FRACUNIT;
-}
+IMPLEMENT_ACTOR (APottery3, Hexen, 106, 0)
+	PROP_HeightFixed (25)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Pottery Bit --------------------------------------------------------------
 
 class APotteryBit : public AActor
 {
-	DECLARE_ACTOR (APotteryBit, AActor);
+	DECLARE_ACTOR (APotteryBit, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (APotteryBit, AActor);
-REGISTER_ACTOR (APotteryBit, Hexen);
 
 FState APotteryBit::States[] =
 {
@@ -311,16 +265,15 @@ FState APotteryBit::States[] =
 	S_NORMAL (PBIT, 'J',	1, A_PotteryCheck			, NULL)
 };
 
-void APotteryBit::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_POTTERYBIT];
-	info->deathstate = &States[S_POTTERYBIT_EX0];
-	info->radius = 5*FRACUNIT;
-	info->height = 5*FRACUNIT;
-	info->flags = MF_MISSILE;
-	info->flags2 = MF2_NOTELEPORT;
-}
+IMPLEMENT_ACTOR (APotteryBit, Hexen, -1, 0)
+	PROP_RadiusFixed (5)
+	PROP_HeightFixed (5)
+	PROP_Flags (MF_MISSILE)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_POTTERYBIT)
+	PROP_DeathState (S_POTTERYBIT_EX0)
+END_DEFAULTS
 
 //============================================================================
 //
@@ -336,7 +289,7 @@ void A_PotteryExplode (AActor *actor)
 	for(i = (P_Random()&3)+3; i; i--)
 	{
 		mo = Spawn<APotteryBit> (actor->x, actor->y, actor->z);
-		mo->SetState (GetInfo (mo)->spawnstate + (P_Random()%5));
+		mo->SetState (mo->SpawnState + (P_Random()%5));
 		if (mo)
 		{
 			mo->momz = ((P_Random()&7)+5)*(3*FRACUNIT/4);
@@ -347,8 +300,8 @@ void A_PotteryExplode (AActor *actor)
 	S_Sound (mo, CHAN_BODY, "PotteryExplode", 1, ATTN_NORM);
 	if (SpawnableThings[actor->args[0]])
 	{ // Spawn an item
-		if (!(dmflags & DF_NO_MONSTERS) 
-		|| !(SpawnableThings[actor->args[0]]->ActorInfo->flags & MF_COUNTKILL))
+		if (!(*dmflags & DF_NO_MONSTERS) 
+		|| !(GetDefaultByType (SpawnableThings[actor->args[0]])->flags & MF_COUNTKILL))
 		{ // Only spawn monsters if not -nomonsters
 			Spawn (SpawnableThings[actor->args[0]],
 				actor->x, actor->y, actor->z);
@@ -364,7 +317,7 @@ void A_PotteryExplode (AActor *actor)
 
 void A_PotteryChooseBit (AActor *actor)
 {
-	actor->SetState (GetInfo (actor)->deathstate+1 + 2*(P_Random()%5));
+	actor->SetState (actor->DeathState+1 + 2*(P_Random()%5));
 	actor->tics = 256+(P_Random()<<1);
 }
 
@@ -397,24 +350,19 @@ void A_PotteryCheck (AActor *actor)
 
 class ABloodPool : public AActor
 {
-	DECLARE_ACTOR (ABloodPool, AActor);
+	DECLARE_ACTOR (ABloodPool, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABloodPool, AActor);
-REGISTER_ACTOR (ABloodPool, Hexen);
 
 FState ABloodPool::States[] =
 {
 	S_NORMAL (BDPL, 'A',   -1, NULL 					, NULL)
 };
 
-void ABloodPool::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 111;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP;
-}
+IMPLEMENT_ACTOR (ABloodPool, Hexen, 111, 0)
+	PROP_Flags (MF_NOBLOCKMAP)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Lynched corpse (no heart) ------------------------------------------------
 
@@ -422,28 +370,23 @@ void A_CorpseBloodDrip (AActor *);
 
 class AZCorpseLynchedNoHeart : public AActor
 {
-	DECLARE_ACTOR (AZCorpseLynchedNoHeart, AActor);
+	DECLARE_ACTOR (AZCorpseLynchedNoHeart, AActor)
 public:
 	void PostBeginPlay ();
 };
-
-IMPLEMENT_DEF_SERIAL (AZCorpseLynchedNoHeart, AActor);
-REGISTER_ACTOR (AZCorpseLynchedNoHeart, Hexen);
 
 FState AZCorpseLynchedNoHeart::States[] =
 {
 	S_NORMAL (CPS5, 'A',  140, A_CorpseBloodDrip		, &States[0])
 };
 
-void AZCorpseLynchedNoHeart::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 109;
-	info->spawnstate = &States[0];
-	info->radius = 10*FRACUNIT;
-	info->height = 100*FRACUNIT;
-	info->flags = MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (AZCorpseLynchedNoHeart, Hexen, 109, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (100)
+	PROP_Flags (MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 void AZCorpseLynchedNoHeart::PostBeginPlay ()
 {
@@ -455,11 +398,8 @@ void AZCorpseLynchedNoHeart::PostBeginPlay ()
 
 class ACorpseBloodDrip : public AActor
 {
-	DECLARE_ACTOR (ACorpseBloodDrip, AActor);
+	DECLARE_ACTOR (ACorpseBloodDrip, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ACorpseBloodDrip, AActor);
-REGISTER_ACTOR (ACorpseBloodDrip, Hexen);
 
 FState ACorpseBloodDrip::States[] =
 {
@@ -473,16 +413,15 @@ FState ACorpseBloodDrip::States[] =
 	S_NORMAL (BDSH, 'D',	2, NULL 					, NULL)
 };
 
-void ACorpseBloodDrip::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_CORPSEBLOODDRIP];
-	info->deathstate = &States[S_CORPSEBLOODDRIP_X];
-	info->radius = FRACUNIT;
-	info->height = 4*FRACUNIT;
-	info->flags = MF_MISSILE;
-	info->flags2 = MF2_LOGRAV;
-}
+IMPLEMENT_ACTOR (ACorpseBloodDrip, Hexen, -1, 0)
+	PROP_RadiusFixed (1)
+	PROP_HeightFixed (4)
+	PROP_Flags (MF_MISSILE)
+	PROP_Flags2 (MF2_LOGRAV)
+
+	PROP_SpawnState (S_CORPSEBLOODDRIP)
+	PROP_DeathState (S_CORPSEBLOODDRIP_X)
+END_DEFAULTS
 
 //============================================================================
 //
@@ -503,11 +442,8 @@ void A_CorpseBloodDrip (AActor *actor)
 
 class ACorpseBit : public AActor
 {
-	DECLARE_ACTOR (ACorpseBit, AActor);
+	DECLARE_ACTOR (ACorpseBit, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ACorpseBit, AActor);
-REGISTER_ACTOR (ACorpseBit, Hexen);
 
 FState ACorpseBit::States[] =
 {
@@ -517,15 +453,14 @@ FState ACorpseBit::States[] =
 	S_NORMAL (CPB4, 'A',   -1, NULL 					, NULL)
 };
 
-void ACorpseBit::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->radius = 5*FRACUNIT;
-	info->height = 5*FRACUNIT;
-	info->flags = MF_NOBLOCKMAP;
-	info->flags2 = MF2_TELESTOMP;
-}
+IMPLEMENT_ACTOR (ACorpseBit, Hexen, -1, 0)
+	PROP_RadiusFixed (5)
+	PROP_HeightFixed (5)
+	PROP_Flags (MF_NOBLOCKMAP)
+	PROP_Flags2 (MF2_TELESTOMP)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Corpse (sitting, splatterable) -------------------------------------------
 
@@ -533,11 +468,8 @@ void A_CorpseExplode (AActor *);
 
 class AZCorpseSitting : public AActor
 {
-	DECLARE_ACTOR (AZCorpseSitting, AActor);
+	DECLARE_ACTOR (AZCorpseSitting, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AZCorpseSitting, AActor);
-REGISTER_ACTOR (AZCorpseSitting, Hexen);
 
 FState AZCorpseSitting::States[] =
 {
@@ -545,18 +477,17 @@ FState AZCorpseSitting::States[] =
 	S_NORMAL (CPS6, 'A',	1, A_CorpseExplode			, NULL)
 };
 
-void AZCorpseSitting::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 110;
-	info->spawnstate = &States[0];
-	info->spawnhealth = 30;
-	info->deathstate = &States[1];
-	info->deathsound = "FireDemonDeath";
-	info->radius = 15*FRACUNIT;
-	info->height = 35*FRACUNIT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD;
-}
+IMPLEMENT_ACTOR (AZCorpseSitting, Hexen, 110, 0)
+	PROP_SpawnHealth (30)
+	PROP_RadiusFixed (15)
+	PROP_HeightFixed (35)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD)
+
+	PROP_SpawnState (0)
+	PROP_DeathState (1)
+
+	PROP_DeathSound ("FireDemonDeath")
+END_DEFAULTS
 
 //============================================================================
 //
@@ -572,7 +503,7 @@ void A_CorpseExplode (AActor *actor)
 	for (i = (P_Random()&3)+3; i; i--)
 	{
 		mo = Spawn<ACorpseBit> (actor->x, actor->y, actor->z);
-		mo->SetState (GetInfo (mo)->spawnstate + (P_Random()%3));
+		mo->SetState (actor->SpawnState + (P_Random()%3));
 		if (mo)
 		{
 			mo->momz = ((P_Random()&7)+5)*(3*FRACUNIT/4);
@@ -582,14 +513,14 @@ void A_CorpseExplode (AActor *actor)
 	}
 	// Spawn a skull
 	mo = Spawn<ACorpseBit> (actor->x, actor->y, actor->z);
-	mo->SetState (GetInfo (mo)->spawnstate + 3);
+	mo->SetState (actor->SpawnState + 3);
 	if (mo)
 	{
 		mo->momz = ((P_Random()&7)+5)*(3*FRACUNIT/4);
 		mo->momx = PS_Random()<<(FRACBITS-6);
 		mo->momy = PS_Random()<<(FRACBITS-6);
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->deathsound, 1, ATTN_IDLE);
+	S_SoundID (actor, CHAN_BODY, actor->DeathSound, 1, ATTN_IDLE);
 	actor->Destroy ();
 }
 
@@ -601,35 +532,26 @@ void A_LeafCheck (AActor *);
 
 class ALeafSpawner : public AActor
 {
-	DECLARE_ACTOR (ALeafSpawner, AActor);
+	DECLARE_ACTOR (ALeafSpawner, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ALeafSpawner, AActor);
-REGISTER_ACTOR (ALeafSpawner, Hexen);
 
 FState ALeafSpawner::States[] =
 {
 	S_NORMAL (MAN1, 'A',   20, A_LeafSpawn				, &States[0])
 };
 
-void ALeafSpawner::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 113;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOSECTOR;
-	info->flags2 = MF2_DONTDRAW;
-}
+IMPLEMENT_ACTOR (ALeafSpawner, Hexen, 113, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR)
+	PROP_RenderFlags (RF_INVISIBLE)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Leaves -------------------------------------------------------------------
 
 class ALeaf1 : public AActor
 {
-	DECLARE_ACTOR (ALeaf1, AActor);
+	DECLARE_ACTOR (ALeaf1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ALeaf1, AActor);
-REGISTER_ACTOR (ALeaf1, Hexen);
 
 FState ALeaf1::States[] =
 {
@@ -657,25 +579,21 @@ FState ALeaf1::States[] =
 	S_NORMAL (LEF3, 'D',   10, A_LeafCheck				, &States[S_LEAF_X+0])
 };
 
-void ALeaf1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_LEAF1];
-	info->deathstate = &States[S_LEAF_X];
-	info->radius = 2*FRACUNIT;
-	info->height = 4*FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE;
-	info->flags2 = MF2_NOTELEPORT|MF2_LOGRAV;
-	info->flags3 = MF3_DONTSPLASH;
-}
+IMPLEMENT_ACTOR (ALeaf1, Hexen, -1, 0)
+	PROP_RadiusFixed (2)
+	PROP_HeightFixed (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_LOGRAV)
+	PROP_Flags3 (MF3_DONTSPLASH)
+
+	PROP_SpawnState (S_LEAF1)
+	PROP_DeathState (S_LEAF_X)
+END_DEFAULTS
 
 class ALeaf2 : public ALeaf1
 {
-	DECLARE_ACTOR (ALeaf2, ALeaf1);
+	DECLARE_ACTOR (ALeaf2, ALeaf1)
 };
-
-IMPLEMENT_DEF_SERIAL (ALeaf2, ALeaf1);
-REGISTER_ACTOR (ALeaf2, Hexen);
 
 FState ALeaf2::States[] =
 {
@@ -700,11 +618,9 @@ FState ALeaf2::States[] =
 	S_NORMAL (LEF2, 'I',	4, NULL 					, NULL)
 };
 
-void ALeaf2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_LEAF2];
-}
+IMPLEMENT_ACTOR (ALeaf2, Hexen, -1, 0)
+	PROP_SpawnState (S_LEAF2)
+END_DEFAULTS
 
 //============================================================================
 //
@@ -769,7 +685,7 @@ void A_LeafCheck (AActor *actor)
 		}
 		return;
 	}
-	actor->SetState (GetInfo (actor)->spawnstate + 7);
+	actor->SetState (actor->SpawnState + 7);
 	actor->momz = (P_Random()<<9)+FRACUNIT;
 	P_ThrustMobj (actor, actor->target->angle, (P_Random()<<9)+2*FRACUNIT);
 	actor->flags |= MF_MISSILE;
@@ -781,13 +697,10 @@ void A_LeafCheck (AActor *actor)
 
 class AZTwinedTorch : public ASwitchableDecoration
 {
-	DECLARE_ACTOR (AZTwinedTorch, ASwitchableDecoration);
+	DECLARE_ACTOR (AZTwinedTorch, ASwitchableDecoration)
 public:
 	void Activate (AActor *activator);
 };
-
-IMPLEMENT_DEF_SERIAL (AZTwinedTorch, ASwitchableDecoration);
-REGISTER_ACTOR (AZTwinedTorch, Hexen);
 
 FState AZTwinedTorch::States[] =
 {
@@ -805,17 +718,15 @@ FState AZTwinedTorch::States[] =
 	S_NORMAL (TWTR, 'I',   -1, NULL 					, NULL)
 };
 
-void AZTwinedTorch::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 116;
-	info->spawnstate = &States[S_ZTWINEDTORCH];
-	info->seestate = &States[S_ZTWINEDTORCH];
-	info->meleestate = &States[S_ZTWINEDTORCH_UNLIT];
-	info->radius = 10*FRACUNIT;
-	info->height = 64*FRACUNIT;
-	info->flags = MF_SOLID;
-}
+IMPLEMENT_ACTOR (AZTwinedTorch, Hexen, 116, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (64)
+	PROP_Flags (MF_SOLID)
+
+	PROP_SpawnState (S_ZTWINEDTORCH)
+	PROP_SeeState (S_ZTWINEDTORCH)
+	PROP_MeleeState (S_ZTWINEDTORCH_UNLIT)
+END_DEFAULTS
 
 void AZTwinedTorch::Activate (AActor *activator)
 {
@@ -825,30 +736,21 @@ void AZTwinedTorch::Activate (AActor *activator)
 
 class AZTwinedTorchUnlit : public AZTwinedTorch
 {
-	DECLARE_STATELESS_ACTOR (AZTwinedTorchUnlit, AZTwinedTorch);
+	DECLARE_STATELESS_ACTOR (AZTwinedTorchUnlit, AZTwinedTorch)
 };
 
-IMPLEMENT_DEF_SERIAL (AZTwinedTorchUnlit, AZTwinedTorch);
-REGISTER_ACTOR (AZTwinedTorchUnlit, Hexen);
-
-void AZTwinedTorchUnlit::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 117;
-	info->spawnstate = info->meleestate;
-}
+IMPLEMENT_STATELESS_ACTOR (AZTwinedTorchUnlit, Hexen, 117, 0)
+	PROP_SpawnState (S_ZTWINEDTORCH_UNLIT)
+END_DEFAULTS
 
 // Wall torch ---------------------------------------------------------------
 
 class AZWallTorch : public ASwitchableDecoration
 {
-	DECLARE_ACTOR (AZWallTorch, ASwitchableDecoration);
+	DECLARE_ACTOR (AZWallTorch, ASwitchableDecoration)
 public:
 	void Activate (AActor *activator);
 };
-
-IMPLEMENT_DEF_SERIAL (AZWallTorch, ASwitchableDecoration);
-REGISTER_ACTOR (AZWallTorch, Hexen);
 
 FState AZWallTorch::States[] =
 {
@@ -866,15 +768,13 @@ FState AZWallTorch::States[] =
 	S_NORMAL (WLTR, 'I',   -1, NULL 					, NULL)
 };
 
-void AZWallTorch::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 54;
-	info->spawnstate = &States[S_ZWALLTORCH];
-	info->seestate = &States[S_ZWALLTORCH];
-	info->meleestate = &States[S_ZWALLTORCH_U];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (AZWallTorch, Hexen, 54, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+
+	PROP_SpawnState (S_ZWALLTORCH)
+	PROP_SeeState (S_ZWALLTORCH)
+	PROP_MeleeState (S_ZWALLTORCH_U)
+END_DEFAULTS
 
 void AZWallTorch::Activate (AActor *activator)
 {
@@ -884,18 +784,12 @@ void AZWallTorch::Activate (AActor *activator)
 
 class AZWallTorchUnlit : public AZWallTorch
 {
-	DECLARE_STATELESS_ACTOR (AZWallTorchUnlit, AZWallTorch);
+	DECLARE_STATELESS_ACTOR (AZWallTorchUnlit, AZWallTorch)
 };
 
-IMPLEMENT_DEF_SERIAL (AZWallTorchUnlit, AZWallTorch);
-REGISTER_ACTOR (AZWallTorchUnlit, Hexen);
-
-void AZWallTorchUnlit::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 55;
-	info->spawnstate = info->meleestate;
-}
+IMPLEMENT_STATELESS_ACTOR (AZWallTorchUnlit, Hexen, 55, 0)
+	PROP_SpawnState (S_ZWALLTORCH_U)
+END_DEFAULTS
 
 // Shrub1 -------------------------------------------------------------------
 
@@ -903,11 +797,8 @@ void A_TreeDeath (AActor *);
 
 class AZShrub1 : public AActor
 {
-	DECLARE_ACTOR (AZShrub1, AActor);
+	DECLARE_ACTOR (AZShrub1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AZShrub1, AActor);
-REGISTER_ACTOR (AZShrub1, Hexen);
 
 FState AZShrub1::States[] =
 {
@@ -923,31 +814,27 @@ FState AZShrub1::States[] =
 	S_BRIGHT (SHB1, 'D',	5, NULL 					, NULL)
 };
 
-void AZShrub1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8101;
-	info->spawnstate = &States[S_ZSHRUB1];
-	info->meleestate = &States[S_ZSHRUB1_X];
-	info->deathstate = &States[S_ZSHRUB1_DIE];
-	info->deathsound = "TreeExplode";
-	info->radius = 8*FRACUNIT;
-	info->height = 24*FRACUNIT;
-	info->mass = MAXINT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD;
-}
+IMPLEMENT_ACTOR (AZShrub1, Hexen, 8101, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (24)
+	PROP_MassLong (FIXED_MAX)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD)
+
+	PROP_SpawnState (S_ZSHRUB1)
+	PROP_MeleeState (S_ZSHRUB1_X)
+	PROP_DeathState (S_ZSHRUB1_DIE)
+
+	PROP_DeathSound ("TreeExplode")
+END_DEFAULTS
 
 // Shrub2 -------------------------------------------------------------------
 
 class AZShrub2 : public AActor
 {
-	DECLARE_ACTOR (AZShrub2, AActor);
+	DECLARE_ACTOR (AZShrub2, AActor)
 public:
 	void GetDamageParms (int &damage, int &distance, bool hurtSrc);
 };
-
-IMPLEMENT_DEF_SERIAL (AZShrub2, AActor);
-REGISTER_ACTOR (AZShrub2, Hexen);
 
 FState AZShrub2::States[] =
 {
@@ -964,19 +851,18 @@ FState AZShrub2::States[] =
 	S_BRIGHT (SHB2, 'E',	5, NULL 					, NULL)
 };
 
-void AZShrub2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8102;
-	info->spawnstate = &States[S_ZSHRUB2];
-	info->meleestate = &States[S_ZSHRUB2_X];
-	info->deathstate = &States[S_ZSHRUB2_DIE];
-	info->deathsound = "TreeExplode";
-	info->radius = 16*FRACUNIT;
-	info->height = 40*FRACUNIT;
-	info->mass = MAXINT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD;
-}
+IMPLEMENT_ACTOR (AZShrub2, Hexen, 8102, 0)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (40)
+	PROP_MassLong (FIXED_MAX)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD)
+
+	PROP_SpawnState (S_ZSHRUB2)
+	PROP_MeleeState (S_ZSHRUB2_X)
+	PROP_DeathState (S_ZSHRUB2_DIE)
+
+	PROP_DeathSound ("TreeExplode")
+END_DEFAULTS
 
 void AZShrub2::GetDamageParms (int &damage, int &distance, bool hurtSrc)
 {
@@ -1002,7 +888,7 @@ void A_TreeDeath (AActor *actor)
 	}
 	else
 	{
-		actor->SetState (GetInfo (actor)->meleestate);
+		actor->SetState (actor->MeleeState);
 	}
 }
 
@@ -1013,11 +899,8 @@ void A_PoisonBagInit () {}	// FIXME
 
 class AZPoisonShroom : public AActor
 {
-	DECLARE_ACTOR (AZPoisonShroom, AActor);
+	DECLARE_ACTOR (AZPoisonShroom, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AZPoisonShroom, AActor);
-REGISTER_ACTOR (AZPoisonShroom, Hexen);
 
 FState AZPoisonShroom::States[] =
 {
@@ -1035,20 +918,19 @@ FState AZPoisonShroom::States[] =
 	S_NORMAL (SHRM, 'F',   -1, NULL 			, NULL)
 };
 
-void AZPoisonShroom::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8104;
-	info->spawnstate = &States[S_ZPOISONSHROOM];
-	info->painstate = &States[S_ZPOISONSHROOM_P];
-	info->painchance = 255;
-	info->painsound = "PoisonShroomPain";
-	info->deathstate = &States[S_ZPOISONSHROOM_X];
-	info->deathsound = "PoisonShroomDeath";
-	info->radius = 6*FRACUNIT;
-	info->height = 20*FRACUNIT;
-	info->flags = MF_SHOOTABLE|MF_SOLID|MF_NOBLOOD;
-}
+IMPLEMENT_ACTOR (AZPoisonShroom, Hexen, 8104, 0)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (20)
+	PROP_PainChance (255)
+	PROP_Flags (MF_SHOOTABLE|MF_SOLID|MF_NOBLOOD)
+
+	PROP_SpawnState (S_ZPOISONSHROOM)
+	PROP_PainState (S_ZPOISONSHROOM_P)
+	PROP_DeathState (S_ZPOISONSHROOM_X)
+
+	PROP_PainSound ("PoisonShroomPain")
+	PROP_DeathSound ("PoisonShroomDeath")
+END_DEFAULTS
 
 //===========================================================================
 //
@@ -1065,13 +947,10 @@ void A_PoisonShroom (AActor *actor)
 
 class AZFireBull : public ASwitchableDecoration
 {
-	DECLARE_ACTOR (AZFireBull, ASwitchableDecoration);
+	DECLARE_ACTOR (AZFireBull, ASwitchableDecoration)
 public:
 	void Activate (AActor *activator);
 };
-
-IMPLEMENT_DEF_SERIAL (AZFireBull, ASwitchableDecoration);
-REGISTER_ACTOR (AZFireBull, Hexen);
 
 FState AZFireBull::States[] =
 {
@@ -1096,17 +975,15 @@ FState AZFireBull::States[] =
 	S_BRIGHT (FBUL, 'J',	4, NULL 		, &States[S_ZFIREBULL+0])
 };
 
-void AZFireBull::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8042;
-	info->spawnstate = &States[S_ZFIREBULL];
-	info->seestate = &States[S_ZFIREBULL_BIRTH];
-	info->meleestate = &States[S_ZFIREBULL_U];
-	info->radius = 20*FRACUNIT;
-	info->height = 80*FRACUNIT;
-	info->flags = MF_SOLID;
-}
+IMPLEMENT_ACTOR (AZFireBull, Hexen, 8042, 0)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (80)
+	PROP_Flags (MF_SOLID)
+
+	PROP_SpawnState (S_ZFIREBULL)
+	PROP_SeeState (S_ZFIREBULL_BIRTH)
+	PROP_MeleeState (S_ZFIREBULL_U)
+END_DEFAULTS
 
 void AZFireBull::Activate (AActor *activator)
 {
@@ -1116,18 +993,12 @@ void AZFireBull::Activate (AActor *activator)
 
 class AZFireBullUnlit : public AZFireBull
 {
-	DECLARE_STATELESS_ACTOR (AZFireBullUnlit, AZFireBull);
+	DECLARE_STATELESS_ACTOR (AZFireBullUnlit, AZFireBull)
 };
 
-IMPLEMENT_DEF_SERIAL (AZFireBullUnlit, AZFireBull);
-REGISTER_ACTOR (AZFireBullUnlit, Hexen);
-
-void AZFireBullUnlit::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 8043;
-	info->spawnstate = info->meleestate;
-}
+IMPLEMENT_STATELESS_ACTOR (AZFireBullUnlit, Hexen, 8043, 0)
+	PROP_SpawnState (S_ZFIREBULL_U)
+END_DEFAULTS
 
 // Suit of armor ------------------------------------------------------------
 
@@ -1135,11 +1006,8 @@ void A_SoAExplode (AActor *);
 
 class AZSuitOfArmor : public AActor
 {
-	DECLARE_ACTOR (AZSuitOfArmor, AActor);
+	DECLARE_ACTOR (AZSuitOfArmor, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AZSuitOfArmor, AActor);
-REGISTER_ACTOR (AZSuitOfArmor, Hexen);
 
 FState AZSuitOfArmor::States[] =
 {
@@ -1147,28 +1015,24 @@ FState AZSuitOfArmor::States[] =
 	S_NORMAL (SUIT, 'A',	1, A_SoAExplode 			, NULL)
 };
 
-void AZSuitOfArmor::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8064;
-	info->spawnstate = &States[0];
-	info->spawnhealth = 60;
-	info->deathstate = &States[1];
-	info->deathsound = "SuitofArmorBreak";
-	info->radius = 16*FRACUNIT;
-	info->height = 72*FRACUNIT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD;
-}
+IMPLEMENT_ACTOR (AZSuitOfArmor, Hexen, 8064, 0)
+	PROP_SpawnHealth (60)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (72)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD)
+
+	PROP_SpawnState (0)
+	PROP_DeathState (1)
+
+	PROP_DeathSound ("SuitofArmorBreak")
+END_DEFAULTS
 
 // Armor chunk --------------------------------------------------------------
 
 class AZArmorChunk : public AActor
 {
-	DECLARE_ACTOR (AZArmorChunk, AActor);
+	DECLARE_ACTOR (AZArmorChunk, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AZArmorChunk, AActor);
-REGISTER_ACTOR (AZArmorChunk, Hexen);
 
 FState AZArmorChunk::States[] =
 {
@@ -1184,13 +1048,11 @@ FState AZArmorChunk::States[] =
 	S_NORMAL (SUIT, 'K',   -1, NULL 					, NULL)
 };
 
-void AZArmorChunk::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->radius = 4*FRACUNIT;
-	info->height = 8*FRACUNIT;
-}
+IMPLEMENT_ACTOR (AZArmorChunk, Hexen, -1, 0)
+	PROP_RadiusFixed (4)
+	PROP_HeightFixed (8)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 //===========================================================================
 //
@@ -1208,7 +1070,7 @@ void A_SoAExplode (AActor *actor)
 		mo = Spawn<AZArmorChunk> (actor->x+((P_Random()-128)<<12),
 			actor->y+((P_Random()-128)<<12), 
 			actor->z+(P_Random()*actor->height/256));
-		mo->SetState (GetInfo (mo)->spawnstate + i);
+		mo->SetState (mo->SpawnState + i);
 		if (mo)
 		{
 			mo->momz = ((P_Random()&7)+5)*FRACUNIT;
@@ -1218,14 +1080,14 @@ void A_SoAExplode (AActor *actor)
 	}
 	if (SpawnableThings[actor->args[0]])
 	{ // Spawn an item
-		if (!(dmflags & DF_NO_MONSTERS) 
-		|| !(SpawnableThings[actor->args[0]]->ActorInfo->flags & MF_COUNTKILL))
+		if (!(*dmflags & DF_NO_MONSTERS) 
+		|| !(GetDefaultByType (SpawnableThings[actor->args[0]])->flags & MF_COUNTKILL))
 		{ // Only spawn monsters if not -nomonsters
 			Spawn (SpawnableThings[actor->args[0]],
 				actor->x, actor->y, actor->z);
 		}
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->deathsound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->DeathSound, 1, ATTN_NORM);
 	actor->Destroy ();
 }
 
@@ -1236,13 +1098,10 @@ void A_BellReset2 (AActor *);
 
 class AZBell : public AActor
 {
-	DECLARE_ACTOR (AZBell, AActor);
+	DECLARE_ACTOR (AZBell, AActor)
 public:
 	void Activate (AActor *activator);
 };
-
-IMPLEMENT_DEF_SERIAL (AZBell, AActor);
-REGISTER_ACTOR (AZBell, Hexen);
 
 FState AZBell::States[] =
 {
@@ -1299,18 +1158,17 @@ FState AZBell::States[] =
 	S_NORMAL (BBLL, 'A',	1, A_BellReset2 			, &States[S_ZBELL])
 };
 
-void AZBell::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8065;
-	info->spawnstate = &States[S_ZBELL];
-	info->spawnhealth = 5;
-	info->deathstate = &States[S_ZBELL_X];
-	info->deathsound = "BellRing";
-	info->radius = 56*FRACUNIT;
-	info->height = 120*FRACUNIT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD|MF_NOGRAVITY|MF_SPAWNCEILING;
-}
+IMPLEMENT_ACTOR (AZBell, Hexen, 8065, 0)
+	PROP_SpawnHealth (5)
+	PROP_RadiusFixed (56)
+	PROP_HeightFixed (120)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD|MF_NOGRAVITY|MF_SPAWNCEILING)
+
+	PROP_SpawnState (S_ZBELL)
+	PROP_DeathState (S_ZBELL_X)
+
+	PROP_DeathSound ("BellRing")
+END_DEFAULTS
 
 void AZBell::Activate (AActor *activator)
 {
@@ -1355,13 +1213,10 @@ void A_BellReset2 (AActor *actor)
 
 class AZXmasTree : public AActor
 {
-	DECLARE_ACTOR (AZXmasTree, AActor);
+	DECLARE_ACTOR (AZXmasTree, AActor)
 public:
 	void SetExplodeParms (int &damage, int &dist, bool dmgSource);
 };
-
-IMPLEMENT_DEF_SERIAL (AZXmasTree, AActor);
-REGISTER_ACTOR (AZXmasTree, Hexen);
 
 FState AZXmasTree::States[] =
 {
@@ -1384,19 +1239,18 @@ FState AZXmasTree::States[] =
 	S_NORMAL (XMAS, 'K',   -1, NULL 					, NULL)
 };
 
-void AZXmasTree::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8068;
-	info->spawnstate = &States[S_ZXMAS_TREE];
-	info->spawnhealth = 20;
-	info->meleestate = &States[S_ZXMAS_TREE_X];
-	info->deathstate = &States[S_ZXMAS_TREE_DIE];
-	info->deathsound = "TreeExplode";
-	info->radius = 11*FRACUNIT;
-	info->height = 130*FRACUNIT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD;
-}
+IMPLEMENT_ACTOR (AZXmasTree, Hexen, 8068, 0)
+	PROP_SpawnHealth (20)
+	PROP_RadiusFixed (11)
+	PROP_HeightFixed (130)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD)
+
+	PROP_SpawnState (S_ZXMAS_TREE)
+	PROP_MeleeState (S_ZXMAS_TREE_X)
+	PROP_DeathState (S_ZXMAS_TREE_DIE)
+
+	PROP_DeathSound ("TreeExplode")
+END_DEFAULTS
 
 void AZXmasTree::SetExplodeParms (int &damage, int &dist, bool dmgSource)
 {
@@ -1408,13 +1262,10 @@ void AZXmasTree::SetExplodeParms (int &damage, int &dist, bool dmgSource)
 
 class AZCauldron : public ASwitchableDecoration
 {
-	DECLARE_ACTOR (AZCauldron, ASwitchableDecoration);
+	DECLARE_ACTOR (AZCauldron, ASwitchableDecoration)
 public:
 	void Activate (AActor *activator);
 };
-
-IMPLEMENT_DEF_SERIAL (AZCauldron, ASwitchableDecoration);
-REGISTER_ACTOR (AZCauldron, Hexen);
 
 FState AZCauldron::States[] =
 {
@@ -1431,17 +1282,15 @@ FState AZCauldron::States[] =
 	S_NORMAL (CDRN, 'A',   -1, NULL 					, NULL)
 };
 
-void AZCauldron::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8069;
-	info->spawnstate = &States[S_ZCAULDRON];
-	info->seestate = &States[S_ZCAULDRON];
-	info->meleestate = &States[S_ZCAULDRON_U];
-	info->radius = 12*FRACUNIT;
-	info->height = 26*FRACUNIT;
-	info->flags = MF_SOLID;
-}
+IMPLEMENT_ACTOR (AZCauldron, Hexen, 8069, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (26)
+	PROP_Flags (MF_SOLID)
+
+	PROP_SpawnState (S_ZCAULDRON)
+	PROP_SeeState (S_ZCAULDRON)
+	PROP_MeleeState (S_ZCAULDRON_U)
+END_DEFAULTS
 
 void AZCauldron::Activate (AActor *activator)
 {
@@ -1451,15 +1300,9 @@ void AZCauldron::Activate (AActor *activator)
 
 class AZCauldronUnlit : public AZCauldron
 {
-	DECLARE_STATELESS_ACTOR (AZCauldronUnlit, AZCauldron);
+	DECLARE_STATELESS_ACTOR (AZCauldronUnlit, AZCauldron)
 };
 
-IMPLEMENT_DEF_SERIAL (AZCauldronUnlit, AZCauldron);
-REGISTER_ACTOR (AZCauldronUnlit, Hexen);
-
-void AZCauldronUnlit::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 8070;
-	info->spawnstate = info->meleestate;
-}
+IMPLEMENT_STATELESS_ACTOR (AZCauldronUnlit, Hexen, 8070, 0)
+	PROP_SpawnState (S_ZCAULDRON_U)
+END_DEFAULTS

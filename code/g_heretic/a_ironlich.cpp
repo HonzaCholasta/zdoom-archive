@@ -5,6 +5,7 @@
 #include "p_local.h"
 #include "p_enemy.h"
 #include "a_action.h"
+#include "gstrings.h"
 
 void A_LichAttack (AActor *);
 void A_LichIceImpact (AActor *);
@@ -15,13 +16,12 @@ void A_WhirlwindSeek (AActor *);
 
 class AIronlich : public AActor
 {
-	DECLARE_ACTOR (AIronlich, AActor);
+	DECLARE_ACTOR (AIronlich, AActor)
 public:
 	void NoBlockingSet ();
+	const char *GetObituary ();
+	const char *GetHitObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (AIronlich, AActor);
-REGISTER_ACTOR (AIronlich, Heretic);
 
 FState AIronlich::States[] =
 {
@@ -49,46 +49,52 @@ FState AIronlich::States[] =
 	S_NORMAL (HEAD, 'I',   -1, A_BossDeath				, NULL)
 };
 
-void AIronlich::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 6;
-	info->spawnstate = &States[S_HEAD_LOOK];
-	info->spawnhealth = 700;
-	info->seestate = &States[S_HEAD_FLOAT];
-	info->seesound = "ironlich/sight";
-	info->attacksound = "ironlich/attack";
-	info->painstate = &States[S_HEAD_PAIN];
-	info->painchance = 32;
-	info->painsound = "ironlich/pain";
-	info->missilestate = &States[S_HEAD_ATK];
-	info->deathstate = &States[S_HEAD_DIE];
-	info->deathsound = "ironlich/death";
-	info->speed = 6;
-	info->radius = 40 * FRACUNIT;
-	info->height = 72 * FRACUNIT;
-	info->mass = 325;
-	info->activesound = "ironlich/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_NOBLOOD;
-	info->flags2 = MF2_PASSMOBJ;
-	info->flags3 = MF3_DONTMORPH|MF3_DONTSQUASH;
-}
+IMPLEMENT_ACTOR (AIronlich, Heretic, 6, 0)
+	PROP_SpawnHealth (700)
+	PROP_RadiusFixed (40)
+	PROP_HeightFixed (72)
+	PROP_Mass (325)
+	PROP_SpeedFixed (6)
+	PROP_PainChance (32)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_NOBLOOD)
+	PROP_Flags2 (MF2_PASSMOBJ)
+	PROP_Flags3 (MF3_DONTMORPH|MF3_DONTSQUASH)
+
+	PROP_SpawnState (S_HEAD_LOOK)
+	PROP_SeeState (S_HEAD_FLOAT)
+	PROP_PainState (S_HEAD_PAIN)
+	PROP_MissileState (S_HEAD_ATK)
+	PROP_DeathState (S_HEAD_DIE)
+
+	PROP_SeeSound ("ironlich/sight")
+	PROP_AttackSound ("ironlich/attack")
+	PROP_PainSound ("ironlich/pain")
+	PROP_DeathSound ("ironlich/death")
+	PROP_ActiveSound ("ironlich/active")
+END_DEFAULTS
 
 void AIronlich::NoBlockingSet ()
 {
-	P_DropItem (this, "BlasterWimpy", 10, 84);
+	P_DropItem (this, "BlasterAmmo", 10, 84);
 	P_DropItem (this, "ArtiEgg", 0, 51);
+}
+
+const char *AIronlich::GetObituary ()
+{
+	return GStrings(OB_IRONLICH);
+}
+
+const char *AIronlich::GetHitObituary ()
+{
+	return GStrings(OB_IRONLICHHIT);
 }
 
 // Head FX 1 ----------------------------------------------------------------
 
 class AHeadFX1 : public AActor
 {
-	DECLARE_ACTOR (AHeadFX1, AActor);
+	DECLARE_ACTOR (AHeadFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AHeadFX1, AActor);
-REGISTER_ACTOR (AHeadFX1, Heretic);
 
 FState AHeadFX1::States[] =
 {
@@ -104,28 +110,29 @@ FState AHeadFX1::States[] =
 	S_NORMAL (FX05, 'G',	5, NULL 					, NULL)
 };
 
-void AHeadFX1::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AHeadFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (13)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_THRUGHOST)
+
+	PROP_SpawnState (S_HEADFX1)
+	PROP_DeathState (S_HEADFXI1)
+END_DEFAULTS
+
+AT_SPEED_SET (HeadFX1, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_HEADFX1];
-	info->deathstate = &States[S_HEADFXI1];
-	info->speed = GameSpeed != SPEED_Fast ? 13 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 12 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_THRUGHOST;
+	SimpleSpeedSetter (AHeadFX1, 13*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 // Head FX 2 ----------------------------------------------------------------
 
 class AHeadFX2 : public AActor
 {
-	DECLARE_ACTOR (AHeadFX2, AActor);
+	DECLARE_ACTOR (AHeadFX2, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AHeadFX2, AActor);
-REGISTER_ACTOR (AHeadFX2, Heretic);
 
 FState AHeadFX2::States[] =
 {
@@ -141,28 +148,24 @@ FState AHeadFX2::States[] =
 	S_NORMAL (FX05, 'G',	5, NULL 					, NULL)
 };
 
-void AHeadFX2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_HEADFX2];
-	info->deathstate = &States[S_HEADFXI2];
-	info->speed = 8 * FRACUNIT;
-	info->radius = 12 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 3;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
-}
+IMPLEMENT_ACTOR (AHeadFX2, Heretic, -1, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (8)
+	PROP_Damage (3)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_HEADFX2)
+	PROP_DeathState (S_HEADFXI2)
+END_DEFAULTS
 
 // Head FX 3 ----------------------------------------------------------------
 
 class AHeadFX3 : public AActor
 {
-	DECLARE_ACTOR (AHeadFX3, AActor);
+	DECLARE_ACTOR (AHeadFX3, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AHeadFX3, AActor);
-REGISTER_ACTOR (AHeadFX3, Heretic);
 
 FState AHeadFX3::States[] =
 {
@@ -181,30 +184,31 @@ FState AHeadFX3::States[] =
 	S_NORMAL (FX06, 'G',	5, NULL 					, NULL)
 };
 
-void AHeadFX3::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AHeadFX3, Heretic, -1, 0)
+	PROP_RadiusFixed (14)
+	PROP_HeightFixed (12)
+	PROP_SpeedFixed (10)
+	PROP_Damage (5)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_HEADFX3)
+	PROP_DeathState (S_HEADFXI3)
+END_DEFAULTS
+
+AT_SPEED_SET (HeadFX3, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_HEADFX3];
-	info->deathstate = &States[S_HEADFXI3];
-	info->speed = GameSpeed != SPEED_Fast ? 10 * FRACUNIT : 18 * FRACUNIT;
-	info->radius = 14 * FRACUNIT;
-	info->height = 12 * FRACUNIT;
-	info->damage = 5;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_WINDTHRUST|MF2_NOTELEPORT;
+	SimpleSpeedSetter (AHeadFX3, 10*FRACUNIT, 18*FRACUNIT, speed);
 }
 
 // Whirlwind ----------------------------------------------------------------
 
 class AWhirlwind : public AActor
 {
-	DECLARE_ACTOR (AWhirlwind, AActor);
+	DECLARE_ACTOR (AWhirlwind, AActor)
 public:
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (AWhirlwind, AActor);
-REGISTER_ACTOR (AWhirlwind, Heretic);
 
 FState AWhirlwind::States[] =
 {
@@ -224,20 +228,20 @@ FState AWhirlwind::States[] =
 	S_NORMAL (FX07, 'D',	4, NULL 					, NULL)
 };
 
-void AWhirlwind::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_HEADFX4];
-	info->deathstate = &States[S_HEADFXI4];
-	info->speed = 10 * FRACUNIT;
-	info->radius = 16 * FRACUNIT;
-	info->height = 74 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
-	info->flags3 = MF3_EXPLOCOUNT;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_ACTOR (AWhirlwind, Heretic, -1, 0)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (74)
+	PROP_SpeedFixed (10)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+	PROP_Flags3 (MF3_EXPLOCOUNT)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+
+	PROP_SpawnState (S_HEADFX4)
+	PROP_DeathState (S_HEADFXI4)
+END_DEFAULTS
 
 int AWhirlwind::DoSpecialDamage (AActor *target, int damage)
 {
@@ -300,7 +304,7 @@ void A_LichAttack (AActor *actor)
 	A_FaceTarget (actor);
 	if (P_CheckMeleeRange (actor))
 	{
-		P_DamageMobj (target, actor, actor, HITDICE(6));
+		P_DamageMobj (target, actor, actor, HITDICE(6), MOD_HIT);
 		return;
 	}
 	dist = P_AproxDistance (actor->x-target->x, actor->y-target->y)
@@ -363,7 +367,7 @@ void A_WhirlwindSeek (AActor *actor)
 	if (actor->health < 0)
 	{
 		actor->momx = actor->momy = actor->momz = 0;
-		actor->SetState (GetInfo (actor)->deathstate);
+		actor->SetState (actor->DeathState);
 		actor->flags &= ~MF_MISSILE;
 		return;
 	}
@@ -398,8 +402,8 @@ void A_LichIceImpact (AActor *ice)
 		shard->target = ice->target;
 		shard->angle = angle;
 		angle >>= ANGLETOFINESHIFT;
-		shard->momx = FixedMul (GetInfo (shard)->speed, finecosine[angle]);
-		shard->momy = FixedMul (GetInfo (shard)->speed, finesine[angle]);
+		shard->momx = FixedMul (shard->Speed, finecosine[angle]);
+		shard->momy = FixedMul (shard->Speed, finesine[angle]);
 		shard->momz = -FRACUNIT*6/10;
 		P_CheckMissileSpawn (shard);
 	}
@@ -417,7 +421,7 @@ void A_LichFireGrow (AActor *fire)
 	fire->z += 9*FRACUNIT;
 	if (fire->health == 0)
 	{
-		fire->damage = GetInfo (fire)->damage;
+		fire->damage = fire->GetDefault()->damage;
 		fire->SetState (&AHeadFX3::States[S_HEADFX3+3]);
 	}
 }

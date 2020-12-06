@@ -1,3 +1,4 @@
+#include "templates.h"
 #include "actor.h"
 #include "info.h"
 #include "s_sound.h"
@@ -8,10 +9,11 @@
 #include "p_pspr.h"
 #include "p_local.h"
 #include "p_inter.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "p_effect.h"
-#include "hstrings.h"
+#include "gstrings.h"
 #include "p_enemy.h"
+#include "gi.h"
 
 #define FLAME_THROWER_TICS (10*TICRATE)
 
@@ -60,18 +62,7 @@ bool P_AutoUseChaosDevice (player_t *player)
 
 // Base Heretic weapon class ------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (AHereticWeapon, AWeapon);
-REGISTER_ACTOR (AHereticWeapon, Heretic);
-
-void AHereticWeapon::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-}
-
-void AHereticWeapon::PlayPickupSound (AActor *toucher)
-{
-	S_Sound (toucher, CHAN_VOICE, "*weaponlaugh", 1, ATTN_NORM);
-}
+IMPLEMENT_ABSTRACT_ACTOR (AHereticWeapon)
 
 // --- Staff ----------------------------------------------------------------
 
@@ -82,13 +73,11 @@ void A_StaffAttackPL2 (player_t *, pspdef_t *);
 
 class AStaff : public AHereticWeapon
 {
-	DECLARE_ACTOR (AStaff, AHereticWeapon);
+	DECLARE_ACTOR (AStaff, AHereticWeapon)
+	AT_GAME_SET_FRIEND (Staff)
 private:
 	static FWeaponInfo WeaponInfo1, WeaponInfo2;
 };
-
-IMPLEMENT_DEF_SERIAL (AStaff, AHereticWeapon);
-REGISTER_ACTOR (AStaff, Heretic);
 
 FState AStaff::States[] =
 {
@@ -161,18 +150,20 @@ FWeaponInfo AStaff::WeaponInfo2 =
 	"weapons/staffcrackle"
 };
 
-void AStaff::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AStaff, Heretic, -1, 0)
+END_DEFAULTS
+
+AT_GAME_SET (Staff)
 {
-	INHERIT_DEFS;
-	WeaponSlots[1].AddWeapon (wp_staff, 1);
-	wpnlev1info[wp_staff] = &WeaponInfo1;
-	wpnlev2info[wp_staff] = &WeaponInfo2;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		WeaponSlots[1].AddWeapon (wp_staff, 1);
+	}
+	wpnlev1info[wp_staff] = &AStaff::WeaponInfo1;
+	wpnlev2info[wp_staff] = &AStaff::WeaponInfo2;
 }
 
 // Staff puff ---------------------------------------------------------------
-
-IMPLEMENT_DEF_SERIAL (AStaffPuff, AActor);
-REGISTER_ACTOR (AStaffPuff, Heretic);
 
 FState AStaffPuff::States[] =
 {
@@ -182,13 +173,11 @@ FState AStaffPuff::States[] =
 	S_NORMAL (PUF3, 'D',	4, NULL 						, NULL)
 };
 
-void AStaffPuff::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->attacksound = "weapons/staffhit";
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (AStaffPuff, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_SpawnState (0)
+	PROP_AttackSound ("weapons/staffhit")
+END_DEFAULTS
 
 void AStaffPuff::BeginPlay ()
 {
@@ -200,13 +189,10 @@ void AStaffPuff::BeginPlay ()
 
 class AStaffPuff2 : public AStaffPuff
 {
-	DECLARE_ACTOR (AStaffPuff2, AStaffPuff);
+	DECLARE_ACTOR (AStaffPuff2, AStaffPuff)
 public:
 	void BeginPlay ();
 };
-
-IMPLEMENT_DEF_SERIAL (AStaffPuff2, AStaffPuff);
-REGISTER_ACTOR (AStaffPuff2, Heretic);
 
 FState AStaffPuff2::States[] =
 {
@@ -218,12 +204,10 @@ FState AStaffPuff2::States[] =
 	S_BRIGHT (PUF4, 'F',	4, NULL 						, NULL)
 };
 
-void AStaffPuff2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->attacksound = "weapons/staffpowerhit";
-}
+IMPLEMENT_ACTOR (AStaffPuff2, Heretic, -1, 0)
+	PROP_SpawnState (0)
+	PROP_AttackSound ("weapons/staffpowerhit")
+END_DEFAULTS
 
 void AStaffPuff2::BeginPlay ()
 {
@@ -293,9 +277,9 @@ void A_FireGoldWandPL2 (player_t *, pspdef_t *);
 
 // Wimpy ammo ---------------------------------------------------------------
 
-class AGoldWandWimpy : public APickup
+class AGoldWandAmmo : public AAmmo
 {
-	DECLARE_ACTOR (AGoldWandWimpy, APickup);
+	DECLARE_ACTOR (AGoldWandAmmo, AAmmo)
 public:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -303,33 +287,31 @@ public:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return TXT_AMMOGOLDWAND1;
+		return GStrings(TXT_AMMOGOLDWAND1);
 	}
 };
 
-IMPLEMENT_DEF_SERIAL (AGoldWandWimpy, APickup);
-REGISTER_ACTOR (AGoldWandWimpy, Heretic);
-
-FState AGoldWandWimpy::States[] =
+FState AGoldWandAmmo::States[] =
 {
 	S_NORMAL (AMG1, 'A',   -1, NULL 						, NULL),
 };
 
-void AGoldWandWimpy::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AGoldWandAmmo, Heretic, 10, 0)
+	PROP_SpawnHealth (AMMO_GWND_WIMPY)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (GoldWandAmmo)
 {
-	INHERIT_DEFS;
-	info->doomednum = 10;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_GWND_WIMPY;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_goldwand] = "INAMGLD";
 }
 
 // Hefty ammo ---------------------------------------------------------------
 
-class AGoldWandHefty : public APickup
+class AGoldWandHefty : public AAmmo
 {
-	DECLARE_ACTOR (AGoldWandHefty, APickup);
+	DECLARE_ACTOR (AGoldWandHefty, AAmmo)
 public:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -337,12 +319,9 @@ public:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return TXT_AMMOGOLDWAND2;
+		return GStrings(TXT_AMMOGOLDWAND2);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AGoldWandHefty, APickup);
-REGISTER_ACTOR (AGoldWandHefty, Heretic);
 
 FState AGoldWandHefty::States[] =
 {
@@ -351,26 +330,22 @@ FState AGoldWandHefty::States[] =
 	S_NORMAL (AMG2, 'C',	4, NULL 						, &States[0])
 };
 
-void AGoldWandHefty::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 12;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_GWND_HEFTY;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (AGoldWandHefty, Heretic, 12, 0)
+	PROP_SpawnHealth (AMMO_GWND_HEFTY)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Gold wand ----------------------------------------------------------------
 
 class AGoldWand : public AHereticWeapon
 {
-	DECLARE_ACTOR (AGoldWand, AHereticWeapon);
+	DECLARE_ACTOR (AGoldWand, AHereticWeapon)
+	AT_GAME_SET_FRIEND (GoldWand)
 private:
 	static FWeaponInfo WeaponInfo1, WeaponInfo2;
 };
-
-IMPLEMENT_DEF_SERIAL (AGoldWand, AHereticWeapon);
-REGISTER_ACTOR (AGoldWand, Heretic);
 
 FState AGoldWand::States[] =
 {
@@ -408,7 +383,7 @@ FWeaponInfo AGoldWand::WeaponInfo1 =
 	&States[S_GOLDWANDATK1],
 	&States[S_GOLDWANDATK1],
 	NULL,
-	RUNTIME_CLASS(AGoldWandWimpy),
+	RUNTIME_CLASS(AGoldWandAmmo),
 	150,
 	5*FRACUNIT,
 	NULL,
@@ -434,23 +409,25 @@ FWeaponInfo AGoldWand::WeaponInfo2 =
 	NULL
 };
 
-void AGoldWand::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AGoldWand, Heretic, -1, 0)
+END_DEFAULTS
+
+AT_GAME_SET (GoldWand)
 {
-	INHERIT_DEFS;
-	WeaponSlots[2].AddWeapon (wp_goldwand, 3);
-	wpnlev1info[wp_goldwand] = &WeaponInfo1;
-	wpnlev2info[wp_goldwand] = &WeaponInfo2;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		WeaponSlots[2].AddWeapon (wp_goldwand, 3);
+	}
+	wpnlev1info[wp_goldwand] = &AGoldWand::WeaponInfo1;
+	wpnlev2info[wp_goldwand] = &AGoldWand::WeaponInfo2;
 }
 
 // Gold wand FX1 ------------------------------------------------------------
 
 class AGoldWandFX1 : public AActor
 {
-	DECLARE_ACTOR (AGoldWandFX1, AActor);
+	DECLARE_ACTOR (AGoldWandFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AGoldWandFX1, AActor);
-REGISTER_ACTOR (AGoldWandFX1, Heretic);
 
 FState AGoldWandFX1::States[] =
 {
@@ -465,29 +442,26 @@ FState AGoldWandFX1::States[] =
 	S_BRIGHT (FX01, 'H',	3, NULL 						, NULL)
 };
 
-void AGoldWandFX1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_GWANDFX1];
-	info->deathstate = &States[S_GWANDFXI1];
-	info->deathsound = "weapons/wandhit";
-	info->speed = 22 * FRACUNIT;
-	info->radius = 10 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 2;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
-}
+IMPLEMENT_ACTOR (AGoldWandFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (22)
+	PROP_Damage (2)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_GWANDFX1)
+	PROP_DeathState (S_GWANDFXI1)
+
+	PROP_DeathSound ("weapons/wandhit")
+END_DEFAULTS
 
 // Gold wand FX2 ------------------------------------------------------------
 
 class AGoldWandFX2 : public AGoldWandFX1
 {
-	DECLARE_ACTOR (AGoldWandFX2, AGoldWandFX1);
+	DECLARE_ACTOR (AGoldWandFX2, AGoldWandFX1)
 };
-
-IMPLEMENT_DEF_SERIAL (AGoldWandFX2, AGoldWandFX1);
-REGISTER_ACTOR (AGoldWandFX2, Heretic);
 
 FState AGoldWandFX2::States[] =
 {
@@ -495,24 +469,21 @@ FState AGoldWandFX2::States[] =
 	S_BRIGHT (FX01, 'D',	6, NULL 						, &States[0])
 };
 
-void AGoldWandFX2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->deathsound = NULL;
-	info->speed = 18 * FRACUNIT;
-	info->damage = 1;
-}
+IMPLEMENT_ACTOR (AGoldWandFX2, Heretic, -1, 0)
+	PROP_SpeedFixed (18)
+	PROP_Damage (1)
+
+	PROP_SpawnState (0)
+
+	PROP_DeathSound ("")
+END_DEFAULTS
 
 // Gold wand puff 1 ---------------------------------------------------------
 
 class AGoldWandPuff1 : public AActor
 {
-	DECLARE_ACTOR (AGoldWandPuff1, AActor);
+	DECLARE_ACTOR (AGoldWandPuff1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AGoldWandPuff1, AActor);
-REGISTER_ACTOR (AGoldWandPuff1, Heretic);
 
 FState AGoldWandPuff1::States[] =
 {
@@ -523,28 +494,21 @@ FState AGoldWandPuff1::States[] =
 	S_BRIGHT (PUF2, 'E',	3, NULL 						, NULL)
 };
 
-void AGoldWandPuff1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (AGoldWandPuff1, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Gold wand puff 2 ---------------------------------------------------------
 
 class AGoldWandPuff2 : public AGoldWandPuff1
 {
-	DECLARE_STATELESS_ACTOR (AGoldWandPuff2, AGoldWandPuff1);
+	DECLARE_STATELESS_ACTOR (AGoldWandPuff2, AGoldWandPuff1)
 };
 
-IMPLEMENT_DEF_SERIAL (AGoldWandPuff2, AGoldWandPuff1);
-REGISTER_ACTOR (AGoldWandPuff2, Heretic);
-
-void AGoldWandPuff2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->spawnstate = &AGoldWandFX1::States[S_GWANDFXI1];
-}
+IMPLEMENT_STATELESS_ACTOR (AGoldWandPuff2, Heretic, -1, 0)
+	PROP_SpawnState (S_GWANDFXI1)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -559,7 +523,7 @@ void A_FireGoldWandPL1 (player_t *player, pspdef_t *psp)
 	int damage;
 
 	mo = player->mo;
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_goldwand] -= USE_GWND_AMMO_1;
 	P_BulletSlope(mo);
 	damage = 7+(P_Random()&7);
@@ -569,7 +533,7 @@ void A_FireGoldWandPL1 (player_t *player, pspdef_t *psp)
 		angle += PS_Random() << 18;
 	}
 	PuffType = RUNTIME_CLASS(AGoldWandPuff1);
-	P_LineAttack (mo, angle, MISSILERANGE, bulletslope, damage);
+	P_LineAttack (mo, angle, MISSILERANGE, bulletpitch, damage);
 	S_Sound (player->mo, CHAN_WEAPON, "weapons/wandhit", 1, ATTN_NORM);
 }
 
@@ -588,19 +552,20 @@ void A_FireGoldWandPL2 (player_t *player, pspdef_t *psp)
 	fixed_t momz;
 
 	mo = player->mo;
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_goldwand] -=
-			deathmatch.value ? USE_GWND_AMMO_1 : USE_GWND_AMMO_2;
+			*deathmatch ? USE_GWND_AMMO_1 : USE_GWND_AMMO_2;
 	PuffType = RUNTIME_CLASS(AGoldWandPuff2);
 	P_BulletSlope (mo);
-	momz = FixedMul (RUNTIME_CLASS(AGoldWandFX2)->ActorInfo->speed, bulletslope);
+	momz = FixedMul (GetDefault<AGoldWandFX2>()->Speed,
+		finetangent[FINEANGLES/4-((signed)bulletpitch>>ANGLETOFINESHIFT)]);
 	P_SpawnMissileAngle (mo, RUNTIME_CLASS(AGoldWandFX2), mo->angle-(ANG45/8), momz);
 	P_SpawnMissileAngle (mo, RUNTIME_CLASS(AGoldWandFX2), mo->angle+(ANG45/8), momz);
 	angle = mo->angle-(ANG45/8);
 	for(i = 0; i < 5; i++)
 	{
 		damage = 1+(P_Random()&7);
-		P_LineAttack (mo, angle, MISSILERANGE, bulletslope, damage);
+		P_LineAttack (mo, angle, MISSILERANGE, bulletpitch, damage);
 		angle += ((ANG45/8)*2)/4;
 	}
 	S_Sound (player->mo, CHAN_WEAPON, "weapons/wandhit", 1, ATTN_NORM);
@@ -614,9 +579,9 @@ void A_BoltSpark (AActor *);
 
 // Wimpy ammo ---------------------------------------------------------------
 
-class ACrossbowWimpy : public APickup
+class ACrossbowAmmo : public AAmmo
 {
-	DECLARE_ACTOR (ACrossbowWimpy, APickup);
+	DECLARE_ACTOR (ACrossbowAmmo, AAmmo)
 public:
 	bool TryPickup (AActor *toucher)
 	{
@@ -624,33 +589,32 @@ public:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOCROSSBOW1;
+		return GStrings(TXT_AMMOCROSSBOW1);
 	}
 };
 
-IMPLEMENT_DEF_SERIAL (ACrossbowWimpy, APickup);
-REGISTER_ACTOR (ACrossbowWimpy, Heretic);
-
-FState ACrossbowWimpy::States[] =
+FState ACrossbowAmmo::States[] =
 {
 	S_NORMAL (AMC1, 'A',   -1, NULL 						, NULL)
 };
 
-void ACrossbowWimpy::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ACrossbowAmmo, Heretic, 18, 0)
+	PROP_SpawnHealth (AMMO_CBOW_WIMPY)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (CrossbowAmmo)
 {
-	INHERIT_DEFS;
-	info->doomednum = 18;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_CBOW_WIMPY;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_crossbow] = "INAMBOW";
 }
 
 // Hefty ammo ---------------------------------------------------------------
 
-class ACrossbowHefty : public APickup
+class ACrossbowHefty : public AAmmo
 {
-	DECLARE_ACTOR (ACrossbowHefty, APickup);
+	DECLARE_ACTOR (ACrossbowHefty, AAmmo)
 public:
 	bool TryPickup (AActor *toucher)
 	{
@@ -658,12 +622,9 @@ public:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOCROSSBOW2;
+		return GStrings(TXT_AMMOCROSSBOW2);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ACrossbowHefty, APickup);
-REGISTER_ACTOR (ACrossbowHefty, Heretic);
 
 FState ACrossbowHefty::States[] =
 {
@@ -672,20 +633,19 @@ FState ACrossbowHefty::States[] =
 	S_NORMAL (AMC2, 'C',	5, NULL 						, &States[0])
 };
 
-void ACrossbowHefty::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 19;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_CBOW_HEFTY;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (ACrossbowHefty, Heretic, 19, 0)
+	PROP_SpawnHealth (AMMO_CBOW_HEFTY)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Crossbow -----------------------------------------------------------------
 
 class ACrossbow : public AHereticWeapon
 {
-	DECLARE_ACTOR (ACrossbow, AHereticWeapon);
+	DECLARE_ACTOR (ACrossbow, AHereticWeapon)
+	AT_GAME_SET_FRIEND (Crossbow)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -693,14 +653,11 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_WPNCROSSBOW;
+		return GStrings(TXT_WPNCROSSBOW);
 	}
 private:
 	static FWeaponInfo WeaponInfo1, WeaponInfo2;
 };
-
-IMPLEMENT_DEF_SERIAL (ACrossbow, AHereticWeapon);
-REGISTER_ACTOR (ACrossbow, Heretic);
 
 FState ACrossbow::States[] =
 {
@@ -792,26 +749,27 @@ FWeaponInfo ACrossbow::WeaponInfo2 =
 	NULL
 };
 
-void ACrossbow::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ACrossbow, Heretic, 2001, 0)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (S_WBOW)
+END_DEFAULTS
+
+AT_GAME_SET (Crossbow)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2001;
-	info->spawnstate = &States[S_WBOW];
-	info->flags = MF_SPECIAL;
-	WeaponSlots[3].AddWeapon (wp_crossbow, 4);
-	wpnlev1info[wp_crossbow] = &WeaponInfo1;
-	wpnlev2info[wp_crossbow] = &WeaponInfo2;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		WeaponSlots[3].AddWeapon (wp_crossbow, 4);
+	}
+	wpnlev1info[wp_crossbow] = &ACrossbow::WeaponInfo1;
+	wpnlev2info[wp_crossbow] = &ACrossbow::WeaponInfo2;
 }
 
 // Crossbow FX1 -------------------------------------------------------------
 
 class ACrossbowFX1 : public AActor
 {
-	DECLARE_ACTOR (ACrossbowFX1, AActor);
+	DECLARE_ACTOR (ACrossbowFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ACrossbowFX1, AActor);
-REGISTER_ACTOR (ACrossbowFX1, Heretic);
 
 FState ACrossbowFX1::States[] =
 {
@@ -824,30 +782,27 @@ FState ACrossbowFX1::States[] =
 	S_BRIGHT (FX03, 'J',	8, NULL 						, NULL)
 };
 
-void ACrossbowFX1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_CRBOWFX1];
-	info->seesound = "weapons/bowshoot";
-	info->deathstate = &States[S_CRBOWFXI1];
-	info->deathsound = "weapons/bowhit";
-	info->speed = 30 * FRACUNIT;
-	info->radius = 11 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 10;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (ACrossbowFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (11)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (30)
+	PROP_Damage (10)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_CRBOWFX1)
+	PROP_DeathState (S_CRBOWFXI1)
+
+	PROP_SeeSound ("weapons/bowshoot")
+	PROP_DeathSound ("weapons/bowhit")
+END_DEFAULTS
 
 // Crossbow FX2 -------------------------------------------------------------
 
 class ACrossbowFX2 : public ACrossbowFX1
 {
-	DECLARE_ACTOR (ACrossbowFX2, ACrossbowFX1);
+	DECLARE_ACTOR (ACrossbowFX2, ACrossbowFX1)
 };
-
-IMPLEMENT_DEF_SERIAL (ACrossbowFX2, ACrossbowFX1);
-REGISTER_ACTOR (ACrossbowFX2, Heretic);
 
 FState ACrossbowFX2::States[] =
 {
@@ -855,23 +810,18 @@ FState ACrossbowFX2::States[] =
 	S_BRIGHT (FX03, 'B',	1, A_BoltSpark					, &States[S_CRBOWFX2])
 };
 
-void ACrossbowFX2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_CRBOWFX2];
-	info->speed = 32 * FRACUNIT;
-	info->damage = 6;
-}
+IMPLEMENT_ACTOR (ACrossbowFX2, Heretic, -1, 0)
+	PROP_SpeedFixed (32)
+	PROP_Damage (6)
+	PROP_SpawnState (S_CRBOWFX2)
+END_DEFAULTS
 
 // Crossbow FX3 -------------------------------------------------------------
 
 class ACrossbowFX3 : public ACrossbowFX1
 {
-	DECLARE_ACTOR (ACrossbowFX3, ACrossbowFX1);
+	DECLARE_ACTOR (ACrossbowFX3, ACrossbowFX1)
 };
-
-IMPLEMENT_DEF_SERIAL (ACrossbowFX3, ACrossbowFX1);
-REGISTER_ACTOR (ACrossbowFX3, Heretic);
 
 FState ACrossbowFX3::States[] =
 {
@@ -884,26 +834,23 @@ FState ACrossbowFX3::States[] =
 	S_BRIGHT (FX03, 'E',	8, NULL 						, NULL)
 };
 
-void ACrossbowFX3::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_CRBOWFX3];
-	info->seesound = NULL;
-	info->deathstate = &States[S_CRBOWFXI3];
-	info->speed = 20 * FRACUNIT;
-	info->damage = 2;
-	info->flags2 = MF2_WINDTHRUST|MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (ACrossbowFX3, Heretic, -1, 0)
+	PROP_SpeedFixed (20)
+	PROP_Damage (2)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_CRBOWFX3)
+	PROP_DeathState (S_CRBOWFXI3)
+
+	PROP_SeeSound ("")
+END_DEFAULTS
 
 // Crossbow FX4 -------------------------------------------------------------
 
 class ACrossbowFX4 : public AActor
 {
-	DECLARE_ACTOR (ACrossbowFX4, AActor);
+	DECLARE_ACTOR (ACrossbowFX4, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ACrossbowFX4, AActor);
-REGISTER_ACTOR (ACrossbowFX4, Heretic);
 
 FState ACrossbowFX4::States[] =
 {
@@ -912,13 +859,11 @@ FState ACrossbowFX4::States[] =
 	S_BRIGHT (FX03, 'G',	8, NULL 						, NULL)
 };
 
-void ACrossbowFX4::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_CRBOWFX4];
-	info->flags = MF_NOBLOCKMAP;
-	info->flags2 = MF2_LOGRAV;
-}
+IMPLEMENT_ACTOR (ACrossbowFX4, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP)
+	PROP_Flags2 (MF2_LOGRAV)
+	PROP_SpawnState (S_CRBOWFX4)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -931,7 +876,7 @@ void A_FireCrossbowPL1 (player_t *player, pspdef_t *psp)
 	AActor *pmo;
 
 	pmo = player->mo;
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_crossbow] -= USE_CBOW_AMMO_1;
 	P_SpawnPlayerMissile (pmo, RUNTIME_CLASS(ACrossbowFX1));
 	P_SpawnPlayerMissile (pmo, RUNTIME_CLASS(ACrossbowFX3), pmo->angle-(ANG45/10));
@@ -949,9 +894,9 @@ void A_FireCrossbowPL2(player_t *player, pspdef_t *psp)
 	AActor *pmo;
 
 	pmo = player->mo;
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_crossbow] -=
-			deathmatch.value ? USE_CBOW_AMMO_1 : USE_CBOW_AMMO_2;
+			*deathmatch ? USE_CBOW_AMMO_1 : USE_CBOW_AMMO_2;
 	P_SpawnPlayerMissile (pmo, RUNTIME_CLASS(ACrossbowFX2));
 	P_SpawnPlayerMissile (pmo, RUNTIME_CLASS(ACrossbowFX2), pmo->angle-(ANG45/10));
 	P_SpawnPlayerMissile (pmo, RUNTIME_CLASS(ACrossbowFX2), pmo->angle+(ANG45/10));
@@ -991,9 +936,9 @@ void A_DeathBallImpact (AActor *);
 
 // Wimpy ammo ---------------------------------------------------------------
 
-class AMaceWimpy : public APickup
+class AMaceAmmo : public AAmmo
 {
-	DECLARE_ACTOR (AMaceWimpy, APickup);
+	DECLARE_ACTOR (AMaceAmmo, AAmmo)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -1001,33 +946,31 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOMACE1;
+		return GStrings(TXT_AMMOMACE1);
 	}
 };
 
-FState AMaceWimpy::States[] =
+FState AMaceAmmo::States[] =
 {
 	S_NORMAL (AMM1, 'A', -1, NULL, NULL)
 };
 
-IMPLEMENT_DEF_SERIAL (AMaceWimpy, APickup);
-REGISTER_ACTOR (AMaceWimpy, Heretic);
+IMPLEMENT_ACTOR (AMaceAmmo, Heretic, 13, 0)
+	PROP_SpawnHealth (AMMO_MACE_WIMPY)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
-void AMaceWimpy::SetDefaults (FActorInfo *info)
+AT_GAME_SET (MaceAmmo)
 {
-	INHERIT_DEFS;
-	info->doomednum = 13;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_MACE_WIMPY;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_mace] = "INAMLOB";
 }
 
 // Hefty ammo ---------------------------------------------------------------
 
-class AMaceHefty : public APickup
+class AMaceHefty : public AAmmo
 {
-	DECLARE_ACTOR (AMaceHefty, APickup);
+	DECLARE_ACTOR (AMaceHefty, AAmmo)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -1035,32 +978,30 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOMACE1;
+		return GStrings(TXT_AMMOMACE1);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AMaceHefty, APickup);
-REGISTER_ACTOR (AMaceHefty, Heretic);
 
 FState AMaceHefty::States[] =
 {
 	S_NORMAL (AMM2, 'A', -1, NULL, NULL)
 };
 
-void AMaceHefty::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 16;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_MACE_HEFTY;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (AMaceHefty, Heretic, 16, 0)
+	PROP_SpawnHealth (AMMO_MACE_HEFTY)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // The mace itself ----------------------------------------------------------
 
 class AMace : public AHereticWeapon
 {
-	DECLARE_ACTOR (AMace, AHereticWeapon);
+	DECLARE_ACTOR (AMace, AHereticWeapon)
+	HAS_OBJECT_POINTERS
+	AT_GAME_SET_FRIEND (Mace)
+public:
+	void Serialize (FArchive &arc);
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -1068,7 +1009,7 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_WPNMACE;
+		return GStrings(TXT_WPNMACE);
 	}
 	bool DoRespawn ();
 	int NumMaceSpots;
@@ -1079,11 +1020,9 @@ private:
 	friend void A_SpawnMace (AActor *self);
 };
 
-IMPLEMENT_POINTY_SERIAL (AMace, AHereticWeapon)
+IMPLEMENT_POINTY_CLASS (AMace)
  DECLARE_POINTER (FirstSpot)
 END_POINTERS
-
-REGISTER_ACTOR (AMace, Heretic);
 
 void AMace::Serialize (FArchive &arc)
 {
@@ -1162,25 +1101,27 @@ FWeaponInfo AMace::WeaponInfo2 =
 	NULL
 };
 
-void AMace::SetDefaults (FActorInfo *info)
+BEGIN_DEFAULTS (AMace, Heretic, -1, 0)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (Mace)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL;
-	WeaponSlots[7].AddWeapon (wp_mace, 8);
-	wpnlev1info[wp_mace] = &WeaponInfo1;
-	wpnlev2info[wp_mace] = &WeaponInfo2;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		WeaponSlots[7].AddWeapon (wp_mace, 8);
+	}
+	wpnlev1info[wp_mace] = &AMace::WeaponInfo1;
+	wpnlev2info[wp_mace] = &AMace::WeaponInfo2;
 }
 
 // Mace FX1 -----------------------------------------------------------------
 
 class AMaceFX1 : public AActor
 {
-	DECLARE_ACTOR (AMaceFX1, AActor);
+	DECLARE_ACTOR (AMaceFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AMaceFX1, AActor);
-REGISTER_ACTOR (AMaceFX1, Heretic);
 
 FState AMaceFX1::States[] =
 {
@@ -1196,29 +1137,26 @@ FState AMaceFX1::States[] =
 	S_BRIGHT (FX02, 'J',	4, NULL 				, NULL)
 };
 
-void AMaceFX1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MACEFX1];
-	info->seesound = "weapons/maceshoot";
-	info->deathstate = &States[S_MACEFXI1];
-	info->speed = 20 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 2;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_FLOORBOUNCE|MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (AMaceFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (20)
+	PROP_Damage (2)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_FLOORBOUNCE|MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_MACEFX1)
+	PROP_DeathState (S_MACEFXI1)
+
+	PROP_SeeSound ("weapons/maceshoot")
+END_DEFAULTS
 
 // Mace FX2 -----------------------------------------------------------------
 
 class AMaceFX2 : public AActor
 {
-	DECLARE_ACTOR (AMaceFX2, AActor);
+	DECLARE_ACTOR (AMaceFX2, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AMaceFX2, AActor);
-REGISTER_ACTOR (AMaceFX2, Heretic);
 
 FState AMaceFX2::States[] =
 {
@@ -1230,28 +1168,24 @@ FState AMaceFX2::States[] =
 	S_BRIGHT (FX02, 'F',	4, A_MaceBallImpact2	, &AMaceFX1::States[S_MACEFXI1+1])
 };
 
-void AMaceFX2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MACEFX2];
-	info->deathstate = &States[S_MACEFXI2];
-	info->speed = 10 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 6;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_LOGRAV|MF2_FLOORBOUNCE|MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (AMaceFX2, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (10)
+	PROP_Damage (6)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_LOGRAV|MF2_FLOORBOUNCE|MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_MACEFX2)
+	PROP_DeathState (S_MACEFXI2)
+END_DEFAULTS
 
 // Mace FX3 -----------------------------------------------------------------
 
 class AMaceFX3 : public AActor
 {
-	DECLARE_ACTOR (AMaceFX3, AActor);
+	DECLARE_ACTOR (AMaceFX3, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AMaceFX3, AActor);
-REGISTER_ACTOR (AMaceFX3, Heretic);
 
 FState AMaceFX3::States[] =
 {
@@ -1260,30 +1194,27 @@ FState AMaceFX3::States[] =
 	S_NORMAL (FX02, 'B',	4, NULL 				, &States[S_MACEFX3+0])
 };
 
-void AMaceFX3::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MACEFX3];
-	info->deathstate = &AMaceFX1::States[S_MACEFXI1];
-	info->speed = 7 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 4;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_LOGRAV|MF2_FLOORBOUNCE|MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (AMaceFX3, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (7)
+	PROP_Damage (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_LOGRAV|MF2_FLOORBOUNCE|MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_MACEFX3)
+	PROP_STATE_BASE (AMaceFX1)
+	PROP_DeathState (S_MACEFXI1)
+END_DEFAULTS
 
 // Mace FX4 -----------------------------------------------------------------
 
 class AMaceFX4 : public AActor
 {
-	DECLARE_ACTOR (AMaceFX4, AActor);
+	DECLARE_ACTOR (AMaceFX4, AActor)
 public:
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (AMaceFX4, AActor);
-REGISTER_ACTOR (AMaceFX4, Heretic);
 
 FState AMaceFX4::States[] =
 {
@@ -1294,18 +1225,17 @@ FState AMaceFX4::States[] =
 	S_BRIGHT (FX02, 'C',	4, A_DeathBallImpact	, &AMaceFX1::States[S_MACEFXI1+1])
 };
 
-void AMaceFX4::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MACEFX4];
-	info->deathstate = &States[S_MACEFXI4];
-	info->speed = 7 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 18;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_LOGRAV|MF2_FLOORBOUNCE|MF2_THRUGHOST|MF2_TELESTOMP|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (AMaceFX4, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (7)
+	PROP_Damage (18)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_LOGRAV|MF2_FLOORBOUNCE|MF2_THRUGHOST|MF2_TELESTOMP|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_MACEFX4)
+	PROP_DeathState (S_MACEFXI4)
+END_DEFAULTS
 
 int AMaceFX4::DoSpecialDamage (AActor *target, int damage)
 {
@@ -1333,18 +1263,10 @@ void A_SpawnMace (AActor *);
 
 class AMaceSpawner : public AActor
 {
-	DECLARE_ACTOR (AMaceSpawner, AActor);
-public:
-	void BeginPlay ();
+	DECLARE_ACTOR (AMaceSpawner, AActor)
 
-	AMaceSpawner *NextSpot;
+	// Uses target to point to the next mace spawner in the list
 };
-
-IMPLEMENT_POINTY_SERIAL (AMaceSpawner, AActor)
- DECLARE_POINTER (NextSpot)
-END_POINTERS
-
-REGISTER_ACTOR (AMaceSpawner, Heretic);
 
 FState AMaceSpawner::States[] =
 {
@@ -1352,25 +1274,10 @@ FState AMaceSpawner::States[] =
 	S_NORMAL (TNT1, 'A', -1, A_SpawnMace, NULL)
 };
 
-void AMaceSpawner::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2002;
-	info->flags = MF_NOSECTOR|MF_NOBLOCKMAP;
-	info->spawnstate = &States[0];
-}
-
-void AMaceSpawner::Serialize (FArchive &arc)
-{
-	Super::Serialize (arc);
-	arc << NextSpot;
-}
-
-void AMaceSpawner::BeginPlay ()
-{
-	Super::BeginPlay ();
-	NextSpot = NULL;
-}
+IMPLEMENT_ACTOR (AMaceSpawner, Heretic, 2002, 0)
+	PROP_Flags (MF_NOSECTOR|MF_NOBLOCKMAP)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Every mace spawn spot will execute this action. The first one
 // will build a list of all mace spots in the level and spawn a
@@ -1378,37 +1285,37 @@ void AMaceSpawner::BeginPlay ()
 
 void A_SpawnMace (AActor *self)
 {
-	if (static_cast<AMaceSpawner *>(self)->NextSpot != NULL)
+	if (self->target != NULL)
 	{ // Another spot already did it
 		return;
 	}
 
 	TThinkerIterator<AMaceSpawner> iterator;
-	AMaceSpawner *spot;
+	AActor *spot;
 	AMaceSpawner *firstSpot;
 	AMace *mace;
 	int numspots = 0;
 
 	spot = firstSpot = iterator.Next ();
-	while (spot)
+	while (spot != NULL)
 	{
 		numspots++;
-		spot->NextSpot = iterator.Next ();
-		if (spot->NextSpot == NULL)
+		spot->target = iterator.Next ();
+		if (spot->target == NULL)
 		{
-			spot->NextSpot = firstSpot;
+			spot->target = firstSpot;
 			spot = NULL;
 		}
 		else
 		{
-			spot = spot->NextSpot;
+			spot = spot->target;
 		}
 	}
 	if (numspots == 0)
 	{
 		return;
 	}
-	if (!deathmatch.value && P_Random() < 64)
+	if (!*deathmatch && P_Random() < 64)
 	{ // Sometimes doesn't show up if not in deathmatch
 		return;
 	}
@@ -1427,11 +1334,11 @@ void A_SpawnMace (AActor *self)
 bool AMace::DoRespawn ()
 {
 	int spotnum = P_Random () % NumMaceSpots;
-	AMaceSpawner *spot = static_cast<AMaceSpawner *>(FirstSpot);
+	AActor *spot = FirstSpot;
 
 	while (spotnum > 0)
 	{
-		spot = spot->NextSpot;
+		spot = spot->target;
 		spotnum--;
 	}
 
@@ -1456,7 +1363,7 @@ void A_FireMacePL1B (player_t *player, pspdef_t *psp)
 	{
 		return;
 	}
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_mace] -= USE_MACE_AMMO_1;
 	pmo = player->mo;
 	ball = Spawn<AMaceFX2> (pmo->x, pmo->y, pmo->z + 28*FRACUNIT 
@@ -1468,10 +1375,8 @@ void A_FireMacePL1B (player_t *player, pspdef_t *psp)
 	ball->angle = angle;
 	ball->z += 2*finetangent[FINEANGLES/4-(pmo->pitch>>ANGLETOFINESHIFT)];
 	angle >>= ANGLETOFINESHIFT;
-	ball->momx = (pmo->momx>>1)
-		+FixedMul(GetInfo (ball)->speed, finecosine[angle]);
-	ball->momy = (pmo->momy>>1)
-		+FixedMul(GetInfo (ball)->speed, finesine[angle]);
+	ball->momx = (pmo->momx>>1)+FixedMul(ball->Speed, finecosine[angle]);
+	ball->momy = (pmo->momy>>1)+FixedMul(ball->Speed, finesine[angle]);
 	S_Sound (ball, CHAN_BODY, "weapons/maceshoot", 1, ATTN_NORM);
 	P_CheckMissileSpawn (ball);
 }
@@ -1495,7 +1400,7 @@ void A_FireMacePL1 (player_t *player, pspdef_t *psp)
 	{
 		return;
 	}
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_mace] -= USE_MACE_AMMO_1;
 	psp->sx = ((P_Random()&3)-2)*FRACUNIT;
 	psp->sy = WEAPONTOP+(P_Random()&3)*FRACUNIT;
@@ -1515,8 +1420,6 @@ void A_FireMacePL1 (player_t *player, pspdef_t *psp)
 
 void A_MacePL1Check (AActor *ball)
 {
-	angle_t angle;
-
 	if (ball->special1 == 0)
 	{
 		return;
@@ -1527,10 +1430,20 @@ void A_MacePL1Check (AActor *ball)
 		return;
 	}
 	ball->special1 = 0;
+	ball->flags &= ~MF_NOGRAVITY;
 	ball->flags2 |= MF2_LOGRAV;
-	angle = ball->angle>>ANGLETOFINESHIFT;
+	// [RH] Avoid some precision loss by scaling the momentum directly
+#if 0
+	angle_t angle = ball->angle>>ANGLETOFINESHIFT;
 	ball->momx = FixedMul(7*FRACUNIT, finecosine[angle]);
 	ball->momy = FixedMul(7*FRACUNIT, finesine[angle]);
+#else
+	float momscale = sqrtf ((float)ball->momx * (float)ball->momx +
+							(float)ball->momy * (float)ball->momy);
+	momscale = 458752.f / momscale;
+	ball->momx = (int)(ball->momx * momscale);
+	ball->momy = (int)(ball->momy * momscale);
+#endif
 	ball->momz -= ball->momz>>1;
 }
 
@@ -1553,7 +1466,7 @@ void A_MaceBallImpact (AActor *ball)
 		ball->health = MAGIC_JUNK;
 		ball->momz = (ball->momz*192)>>8;
 		ball->flags2 &= ~MF2_FLOORBOUNCE;
-		ball->SetState (GetInfo (ball)->spawnstate);
+		ball->SetState (ball->SpawnState);
 		S_Sound (ball, CHAN_BODY, "weapons/macebounce", 1, ATTN_NORM);
 	}
 	else
@@ -1589,7 +1502,7 @@ void A_MaceBallImpact2 (AActor *ball)
 	else
 	{ // Bounce
 		ball->momz = (ball->momz*192)>>8;
-		ball->SetState (GetInfo (ball)->spawnstate);
+		ball->SetState (ball->SpawnState);
 
 		tiny = Spawn<AMaceFX3> (ball->x, ball->y, ball->z);
 		angle = ball->angle+ANG90;
@@ -1627,9 +1540,9 @@ void A_FireMacePL2 (player_t *player, pspdef_t *psp)
 {
 	AActor *mo;
 
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_mace] -=
-			deathmatch.value ? USE_MACE_AMMO_1 : USE_MACE_AMMO_2;
+			*deathmatch ? USE_MACE_AMMO_1 : USE_MACE_AMMO_2;
 	mo = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(AMaceFX4));
 	if (mo)
 	{
@@ -1701,10 +1614,10 @@ void A_DeathBallImpact (AActor *ball)
 		{
 			ball->angle = angle;
 			angle >>= ANGLETOFINESHIFT;
-			ball->momx = FixedMul (GetInfo (ball)->speed, finecosine[angle]);
-			ball->momy = FixedMul (GetInfo (ball)->speed, finesine[angle]);
+			ball->momx = FixedMul (ball->Speed, finecosine[angle]);
+			ball->momy = FixedMul (ball->Speed, finesine[angle]);
 		}
-		ball->SetState (GetInfo (ball)->spawnstate);
+		ball->SetState (ball->SpawnState);
 		S_Sound (ball, CHAN_BODY, "weapons/macestop", 1, ATTN_NORM);
 	}
 	else
@@ -1723,7 +1636,8 @@ void A_GauntletAttack (player_t *, pspdef_t *);
 
 class AGauntlets : public AHereticWeapon
 {
-	DECLARE_ACTOR (AGauntlets, AHereticWeapon);
+	DECLARE_ACTOR (AGauntlets, AHereticWeapon)
+	AT_GAME_SET_FRIEND (Gauntlets)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -1731,14 +1645,11 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_WPNGAUNTLETS;
+		return GStrings(TXT_WPNGAUNTLETS);
 	}
 private:
 	static FWeaponInfo WeaponInfo1, WeaponInfo2;
 };
-
-IMPLEMENT_DEF_SERIAL (AGauntlets, AHereticWeapon);
-REGISTER_ACTOR (AGauntlets, Heretic);
 
 FState AGauntlets::States[] =
 {
@@ -1822,28 +1733,29 @@ FWeaponInfo AGauntlets::WeaponInfo2 =
 	NULL
 };
 
-void AGauntlets::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AGauntlets, Heretic, 2005, 0)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (S_WGNT)
+END_DEFAULTS
+
+AT_GAME_SET (Gauntlets)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2005;
-	info->spawnstate = &States[S_WGNT];
-	info->flags = MF_SPECIAL;
-	WeaponSlots[1].AddWeapon (wp_gauntlets, 2);
-	wpnlev1info[wp_gauntlets] = &WeaponInfo1;
-	wpnlev2info[wp_gauntlets] = &WeaponInfo2;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		WeaponSlots[1].AddWeapon (wp_gauntlets, 2);
+	}
+	wpnlev1info[wp_gauntlets] = &AGauntlets::WeaponInfo1;
+	wpnlev2info[wp_gauntlets] = &AGauntlets::WeaponInfo2;
 }
 
 // Gauntlet puff 1 ----------------------------------------------------------
 
 class AGauntletPuff1 : public AActor
 {
-	DECLARE_ACTOR (AGauntletPuff1, AActor);
+	DECLARE_ACTOR (AGauntletPuff1, AActor)
 public:
 	void BeginPlay ();
 };
-
-IMPLEMENT_DEF_SERIAL (AGauntletPuff1, AActor);
-REGISTER_ACTOR (AGauntletPuff1, Heretic);
 
 FState AGauntletPuff1::States[] =
 {
@@ -1854,13 +1766,12 @@ FState AGauntletPuff1::States[] =
 	S_BRIGHT (PUF1, 'D',	4, NULL 					, NULL)
 };
 
-void AGauntletPuff1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_GAUNTLETPUFF1];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_ACTOR (AGauntletPuff1, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+	PROP_SpawnState (S_GAUNTLETPUFF1)
+END_DEFAULTS
 
 void AGauntletPuff1::BeginPlay ()
 {
@@ -1872,11 +1783,8 @@ void AGauntletPuff1::BeginPlay ()
 
 class AGauntletPuff2 : public AGauntletPuff1
 {
-	DECLARE_ACTOR (AGauntletPuff2, AGauntletPuff1);
+	DECLARE_ACTOR (AGauntletPuff2, AGauntletPuff1)
 };
-
-IMPLEMENT_DEF_SERIAL (AGauntletPuff2, AGauntletPuff1);
-REGISTER_ACTOR (AGauntletPuff2, Heretic);
 
 FState AGauntletPuff2::States[] =
 {
@@ -1887,13 +1795,13 @@ FState AGauntletPuff2::States[] =
 	S_BRIGHT (PUF1, 'H',	4, NULL 					, NULL)
 };
 
-void AGauntletPuff2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_GAUNTLETPUFF2];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_ACTOR (AGauntletPuff2, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+
+	PROP_SpawnState (S_GAUNTLETPUFF2)
+END_DEFAULTS
 
 //---------------------------------------------------------------------------
 //
@@ -1964,7 +1872,7 @@ void A_GauntletAttack (player_t *player, pspdef_t *psp)
 		linetarget->x, linetarget->y);
 	if (angle-player->mo->angle > ANG180)
 	{
-		if (angle-player->mo->angle < -ANG90/20)
+		if ((int)(angle-player->mo->angle) < -ANG90/20)
 			player->mo->angle = angle+ANG90/21;
 		else
 			player->mo->angle -= ANG90/20;
@@ -1987,9 +1895,9 @@ void A_SpawnRippers (AActor *);
 
 // Wimpy ammo ---------------------------------------------------------------
 
-class ABlasterWimpy : public APickup
+class ABlasterAmmo : public AAmmo
 {
-	DECLARE_ACTOR (ABlasterWimpy, APickup);
+	DECLARE_ACTOR (ABlasterAmmo, AAmmo)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -1997,35 +1905,34 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOBLASTER1;
+		return GStrings(TXT_AMMOBLASTER1);
 	}
 };
 
-IMPLEMENT_DEF_SERIAL (ABlasterWimpy, APickup);
-REGISTER_ACTOR (ABlasterWimpy, Heretic);
-
-FState ABlasterWimpy::States[] =
+FState ABlasterAmmo::States[] =
 {
 	S_NORMAL (AMB1, 'A',	4, NULL 					, &States[1]),
 	S_NORMAL (AMB1, 'B',	4, NULL 					, &States[2]),
 	S_NORMAL (AMB1, 'C',	4, NULL 					, &States[0])
 };
 
-void ABlasterWimpy::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABlasterAmmo, Heretic, 54, 0)
+	PROP_SpawnHealth (AMMO_BLSR_WIMPY)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (BlasterAmmo)
 {
-	INHERIT_DEFS;
-	info->doomednum = 54;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_BLSR_WIMPY;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_blaster] = "INAMBST";
 }
 
 // Hefty ammo ---------------------------------------------------------------
 
-class ABlasterHefty : public APickup
+class ABlasterHefty : public AAmmo
 {
-	DECLARE_ACTOR (ABlasterHefty, APickup);
+	DECLARE_ACTOR (ABlasterHefty, AAmmo)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -2033,12 +1940,9 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOBLASTER2;
+		return GStrings(TXT_AMMOBLASTER2);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ABlasterHefty, APickup);
-REGISTER_ACTOR (ABlasterHefty, Heretic);
 
 FState ABlasterHefty::States[] =
 {
@@ -2047,20 +1951,18 @@ FState ABlasterHefty::States[] =
 	S_NORMAL (AMB2, 'C',	4, NULL 					, &States[0])
 };
 
-void ABlasterHefty::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 55;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_BLSR_HEFTY;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (ABlasterHefty, Heretic, 55, 0)
+	PROP_SpawnHealth (AMMO_BLSR_HEFTY)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Blaster ------------------------------------------------------------------
 
 class ABlaster : public AHereticWeapon
 {
-	DECLARE_ACTOR (ABlaster, AHereticWeapon);
+	DECLARE_ACTOR (ABlaster, AHereticWeapon)
+	AT_GAME_SET_FRIEND (Blaster)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -2068,14 +1970,11 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_WPNBLASTER;
+		return GStrings(TXT_WPNBLASTER);
 	}
 private:
 	static FWeaponInfo WeaponInfo1, WeaponInfo2;
 };
-
-IMPLEMENT_DEF_SERIAL (ABlaster, AHereticWeapon);
-REGISTER_ACTOR (ABlaster, Heretic);
 
 FState ABlaster::States[] =
 {
@@ -2146,29 +2045,30 @@ FWeaponInfo ABlaster::WeaponInfo2 =
 	NULL
 };
 
-void ABlaster::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABlaster, Heretic, 53, 0)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (S_BLSR)
+END_DEFAULTS
+
+AT_GAME_SET (Blaster)
 {
-	INHERIT_DEFS;
-	info->doomednum = 53;
-	info->spawnstate = &States[S_BLSR];
-	info->flags = MF_SPECIAL;
-	WeaponSlots[4].AddWeapon (wp_blaster, 5);
-	wpnlev1info[wp_blaster] = &WeaponInfo1;
-	wpnlev2info[wp_blaster] = &WeaponInfo2;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		WeaponSlots[4].AddWeapon (wp_blaster, 5);
+	}
+	wpnlev1info[wp_blaster] = &ABlaster::WeaponInfo1;
+	wpnlev2info[wp_blaster] = &ABlaster::WeaponInfo2;
 }
 
 // Blaster FX 1 -------------------------------------------------------------
 
 class ABlasterFX1 : public AActor
 {
-	DECLARE_ACTOR (ABlasterFX1, AActor);
+	DECLARE_ACTOR (ABlasterFX1, AActor)
 public:
 	void RunThink ();
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (ABlasterFX1, AActor);
-REGISTER_ACTOR (ABlasterFX1, Heretic);
 
 FState ABlasterFX1::States[] =
 {
@@ -2185,20 +2085,20 @@ FState ABlasterFX1::States[] =
 	S_BRIGHT (FX18, 'G',	4, NULL 					, NULL)
 };
 
-void ABlasterFX1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_BLASTERFX1];
-	info->deathstate = &States[S_BLASTERFXI1];
-	info->deathsound = "weapons/blasterhit";
-	info->speed = 184 * FRACUNIT;
-	info->radius = 12 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 2;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT;
-	info->flags3 = MF3_VERYFAST;
-}
+IMPLEMENT_ACTOR (ABlasterFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (184)
+	PROP_Damage (2)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT)
+	PROP_Flags3 (MF3_VERYFAST)
+
+	PROP_SpawnState (S_BLASTERFX1)
+	PROP_DeathState (S_BLASTERFXI1)
+
+	PROP_DeathSound ("weapons/blasterhit")
+END_DEFAULTS
 
 int ABlasterFX1::DoSpecialDamage (AActor *target, int damage)
 {
@@ -2217,11 +2117,8 @@ int ABlasterFX1::DoSpecialDamage (AActor *target, int damage)
 
 class ABlasterSmoke : public AActor
 {
-	DECLARE_ACTOR (ABlasterSmoke, AActor);
+	DECLARE_ACTOR (ABlasterSmoke, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABlasterSmoke, AActor);
-REGISTER_ACTOR (ABlasterSmoke, Heretic);
 
 FState ABlasterSmoke::States[] =
 {
@@ -2233,26 +2130,23 @@ FState ABlasterSmoke::States[] =
 	S_NORMAL (FX18, 'L',	4, NULL 					, NULL)
 };
 
-void ABlasterSmoke::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_BLASTERSMOKE];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_CANNOTPUSH;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_ACTOR (ABlasterSmoke, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_CANNOTPUSH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+
+	PROP_SpawnState (S_BLASTERSMOKE)
+END_DEFAULTS
 
 // Ripper -------------------------------------------------------------------
 
 class ARipper : public AActor
 {
-	DECLARE_ACTOR (ARipper, AActor);
+	DECLARE_ACTOR (ARipper, AActor)
 public:
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (ARipper, AActor);
-REGISTER_ACTOR (ARipper, Heretic);
 
 FState ARipper::States[] =
 {
@@ -2268,18 +2162,18 @@ FState ARipper::States[] =
 	S_BRIGHT (FX18, 'S',	4, NULL 					, NULL)
 };
 
-void ARipper::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_RIPPER];
-	info->deathsound = "weapons/blasterpowhit";
-	info->speed = 14 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_RIP|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (ARipper, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (14)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_RIP|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_RIPPER)
+
+	PROP_DeathSound ("weapons/blasterpowhit")
+END_DEFAULTS
 
 int ARipper::DoSpecialDamage (AActor *target, int damage)
 {
@@ -2298,11 +2192,8 @@ int ARipper::DoSpecialDamage (AActor *target, int damage)
 
 class ABlasterPuff1 : public AActor
 {
-	DECLARE_ACTOR (ABlasterPuff1, AActor);
+	DECLARE_ACTOR (ABlasterPuff1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABlasterPuff1, AActor);
-REGISTER_ACTOR (ABlasterPuff1, Heretic);
 
 FState ABlasterPuff1::States[] =
 {
@@ -2314,22 +2205,18 @@ FState ABlasterPuff1::States[] =
 	S_BRIGHT (FX17, 'E',	4, NULL 					, NULL),
 };
 
-void ABlasterPuff1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_BLASTERPUFF1];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (ABlasterPuff1, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+
+	PROP_SpawnState (S_BLASTERPUFF1)
+END_DEFAULTS
 
 // Blaster puff 2 -----------------------------------------------------------
 
 class ABlasterPuff2 : public AActor
 {
-	DECLARE_ACTOR (ABlasterPuff2, AActor);
+	DECLARE_ACTOR (ABlasterPuff2, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABlasterPuff2, AActor);
-REGISTER_ACTOR (ABlasterPuff2, Heretic);
 
 FState ABlasterPuff2::States[] =
 {
@@ -2343,12 +2230,11 @@ FState ABlasterPuff2::States[] =
 	S_BRIGHT (FX17, 'L',	4, NULL 					, NULL)
 };
 
-void ABlasterPuff2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_BLASTERPUFF2];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (ABlasterPuff2, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+
+	PROP_SpawnState (S_BLASTERPUFF2)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -2363,7 +2249,7 @@ void A_FireBlasterPL1 (player_t *player, pspdef_t *psp)
 	int damage;
 
 	mo = player->mo;
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_blaster] -= USE_BLSR_AMMO_1;
 	P_BulletSlope(mo);
 	damage = HITDICE(4);
@@ -2374,7 +2260,7 @@ void A_FireBlasterPL1 (player_t *player, pspdef_t *psp)
 	}
 	PuffType = RUNTIME_CLASS(ABlasterPuff1);
 	HitPuffType = RUNTIME_CLASS(ABlasterPuff2);
-	P_LineAttack (mo, angle, MISSILERANGE, bulletslope, damage);
+	P_LineAttack (mo, angle, MISSILERANGE, bulletpitch, damage);
 	HitPuffType = NULL;
 	S_Sound (mo, CHAN_WEAPON, "weapons/blastershoot", 1, ATTN_NORM);
 }
@@ -2389,9 +2275,9 @@ void A_FireBlasterPL2 (player_t *player, pspdef_t *psp)
 {
 	AActor *mo;
 
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_blaster] -=
-			deathmatch.value ? USE_BLSR_AMMO_1 : USE_BLSR_AMMO_2;
+			*deathmatch ? USE_BLSR_AMMO_1 : USE_BLSR_AMMO_2;
 	mo = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ABlasterFX1));
 	S_Sound (mo, CHAN_WEAPON, "weapons/blastershoot", 1, ATTN_NORM);
 }
@@ -2415,8 +2301,8 @@ void A_SpawnRippers (AActor *actor)
 		ripper->target = actor->target;
 		ripper->angle = angle;
 		angle >>= ANGLETOFINESHIFT;
-		ripper->momx = FixedMul (GetInfo (ripper)->speed, finecosine[angle]);
-		ripper->momy = FixedMul (GetInfo (ripper)->speed, finesine[angle]);
+		ripper->momx = FixedMul (ripper->Speed, finecosine[angle]);
+		ripper->momy = FixedMul (ripper->Speed, finesine[angle]);
 		P_CheckMissileSpawn (ripper);
 	}
 }
@@ -2472,7 +2358,7 @@ void ABlasterFX1::RunThink ()
 			}
 			if (changexy && (P_Random() < 64))
 			{
-				Spawn<ABlasterSmoke> (x, y, MAX (z - 8 * FRACUNIT, floorz));
+				Spawn<ABlasterSmoke> (x, y, MAX<fixed_t> (z - 8 * FRACUNIT, floorz));
 			}
 		}
 	}
@@ -2482,7 +2368,7 @@ void ABlasterFX1::RunThink ()
 		tics--;
 		while (!tics)
 		{
-			if (!SetState (state->nextstate))
+			if (!SetState (state->GetNextState ()))
 			{ // mobj was removed
 				return;
 			}
@@ -2502,9 +2388,9 @@ void A_RainImpact (AActor *);
 
 // Wimpy ammo ---------------------------------------------------------------
 
-class ASkullRodWimpy : public APickup
+class ASkullRodAmmo : public AAmmo
 {
-	DECLARE_ACTOR (ASkullRodWimpy, APickup);
+	DECLARE_ACTOR (ASkullRodAmmo, AAmmo)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -2512,34 +2398,32 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOSKULLROD1;
+		return GStrings(TXT_AMMOSKULLROD1);
 	}
 };
 
-IMPLEMENT_DEF_SERIAL (ASkullRodWimpy, APickup);
-REGISTER_ACTOR (ASkullRodWimpy, Heretic);
-
-FState ASkullRodWimpy::States[] =
+FState ASkullRodAmmo::States[] =
 {
 	S_NORMAL (AMS1, 'A',	5, NULL 					, &States[1]),
 	S_NORMAL (AMS1, 'B',	5, NULL 					, &States[0])
 };
 
-void ASkullRodWimpy::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASkullRodAmmo, Heretic, 20, 0)
+	PROP_SpawnHealth (AMMO_SKRD_WIMPY)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (SkullRodAmmo)
 {
-	INHERIT_DEFS;
-	info->doomednum = 20;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_SKRD_WIMPY;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_skullrod] = "INAMRAM";
 }
 
 // Hefty ammo ---------------------------------------------------------------
 
-class ASkullRodHefty : public APickup
+class ASkullRodHefty : public AAmmo
 {
-	DECLARE_ACTOR (ASkullRodHefty, APickup);
+	DECLARE_ACTOR (ASkullRodHefty, AAmmo)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -2547,12 +2431,9 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOSKULLROD2;
+		return GStrings(TXT_AMMOSKULLROD2);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ASkullRodHefty, APickup);
-REGISTER_ACTOR (ASkullRodHefty, Heretic);
 
 FState ASkullRodHefty::States[] =
 {
@@ -2560,20 +2441,19 @@ FState ASkullRodHefty::States[] =
 	S_NORMAL (AMS2, 'B',	5, NULL 					, &States[0])
 };
 
-void ASkullRodHefty::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 21;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_SKRD_HEFTY;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (ASkullRodHefty, Heretic, 21, 0)
+	PROP_SpawnHealth (AMMO_SKRD_HEFTY)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Skull (Horn) Rod ---------------------------------------------------------
 
 class ASkullRod : public AHereticWeapon
 {
-	DECLARE_ACTOR (ASkullRod, AHereticWeapon);
+	DECLARE_ACTOR (ASkullRod, AHereticWeapon)
+	AT_GAME_SET_FRIEND (SkullRod)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -2581,14 +2461,11 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_WPNSKULLROD;
+		return GStrings(TXT_WPNSKULLROD);
 	}
 private:
 	static FWeaponInfo WeaponInfo1, WeaponInfo2;
 };
-
-IMPLEMENT_DEF_SERIAL (ASkullRod, AHereticWeapon);
-REGISTER_ACTOR (ASkullRod, Heretic);
 
 FState ASkullRod::States[] =
 {
@@ -2659,26 +2536,27 @@ FWeaponInfo ASkullRod::WeaponInfo2 =
 	NULL
 };
 
-void ASkullRod::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASkullRod, Heretic, 2004, 0)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (S_WSKL)
+END_DEFAULTS
+
+AT_GAME_SET (SkullRod)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2004;
-	info->spawnstate = &States[S_WSKL];
-	info->flags = MF_SPECIAL;
-	WeaponSlots[5].AddWeapon (wp_skullrod, 6);
-	wpnlev1info[wp_skullrod] = &WeaponInfo1;
-	wpnlev2info[wp_skullrod] = &WeaponInfo2;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		WeaponSlots[5].AddWeapon (wp_skullrod, 6);
+	}
+	wpnlev1info[wp_skullrod] = &ASkullRod::WeaponInfo1;
+	wpnlev2info[wp_skullrod] = &ASkullRod::WeaponInfo2;
 }
 
 // Horn Rod FX 1 ------------------------------------------------------------
 
 class AHornRodFX1 : public AActor
 {
-	DECLARE_ACTOR (AHornRodFX1, AActor);
+	DECLARE_ACTOR (AHornRodFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AHornRodFX1, AActor);
-REGISTER_ACTOR (AHornRodFX1, Heretic);
 
 FState AHornRodFX1::States[] =
 {
@@ -2695,32 +2573,29 @@ FState AHornRodFX1::States[] =
 	S_BRIGHT (FX00, 'M',	3, NULL 					, NULL)
 };
 
-void AHornRodFX1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_HRODFX1];
-	info->seesound = "weapons/hornrodshoot";
-	info->deathstate = &States[S_HRODFXI1];
-	info->deathsound = "weapons/hornrodhit";
-	info->speed = 22 * FRACUNIT;
-	info->radius = 12 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 3;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_WINDTHRUST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (AHornRodFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (22)
+	PROP_Damage (3)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_HRODFX1)
+	PROP_DeathState (S_HRODFXI1)
+
+	PROP_SeeSound ("weapons/hornrodshoot")
+	PROP_DeathSound ("weapons/hornrodhit")
+END_DEFAULTS
 
 // Horn Rod FX 2 ------------------------------------------------------------
 
 class AHornRodFX2 : public AActor
 {
-	DECLARE_ACTOR (AHornRodFX2, AActor);
+	DECLARE_ACTOR (AHornRodFX2, AActor)
 public:
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (AHornRodFX2, AActor);
-REGISTER_ACTOR (AHornRodFX2, Heretic);
 
 FState AHornRodFX2::States[] =
 {
@@ -2741,19 +2616,18 @@ FState AHornRodFX2::States[] =
 	S_NORMAL (FX00, 'G',	1, A_SkullRodStorm			, &States[S_HRODFXI2+7])
 };
 
-void AHornRodFX2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_HRODFX2];
-	info->spawnhealth = 4*35;
-	info->deathstate = &States[S_HRODFXI2];
-	info->speed = 22 * FRACUNIT;
-	info->radius = 12 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 10;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (AHornRodFX2, Heretic, -1, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (22)
+	PROP_Damage (10)
+	PROP_SpawnHealth (4*35)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_HRODFX2)
+	PROP_DeathState (S_HRODFXI2)
+END_DEFAULTS
 
 int AHornRodFX2::DoSpecialDamage (AActor *target, int damage)
 {
@@ -2769,13 +2643,10 @@ int AHornRodFX2::DoSpecialDamage (AActor *target, int damage)
 
 class ARainPillar : public AActor
 {
-	DECLARE_ACTOR (ARainPillar, AActor);
+	DECLARE_ACTOR (ARainPillar, AActor)
 public:
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (ARainPillar, AActor);
-REGISTER_ACTOR (ARainPillar, Heretic);
 
 FState ARainPillar::States[] =
 {
@@ -2795,18 +2666,17 @@ FState ARainPillar::States[] =
 	S_BRIGHT (FX22, 'I',	4, NULL 					, NULL),
 };
 
-void ARainPillar::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_RAINPLR];
-	info->deathstate = &States[S_RAINPLRX];
-	info->speed = 12 * FRACUNIT;
-	info->radius = 5 * FRACUNIT;
-	info->height = 12 * FRACUNIT;
-	info->damage = 5;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
-}
+IMPLEMENT_ACTOR (ARainPillar, Heretic, -1, 0)
+	PROP_RadiusFixed (5)
+	PROP_HeightFixed (12)
+	PROP_SpeedFixed (12)
+	PROP_Damage (5)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_RAINPLR)
+	PROP_DeathState (S_RAINPLRX)
+END_DEFAULTS
 
 int ARainPillar::DoSpecialDamage (AActor *target, int damage)
 {
@@ -2831,13 +2701,13 @@ void A_FireSkullRodPL1 (player_t *player, pspdef_t *psp)
 	{
 		return;
 	}
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_skullrod] -= USE_SKRD_AMMO_1;
 	mo = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(AHornRodFX1));
 	// Randomize the first frame
 	if (mo && P_Random() > 128)
 	{
-		mo->SetState (mo->state->nextstate);
+		mo->SetState (mo->state->GetNextState());
 	}
 }
 
@@ -2852,9 +2722,9 @@ void A_FireSkullRodPL1 (player_t *player, pspdef_t *psp)
 
 void A_FireSkullRodPL2 (player_t *player, pspdef_t *psp)
 {
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_skullrod] -=
-			deathmatch.value ? USE_SKRD_AMMO_1 : USE_SKRD_AMMO_2;
+			*deathmatch ? USE_SKRD_AMMO_1 : USE_SKRD_AMMO_2;
 	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(AHornRodFX2));
 	// Use MissileActor instead of the return value from
 	// P_SpawnPlayerMissile because we need to give info to the mobj
@@ -2978,7 +2848,7 @@ void A_SkullRodStorm (AActor *actor)
 		translationtables + actor->special2*2*256 + 256 : NULL;
 	mo->target = actor->target;
 	mo->momx = 1; // Force collision detection
-	mo->momz = -GetInfo (mo)->speed;
+	mo->momz = -mo->Speed;
 	mo->special2 = actor->special2; // Transfer player number
 	P_CheckMissileSpawn (mo);
 	if (actor->special1 != -1 && !S_GetSoundPlayingInfo (actor, actor->special1))
@@ -3028,9 +2898,9 @@ void A_FloatPuff (AActor *);
 
 // Wimpy ammo ---------------------------------------------------------------
 
-class APhoenixRodWimpy : public APickup
+class APhoenixRodAmmo : public AAmmo
 {
-	DECLARE_ACTOR (APhoenixRodWimpy, APickup);
+	DECLARE_ACTOR (APhoenixRodAmmo, AAmmo)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -3038,35 +2908,33 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOPHOENIXROD1;
+		return GStrings(TXT_AMMOPHOENIXROD1);
 	}
 };
 
-IMPLEMENT_DEF_SERIAL (APhoenixRodWimpy, APickup);
-REGISTER_ACTOR (APhoenixRodWimpy, Heretic);
-
-FState APhoenixRodWimpy::States[] =
+FState APhoenixRodAmmo::States[] =
 {
 	S_NORMAL (AMP1, 'A',	4, NULL 					, &States[1]),
 	S_NORMAL (AMP1, 'B',	4, NULL 					, &States[2]),
 	S_NORMAL (AMP1, 'C',	4, NULL 					, &States[0])
 };
 
-void APhoenixRodWimpy::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (APhoenixRodAmmo, Heretic, 22, 0)
+	PROP_SpawnHealth (AMMO_PHRD_WIMPY)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (PhoenixRodAmmo)
 {
-	INHERIT_DEFS;
-	info->doomednum = 22;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_PHRD_WIMPY;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_phoenixrod] = "INAMPNX";
 }
 
 // Hefty ammo ---------------------------------------------------------------
 
-class APhoenixRodHefty : public APickup
+class APhoenixRodHefty : public AAmmo
 {
-	DECLARE_ACTOR (APhoenixRodHefty, APickup);
+	DECLARE_ACTOR (APhoenixRodHefty, AAmmo)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -3074,12 +2942,9 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_AMMOPHOENIXROD2;
+		return GStrings(TXT_AMMOPHOENIXROD2);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (APhoenixRodHefty, APickup);
-REGISTER_ACTOR (APhoenixRodHefty, Heretic);
 
 FState APhoenixRodHefty::States[] =
 {
@@ -3088,20 +2953,18 @@ FState APhoenixRodHefty::States[] =
 	S_NORMAL (AMP2, 'C',	4, NULL 					, &States[0])
 };
 
-void APhoenixRodHefty::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 23;
-	info->spawnstate = &States[0];
-	info->spawnhealth = AMMO_PHRD_HEFTY;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (APhoenixRodHefty, Heretic, 23, 0)
+	PROP_SpawnHealth (AMMO_PHRD_HEFTY)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Phoenix Rod --------------------------------------------------------------
 
 class APhoenixRod : public AHereticWeapon
 {
-	DECLARE_ACTOR (APhoenixRod, AHereticWeapon);
+	DECLARE_ACTOR (APhoenixRod, AHereticWeapon)
+	AT_GAME_SET_FRIEND (PhoenixRod)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -3109,14 +2972,11 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_WPNPHOENIXROD;
+		return GStrings(TXT_WPNPHOENIXROD);
 	}
 private:
 	static FWeaponInfo WeaponInfo1, WeaponInfo2;
 };
-
-IMPLEMENT_DEF_SERIAL (APhoenixRod, AHereticWeapon);
-REGISTER_ACTOR (APhoenixRod, Heretic);
 
 FState APhoenixRod::States[] =
 {
@@ -3184,21 +3044,22 @@ FWeaponInfo APhoenixRod::WeaponInfo2 =
 	NULL
 };
 
-void APhoenixRod::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (APhoenixRod, Heretic, 2003, 0)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (S_WPHX)
+END_DEFAULTS
+
+AT_GAME_SET (PhoenixRod)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2003;
-	info->spawnstate = &States[S_WPHX];
-	info->flags = MF_SPECIAL;
-	WeaponSlots[6].AddWeapon (wp_phoenixrod, 7);
-	wpnlev1info[wp_phoenixrod] = &WeaponInfo1;
-	wpnlev2info[wp_phoenixrod] = &WeaponInfo2;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		WeaponSlots[6].AddWeapon (wp_phoenixrod, 7);
+	}
+	wpnlev1info[wp_phoenixrod] = &APhoenixRod::WeaponInfo1;
+	wpnlev2info[wp_phoenixrod] = &APhoenixRod::WeaponInfo2;
 }
 
 // Phoenix FX 1 -------------------------------------------------------------
-
-IMPLEMENT_DEF_SERIAL (APhoenixFX1, AActor);
-REGISTER_ACTOR (APhoenixFX1, Heretic);
 
 FState APhoenixFX1::States[] =
 {
@@ -3216,20 +3077,20 @@ FState APhoenixFX1::States[] =
 	S_BRIGHT (FX08, 'H',	4, NULL 					, NULL)
 };
 
-void APhoenixFX1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_PHOENIXFX1];
-	info->seesound = "weapons/phoenixshoot";
-	info->deathstate = &States[S_PHOENIXFXI1];
-	info->deathsound = "weapons/phoenixhit";
-	info->speed = 20 * FRACUNIT;
-	info->radius = 11 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 20;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT|MF2_FIREDAMAGE;
-}
+IMPLEMENT_ACTOR (APhoenixFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (11)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (20)
+	PROP_Damage (20)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_THRUGHOST|MF2_NOTELEPORT|MF2_PCROSS|MF2_IMPACT|MF2_FIREDAMAGE)
+
+	PROP_SpawnState (S_PHOENIXFX1)
+	PROP_DeathState (S_PHOENIXFXI1)
+
+	PROP_SeeSound ("weapons/phoenixshoot")
+	PROP_DeathSound ("weapons/phoenixhit")
+END_DEFAULTS
 
 int APhoenixFX1::DoSpecialDamage (AActor *target, int damage)
 {
@@ -3243,9 +3104,6 @@ int APhoenixFX1::DoSpecialDamage (AActor *target, int damage)
 
 // Phoenix puff -------------------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (APhoenixPuff, AActor);
-REGISTER_ACTOR (APhoenixPuff, Heretic);
-
 FState APhoenixPuff::States[] =
 {
 	S_NORMAL (FX04, 'B',	4, NULL 					, &States[1]),
@@ -3255,26 +3113,23 @@ FState APhoenixPuff::States[] =
 	S_NORMAL (FX04, 'F',	4, NULL 					, NULL),
 };
 
-void APhoenixPuff::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_CANNOTPUSH;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_ACTOR (APhoenixPuff, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_CANNOTPUSH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Phoenix FX 2 -------------------------------------------------------------
 
 class APhoenixFX2 : public AActor
 {
-	DECLARE_ACTOR (APhoenixFX2, AActor);
+	DECLARE_ACTOR (APhoenixFX2, AActor)
 public:
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (APhoenixFX2, AActor);
-REGISTER_ACTOR (APhoenixFX2, Heretic);
 
 FState APhoenixFX2::States[] =
 {
@@ -3298,18 +3153,17 @@ FState APhoenixFX2::States[] =
 	S_BRIGHT (FX09, 'K',	5, NULL 					, NULL)
 };
 
-void APhoenixFX2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_PHOENIXFX2];
-	info->deathstate = &States[S_PHOENIXFXI2];
-	info->speed = 10 * FRACUNIT;
-	info->radius = 6 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 2;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_FIREDAMAGE|MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (APhoenixFX2, Heretic, -1, 0)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (10)
+	PROP_Damage (2)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_FIREDAMAGE|MF2_PCROSS|MF2_IMPACT)
+
+	PROP_SpawnState (S_PHOENIXFX2)
+	PROP_DeathState (S_PHOENIXFXI2)
+END_DEFAULTS
 
 int APhoenixFX2::DoSpecialDamage (AActor *target, int damage)
 {
@@ -3330,7 +3184,7 @@ void A_FirePhoenixPL1 (player_t *player, pspdef_t *psp)
 {
 	angle_t angle;
 
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_phoenixrod] -= USE_PHRD_AMMO_1;
 	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(APhoenixFX1));
 	angle = player->mo->angle + ANG180;
@@ -3398,7 +3252,7 @@ void A_FirePhoenixPL2 (player_t *player, pspdef_t *psp)
 
 	if (--player->flamecount == 0)
 	{ // Out of flame
-		P_SetPsprite (player, ps_weapon, &APhoenixFX2::States[S_PHOENIXATK2+3]);
+		P_SetPsprite (player, ps_weapon, &APhoenixRod::States[S_PHOENIXATK2+3]);
 		player->refire = 0;
 		S_StopSound (player->mo, CHAN_WEAPON);
 		return;
@@ -3413,11 +3267,9 @@ void A_FirePhoenixPL2 (player_t *player, pspdef_t *psp)
 	mo = Spawn<APhoenixFX2> (x, y, z);
 	mo->target = pmo;
 	mo->angle = angle;
-	mo->momx = pmo->momx + FixedMul (GetInfo (mo)->speed,
-		finecosine[angle>>ANGLETOFINESHIFT]);
-	mo->momy = pmo->momy + FixedMul (GetInfo (mo)->speed,
-		finesine[angle>>ANGLETOFINESHIFT]);
-	mo->momz = FixedMul (GetInfo (mo)->speed, slope);
+	mo->momx = pmo->momx + FixedMul (mo->Speed, finecosine[angle>>ANGLETOFINESHIFT]);
+	mo->momy = pmo->momy + FixedMul (mo->Speed, finesine[angle>>ANGLETOFINESHIFT]);
+	mo->momz = FixedMul (mo->Speed, slope);
 	if (!player->refire || !S_GetSoundPlayingInfo (pmo, soundid))
 	{
 		S_LoopedSoundID (pmo, CHAN_WEAPON, soundid, 1, ATTN_NORM);
@@ -3434,7 +3286,7 @@ void A_FirePhoenixPL2 (player_t *player, pspdef_t *psp)
 void A_ShutdownPhoenixPL2 (player_t *player, pspdef_t *psp)
 {
 	S_StopSound (player->mo, CHAN_WEAPON);
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[am_phoenixrod] -= USE_PHRD_AMMO_2;
 }
 
@@ -3462,9 +3314,9 @@ void A_FloatPuff (AActor *puff)
 
 // --- Bag of holding -------------------------------------------------------
 
-class ABagOfHolding : public APickup
+class ABagOfHolding : public AInventory
 {
-	DECLARE_ACTOR (ABagOfHolding, APickup);
+	DECLARE_ACTOR (ABagOfHolding, AInventory)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -3488,23 +3340,18 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_ITEMBAGOFHOLDING;
+		return GStrings(TXT_ITEMBAGOFHOLDING);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ABagOfHolding, APickup);
-REGISTER_ACTOR (ABagOfHolding, Heretic);
 
 FState ABagOfHolding::States[] =
 {
 	S_NORMAL (BAGH, 'A',   -1, NULL, NULL)
 };
 
-void ABagOfHolding::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-}
+IMPLEMENT_ACTOR (ABagOfHolding, Heretic, 8, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+
+	PROP_SpawnState (0)
+END_DEFAULTS

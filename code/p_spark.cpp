@@ -12,15 +12,9 @@ public:
 	void Activate (AActor *activator);
 };
 
-IMPLEMENT_DEF_SERIAL (ASpark, AActor);
-REGISTER_ACTOR (ASpark, Any);
-
-void ASpark::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->doomednum = 9026;
-	info->flags = MF_NOSECTOR|MF_NOBLOCKMAP|MF_NOGRAVITY;
-}
+IMPLEMENT_STATELESS_ACTOR (ASpark, Any, 9026, 0)
+	PROP_Flags (MF_NOSECTOR|MF_NOBLOCKMAP|MF_NOGRAVITY)
+END_DEFAULTS
 
 angle_t ASpark::AngleIncrements ()
 {

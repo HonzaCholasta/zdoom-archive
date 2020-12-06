@@ -8,8 +8,9 @@
 #include "p_pspr.h"
 #include "p_local.h"
 #include "p_inter.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "p_effect.h"
+#include "gi.h"
 
 /* ammo ********************************************************************/
 
@@ -24,9 +25,9 @@ int clipammo[NUMAMMO] =
 
 // Clip --------------------------------------------------------------------
 
-class AClip : public APickup
+class AClip : public AAmmo
 {
-	DECLARE_ACTOR (AClip, APickup);
+	DECLARE_ACTOR (AClip, AAmmo)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -37,35 +38,33 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTCLIP;
+		return GStrings(GOTCLIP);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AClip, APickup);
-REGISTER_ACTOR (AClip, Doom);
 
 FState AClip::States[] =
 {
 	S_NORMAL (CLIP, 'A',   -1, NULL 				, NULL)
 };
 
-void AClip::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AClip, Doom, 2007, 11)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (Clip)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2007;
-	info->spawnid = 11;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_clip] = "CLIPA0";
 }
 
 // Clip box ----------------------------------------------------------------
 
-class AClipBox : public APickup
+class AClipBox : public AAmmo
 {
-	DECLARE_ACTOR (AClipBox, APickup);
+	DECLARE_ACTOR (AClipBox, AAmmo)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -73,34 +72,28 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTCLIPBOX;
+		return GStrings(GOTCLIPBOX);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AClipBox, APickup);
-REGISTER_ACTOR (AClipBox, Doom);
 
 FState AClipBox::States[] =
 {
 	S_NORMAL (AMMO, 'A',   -1, NULL 				, NULL)
 };
 
-void AClipBox::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2048;
-	info->spawnid = 139;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (AClipBox, Doom, 2048, 139)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Rocket ------------------------------------------------------------------
 
-class ARocketAmmo : public APickup
+class ARocketAmmo : public AAmmo
 {
-	DECLARE_ACTOR (ARocketAmmo, APickup);
+	DECLARE_ACTOR (ARocketAmmo, AAmmo)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -108,35 +101,33 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTROCKET;
+		return GStrings(GOTROCKET);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ARocketAmmo, APickup);
-REGISTER_ACTOR (ARocketAmmo, Doom);
 
 FState ARocketAmmo::States[] =
 {
 	S_NORMAL (ROCK, 'A',   -1, NULL 				, NULL)
 };
 
-void ARocketAmmo::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ARocketAmmo, Doom, 2010, 140)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (26)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (RocketAmmo)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2010;
-	info->spawnid = 140;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 26 * FRACUNIT;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_misl] = "ROCKA0";
 }
 
 // Rocket box --------------------------------------------------------------
 
-class ARocketBox : public APickup
+class ARocketBox : public AAmmo
 {
-	DECLARE_ACTOR (ARocketBox, APickup);
+	DECLARE_ACTOR (ARocketBox, AAmmo)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -144,34 +135,28 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTROCKBOX;
+		return GStrings(GOTROCKBOX);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ARocketBox, APickup);
-REGISTER_ACTOR (ARocketBox, Doom);
 
 FState ARocketBox::States[] =
 {
 	S_NORMAL (BROK, 'A',   -1, NULL 				, NULL)
 };
 
-void ARocketBox::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2046;
-	info->spawnid = 141;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (ARocketBox, Doom, 2046, 141)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Cell --------------------------------------------------------------------
 
-class ACell : public APickup
+class ACell : public AAmmo
 {
-	DECLARE_ACTOR (ACell, APickup);
+	DECLARE_ACTOR (ACell, AAmmo)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -179,35 +164,33 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTCELL;
+		return GStrings(GOTCELL);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ACell, APickup);
-REGISTER_ACTOR (ACell, Doom);
 
 FState ACell::States[] =
 {
 	S_NORMAL (CELL, 'A',   -1, NULL 				, NULL)
 };
 
-void ACell::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ACell, Doom, 2047, 75)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (10)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (Cell)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2047;
-	info->spawnid = 75;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 10 * FRACUNIT;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_cell] = "CELLA0";
 }
 
 // Cell pack ---------------------------------------------------------------
 
-class ACellPack : public APickup
+class ACellPack : public AAmmo
 {
-	DECLARE_ACTOR (ACellPack, APickup);
+	DECLARE_ACTOR (ACellPack, AAmmo)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -215,34 +198,28 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTCELLBOX;
+		return GStrings(GOTCELLBOX);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ACellPack, APickup);
-REGISTER_ACTOR (ACellPack, Doom);
 
 FState ACellPack::States[] =
 {
 	S_NORMAL (CELP, 'A',   -1, NULL 				, NULL)
 };
 
-void ACellPack::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 17;
-	info->spawnid = 142;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 18 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (ACellPack, Doom, 17, 142)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (18)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Shells ------------------------------------------------------------------
 
-class AShell : public APickup
+class AShell : public AAmmo
 {
-	DECLARE_ACTOR (AShell, APickup);
+	DECLARE_ACTOR (AShell, AAmmo)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -250,35 +227,33 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTSHELLS;
+		return GStrings(GOTSHELLS);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AShell, APickup);
-REGISTER_ACTOR (AShell, Doom);
 
 FState AShell::States[] =
 {
 	S_NORMAL (SHEL, 'A',   -1, NULL 				, NULL)
 };
 
-void AShell::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AShell, Doom, 2008, 12)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (8)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (Shell)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2008;
-	info->spawnid = 12;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->flags = MF_SPECIAL;
 	AmmoPics[am_shell] = "SHELA0";
 }
 
 // Shell box ---------------------------------------------------------------
 
-class AShellBox : public APickup
+class AShellBox : public AAmmo
 {
-	DECLARE_ACTOR (AShellBox, APickup);
+	DECLARE_ACTOR (AShellBox, AAmmo)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -286,28 +261,22 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTSHELLBOX;
+		return GStrings(GOTSHELLBOX);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AShellBox, APickup);
-REGISTER_ACTOR (AShellBox, Doom);
 
 FState AShellBox::States[] =
 {
 	S_NORMAL (SBOX, 'A',   -1, NULL 				, NULL)
 };
 
-void AShellBox::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2049;
-	info->spawnid = 143;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 10 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (AShellBox, Doom, 2049, 143)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (10)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 /* the weapons that use the ammo above *************************************/
 
@@ -317,13 +286,11 @@ void A_Punch (player_t *, pspdef_t *);
 
 class AFist : public AWeapon
 {
-	DECLARE_ACTOR (AFist, AWeapon);
+	DECLARE_ACTOR (AFist, AWeapon)
+	AT_GAME_SET_FRIEND (Fist)
 private:
 	static FWeaponInfo WeaponInfo;
 };
-
-IMPLEMENT_DEF_SERIAL (AFist, AWeapon);
-REGISTER_ACTOR (AFist, Doom);
 
 FState AFist::States[] =
 {
@@ -363,12 +330,17 @@ FWeaponInfo AFist::WeaponInfo =
 	NULL
 };
 
-void AFist::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AFist, Doom, -1, 0)
+END_DEFAULTS
+
+AT_GAME_SET (Fist)
 {
-	INHERIT_DEFS;
-	wpnlev1info[wp_fist] = wpnlev2info[wp_fist] = &WeaponInfo;
-	WeaponSlots[1].AddWeapon (wp_fist, 1);
-};
+	wpnlev1info[wp_fist] = wpnlev2info[wp_fist] = &AFist::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[1].AddWeapon (wp_fist, 1);
+	}
+}
 
 //
 // A_Punch
@@ -377,7 +349,7 @@ void A_Punch (player_t *player, pspdef_t *psp)
 {
 	angle_t 	angle;
 	int 		damage;
-	int 		slope;
+	int 		pitch;
 		
 	damage = (P_Random (pr_punch)%10+1)<<1;
 
@@ -387,8 +359,8 @@ void A_Punch (player_t *player, pspdef_t *psp)
 	angle = player->mo->angle;
 
 	angle += PS_Random (pr_punch) << 18;
-	slope = P_AimLineAttack (player->mo, angle, MELEERANGE);
-	P_LineAttack (player->mo, angle, MELEERANGE, slope, damage);
+	pitch = P_AimLineAttack (player->mo, angle, MELEERANGE);
+	P_LineAttack (player->mo, angle, MELEERANGE, pitch, damage);
 
 	// turn to face target
 	if (linetarget)
@@ -407,7 +379,8 @@ void A_FirePistol (player_t *, pspdef_t *);
 
 class APistol : public AWeapon
 {
-	DECLARE_ACTOR (APistol, AWeapon);
+	DECLARE_ACTOR (APistol, AWeapon)
+	AT_GAME_SET_FRIEND (Pistol)
 private:
 	static FWeaponInfo WeaponInfo;
 };
@@ -433,9 +406,6 @@ FState APistol::States[] =
 	S_BRIGHT (PISF, 'A',	7, A_Light1 			, &AWeapon::States[S_LIGHTDONE])
 };
 
-IMPLEMENT_DEF_SERIAL (APistol, AWeapon);
-REGISTER_ACTOR (APistol, Doom);
-
 FWeaponInfo APistol::WeaponInfo =
 {
 	0,
@@ -455,11 +425,16 @@ FWeaponInfo APistol::WeaponInfo =
 	NULL
 };
 
-void APistol::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (APistol, Doom, -1, 0)
+END_DEFAULTS
+
+AT_GAME_SET (Pistol)
 {
-	INHERIT_DEFS;
-	wpnlev1info[wp_pistol] = wpnlev2info[wp_pistol] = &WeaponInfo;
-	WeaponSlots[2].AddWeapon (wp_pistol, 3);
+	wpnlev1info[wp_pistol] = wpnlev2info[wp_pistol] = &APistol::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[2].AddWeapon (wp_pistol, 3);
+	}
 }
 
 //
@@ -470,7 +445,7 @@ void A_FirePistol (player_t *player, pspdef_t *psp)
 	S_Sound (player->mo, CHAN_WEAPON, "weapons/pistol", 1, ATTN_NORM);
 
 	player->mo->PlayAttacking2 ();
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[wpnlev1info[player->readyweapon]->ammo]--;
 
 	P_SetPsprite (player,
@@ -487,16 +462,14 @@ void A_Saw (player_t *, pspdef_t *);
 
 class AChainsaw : public AWeapon
 {
-	DECLARE_ACTOR (AChainsaw, AWeapon);
+	DECLARE_ACTOR (AChainsaw, AWeapon)
+	AT_GAME_SET_FRIEND (Chainsaw)
 protected:
 	bool TryPickup (AActor *toucher);
 	const char *PickupMessage ();
 private:
 	static FWeaponInfo WeaponInfo;
 };
-
-IMPLEMENT_DEF_SERIAL (AChainsaw, AWeapon);
-REGISTER_ACTOR (AChainsaw, Doom);
 
 FState AChainsaw::States[] =
 {
@@ -538,17 +511,21 @@ FWeaponInfo AChainsaw::WeaponInfo =
 	"weapons/sawidle"
 };
 
-void AChainsaw::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AChainsaw, Doom, 2005, 32)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_CSAW)
+END_DEFAULTS
+
+AT_GAME_SET (Chainsaw)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2005;
-	info->spawnid = 32;
-	info->spawnstate = &States[S_CSAW];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	wpnlev1info[wp_chainsaw] = wpnlev2info[wp_chainsaw] = &WeaponInfo;
-	WeaponSlots[1].AddWeapon (wp_chainsaw, 2);
+	wpnlev1info[wp_chainsaw] = wpnlev2info[wp_chainsaw] = &AChainsaw::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[1].AddWeapon (wp_chainsaw, 2);
+	}
 }
 
 bool AChainsaw::TryPickup (AActor *toucher)
@@ -558,7 +535,7 @@ bool AChainsaw::TryPickup (AActor *toucher)
 
 const char *AChainsaw::PickupMessage ()
 {
-	return GOTCHAINSAW;
+	return GStrings(GOTCHAINSAW);
 }
 
 //
@@ -610,16 +587,14 @@ void A_FireShotgun (player_t *, pspdef_t *);
 
 class AShotgun : public AWeapon
 {
-	DECLARE_ACTOR (AShotgun, AWeapon);
+	DECLARE_ACTOR (AShotgun, AWeapon)
+	AT_GAME_SET_FRIEND (Shotgun)
 protected:
 	bool TryPickup (AActor *toucher);
 	const char *PickupMessage ();
 private:
 	static FWeaponInfo WeaponInfo;
 };
-
-IMPLEMENT_DEF_SERIAL (AShotgun, AWeapon);
-REGISTER_ACTOR (AShotgun, Doom);
 
 FState AShotgun::States[] =
 {
@@ -670,17 +645,21 @@ FWeaponInfo AShotgun::WeaponInfo =
 	NULL
 };
 
-void AShotgun::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AShotgun, Doom, 2001, 27)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_SHOT)
+END_DEFAULTS
+
+AT_GAME_SET (Shotgun)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2001;
-	info->spawnid = 27;
-	info->spawnstate = &States[S_SHOT];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	wpnlev1info[wp_shotgun] = wpnlev2info[wp_shotgun] = &WeaponInfo;
-	WeaponSlots[3].AddWeapon (wp_shotgun, 4);
+	wpnlev1info[wp_shotgun] = wpnlev2info[wp_shotgun] = &AShotgun::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[3].AddWeapon (wp_shotgun, 4);
+	}
 }
 
 bool AShotgun::TryPickup (AActor *toucher)
@@ -690,7 +669,7 @@ bool AShotgun::TryPickup (AActor *toucher)
 
 const char *AShotgun::PickupMessage ()
 {
-	return GOTSHOTGUN;
+	return GStrings(GOTSHOTGUN);
 }
 
 //
@@ -703,7 +682,7 @@ void A_FireShotgun (player_t *player, pspdef_t *psp)
 	S_Sound (player->mo, CHAN_WEAPON,  "weapons/shotgf", 1, ATTN_NORM);
 	player->mo->PlayAttacking2 ();
 
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[wpnlev1info[player->readyweapon]->ammo]--;
 
 	P_SetPsprite (player,
@@ -726,16 +705,14 @@ void A_CloseShotgun2 (player_t *, pspdef_t *);
 
 class ASuperShotgun : public AWeapon
 {
-	DECLARE_ACTOR (ASuperShotgun, AWeapon);
+	DECLARE_ACTOR (ASuperShotgun, AWeapon)
+	AT_GAME_SET_FRIEND (SuperShotgun)
 protected:
 	bool TryPickup (AActor *toucher);
 	const char *PickupMessage ();
 private:
 	static FWeaponInfo WeaponInfo;
 };
-
-IMPLEMENT_DEF_SERIAL (ASuperShotgun, AWeapon);
-REGISTER_ACTOR (ASuperShotgun, Doom);
 
 FState ASuperShotgun::States[] =
 {
@@ -791,17 +768,21 @@ FWeaponInfo ASuperShotgun::WeaponInfo =
 	NULL
 };
 
-void ASuperShotgun::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASuperShotgun, Doom, 82, 33)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_SHOT2)
+END_DEFAULTS
+
+AT_GAME_SET (SuperShotgun)
 {
-	INHERIT_DEFS;
-	info->doomednum = 82;
-	info->spawnid = 33;
-	info->spawnstate = &States[S_SHOT2];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	wpnlev1info[wp_supershotgun] = wpnlev2info[wp_supershotgun] = &WeaponInfo;
-	WeaponSlots[3].AddWeapon (wp_supershotgun, 5);
+	wpnlev1info[wp_supershotgun] = wpnlev2info[wp_supershotgun] = &ASuperShotgun::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[3].AddWeapon (wp_supershotgun, 5);
+	}
 }
 
 bool ASuperShotgun::TryPickup (AActor *toucher)
@@ -811,7 +792,7 @@ bool ASuperShotgun::TryPickup (AActor *toucher)
 
 const char *ASuperShotgun::PickupMessage ()
 {
-	return GOTSHOTGUN2;
+	return GStrings(GOTSHOTGUN2);
 }
 
 //
@@ -827,7 +808,7 @@ void A_FireShotgun2 (player_t *player, pspdef_t *psp)
 	S_Sound (player->mo, CHAN_WEAPON, "weapons/sshotf", 1, ATTN_NORM);
 	player->mo->PlayAttacking2 ();
 
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[wpnlev1info[player->readyweapon]->ammo]-=2;
 
 	P_SetPsprite (player,
@@ -844,7 +825,7 @@ void A_FireShotgun2 (player_t *player, pspdef_t *psp)
 		P_LineAttack (player->mo,
 					  angle,
 					  MISSILERANGE,
-					  bulletslope + (PS_Random (pr_fireshotgun2) << 5), damage);
+					  bulletpitch + (PS_Random (pr_fireshotgun2) << 18), damage);
 	}
 }
 
@@ -875,16 +856,14 @@ void A_FireCGun (player_t *, pspdef_t *);
 
 class AChaingun : public AWeapon
 {
-	DECLARE_ACTOR (AChaingun, AWeapon);
+	DECLARE_ACTOR (AChaingun, AWeapon)
+	AT_GAME_SET_FRIEND (Chaingun)
 protected:
 	bool TryPickup (AActor *toucher);
 	const char *PickupMessage ();
 private:
 	static FWeaponInfo WeaponInfo;
 };
-
-IMPLEMENT_DEF_SERIAL (AChaingun, AWeapon);
-REGISTER_ACTOR (AChaingun, Doom);
 
 FState AChaingun::States[] =
 {
@@ -929,17 +908,21 @@ FWeaponInfo AChaingun::WeaponInfo =
 	NULL
 };
 
-void AChaingun::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AChaingun, Doom, 2002, 28)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_MGUN)
+END_DEFAULTS
+
+AT_GAME_SET (Chaingun)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2002;
-	info->spawnid = 28;
-	info->spawnstate = &States[S_MGUN];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	wpnlev1info[wp_chaingun] = wpnlev2info[wp_chaingun] = &WeaponInfo;
-	WeaponSlots[4].AddWeapon (wp_chaingun, 6);
+	wpnlev1info[wp_chaingun] = wpnlev2info[wp_chaingun] = &AChaingun::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[4].AddWeapon (wp_chaingun, 6);
+	}
 }
 
 bool AChaingun::TryPickup (AActor *toucher)
@@ -949,7 +932,7 @@ bool AChaingun::TryPickup (AActor *toucher)
 
 const char *AChaingun::PickupMessage ()
 {
-	return GOTCHAINGUN;
+	return GStrings(GOTCHAINGUN);
 }
 
 //
@@ -963,7 +946,7 @@ void A_FireCGun (player_t *player, pspdef_t *psp)
 		return;
 				
 	player->mo->PlayAttacking2 ();
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[wpnlev1info[player->readyweapon]->ammo]--;
 
 	P_SetPsprite (player,
@@ -983,16 +966,14 @@ void A_Explode (AActor *);
 
 class ARocketLauncher : public AWeapon
 {
-	DECLARE_ACTOR (ARocketLauncher, AWeapon);
+	DECLARE_ACTOR (ARocketLauncher, AWeapon)
+	AT_GAME_SET_FRIEND (RocketLauncher)
 protected:
 	bool TryPickup (AActor *toucher);
 	const char *PickupMessage ();
 private:
 	static FWeaponInfo WeaponInfo;
 };
-
-IMPLEMENT_DEF_SERIAL (ARocketLauncher, AWeapon);
-REGISTER_ACTOR (ARocketLauncher, Doom);
 
 FState ARocketLauncher::States[] =
 {
@@ -1039,17 +1020,21 @@ FWeaponInfo ARocketLauncher::WeaponInfo =
 	NULL
 };
 
-void ARocketLauncher::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ARocketLauncher, Doom, 2003, 29)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_LAUN)
+END_DEFAULTS
+
+AT_GAME_SET (RocketLauncher)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2003;
-	info->spawnid = 29;
-	info->spawnstate = &States[S_LAUN];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	wpnlev1info[wp_missile] = wpnlev2info[wp_missile] = &WeaponInfo;
-	WeaponSlots[5].AddWeapon (wp_missile, 7);
+	wpnlev1info[wp_missile] = wpnlev2info[wp_missile] = &ARocketLauncher::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[5].AddWeapon (wp_missile, 7);
+	}
 }
 
 bool ARocketLauncher::TryPickup (AActor *toucher)
@@ -1059,11 +1044,8 @@ bool ARocketLauncher::TryPickup (AActor *toucher)
 
 const char *ARocketLauncher::PickupMessage ()
 {
-	return GOTLAUNCHER;
+	return GStrings(GOTLAUNCHER);
 }
-
-IMPLEMENT_DEF_SERIAL (ARocket, AActor);
-REGISTER_ACTOR (ARocket, Doom);
 
 FState ARocket::States[] =
 {
@@ -1076,21 +1058,20 @@ FState ARocket::States[] =
 	S_BRIGHT (MISL, 'D',	4, NULL 						, NULL)
 };
 
-void ARocket::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnid = 127;
-	info->spawnstate = &States[S_ROCKET];
-	info->seesound = "weapons/rocklf";
-	info->deathstate = &States[S_EXPLODE];
-	info->deathsound = "weapons/rocklx";
-	info->speed = 20 * FRACUNIT;
-	info->radius = 11 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 20;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-}
+IMPLEMENT_ACTOR (ARocket, Doom, -1, 127)
+	PROP_RadiusFixed (11)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (20)
+	PROP_Damage (20)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_ROCKET)
+	PROP_DeathState (S_EXPLODE)
+
+	PROP_SeeSound ("weapons/rocklf")
+	PROP_DeathSound ("weapons/rocklx")
+END_DEFAULTS
 
 void ARocket::BeginPlay ()
 {
@@ -1103,7 +1084,7 @@ void ARocket::BeginPlay ()
 //
 void A_FireMissile (player_t *player, pspdef_t *psp)
 {
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[wpnlev1info[player->readyweapon]->ammo]--;
 	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ARocket));
 }
@@ -1114,16 +1095,14 @@ void A_FirePlasma (player_t *, pspdef_t *);
 
 class APlasmaRifle : public AWeapon
 {
-	DECLARE_ACTOR (APlasmaRifle, AWeapon);
+	DECLARE_ACTOR (APlasmaRifle, AWeapon)
+	AT_GAME_SET_FRIEND (PlasmaRifle)
 protected:
 	bool TryPickup (AActor *toucher);
 	const char *PickupMessage ();
 private:
 	static FWeaponInfo WeaponInfo;
 };
-
-IMPLEMENT_DEF_SERIAL (APlasmaRifle, AWeapon);
-REGISTER_ACTOR (APlasmaRifle, Doom);
 
 FState APlasmaRifle::States[] =
 {
@@ -1167,17 +1146,21 @@ FWeaponInfo APlasmaRifle::WeaponInfo =
 	NULL
 };
 
-void APlasmaRifle::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (APlasmaRifle, Doom, 2004, 30)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_PLAS)
+END_DEFAULTS
+
+AT_GAME_SET (PlasmaRifle)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2004;
-	info->spawnid = 30;
-	info->spawnstate = &States[S_PLAS];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	wpnlev1info[wp_plasma] = wpnlev2info[wp_plasma] = &WeaponInfo;
-	WeaponSlots[6].AddWeapon (wp_plasma, 8);
+	wpnlev1info[wp_plasma] = wpnlev2info[wp_plasma] = &APlasmaRifle::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[6].AddWeapon (wp_plasma, 8);
+	}
 }
 
 bool APlasmaRifle::TryPickup (AActor *toucher)
@@ -1187,11 +1170,8 @@ bool APlasmaRifle::TryPickup (AActor *toucher)
 
 const char *APlasmaRifle::PickupMessage ()
 {
-	return GOTPLASMA;
+	return GStrings(GOTPLASMA);
 }
-
-IMPLEMENT_DEF_SERIAL (APlasmaBall, AActor);
-REGISTER_ACTOR (APlasmaBall, Doom);
 
 FState APlasmaBall::States[] =
 {
@@ -1207,28 +1187,29 @@ FState APlasmaBall::States[] =
 	S_BRIGHT (PLSE, 'E',	4, NULL 						, NULL)
 };
 
-void APlasmaBall::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnid = 51;
-	info->spawnstate = &States[S_PLASBALL];
-	info->seesound = "weapons/plasmaf";
-	info->deathstate = &States[S_PLASEXP];
-	info->deathsound = "weapons/plasmax";
-	info->speed = 25 * FRACUNIT;
-	info->radius = 13 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 5;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-	info->translucency = TRANSLUC66;
-}
+IMPLEMENT_ACTOR (APlasmaBall, Doom, -1, 51)
+	PROP_RadiusFixed (13)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (25)
+	PROP_Damage (5)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+	PROP_Alpha (TRANSLUC75)
+
+	PROP_SpawnState (S_PLASBALL)
+	PROP_DeathState (S_PLASEXP)
+
+	PROP_SeeSound ("weapons/plasmaf")
+	PROP_DeathSound ("weapons/plasmax")
+END_DEFAULTS
+
 //
 // A_FirePlasma
 //
 void A_FirePlasma (player_t *player, pspdef_t *psp)
 {
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[wpnlev1info[player->readyweapon]->ammo]--;
 
 	if (wpnlev1info[player->readyweapon]->flashstate)
@@ -1260,7 +1241,7 @@ void A_FireRailgun (player_t *player, pspdef_t *psp)
 		return;
 	}
 
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[wpnlev1info[player->readyweapon]->ammo] -= 10;
 
 	if (wpnlev1info[player->readyweapon]->flashstate)
@@ -1271,10 +1252,7 @@ void A_FireRailgun (player_t *player, pspdef_t *psp)
 					   + (P_Random (pr_fireplasma)&1));
 	}
 
-	if (deathmatch.value)
-		damage = 100;
-	else
-		damage = 150;
+	damage = *deathmatch ? 100 : 150;
 
 	P_RailAttack (player->mo, damage, RailOffset);
 	RailOffset = 0;
@@ -1305,7 +1283,8 @@ void A_BFGsound (player_t *, pspdef_t *);
 
 class ABFG9000 : public AWeapon
 {
-	DECLARE_ACTOR (ABFG9000, AWeapon);
+	DECLARE_ACTOR (ABFG9000, AWeapon)
+	AT_GAME_SET_FRIEND (BFG9000)
 protected:
 	bool TryPickup (AActor *toucher);
 	const char *PickupMessage ();
@@ -1315,18 +1294,15 @@ private:
 
 class ABFGBall : public AActor
 {
-	DECLARE_ACTOR (ABFGBall, AActor);
+	DECLARE_ACTOR (ABFGBall, AActor)
 public:
 	int GetMOD () { return MOD_BFG_BOOM; }
 };
 
 class ABFGExtra : public AActor
 {
-	DECLARE_ACTOR (ABFGExtra, AActor);
+	DECLARE_ACTOR (ABFGExtra, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABFG9000, AWeapon);
-REGISTER_ACTOR (ABFG9000, Doom);
 
 FState ABFG9000::States[] =
 {
@@ -1372,17 +1348,21 @@ FWeaponInfo ABFG9000::WeaponInfo =
 	NULL
 };
 
-void ABFG9000::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABFG9000, Doom, 2006, 31)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (20)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_BFUG)
+END_DEFAULTS
+
+AT_GAME_SET (BFG9000)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2006;
-	info->spawnid = 31;
-	info->spawnstate = &States[S_BFUG];
-	info->radius = 20 * FRACUNIT;
-	info->height = 20 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	wpnlev1info[wp_bfg] = wpnlev2info[wp_bfg] = &WeaponInfo;
-	WeaponSlots[7].AddWeapon (wp_bfg, 9);
+	wpnlev1info[wp_bfg] = wpnlev2info[wp_bfg] = &ABFG9000::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[7].AddWeapon (wp_bfg, 9);
+	}
 }
 
 bool ABFG9000::TryPickup (AActor *toucher)
@@ -1392,11 +1372,8 @@ bool ABFG9000::TryPickup (AActor *toucher)
 
 const char *ABFG9000::PickupMessage ()
 {
-	return GOTBFG9000;
+	return GStrings(GOTBFG9000);
 }
-
-IMPLEMENT_DEF_SERIAL (ABFGBall, AActor);
-REGISTER_ACTOR (ABFGBall, Doom);
 
 FState ABFGBall::States[] =
 {
@@ -1413,24 +1390,21 @@ FState ABFGBall::States[] =
 	S_BRIGHT (BFE1, 'F',	8, NULL 						, NULL)
 };
 
-void ABFGBall::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnid = 128;
-	info->spawnstate = &States[S_BFGSHOT];
-	info->deathstate = &States[S_BFGLAND];
-	info->deathsound = "weapons/bfgx";
-	info->speed = 25 * FRACUNIT;
-	info->radius = 13 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 100;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-	info->translucency = TRANSLUC66;
-}
+IMPLEMENT_ACTOR (ABFGBall, Doom, -1, 128)
+	PROP_RadiusFixed (13)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (25)
+	PROP_Damage (100)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+	PROP_Alpha (TRANSLUC75)
 
-IMPLEMENT_DEF_SERIAL (ABFGExtra, AActor);
-REGISTER_ACTOR (ABFGExtra, Doom);
+	PROP_SpawnState (S_BFGSHOT)
+	PROP_DeathState (S_BFGLAND)
+
+	PROP_DeathSound ("weapons/bfgx")
+END_DEFAULTS
 
 FState ABFGExtra::States[] =
 {
@@ -1440,18 +1414,17 @@ FState ABFGExtra::States[] =
 	S_BRIGHT (BFE2, 'D',	8, NULL 				, NULL)
 };
 
-void ABFGExtra::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = TRANSLUC66;
-}
+IMPLEMENT_ACTOR (ABFGExtra, Doom, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Add)
+	PROP_Alpha (TRANSLUC75)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 //
 // A_FireBFG
 //
-CVAR (nobfgaim, "0", CVAR_SERVERINFO)
 
 void A_FireBFG (player_t *player, pspdef_t *psp)
 {
@@ -1459,14 +1432,14 @@ void A_FireBFG (player_t *player, pspdef_t *psp)
 	angle_t storedpitch = player->mo->pitch;
 	int storedaimdist = player->userinfo.aimdist;
 
-	if (!(dmflags & DF_INFINITE_AMMO))
+	if (!(*dmflags & DF_INFINITE_AMMO))
 		player->ammo[wpnlev1info[player->readyweapon]->ammo] -=
 			wpnlev1info[player->readyweapon]->ammouse;
 
-	if (nobfgaim.value)
+	if (*dmflags2 & DF2_NO_FREEAIMBFG)
 	{
 		player->mo->pitch = 0;
-		player->userinfo.aimdist = 81920000;
+		player->userinfo.aimdist = ANGLE_1*32;
 	}
 	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ABFGBall));
 	player->mo->pitch = storedpitch;
@@ -1495,7 +1468,7 @@ void A_BFGSpray (AActor *mo)
 
 		// mo->target is the originator (player)
 		//	of the missile
-		P_AimLineAttack (mo->target, an, 16*64*FRACUNIT);
+		P_AimLineAttack (mo->target, an, 16*64*FRACUNIT, ANGLE_1*32);
 
 		if (!linetarget)
 			continue;

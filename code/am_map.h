@@ -24,12 +24,6 @@
 
 #include "d_event.h"
 
-// Used by ST StatusBar stuff.
-#define AM_MSGHEADER (('a'<<24)+('m'<<16))
-#define AM_MSGENTERED (AM_MSGHEADER | ('e'<<8))
-#define AM_MSGEXITED (AM_MSGHEADER | ('x'<<8))
-
-
 // Called by main loop.
 BOOL AM_Responder (event_t* ev);
 
@@ -47,8 +41,3 @@ void AM_Stop (void);
 
 
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------

@@ -4,11 +4,11 @@
 #include "s_sound.h"
 #include "p_local.h"
 #include "p_enemy.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_PosAttack (AActor *);
-void A_SPosAttack (AActor *);
+void A_SPosAttackUseAtkSound (AActor *);
 void A_CPosAttack (AActor *);
 void A_CPosRefire (AActor *);
 
@@ -16,14 +16,11 @@ void A_CPosRefire (AActor *);
 
 class AZombieMan : public AActor
 {
-	DECLARE_ACTOR (AZombieMan, AActor);
+	DECLARE_ACTOR (AZombieMan, AActor)
 public:
 	void NoBlockingSet ();
-	const char *GetObituary () { return OB_ZOMBIE; }
+	const char *GetObituary () { return GStrings(OB_ZOMBIE); }
 };
-
-IMPLEMENT_DEF_SERIAL (AZombieMan, AActor);
-REGISTER_ACTOR (AZombieMan, Doom);
 
 FState AZombieMan::States[] =
 {
@@ -75,56 +72,48 @@ FState AZombieMan::States[] =
 	S_NORMAL (POSS, 'H',	5, NULL 						, &States[S_POSS_RUN+0])
 };
 
-void AZombieMan::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 3004;
-	info->spawnid = 4;
-	info->spawnstate = &States[S_POSS_STND];
-	info->spawnhealth = 20;
-	info->seestate = &States[S_POSS_RUN];
-	info->seesound = "grunt/sight1";
-	info->attacksound = "grunt/attack";
-	info->painstate = &States[S_POSS_PAIN];
-	info->painchance = 200;
-	info->painsound = "grunt/pain";
-	info->missilestate = &States[S_POSS_ATK];
-	info->deathstate = &States[S_POSS_DIE];
-	info->xdeathstate = &States[S_POSS_XDIE];
-	info->deathsound = "grunt/death1";
-	info->speed = 8;
-	info->radius = 20 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 100;
-	info->activesound = "grunt/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_POSS_RAISE];
-}
+IMPLEMENT_ACTOR (AZombieMan, Doom, 3004, 4)
+	PROP_SpawnHealth (20)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (56)
+	PROP_Mass (100)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (200)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_POSS_STND)
+	PROP_SeeState (S_POSS_RUN)
+	PROP_PainState (S_POSS_PAIN)
+	PROP_MissileState (S_POSS_ATK)
+	PROP_DeathState (S_POSS_DIE)
+	PROP_XDeathState (S_POSS_XDIE)
+	PROP_RaiseState (S_POSS_RAISE)
+
+	PROP_SeeSound ("grunt/sight")
+	PROP_AttackSound ("grunt/attack")
+	PROP_PainSound ("grunt/pain")
+	PROP_DeathSound ("grunt/death")
+	PROP_ActiveSound ("grunt/active")
+END_DEFAULTS
 
 void AZombieMan::NoBlockingSet ()
 {
-	P_DropItem (this, "Clip", 0, 256);
+	P_DropItem (this, "Clip", -1, 256);
 }
 
 class AStealthZombieMan : public AZombieMan
 {
-	DECLARE_STATELESS_ACTOR (AStealthZombieMan, AZombieMan);
+	DECLARE_STATELESS_ACTOR (AStealthZombieMan, AZombieMan)
 public:
-	const char *GetObituary () { return OB_STEALTHZOMBIE; }
+	const char *GetObituary () { return GStrings(OB_STEALTHZOMBIE); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthZombieMan, AZombieMan);
-REGISTER_ACTOR (AStealthZombieMan, Doom);
-
-void AStealthZombieMan::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9061;
-	info->spawnid = 102;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthZombieMan, Doom, 9061, 102)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 //
 // A_PosAttack
@@ -152,35 +141,25 @@ void A_PosAttack (AActor *self)
 
 class ADeadZombieMan : public AZombieMan
 {
-	DECLARE_STATELESS_ACTOR (ADeadZombieMan, AZombieMan);
+	DECLARE_STATELESS_ACTOR (ADeadZombieMan, AZombieMan)
 public:
 	void NoBlockingSet () {}
 };
 
-IMPLEMENT_DEF_SERIAL (ADeadZombieMan, AZombieMan);
-REGISTER_ACTOR (ADeadZombieMan, Doom);
-
-void ADeadZombieMan::SetDefaults (FActorInfo *info)
-{
-	AActor::SetDefaults (info);
-	info->OwnedStates = NULL;
-	info->NumOwnedStates = 0;
-	info->doomednum = 18;
-	info->spawnstate = &States[S_POSS_DIE+4];
-}
+IMPLEMENT_STATELESS_ACTOR (ADeadZombieMan, Doom, 18, 0)
+	PROP_SKIP_SUPER
+	PROP_SpawnState (S_POSS_DIE+4)
+END_DEFAULTS
 
 // Shotgun guy -------------------------------------------------------------
 
 class AShotgunGuy : public AActor
 {
-	DECLARE_ACTOR (AShotgunGuy, AActor);
+	DECLARE_ACTOR (AShotgunGuy, AActor)
 public:
 	void NoBlockingSet ();
-	const char *GetObituary () { return OB_SHOTGUY; }
+	const char *GetObituary () { return GStrings(OB_SHOTGUY); }
 };
-
-IMPLEMENT_DEF_SERIAL (AShotgunGuy, AActor);
-REGISTER_ACTOR (AShotgunGuy, Doom);
 
 FState AShotgunGuy::States[] =
 {
@@ -201,7 +180,7 @@ FState AShotgunGuy::States[] =
 
 #define S_SPOS_ATK (S_SPOS_RUN+8)
 	S_NORMAL (SPOS, 'E',   10, A_FaceTarget 				, &States[S_SPOS_ATK+1]),
-	S_BRIGHT (SPOS, 'F',   10, A_SPosAttack 				, &States[S_SPOS_ATK+2]),
+	S_BRIGHT (SPOS, 'F',   10, A_SPosAttackUseAtkSound		, &States[S_SPOS_ATK+2]),
 	S_NORMAL (SPOS, 'E',   10, NULL 						, &States[S_SPOS_RUN+0]),
 
 #define S_SPOS_PAIN (S_SPOS_ATK+3)
@@ -234,66 +213,55 @@ FState AShotgunGuy::States[] =
 	S_NORMAL (SPOS, 'H',	5, NULL 						, &States[S_SPOS_RUN+0])
 };
 
-void AShotgunGuy::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 9;
-	info->spawnid = 1;
-	info->spawnstate = &States[S_SPOS_STND];
-	info->spawnhealth = 30;
-	info->seestate = &States[S_SPOS_RUN];
-	info->seesound = "shotguy/sight1";
-	info->painstate = &States[S_SPOS_PAIN];
-	info->painchance = 170;
-	info->painsound = "shotguy/pain";
-	info->missilestate = &States[S_SPOS_ATK];
-	info->deathstate = &States[S_SPOS_DIE];
-	info->xdeathstate = &States[S_SPOS_XDIE];
-	info->deathsound = "shotguy/death1";
-	info->speed = 8;
-	info->radius = 20 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 100;
-	info->activesound = "shotguy/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_SPOS_RAISE];
-}
+IMPLEMENT_ACTOR (AShotgunGuy, Doom, 9, 1)
+	PROP_SpawnHealth (30)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (56)
+	PROP_Mass (100)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (170)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_SPOS_STND)
+	PROP_SeeState (S_SPOS_RUN)
+	PROP_PainState (S_SPOS_PAIN)
+	PROP_MissileState (S_SPOS_ATK)
+	PROP_DeathState (S_SPOS_DIE)
+	PROP_XDeathState (S_SPOS_XDIE)
+	PROP_RaiseState (S_SPOS_RAISE)
+
+	PROP_SeeSound ("shotguy/sight")
+	PROP_AttackSound ("shotguy/attack")
+	PROP_PainSound ("shotguy/pain")
+	PROP_DeathSound ("shotguy/death")
+	PROP_ActiveSound ("shotguy/active")
+END_DEFAULTS
 
 void AShotgunGuy::NoBlockingSet ()
 {
-	P_DropItem (this, "Shotgun", 0, 256);
+	P_DropItem (this, "Shotgun", -1, 256);
 }
 
 class AStealthShotgunGuy : public AShotgunGuy
 {
-	DECLARE_STATELESS_ACTOR (AStealthShotgunGuy, AShotgunGuy);
+	DECLARE_STATELESS_ACTOR (AStealthShotgunGuy, AShotgunGuy)
 public:
-	const char *GetObituary () { return OB_STEALTHSHOTGUY; }
+	const char *GetObituary () { return GStrings(OB_STEALTHSHOTGUY); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthShotgunGuy, AShotgunGuy);
-REGISTER_ACTOR (AStealthShotgunGuy, Doom);
+IMPLEMENT_STATELESS_ACTOR (AStealthShotgunGuy, Doom, 9060, 103)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
-void AStealthShotgunGuy::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9060;
-	info->spawnid = 103;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
-
-void A_SPosAttack (AActor *self)
+static void A_SPosAttack2 (AActor *self)
 {
 	int i;
 	int bangle;
 	int slope;
 		
-	if (!self->target)
-		return;
-
-	S_Sound (self, CHAN_WEAPON, "shotguy/attack", 1, ATTN_NORM);
 	A_FaceTarget (self);
 	bangle = self->angle;
 	slope = P_AimLineAttack (self, bangle, MISSILERANGE);
@@ -306,39 +274,49 @@ void A_SPosAttack (AActor *self)
     }
 }
 
+void A_SPosAttackUseAtkSound (AActor *self)
+{
+	if (!self->target)
+		return;
+
+	S_SoundID (self, CHAN_WEAPON, self->AttackSound, 1, ATTN_NORM);
+	A_SPosAttack2 (self);
+}
+
+// This version of the function, which uses a hard-coded sound, is
+// meant for Dehacked only.
+void A_SPosAttack (AActor *self)
+{
+	if (!self->target)
+		return;
+
+	S_Sound (self, CHAN_WEAPON, "shotguy/attack", 1, ATTN_NORM);
+	A_SPosAttack2 (self);
+}
+
 // Dead shotgun guy --------------------------------------------------------
 
 class ADeadShotgunGuy : public AShotgunGuy
 {
-	DECLARE_STATELESS_ACTOR (ADeadShotgunGuy, AShotgunGuy);
+	DECLARE_STATELESS_ACTOR (ADeadShotgunGuy, AShotgunGuy)
 public:
 	void NoBlockingSet () {}
 };
 
-IMPLEMENT_DEF_SERIAL (ADeadShotgunGuy, AShotgunGuy);
-REGISTER_ACTOR (ADeadShotgunGuy, Doom);
-
-void ADeadShotgunGuy::SetDefaults (FActorInfo *info)
-{
-	AActor::SetDefaults (info);
-	info->OwnedStates = NULL;
-	info->NumOwnedStates = 0;
-	info->doomednum = 19;
-	info->spawnstate = &States[S_SPOS_DIE+4];
-}
+IMPLEMENT_STATELESS_ACTOR (ADeadShotgunGuy, Doom, 19, 0)
+	PROP_SKIP_SUPER
+	PROP_SpawnState (S_SPOS_DIE+4)
+END_DEFAULTS
 
 // Chaingun guy ------------------------------------------------------------
 
 class AChaingunGuy : public AActor
 {
-	DECLARE_ACTOR (AChaingunGuy, AActor);
+	DECLARE_ACTOR (AChaingunGuy, AActor)
 public:
 	void NoBlockingSet ();
-	const char *GetObituary () { return OB_CHAINGUY; }
+	const char *GetObituary () { return GStrings(OB_CHAINGUY); }
 };
-
-IMPLEMENT_DEF_SERIAL (AChaingunGuy, AActor);
-REGISTER_ACTOR (AChaingunGuy, Doom);
 
 FState AChaingunGuy::States[] =
 {
@@ -393,68 +371,57 @@ FState AChaingunGuy::States[] =
 	S_NORMAL (CPOS, 'H',	5, NULL 						, &States[S_CPOS_RUN+0])
 };
 
-void AChaingunGuy::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 65;
-	info->spawnid = 2;
-	info->spawnstate = &States[S_CPOS_STND];
-	info->spawnhealth = 70;
-	info->seestate = &States[S_CPOS_RUN];
-	info->seesound = "chainguy/sight1";
-	info->painstate = &States[S_CPOS_PAIN];
-	info->painchance = 170;
-	info->painsound = "chainguy/pain";
-	info->missilestate = &States[S_CPOS_ATK];
-	info->deathstate = &States[S_CPOS_DIE];
-	info->xdeathstate = &States[S_CPOS_XDIE];
-	info->deathsound = "chainguy/death1";
-	info->speed = 8;
-	info->radius = 20 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 100;
-	info->activesound = "chainguy/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_CPOS_RAISE];
-}
+IMPLEMENT_ACTOR (AChaingunGuy, Doom, 65, 2)
+	PROP_SpawnHealth (70)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (56)
+	PROP_Mass (100)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (170)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_CPOS_STND)
+	PROP_SeeState (S_CPOS_RUN)
+	PROP_PainState (S_CPOS_PAIN)
+	PROP_MissileState (S_CPOS_ATK)
+	PROP_DeathState (S_CPOS_DIE)
+	PROP_XDeathState (S_CPOS_XDIE)
+	PROP_RaiseState (S_CPOS_RAISE)
+
+	PROP_SeeSound ("chainguy/sight")
+	PROP_PainSound ("chainguy/pain")
+	PROP_DeathSound ("chainguy/death")
+	PROP_ActiveSound ("chainguy/active")
+END_DEFAULTS
 
 void AChaingunGuy::NoBlockingSet ()
 {
-	P_DropItem (this, "Chaingun", 0, 256);
+	P_DropItem (this, "Chaingun", -1, 256);
 }
 
 class AStealthChaingunGuy : public AChaingunGuy
 {
-	DECLARE_STATELESS_ACTOR (AStealthChaingunGuy, AChaingunGuy);
+	DECLARE_STATELESS_ACTOR (AStealthChaingunGuy, AChaingunGuy)
 public:
-	const char *GetObituary () { return OB_STEALTHCHAINGUY; }
+	const char *GetObituary () { return GStrings(OB_STEALTHCHAINGUY); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthChaingunGuy, AChaingunGuy);
-REGISTER_ACTOR (AStealthChaingunGuy, Doom);
-
-void AStealthChaingunGuy::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9054;
-	info->spawnid = 120;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthChaingunGuy, Doom, 9054, 120)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 // Wolfenstein SS ----------------------------------------------------------
 
 class AWolfensteinSS : public AActor
 {
-	DECLARE_ACTOR (AWolfensteinSS, AActor);
+	DECLARE_ACTOR (AWolfensteinSS, AActor)
 public:
-	const char *GetObituary () { return OB_WOLFSS; }
+	const char *GetObituary () { return GStrings(OB_WOLFSS); }
 	void NoBlockingSet ();
 };
-
-IMPLEMENT_DEF_SERIAL (AWolfensteinSS, AActor);
-REGISTER_ACTOR (AWolfensteinSS, Doom);
 
 FState AWolfensteinSS::States[] =
 {
@@ -510,35 +477,33 @@ FState AWolfensteinSS::States[] =
 	S_NORMAL (SSWV, 'I',	5, NULL 						, &States[S_SSWV_RUN+0])
 };
 
-void AWolfensteinSS::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 84;
-	info->spawnid = 116;
-	info->spawnstate = &States[S_SSWV_STND];
-	info->spawnhealth = 50;
-	info->seestate = &States[S_SSWV_RUN];
-	info->seesound = "wolfss/sight";
-	info->painstate = &States[S_SSWV_PAIN];
-	info->painchance = 170;
-	info->painsound = "wolfss/pain";
-	info->missilestate = &States[S_SSWV_ATK];
-	info->deathstate = &States[S_SSWV_DIE];
-	info->xdeathstate = &States[S_SSWV_XDIE];
-	info->deathsound = "wolfss/death";
-	info->speed = 8;
-	info->radius = 20 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 100;
-	info->activesound = "wolfss/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_SSWV_RAISE];
-}
+IMPLEMENT_ACTOR (AWolfensteinSS, Doom, 84, 116)
+	PROP_SpawnHealth (50)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (56)
+	PROP_Mass (100)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (170)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_SSWV_STND)
+	PROP_SeeState (S_SSWV_RUN)
+	PROP_PainState (S_SSWV_PAIN)
+	PROP_MissileState (S_SSWV_ATK)
+	PROP_DeathState (S_SSWV_DIE)
+	PROP_XDeathState (S_SSWV_XDIE)
+	PROP_RaiseState (S_SSWV_RAISE)
+
+	PROP_SeeSound ("wolfss/sight")
+	PROP_PainSound ("wolfss/pain")
+	PROP_DeathSound ("wolfss/death")
+	PROP_ActiveSound ("wolfss/active")
+END_DEFAULTS
 
 void AWolfensteinSS::NoBlockingSet ()
 {
-	P_DropItem (this, "Clip", 0, 256);
+	P_DropItem (this, "Clip", -1, 256);
 }
 
 void A_CPosAttack (AActor *self)
@@ -579,6 +544,6 @@ void A_CPosRefire (AActor *self)
 		|| self->target->health <= 0
 		|| !P_CheckSight (self, self->target, false) )
 	{
-		self->SetState (RUNTIME_TYPE(self)->ActorInfo->seestate);
+		self->SetState (self->SeeState);
 	}
 }

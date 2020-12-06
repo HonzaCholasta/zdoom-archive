@@ -5,6 +5,7 @@
 
 #include "m_fixed.h"
 #include "c_dispatch.h"
+#include "autosegs.h"
 
 #include "info.h"
 #include "gi.h"
@@ -47,24 +48,16 @@ FArchive &operator<< (FArchive &arc, FState *&state)
 			return arc;
 		}
 
-		FActorInfoInitializer *init = FActorInfoInitializer::StaticInitList;
-		while (init != NULL)
+		TAutoSegIterator<FActorInfo *, &ARegHead, &ARegTail> reg;
+		while (++reg != NULL)
 		{
-			if (init->info)
+			if (state >= reg->OwnedStates &&
+				state < reg->OwnedStates + reg->NumOwnedStates)
 			{
-				info = init->info->ActorInfo;
-				if (info != NULL)
-				{
-					if (state >= info->OwnedStates &&
-						state < info->OwnedStates + info->NumOwnedStates)
-					{
-						arc.UserWriteClass (init->info);
-						arc.WriteCount (state - info->OwnedStates);
-						return arc;
-					}
-				}
+				arc.UserWriteClass (reg->Class);
+				arc.WriteCount (state - reg->OwnedStates);
+				return arc;
 			}
-			init = init->next;
 		}
 		I_Error ("Cannot find owner for state %p\n", state);
 	}
@@ -79,7 +72,7 @@ FArchive &operator<< (FArchive &arc, FState *&state)
 		{
 			state = NULL;
 		}
-		else if (info->ActorInfo)
+		else if (info->ActorInfo != NULL)
 		{
 			state = info->ActorInfo->OwnedStates + ofs;
 		}
@@ -91,8 +84,7 @@ FArchive &operator<< (FArchive &arc, FState *&state)
 	return arc;
 }
 
-FActorInfoInitializer *FActorInfoInitializer::StaticInitList = NULL;
-
+// Change sprite names to indices
 static void ProcessStates (FState *states, int numstates)
 {
 	int sprite = -1;
@@ -107,7 +99,7 @@ static void ProcessStates (FState *states, int numstates)
 			size_t i;
 
 			sprite = -1;
-			for (i = 0; i < sprites.Size (); i++)
+			for (i = 0; i < sprites.Size (); ++i)
 			{
 				if (strncmp (sprites[i].name, states->sprite.name, 4) == 0)
 				{
@@ -128,62 +120,73 @@ static void ProcessStates (FState *states, int numstates)
 	}
 }
 
-void FActorInfoInitializer::StaticInit (EGameType game)
+void FActorInfo::StaticInit ()
 {
-	// Make sure the AActor class has its ActorInfo created
-	AActor::SetDefaults ((RUNTIME_CLASS(AActor)->ActorInfo = new FActorInfo));
-	ProcessStates (RUNTIME_CLASS(AActor)->ActorInfo->OwnedStates, RUNTIME_CLASS(AActor)->ActorInfo->NumOwnedStates);
+	TAutoSegIterator<FActorInfo *, &ARegHead, &ARegTail> reg;
 
-	// Find all actors valid for the current gametype and
-	// create ActorInfos for them.
-	FActorInfoInitializer *init = StaticInitList;
-	while (init != NULL)
+	// Attach FActorInfo structures to every actor's TypeInfo
+	while (++reg != NULL)
 	{
-		if (init->gamemode == GAME_Any || (init->gamemode & game))
+		reg->Class->ActorInfo = reg;
+		if (reg->OwnedStates &&
+			(unsigned)reg->OwnedStates->sprite.index < sprites.Size ())
 		{
-			TypeInfo *info = const_cast<TypeInfo *>(init->info);
-			info->ActorInfo = new FActorInfo;
-			init->active = 1;
-			init->setdefaults (info->ActorInfo);
-			if (info->ActorInfo->spawnid != 0 && info->ActorInfo->spawnid < MAX_SPAWNABLES)
-				SpawnableThings[info->ActorInfo->spawnid] = info;
-			if (info->ActorInfo->doomednum != -1)
-				DoomEdMap.AddType (info->ActorInfo->doomednum, info);
-			if (info->ActorInfo->OwnedStates && info->ActorInfo->NumOwnedStates)
-				ProcessStates (info->ActorInfo->OwnedStates, info->ActorInfo->NumOwnedStates);
+			Printf ("\x81+%s is stateless. Fix its default list.\n",
+				reg->Class->Name + 1);
 		}
-		init = init->next;
+		ProcessStates (reg->OwnedStates, reg->NumOwnedStates);
 	}
 
-	// Find classes for all actors
-
-	// For any actors without infos, use the info from the closest
-	// ancestor class.
-	int i;
-
-	for (i = 0; i < TypeInfo::m_NumTypes; i++)
+	// Now build default instances of every actor
+	reg.Reset ();
+	while (++reg != NULL)
 	{
-		if (TypeInfo::m_Types[i]->ActorInfo == NULL)
-		{
-			const TypeInfo *type = TypeInfo::m_Types[i]->ParentType;
-			while (type && type->ActorInfo == NULL)
-				type = type->ParentType;
-			if (type)
-				TypeInfo::m_Types[i]->ActorInfo = type->ActorInfo;
-		}
+		reg->BuildDefaults ();
 	}
 }
 
-void FActorInfoInitializer::StaticSetDefaults (EGameType game)
+// Called whenever a new game is started
+void FActorInfo::StaticGameSet ()
 {
-	FActorInfoInitializer *init = StaticInitList;
-	while (init != NULL)
+	memset (SpawnableThings, 0, sizeof(SpawnableThings));
+	DoomEdMap.Empty ();
+
+	// For every actor valid for this game, add it to the
+	// SpawnableThings array and DoomEdMap
+	TAutoSegIterator<FActorInfo *, &ARegHead, &ARegTail> reg;
+	while (++reg != NULL)
 	{
-		if (init->active)
+		if (reg->GameFilter == GAME_Any ||
+			(reg->GameFilter & gameinfo.gametype))
 		{
-			init->setdefaults (init->info->ActorInfo);
+			if (reg->SpawnID != 0)
+			{
+				SpawnableThings[reg->SpawnID] = reg->Class;
+			}
+			if (reg->DoomEdNum != -1)
+			{
+				DoomEdMap.AddType (reg->DoomEdNum, reg->Class);
+			}
 		}
-		init = init->next;
+	}
+
+	// Now run every AT_GAME_SET function
+	TAutoSegIteratorNoArrow<void (*)(), &GRegHead, &GRegTail> setters;
+	while (++setters != NULL)
+	{
+		((void (*)())setters) ();
+	}
+}
+
+// Called immediately after StaticGameSet, but only if the game
+// speed has changed.
+
+void FActorInfo::StaticSpeedSet ()
+{
+	TAutoSegIteratorNoArrow<void (*)(int), &SRegHead, &SRegTail> setters;
+	while (++setters != NULL)
+	{
+		((void (*)(int))setters) (GameSpeed);
 	}
 }
 
@@ -196,7 +199,9 @@ void FDoomEdMap::AddType (int doomednum, const TypeInfo *type)
 	int hash = doomednum % DOOMED_HASHSIZE;
 	FDoomEdEntry *entry = DoomEdHash[hash];
 	while (entry && entry->DoomEdNum != doomednum)
+	{
 		entry = entry->HashNext;
+	}
 	if (entry == NULL)
 	{
 		entry = new FDoomEdEntry;
@@ -207,7 +212,42 @@ void FDoomEdMap::AddType (int doomednum, const TypeInfo *type)
 	entry->Type = type;
 }
 
-const TypeInfo *FDoomEdMap::FindType (int doomednum)
+void FDoomEdMap::DelType (int doomednum)
+{
+	int hash = doomednum % DOOMED_HASHSIZE;
+	FDoomEdEntry **prev = &DoomEdHash[hash];
+	FDoomEdEntry *entry = *prev;
+	while (entry && entry->DoomEdNum != doomednum)
+	{
+		prev = &entry->HashNext;
+		entry = entry->HashNext;
+	}
+	if (entry != NULL)
+	{
+		*prev = entry->HashNext;
+		delete entry;
+	}
+}
+
+void FDoomEdMap::Empty ()
+{
+	int bucket;
+
+	for (bucket = 0; bucket < DOOMED_HASHSIZE; ++bucket)
+	{
+		FDoomEdEntry *probe = DoomEdHash[bucket];
+
+		while (probe != NULL)
+		{
+			FDoomEdEntry *next = probe->HashNext;
+			delete probe;
+			probe = next;
+		}
+		DoomEdHash[bucket] = NULL;
+	}
+}
+
+const TypeInfo *FDoomEdMap::FindType (int doomednum) const
 {
 	int hash = doomednum % DOOMED_HASHSIZE;
 	FDoomEdEntry *entry = DoomEdHash[hash];
@@ -216,46 +256,54 @@ const TypeInfo *FDoomEdMap::FindType (int doomednum)
 	return entry ? entry->Type : NULL;
 }
 
+struct EdSorting
+{
+	const TypeInfo *Type;
+	int DoomEdNum;
+};
+
 static int STACK_ARGS sortnums (const void *a, const void *b)
 {
-	return (*((const TypeInfo **)a))->ActorInfo->doomednum -
-		(*((const TypeInfo **)b))->ActorInfo->doomednum;
+	return ((const EdSorting *)a)->DoomEdNum -
+		((const EdSorting *)b)->DoomEdNum;
 }
 
-BEGIN_COMMAND (dumpmapthings)
+CCMD (dumpmapthings)
 {
-	TArray<const TypeInfo *> infos (TypeInfo::m_NumTypes);
+	TArray<EdSorting> infos (TypeInfo::m_NumTypes);
 	int i;
 
-	for (i = 0; i < TypeInfo::m_NumTypes; i++)
+	for (i = 0; i < FDoomEdMap::DOOMED_HASHSIZE; ++i)
 	{
-		if (TypeInfo::m_Types[i]->ActorInfo &&
-			TypeInfo::m_Types[i]->ActorInfo->doomednum != -1)
+		FDoomEdMap::FDoomEdEntry *probe = FDoomEdMap::DoomEdHash[i];
+
+		while (probe != NULL)
 		{
-			infos.Push (TypeInfo::m_Types[i]);
+			EdSorting sorting = { probe->Type, probe->DoomEdNum };
+			infos.Push (sorting);
+			probe = probe->HashNext;
 		}
 	}
 
 	if (infos.Size () == 0)
 	{
-		Printf (PRINT_HIGH, "No map things registered\n");
+		Printf ("No map things registered\n");
 	}
 	else
 	{
-		qsort (&infos[0], infos.Size (), sizeof(TypeInfo *), sortnums);
+		qsort (&infos[0], infos.Size (), sizeof(EdSorting), sortnums);
 
-		for (i = 0; i < (int)infos.Size (); i++)
+		for (i = 0; i < (int)infos.Size (); ++i)
 		{
-			Printf (PRINT_HIGH, "%6d %s\n",
-				infos[i]->ActorInfo->doomednum, infos[i]->Name + 1);
+			Printf ("%6d %s\n",
+				infos[i].DoomEdNum, infos[i].Type->Name + 1);
 		}
 	}
 }
-END_COMMAND (dumpmapthings)
 
 BOOL CheckCheatmode ();
 
-BEGIN_COMMAND (summon)
+CCMD (summon)
 {
 	if (CheckCheatmode ())
 		return;
@@ -266,11 +314,10 @@ BEGIN_COMMAND (summon)
 		const TypeInfo *type = TypeInfo::IFindType (argv[1]);
 		if (type == NULL)
 		{
-			Printf (PRINT_HIGH, "Unknown class '%s'\n", argv[1]);
+			Printf ("Unknown class '%s'\n", argv[1]);
 			return;
 		}
 		Net_WriteByte (DEM_SUMMON);
 		Net_WriteString (type->Name + 1);
 	}
 }
-END_COMMAND (summon)

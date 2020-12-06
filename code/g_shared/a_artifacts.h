@@ -90,9 +90,9 @@ STREAM_ENUM (powertype_t)
 
 // An artifact is something the player can pickup and carry around
 // in his/her inventory.
-class AArtifact : public APickup
+class AArtifact : public AInventory
 {
-	DECLARE_ACTOR (AArtifact, APickup);
+	DECLARE_ACTOR (AArtifact, AInventory)
 public:
 	virtual void SetDormant ();
 protected:
@@ -104,7 +104,7 @@ protected:
 // on pickup with the appropriate dmflags setting.
 class APowerup : public AArtifact
 {
-	DECLARE_SERIAL (APowerup, AArtifact);
+	DECLARE_CLASS (APowerup, AArtifact)
 };
 
 class player_s;
@@ -122,7 +122,7 @@ bool P_UseArtifact (player_s *player, artitype_t arti);
 
 #define BASIC_ARTI(name,type,msg) \
 	class AArti##name : public AArtifact { \
-		DECLARE_ACTOR (AArti##name, AArtifact); protected: \
+		DECLARE_ACTOR (AArti##name, AArtifact) protected: \
 		bool TryPickup (AActor *toucher) { \
 			return P_GiveArtifact (toucher->player, type); } \
 			const char *PickupMessage () { return msg; } 
@@ -131,13 +131,9 @@ bool P_UseArtifact (player_s *player, artitype_t arti);
 
 #define POWER_ARTI(name,type,msg) \
 	class AArti##name : public APowerup { \
-		DECLARE_ACTOR (AArti##name, APowerup); protected: \
+		DECLARE_ACTOR (AArti##name, APowerup) protected: \
 		bool TryPickup (AActor *toucher) { \
 			return P_GiveArtifact (toucher->player, type); } \
 			const char *PickupMessage () { return msg; } 
-
-#define ARTI_SETUP(name,game) \
-	IMPLEMENT_DEF_SERIAL (AArti##name, AArtifact); \
-	REGISTER_ACTOR (AArti##name, game);
 
 #endif //__A_ARTIFACTS_H__

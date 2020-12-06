@@ -121,6 +121,9 @@ typedef enum {
 	Sector_ChangeSound = 140,
 
 // [RH] Begin new specials for ZDoom
+	Plane_Align = 181,
+
+	Line_Mirror = 182,
 	Line_AlignCeiling = 183,
 	Line_AlignFloor = 184,
 
@@ -266,6 +269,7 @@ typedef enum {
 
 	Sky2 = 200,
 
+	// Hexen-type scrollers
 	Scroll_North_Slow = 201,
 	Scroll_North_Medium = 202,
 	Scroll_North_Fast = 203,
@@ -291,6 +295,7 @@ typedef enum {
 	Scroll_SouthWest_Medium = 223,
 	Scroll_SouthWest_Fast = 224,
 
+	// Heretic-type scrollers
 	Carry_East5 = 225,
 	Carry_East10,
 	Carry_East25,
@@ -324,7 +329,7 @@ typedef enum {
 struct line_s;
 class AActor;
 
-typedef BOOL (*lnSpecFunc)(struct line_s	*line,
+typedef bool (*lnSpecFunc)(struct line_s	*line,
 						   class AActor		*activator,
 						   int				arg1,
 						   int				arg2,

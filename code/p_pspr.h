@@ -38,14 +38,6 @@
 // and the Frame Sequence table.
 #include "info.h"
 
-//
-// Frame flags:
-// handles maximum brightness (torches, muzzle flare, light sources)
-//
-#define FF_FULLBRIGHT	0x8000	// flag in thing->frame
-#define FF_FRAMEMASK	0x7fff
-
-
 #define WEAPONBOTTOM			128*FRACUNIT
 
 // [RH] +0x6000 helps it meet the screen bottom
@@ -109,6 +101,6 @@ void A_Light0 (player_s *player, pspdef_t *psp);
 void A_Light1 (player_s *player, pspdef_t *psp);
 void A_Light2 (player_s *player, pspdef_t *psp);
 
-extern fixed_t bulletslope;
+extern angle_t bulletpitch;
 
 #endif	// __P_PSPR_H__

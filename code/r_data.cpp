@@ -24,7 +24,7 @@
 //-----------------------------------------------------------------------------
 
 // On the Alpha, accessing the shorts directly if they aren't aligned on a
-// 4-byte boundary causes unaligned access warnings. Why it does this it at
+// 4-byte boundary causes unaligned access warnings. Why it does this at
 // all and only while initing the textures is beyond me.
 
 #ifdef ALPHA
@@ -100,7 +100,8 @@ typedef struct
 	
 } texture_t;
 
-
+FTileSize		*TileSizes;
+patch_t			**TileCache;
 
 int 			firstflat;
 int 			lastflat;
@@ -327,8 +328,7 @@ static void R_GenerateLookup(int texnum, int *const errors)
 		{
 			if (!count[x].patches)				// killough 4/9/98
 			{
-				Printf (PRINT_HIGH,
-						"\nR_GenerateLookup: Column %d is without a patch in texture %.8s",
+				Printf ("\nR_GenerateLookup: Column %d is without a patch in texture %.8s",
 						x, texture->name);
 						++*errors;
 			}
@@ -511,7 +511,7 @@ void R_InitTextures (void)
 			patch->patch = patchlookup[SHORT(mpatch->patch)];
 			if (patch->patch == -1)
 			{
-				Printf (PRINT_HIGH, "R_InitTextures: Missing patch in texture %s\n", texture->name);
+				Printf ("R_InitTextures: Missing patch in texture %s\n", texture->name);
 				errors++;
 			}
 		}
@@ -625,7 +625,7 @@ void R_InitSpriteLumps (void)
 
 static struct FakeCmap {
 	char name[8];
-	unsigned int blend;
+	PalEntry blend;
 } *fakecmaps;
 size_t numfakecmaps;
 int firstfakecmap;
@@ -634,11 +634,16 @@ int lastusedcolormap;
 
 void R_SetDefaultColormap (const char *name)
 {
-	if (strnicmp (fakecmaps[0].name, name, 8))
+	if (strnicmp (fakecmaps[0].name, name, 8) != 0)
 	{
-		byte *data = (byte *)W_CacheLumpName (name, PU_CACHE);
+		int lump;
 
-		memcpy (realcolormaps, data, (NUMCOLORMAPS+1)*256);
+		lump = W_CheckNumForName (name, ns_colormaps);
+		if (lump == -1)
+			lump = W_CheckNumForName (name, ns_global);
+		byte *data = (byte *)W_CacheLumpNum (lump, PU_CACHE);
+
+		memcpy (realcolormaps, data, NUMCOLORMAPS*256);
 		uppercopy (fakecmaps[0].name, name);
 		fakecmaps[0].blend = 0;
 	}
@@ -647,7 +652,7 @@ void R_SetDefaultColormap (const char *name)
 //
 // R_InitColormaps
 //
-void R_InitColormaps (void)
+void R_InitColormaps ()
 {
 	// [RH] Try and convert BOOM colormaps into blending values.
 	//		This is a really rough hack, but it's better than
@@ -659,7 +664,7 @@ void R_InitColormaps (void)
 		numfakecmaps = 1;
 	else
 		numfakecmaps = lastfakecmap - firstfakecmap;
-	realcolormaps = (byte *)Z_Malloc (256*(NUMCOLORMAPS+1)*numfakecmaps+255,PU_STATIC,0);
+	realcolormaps = (byte *)Z_Malloc (256*NUMCOLORMAPS*numfakecmaps+255,PU_STATIC,0);
 	realcolormaps = (byte *)(((ptrdiff_t)realcolormaps + 255) & ~255);
 	fakecmaps = (FakeCmap *)Z_Malloc (sizeof(*fakecmaps) * numfakecmaps, PU_STATIC, 0);
 
@@ -670,7 +675,6 @@ void R_InitColormaps (void)
 	{
 		int i;
 		size_t j;
-		palette_t *pal = GetDefaultPalette ();
 
 		for (i = ++firstfakecmap, j = 1; j < numfakecmaps; i++, j++)
 		{
@@ -679,31 +683,31 @@ void R_InitColormaps (void)
 				int k, r, g, b;
 				byte *map = (byte *)W_CacheLumpNum (i, PU_CACHE);
 
-				memcpy (realcolormaps+(NUMCOLORMAPS+1)*256*j,
-						map, (NUMCOLORMAPS+1)*256);
+				memcpy (realcolormaps+NUMCOLORMAPS*256*j,
+						map, NUMCOLORMAPS*256);
 
-				r = RPART(pal->basecolors[*map]);
-				g = GPART(pal->basecolors[*map]);
-				b = BPART(pal->basecolors[*map]);
+				r = g = b = 0;
 
 				W_GetLumpName (fakecmaps[j].name, i);
-				for (k = 1; k < 256; k++) {
-					r = (r + RPART(pal->basecolors[map[k]])) >> 1;
-					g = (g + GPART(pal->basecolors[map[k]])) >> 1;
-					b = (b + BPART(pal->basecolors[map[k]])) >> 1;
+				for (k = 0; k < 256; k++)
+				{
+					r += GPalette.BaseColors[map[k]].r;
+					g += GPalette.BaseColors[map[k]].g;
+					b += GPalette.BaseColors[map[k]].b;
 				}
-				fakecmaps[j].blend = MAKEARGB (255, r, g, b);
+				fakecmaps[j].blend = PalEntry (255, r/256, g/256, b/256);
 			}
 		}
 	}
 }
 
 // [RH] Returns an index into realcolormaps. Multiply it by
-//		256*(NUMCOLORMAPS+1) to find the start of the colormap to use.
+//		256*NUMCOLORMAPS to find the start of the colormap to use.
 //		WATERMAP is an exception and returns a blending value instead.
-int R_ColormapNumForName (const char *name)
+DWORD R_ColormapNumForName (const char *name)
 {
-	int lump, blend = 0;
+	int lump;
+	DWORD blend = 0;
 
 	if (strnicmp (name, "COLORMAP", 8))
 	{	// COLORMAP always returns 0
@@ -716,20 +720,39 @@ int R_ColormapNumForName (const char *name)
 	return blend;
 }
 
-unsigned int R_BlendForColormap (int map)
+DWORD R_BlendForColormap (DWORD map)
 {
 	return APART(map) ? map : 
-		   (unsigned)map < numfakecmaps ? fakecmaps[map].blend : 0;
+		   map < numfakecmaps ? DWORD(fakecmaps[map].blend) : 0;
+}
+
+//
+// [RH] R_InitTiles
+//
+// Initialize the tile cache.
+//
+void R_InitTiles ()
+{
+	int i;
+
+	TileSizes = new FTileSize[numlumps];
+	TileCache = new patch_t *[numlumps];
+
+	for (i = 0; i < numlumps; i++)
+	{
+		TileSizes[i].Width = 0xffff;
+		TileCache[i] = NULL;
+	}
 }
 
 //
 // R_InitData
-// Locates all the lumps
-//	that will be used by all views
+// Locates all the lumps that will be used by all views
 // Must be called after W_Init.
 //
-void R_InitData (void)
+void R_InitData ()
 {
+	R_InitTiles ();
 	R_InitTextures ();
 	R_InitFlats ();
 	R_InitSpriteLumps ();
@@ -782,7 +805,8 @@ int R_CheckTextureNumForName (const char *name)
 	uppercopy (uname, name);
 	i = textures[W_LumpNameHash (uname) % (unsigned) numtextures]->index;
 
-	while (i != -1) {
+	while (i != -1)
+	{
 		if (!strncmp (textures[i]->name, uname, 8))
 			break;
 		i = textures[i]->next;
@@ -804,21 +828,70 @@ int R_TextureNumForName (const char *name)
 		
 	i = R_CheckTextureNumForName (name);
 
-	if (i==-1) {
+	if (i==-1)
+	{
 		char namet[9];
 		strncpy (namet, name, 8);
 		namet[8] = 0;
 		//I_Error ("R_TextureNumForName: %s not found", namet);
-		// [RH] Return empty texture if it wasn't found.
-		Printf (PRINT_HIGH, "Texture %s not found\n", namet);
-		return 0;
+		// [RH] Return default texture if it wasn't found.		Printf ("Texture %s not found\n", namet);
+		return 1;
 	}
 
 	return i;
 }
 
+//
+// R_CheckTileNumForName
+//
+int R_CheckTileNumForName (const char *name, ETileType type)
+{
+	static const namespace_t spaces[2][2] =
+	{ {ns_global,ns_sprites}, {ns_sprites,ns_global} };
 
+	const namespace_t *space = spaces[type];
+	int i;
+	int lump;
 
+	for (i = 0; i < NUM_TILE_TYPES; i++)
+	{
+		lump = W_CheckNumForName (name, space[i]);
+		if (lump != -1)
+			break;
+	}
+	return lump;
+}
+
+//
+// R_CacheTileNum
+//
+int R_CacheTileNum (int picnum, int purgelevel)
+{
+	if (TileCache[picnum] != NULL)
+	{
+		return picnum;
+	}
+	Z_Malloc (W_LumpLength (picnum), purgelevel, &TileCache[picnum]);
+	W_ReadLump (picnum, TileCache[picnum]);
+	TileSizes[picnum].Width = SHORT(TileCache[picnum]->width);
+	TileSizes[picnum].Height = SHORT(TileCache[picnum]->height);
+	TileSizes[picnum].LeftOffset = SHORT(TileCache[picnum]->leftoffset);
+	TileSizes[picnum].TopOffset = SHORT(TileCache[picnum]->topoffset);
+	return picnum;
+}
+
+//
+// R_CacheTileName
+//
+int R_CacheTileName (const char *name, ETileType type, int purgelevel)
+{
+	int picnum = R_CheckTileNumForName (name, type);
+	if (picnum == -1)
+	{
+		I_Error ("Can't find tile \"%s\"\n", name);
+	}
+	return R_CacheTileNum (picnum, purgelevel);
+}
 
 //
 // R_PrecacheLevel
@@ -898,7 +971,19 @@ void R_PrecacheLevel (void)
 	for (i = sprites.Size () - 1; i >= 0; i--)
 	{
 		if (hitlist[i])
-			R_CacheSprite (&sprites[i]);
+		{
+			int j, k;
+			for (j = 0; j < sprites[i].numframes; j++)
+			{
+				for (k = 0; k < 8; k++)
+				{
+					if (sprites[i].spriteframes[j].lump[k] != -1)
+					{
+						R_CacheTileNum (sprites[i].spriteframes[j].lump[k], PU_CACHE);
+					}
+				}
+			}
+		}
 	}
 
 	delete[] hitlist;

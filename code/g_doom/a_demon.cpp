@@ -3,20 +3,17 @@
 #include "m_random.h"
 #include "p_local.h"
 #include "p_enemy.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_SargAttack (AActor *);
 
 class ADemon : public AActor
 {
-	DECLARE_ACTOR (ADemon, AActor);
+	DECLARE_ACTOR (ADemon, AActor)
 public:
-	const char *GetHitObituary () { return OB_DEMONHIT; }
+	const char *GetHitObituary () { return GStrings(OB_DEMONHIT); }
 };
-
-IMPLEMENT_DEF_SERIAL (ADemon, AActor);
-REGISTER_ACTOR (ADemon, Doom);
 
 FState ADemon::States[] =
 {
@@ -60,81 +57,88 @@ FState ADemon::States[] =
 	S_NORMAL (SARG, 'I',	5, NULL 						, &States[S_SARG_RUN+0])
 };
 
-void ADemon::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ADemon, Doom, 3002, 8)
+	PROP_SpawnHealth (150)
+	PROP_PainChance (180)
+	PROP_SpeedFixed (10)
+	PROP_RadiusFixed (30)
+	PROP_HeightFixed (56)
+	PROP_Mass (400)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_SARG_STND)
+	PROP_SeeState (S_SARG_RUN)
+	PROP_PainState (S_SARG_PAIN)
+	PROP_MeleeState (S_SARG_ATK)
+	PROP_DeathState (S_SARG_DIE)
+	PROP_RaiseState (S_SARG_RAISE)
+
+	PROP_SeeSound ("demon/sight")
+	PROP_AttackSound ("demon/melee")
+	PROP_PainSound ("demon/pain")
+	PROP_DeathSound ("demon/death")
+	PROP_ActiveSound ("demon/active")
+END_DEFAULTS
+
+static void SetTics (FState *state, int count)
 {
+	state->Tics = (count+1) & 255;
+	state->Misc1 = state->GetMisc1() | ((count+1)>>8);
+	state->Frame = (state->Frame & ~SF_BIGTIC) | (count > 254 ? SF_BIGTIC : 0);
+}
+
+AT_GAME_SET (Demon)
+{
+	static bool isFast = false;
 	int i;
 
-	INHERIT_DEFS;
-	info->doomednum = 3002;
-	info->spawnid = 8;
-	info->spawnstate = &States[S_SARG_STND];
-	info->spawnhealth = 150;
-	info->seestate = &States[S_SARG_RUN];
-	info->seesound = "demon/sight";
-	info->attacksound = "demon/melee";
-	info->painstate = &States[S_SARG_PAIN];
-	info->painchance = 180;
-	info->painsound = "demon/pain";
-	info->meleestate = &States[S_SARG_ATK];
-	info->deathstate = &States[S_SARG_DIE];
-	info->deathsound = "demon/death";
-	info->speed = 10;
-	info->radius = 30 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 400;
-	info->activesound = "demon/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_SARG_RAISE];
-
-	if (GameSpeed == SPEED_Fast)
+	if (GameSpeed == SPEED_Fast && !isFast)
 	{
+		isFast = true;
 		for (i = S_SARG_RUN; i < S_SARG_PAIN; i++)
-			States[i].tics <<= 1;
+			SetTics (&ADemon::States[i], ADemon::States[i].GetTics() >> 1);
 	}
-	else if (GameSpeed == SPEED_Normal)
+	else if (GameSpeed == SPEED_Normal && isFast)
 	{
+		isFast = false;
 		for (i = S_SARG_RUN; i < S_SARG_PAIN; i++)
-			States[i].tics >>= 1;
+			SetTics (&ADemon::States[i], ADemon::States[i].GetTics() << 1);
 	}
 }
 
 class AStealthDemon : public ADemon
 {
-	DECLARE_STATELESS_ACTOR (AStealthDemon, ADemon);
+	DECLARE_STATELESS_ACTOR (AStealthDemon, ADemon)
 public:
-	const char *GetObituary () { return OB_STEALTHDEMON; }
-	const char *GetHitObituary () { return OB_STEALTHDEMON; }
+	const char *GetObituary () { return GStrings(OB_STEALTHDEMON); }
+	const char *GetHitObituary () { return GStrings(OB_STEALTHDEMON); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthDemon, ADemon);
-REGISTER_ACTOR (AStealthDemon, Doom);
-
-void AStealthDemon::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9055;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthDemon, Doom, 9055, 121)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_Alpha (0)
+	PROP_RenderStyle (STYLE_Translucent)
+END_DEFAULTS
 
 class ASpectre : public ADemon
 {
-	DECLARE_STATELESS_ACTOR (ASpectre, ADemon);
+	DECLARE_STATELESS_ACTOR (ASpectre, ADemon)
 public:
-	const char *GetHitObituary () { return OB_SPECTREHIT; }
+	const char *GetHitObituary () { return GStrings(OB_SPECTREHIT); }
 };
 
-IMPLEMENT_DEF_SERIAL (ASpectre, ADemon);
-REGISTER_ACTOR (ASpectre, Doom);
+IMPLEMENT_STATELESS_ACTOR (ASpectre, Doom, 58, 9)
+	PROP_FlagsSet (MF_SHADOW)
+	PROP_RenderStyle (STYLE_OptFuzzy)
+	PROP_Alpha (FRACUNIT/5)
 
-void ASpectre::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 58;
-	info->spawnid = 9;
-	info->flags |= MF_SHADOW;
-}
+	PROP_SeeSound ("spectre/sight")
+	PROP_AttackSound ("spectre/melee")
+	PROP_PainSound ("spectre/pain")
+	PROP_DeathSound ("spectre/death")
+	PROP_ActiveSound ("spectre/active")
+END_DEFAULTS
 
 void A_SargAttack (AActor *self)
 {
@@ -153,17 +157,10 @@ void A_SargAttack (AActor *self)
 
 class ADeadDemon : public ADemon
 {
-	DECLARE_STATELESS_ACTOR (ADeadDemon, ADemon);
+	DECLARE_STATELESS_ACTOR (ADeadDemon, ADemon)
 };
 
-IMPLEMENT_DEF_SERIAL (ADeadDemon, ADemon);
-REGISTER_ACTOR (ADeadDemon, Doom);
-
-void ADeadDemon::SetDefaults (FActorInfo *info)
-{
-	AActor::SetDefaults (info);
-	info->OwnedStates = NULL;
-	info->NumOwnedStates = 0;
-	info->doomednum = 21;
-	info->spawnstate = &States[S_SARG_DIE+5];
-}
+IMPLEMENT_STATELESS_ACTOR (ADeadDemon, Doom, 21, 0)
+	PROP_SKIP_SUPER
+	PROP_SpawnState (S_SARG_DIE+5)
+END_DEFAULTS

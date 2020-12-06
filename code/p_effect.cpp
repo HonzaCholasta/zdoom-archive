@@ -11,7 +11,7 @@
 #include "r_things.h"
 #include "s_sound.h"
 
-CVAR (cl_rockettrails, "1", CVAR_ARCHIVE)
+CVAR (Int, cl_rockettrails, 1, CVAR_ARCHIVE);
 
 #define FADEFROMTTL(a)	(255/(a))
 
@@ -21,7 +21,8 @@ static int grey1, grey2, grey3, grey4, red, green, blue, yellow, black,
 		   maroon1, maroon2;
 
 static const struct ColorList {
-	int *color, r, g, b;
+	int *color;
+	byte r, g, b;
 } Colors[] = {
 	{&grey1,	85,  85,  85 },
 	{&grey2,	171, 171, 171},
@@ -52,33 +53,34 @@ static const struct ColorList {
 	{NULL}
 };
 
-void P_InitEffects (void)
+void P_InitEffects ()
 {
 	const struct ColorList *color = Colors;
-	DWORD *palette = DefaultPalette->basecolors;
-	int numcolors = DefaultPalette->numcolors;
 
-	while (color->color) {
-		*(color->color) = BestColor (palette, color->r, color->g, color->b, numcolors);
+	while (color->color)
+	{
+		*(color->color) = ColorMatcher.Pick (color->r, color->g, color->b);
 		color++;
 	}
 }
 
-void P_ThinkParticles (void)
+void P_ThinkParticles ()
 {
 	int i;
 	particle_t *particle, *prev;
 
 	i = ActiveParticles;
 	prev = NULL;
-	while (i != -1) {
+	while (i != -1)
+	{
 		byte oldtrans;
 
 		particle = Particles + i;
 		i = particle->next;
 		oldtrans = particle->trans;
 		particle->trans -= particle->fade;
-		if (oldtrans < particle->trans || --particle->ttl == 0) {
+		if (oldtrans < particle->trans || --particle->ttl == 0)
+		{
 			memset (particle, 0, sizeof(particle_t));
 			if (prev)
 				prev->next = i;
@@ -103,7 +105,7 @@ void P_ThinkParticles (void)
 //
 // Run effects on all mobjs in world
 //
-void P_RunEffects (void)
+void P_RunEffects ()
 {
 	int pnum = (players[consoleplayer].camera->subsector->sector - sectors) * numsectors;
 	AActor *actor;
@@ -184,8 +186,10 @@ void P_RunEffect (AActor *actor, int effects)
 {
 	angle_t moveangle = R_PointToAngle2(0,0,actor->momx,actor->momy);
 	particle_t *particle;
+	int i;
 
-	if ((effects & FX_ROCKET) && cl_rockettrails.value) {
+	if ((effects & FX_ROCKET) && *cl_rockettrails)
+	{
 		// Rocket trail
 
 		fixed_t backx = actor->x - FixedMul (finecosine[(moveangle)>>ANGLETOFINESHIFT], actor->radius*2);
@@ -193,7 +197,7 @@ void P_RunEffect (AActor *actor, int effects)
 		fixed_t backz = actor->z - (actor->height>>3) * (actor->momz>>16) + (2*actor->height)/3;
 
 		angle_t an = (moveangle + ANG90) >> ANGLETOFINESHIFT;
-		int i, speed;
+		int speed;
 
 		particle = JitterParticle (3 + (M_Random() & 31));
 		if (particle) {
@@ -230,7 +234,8 @@ void P_RunEffect (AActor *actor, int effects)
 				break;
 		}
 	}
-	if ((effects & FX_GRENADE) && (cl_rockettrails.value)) {
+	if ((effects & FX_GRENADE) && (*cl_rockettrails))
+	{
 		// Grenade trail
 
 		P_DrawSplash2 (6,
@@ -239,7 +244,8 @@ void P_RunEffect (AActor *actor, int effects)
 			actor->z - (actor->height>>3) * (actor->momz>>16) + (2*actor->height)/3,
 			moveangle + ANG180, 2, 2);
 	}
-	if (effects & FX_FOUNTAINMASK) {
+	if (effects & FX_FOUNTAINMASK)
+	{
 		// Particle fountain
 
 		static const int *fountainColors[16] = 
@@ -255,22 +261,52 @@ void P_RunEffect (AActor *actor, int effects)
 		int color = (effects & FX_FOUNTAINMASK) >> 15;
 		MakeFountain (actor, *fountainColors[color], *fountainColors[color+1]);
 	}
+	if (effects & FX_RESPAWNINVUL)
+	{
+		// Respawn protection
+
+		static const int *protectColors[2] = { &yellow1, &white };
+
+		for (i = 3; i > 0; i--)
+		{
+			particle = JitterParticle (16);
+			if (particle != NULL)
+			{
+				angle_t ang = M_Random () << (32-ANGLETOFINESHIFT-8);
+				particle->x = actor->x + FixedMul (actor->radius, finecosine[ang]);
+				particle->y = actor->y + FixedMul (actor->radius, finesine[ang]);
+				particle->color = *protectColors[M_Random() & 1];
+				particle->z = actor->z;
+				particle->velz = FRACUNIT;
+				particle->accz = M_Random () << 7;
+				particle->size = 1;
+				if (M_Random () < 128)
+				{ // make particle fall from top of actor
+					particle->z += actor->height;
+					particle->velz = -particle->velz;
+					particle->accz = -particle->accz;
+				}
+			}
+		}
+	}
 }
 
 void P_DrawSplash (int count, fixed_t x, fixed_t y, fixed_t z, angle_t angle, int kind)
 {
 	int color1, color2;
 
-	switch (kind) {
-		case 1:		// Spark
-			color1 = orange;
-			color2 = yorange;
-			break;
-		default:
-			return;
+	switch (kind)
+	{
+	case 1:		// Spark
+		color1 = orange;
+		color2 = yorange;
+		break;
+	default:
+		return;
 	}
 
-	for (; count; count--) {
+	for (; count; count--)
+	{
 		particle_t *p = JitterParticle (10);
 		angle_t an;
 
@@ -294,28 +330,30 @@ void P_DrawSplash2 (int count, fixed_t x, fixed_t y, fixed_t z, angle_t angle, i
 {
 	int color1, color2, zvel, zspread, zadd;
 
-	switch (kind) {
-		case 0:		// Blood
-			color1 = red;
-			color2 = dred;
-			break;
-		case 1:		// Gunshot
-			color1 = grey3;
-			color2 = grey5;
-			break;
-		case 2:		// Smoke
-			color1 = grey3;
-			color2 = grey1;
-			break;
-		default:
-			return;
+	switch (kind)
+	{
+	case 0:		// Blood
+		color1 = red;
+		color2 = dred;
+		break;
+	case 1:		// Gunshot
+		color1 = grey3;
+		color2 = grey5;
+		break;
+	case 2:		// Smoke
+		color1 = grey3;
+		color2 = grey1;
+		break;
+	default:
+		return;
 	}
 
 	zvel = -128;
 	zspread = updown ? -6000 : 6000;
 	zadd = (updown == 2) ? -128 : 0;
 
-	for (; count; count--) {
+	for (; count; count--)
+	{
 		particle_t *p = NewParticle ();
 		angle_t an;
 
@@ -336,10 +374,10 @@ void P_DrawSplash2 (int count, fixed_t x, fixed_t y, fixed_t z, angle_t angle, i
 			p->accx = p->velx >> 4;
 			p->accy = p->vely >> 4;
 		}
-		p->z = z + (M_Random () + zadd) * zspread;
+		p->z = z + (M_Random () + zadd - 128) * zspread;
 		an = (angle + ((M_Random() - 128) << 22)) >> ANGLETOFINESHIFT;
-		p->x = x + (M_Random () & 31)*finecosine[an];
-		p->y = y + (M_Random () & 31)*finesine[an];
+		p->x = x + ((M_Random () & 31)-15)*finecosine[an];
+		p->y = y + ((M_Random () & 31)-15)*finesine[an];
 	}
 }
 
@@ -354,7 +392,8 @@ void P_DrawRailTrail (vec3_t start, vec3_t end)
 	length = VectorLength (dir);
 	steps = (int)(length*0.3333f);
 
-	if (length) {
+	if (length)
+	{
 		// The railgun's sound is a special case. It gets played from the
 		// point on the slug's trail that is closest to the hearing player.
 		AActor *mo = players[consoleplayer].camera;
@@ -383,7 +422,9 @@ void P_DrawRailTrail (vec3_t start, vec3_t end)
 			S_Sound (FLOAT2FIXED(point[0]), FLOAT2FIXED(point[1]),
 				CHAN_WEAPON, "weapons/railgf", 1, ATTN_NORM);
 		}
-	} else {
+	}
+	else
+	{
 		// line is 0 length, so nothing to do
 		return;
 	}
@@ -395,7 +436,8 @@ void P_DrawRailTrail (vec3_t start, vec3_t end)
 
 	VectorCopy (start, pos);
 	deg = 270;
-	for (i = steps; i; i--) {
+	for (i = steps; i; i--)
+	{
 		particle_t *p = NewParticle ();
 		vec3_t tempvec;
 
@@ -435,7 +477,8 @@ void P_DrawRailTrail (vec3_t start, vec3_t end)
 	}
 
 	VectorCopy (start, pos);
-	for (i = steps; i; i--) {
+	for (i = steps; i; i--)
+	{
 		particle_t *p = JitterParticle (33);
 
 		if (!p)
@@ -465,7 +508,8 @@ void P_DisconnectEffect (AActor *actor)
 {
 	int i;
 
-	for (i = 64; i; i--) {
+	for (i = 64; i; i--)
+	{
 		particle_t *p = JitterParticle (TICRATE*2);
 
 		if (!p)

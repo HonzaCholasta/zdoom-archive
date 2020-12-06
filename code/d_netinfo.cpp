@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CVAR_IMPLEMENTOR 1
-
 #include "doomtype.h"
 #include "doomdef.h"
 #include "doomstat.h"
@@ -21,13 +19,13 @@
 
 extern BOOL st_firsttime;
 
-CVAR (autoaim,				"5000",		CVAR_USERINFO | CVAR_ARCHIVE)
-CVAR (name,					"Player",	CVAR_USERINFO | CVAR_ARCHIVE)
-CVAR (color,				"40 cf 00",	CVAR_USERINFO | CVAR_ARCHIVE)
-CVAR (skin,					"base",		CVAR_USERINFO | CVAR_ARCHIVE)
-CVAR (team,					"",			CVAR_USERINFO | CVAR_ARCHIVE)
-CVAR (gender,				"male",		CVAR_USERINFO | CVAR_ARCHIVE)
-CVAR (neverswitchonpickup,	"0",		CVAR_USERINFO | CVAR_ARCHIVE)
+CVAR (Float,	autoaim,				5000.f,		CVAR_USERINFO | CVAR_ARCHIVE);
+CVAR (String,	name,					"Player",	CVAR_USERINFO | CVAR_ARCHIVE);
+CVAR (Color,	color,					0x40cf00,	CVAR_USERINFO | CVAR_ARCHIVE);
+CVAR (String,	skin,					"base",		CVAR_USERINFO | CVAR_ARCHIVE);
+CVAR (Int,		team,					255,		CVAR_USERINFO | CVAR_ARCHIVE);
+CVAR (String,	gender,					"male",		CVAR_USERINFO | CVAR_ARCHIVE);
+CVAR (Bool,		neverswitchonpickup,	false,		CVAR_USERINFO | CVAR_ARCHIVE);
 
 enum
 {
@@ -39,6 +37,13 @@ enum
 	INFO_Gender,
 	INFO_NeverSwitchOnPickup
 };
+
+const char *TeamNames[NUM_TEAMS] =
+{
+	"Red", "Blue", "Green", "Gold"
+};
+
+const char *GenderNames[3] = { "male", "female", "cyborg" };
 
 static const char *UserInfoStrings[] =
 {
@@ -70,102 +75,121 @@ void D_SetupUserInfo (void)
 	for (i = 0; i < MAXPLAYERS; i++)
 		memset (&players[i].userinfo, 0, sizeof(userinfo_t));
 
-	strncpy (coninfo->netname, name.string, MAXPLAYERNAME);
-	strncpy (coninfo->team, team.string, MAXPLAYERNAME);
-	coninfo->aimdist = (fixed_t)(autoaim.value * 16384.0);
-	coninfo->color = V_GetColorFromString (NULL, color.string);
-	coninfo->skin = R_FindSkin (skin.string);
-	coninfo->gender = D_GenderToInt (gender.string);
-	coninfo->neverswitch = neverswitchonpickup.value ? true : false;
+	strncpy (coninfo->netname, *name, MAXPLAYERNAME);
+	coninfo->team = *team;
+	coninfo->aimdist = abs ((int)(*autoaim * (float)ANGLE_1));
+	if (coninfo->aimdist > ANGLE_1*32)
+	{
+		coninfo->aimdist = ANGLE_1*32;
+	}
+	coninfo->color = *color;
+	coninfo->skin = R_FindSkin (*skin);
+	coninfo->gender = D_GenderToInt (*gender);
+	coninfo->neverswitch = *neverswitchonpickup;
 	R_BuildPlayerTranslation (consoleplayer, coninfo->color);
 }
 
-void D_UserInfoChanged (cvar_t *cvar)
+void D_UserInfoChanged (FBaseCVar *cvar)
 {
+	UCVarValue val;
 	char foo[256];
 
 	if (cvar == &autoaim)
 	{
-		if (cvar->value < 0.0f)
+		if (*autoaim < 0.0f)
 		{
-			cvar->Set (0.0f);
+			autoaim = 0.0f;
 			return;
 		}
-		else if (cvar->value > 5000.0f)
+		else if (*autoaim > 5000.0f)
 		{
-			cvar->Set (5000.0f);
+			autoaim = 5000.f;
 			return;
 		}
 	}
 
-	if (4 + strlen (cvar->name) + strlen (cvar->string) > 256)
+	val = cvar->GetGenericRep (CVAR_String);
+	if (4 + strlen (cvar->GetName ()) + strlen (val.String) > 256)
 		I_Error ("User info descriptor too big");
 
-	sprintf (foo, "\\%s\\%s", cvar->name, cvar->string);
+	sprintf (foo, "\\%s\\%s", cvar->GetName (), val.String);
 
 	Net_WriteByte (DEM_UINFCHANGED);
 	Net_WriteString (foo);
 }
 
-BOOL SetServerVar (char *name, char *value)
+static const char *SetServerVar (char *name, ECVarType type, byte **stream)
 {
-	cvar_t *dummy;
-	cvar_t *var = FindCVar (name, &dummy);
+	FBaseCVar *var = FindCVar (name, NULL);
+	UCVarValue value;
+
+	switch (type)
+	{
+	case CVAR_Bool:		value.Bool = ReadByte (stream) ? 1 : 0;	break;
+	case CVAR_Int:		value.Int = ReadLong (stream);			break;
+	case CVAR_Float:	value.Float = ReadFloat (stream);		break;
+	case CVAR_String:	value.String = ReadString (stream);		break;
+	default: break;	// Silence GCC
+	}
 
 	if (var)
 	{
-		unsigned oldflags = var->flags;
-
-		var->flags &= ~(CVAR_SERVERINFO|CVAR_LATCH);
-		var->Set (value);
-		var->flags = oldflags;
-		return true;
+		var->ForceSet (value, type);
 	}
-	return false;
+
+	if (type == CVAR_String)
+	{
+		delete[] value.String;
+	}
+
+	if (var)
+	{
+		value = var->GetGenericRep (CVAR_String);
+		return value.String;
+	}
+
+	return NULL;
 }
 
-void D_SendServerInfoChange (const cvar_t *cvar, const char *value)
+void D_SendServerInfoChange (const FBaseCVar *cvar, UCVarValue value, ECVarType type)
 {
-	char foo[256];
+	int namelen;
 
-	if (4 + strlen (cvar->name) + strlen (value) > 256)
-		I_Error ("Server info descriptor too big");
-
-	sprintf (foo, "\\%s\\%s", cvar->name, value);
+	namelen = strlen (cvar->GetName ());
 
 	Net_WriteByte (DEM_SINFCHANGED);
-	Net_WriteString (foo);
+	Net_WriteByte (namelen | (type << 6));
+	Net_WriteBytes ((BYTE *)cvar->GetName (), namelen);
+	switch (type)
+	{
+	case CVAR_Bool:		Net_WriteByte (value.Bool);		break;
+	case CVAR_Int:		Net_WriteLong (value.Int);		break;
+	case CVAR_Float:	Net_WriteFloat (value.Float);	break;
+	case CVAR_String:	Net_WriteString (value.String);	break;
+	default: break; // Silence GCC
+	}
 }
 
 void D_DoServerInfoChange (byte **stream)
 {
-	char *ptr = *((char **)stream);
-	char *breakpt;
-	char *value;
+	const char *value;
+	char name[64];
+	int len;
+	int type;
 
-	if (*ptr++ != '\\')
+	len = ReadByte (stream);
+	type = len >> 6;
+	len &= 0x3f;
+	if (len == 0)
 		return;
+	memcpy (name, *stream, len);
+	*stream += len;
+	name[len] = 0;
 
-	while ( (breakpt = strchr (ptr, '\\')) )
+	if ( (value = SetServerVar (name, (ECVarType)type, stream)) && netgame)
 	{
-		*breakpt = 0;
-		value = breakpt + 1;
-		if ( (breakpt = strchr (value, '\\')) )
-			*breakpt = 0;
-
-		if (SetServerVar (ptr, value) && netgame)
-			Printf (PRINT_HIGH, "%s changed to %s\n", ptr, value);
-
-		*(value - 1) = '\\';
-		if (breakpt) {
-			*breakpt = '\\';
-			ptr = breakpt + 1;
-		} else {
-			break;
-		}
+		Printf ("%s changed to %s\n", name, value);
 	}
-
-	*stream += strlen (*((char **)stream)) + 1;
 }
 
 void D_WriteUserInfoStrings (int i, byte **stream, bool compact)
@@ -185,11 +209,11 @@ void D_WriteUserInfoStrings (int i, byte **stream, bool compact)
 					 "\\autoaim\\%g"
 					 "\\color\\%x %x %x"
 					 "\\skin\\%s"
-					 "\\team\\%s"
+					 "\\team\\%d"
 					 "\\gender\\%s"
 					 "\\neverswitchonpickup\\%d",
 					 info->netname,
-					 (double)info->aimdist / 16384.0,
+					 (double)info->aimdist / (float)ANGLE_1,
 					 RPART(info->color), GPART(info->color), BPART(info->color),
 					 skins[info->skin].name, info->team,
 					 info->gender == GENDER_FEMALE ? "female" :
@@ -205,12 +229,12 @@ void D_WriteUserInfoStrings (int i, byte **stream, bool compact)
 				"\\%g"			// autoaim
 				"\\%x %x %x"	// color
 				"\\%s"			// skin
-				"\\%s"			// team
+				"\\%d"			// team
 				"\\%s"			// gender
 				"\\%d"			// neverswitchonpickup
 				,
 				info->netname,
-				(double)info->aimdist / 16384.0,
+				(double)info->aimdist / (float)ANGLE_1,
 				RPART(info->color), GPART(info->color), BPART(info->color),
 				skins[info->skin].name,
 				info->team,
@@ -274,7 +298,11 @@ void D_ReadUserInfoStrings (int i, byte **stream, bool update)
 			switch (infotype)
 			{
 			case INFO_Autoaim:
-				info->aimdist = (fixed_t)(atof (value) * 16384.0);
+				info->aimdist = abs ((int)(atof (value) * (float)ANGLE_1));
+				if (info->aimdist > ANGLE_1*32)
+				{
+					info->aimdist = ANGLE_1*32;
+				}
 				break;
 
 			case INFO_Name:
@@ -287,19 +315,20 @@ void D_ReadUserInfoStrings (int i, byte **stream, bool update)
 					info->netname[MAXPLAYERNAME] = 0;
 
 					if (update)
-						Printf (PRINT_HIGH, "%s is now known as %s\n", oldname, info->netname);
+						Printf ("%s is now known as %s\n", oldname, info->netname);
 				}
 				break;
 
 			case INFO_Team:
-				strncpy (info->team, value, MAXPLAYERNAME);
-				info->team[MAXPLAYERNAME] = 0;
+				info->team = atoi (value);
+				if ((unsigned)info->team >= NUM_TEAMS)
+					info->team = TEAM_None;
 				if (update)
 				{
-					if (info->team[0])
-						Printf (PRINT_HIGH, "%s joined the %s team\n", info->netname, info->team);
+					if (info->team != TEAM_None)
+						Printf ("%s is now on %s\n", info->netname, TeamNames[info->team]);
 					else
-						Printf (PRINT_HIGH, "%s is not on a team\n", info->netname);
+						Printf ("%s is now a loner\n", info->netname);
 				}
 				break;
 
@@ -314,8 +343,11 @@ void D_ReadUserInfoStrings (int i, byte **stream, bool update)
 
 			case INFO_Skin:
 				info->skin = R_FindSkin (value);
-				if (players[i].mo)
+				if (players[i].mo != NULL)
+				{
 					players[i].mo->sprite = skins[info->skin].sprite;
+					players[i].mo->skin = &skins[info->skin];
+				}
 				if (StatusBar != NULL && i == displayplayer)
 				{
 					StatusBar->SetFace (&skins[info->skin]);
@@ -369,7 +401,7 @@ FArchive &operator<< (FArchive &arc, userinfo_t &info)
 	return arc;
 }
 
-BEGIN_COMMAND (playerinfo)
+CCMD (playerinfo)
 {
 	if (argc < 2)
 	{
@@ -379,20 +411,19 @@ BEGIN_COMMAND (playerinfo)
 		{
 			if (playeringame[i])
 			{
-				Printf (PRINT_HIGH, "%d. %s\n", i, players[i].userinfo.netname);
+				Printf ("%d. %s\n", i, players[i].userinfo.netname);
 			}
 		}
 	}
 	else
 	{
 		int i = atoi (argv[1]);
-		Printf (PRINT_HIGH, "Name:        %s\n", players[i].userinfo.netname);
-		Printf (PRINT_HIGH, "Team:        %s\n", players[i].userinfo.team);
-		Printf (PRINT_HIGH, "Aimdist:     %d\n", players[i].userinfo.aimdist);
-		Printf (PRINT_HIGH, "Color:       %06x\n", players[i].userinfo.color);
-		Printf (PRINT_HIGH, "Skin:        %d\n", players[i].userinfo.skin);
-		Printf (PRINT_HIGH, "Gender:      %d\n", players[i].userinfo.gender);
-		Printf (PRINT_HIGH, "NeverSwitch: %d\n", players[i].userinfo.neverswitch);
+		Printf ("Name:        %s\n", players[i].userinfo.netname);
+		Printf ("Team:        %d\n", players[i].userinfo.team);
+		Printf ("Aimdist:     %d\n", players[i].userinfo.aimdist);
+		Printf ("Color:       %06x\n", players[i].userinfo.color);
+		Printf ("Skin:        %d\n", players[i].userinfo.skin);
+		Printf ("Gender:      %d\n", players[i].userinfo.gender);
+		Printf ("NeverSwitch: %d\n", players[i].userinfo.neverswitch);
 	}
 }
-END_COMMAND (playerinfo)

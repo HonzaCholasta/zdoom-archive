@@ -34,7 +34,7 @@
 #include "v_text.h"
 #include "w_wad.h"
 #include "s_sound.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "doomstat.h"
 #include "r_state.h"
 #include "hu_stuff.h"
@@ -68,7 +68,7 @@ void	F_CastDrawer (void);
 //
 // F_StartFinale
 //
-void F_StartFinale (char *music, char *flat, char *text)
+void F_StartFinale (char *music, int musicorder, int cdtrack, unsigned int cdid, char *flat, char *text)
 {
 	gameaction = ga_nothing;
 	gamestate = GS_FINALE;
@@ -83,11 +83,14 @@ void F_StartFinale (char *music, char *flat, char *text)
 	//  determined in G_WorldDone() based on data in
 	//  a level_info_t and a cluster_info_t.
 
-	if (music == NULL)
-		S_ChangeMusic (gameinfo.finaleMusic,
-			!(gameinfo.flags & GI_NOLOOPFINALEMUSIC));
-	else
- 		S_ChangeMusic (music, !(gameinfo.flags & GI_NOLOOPFINALEMUSIC));
+	if (cdtrack == 0 || !S_ChangeCDMusic (cdtrack, cdid))
+	{
+		if (music == NULL)
+			S_ChangeMusic (gameinfo.finaleMusic, 0,
+				!(gameinfo.flags & GI_NOLOOPFINALEMUSIC));
+		else
+ 			S_ChangeMusic (music, musicorder, !(gameinfo.flags & GI_NOLOOPFINALEMUSIC));
+	}
 
 	if (*flat == 0)
 		finaleflat = gameinfo.finaleFlat;
@@ -111,7 +114,7 @@ BOOL F_Responder (event_t *event)
 	{
 		return F_CastResponder (event);
 	}
-	else if (finalestage == 2 && event->type == ev_keydown)
+	else if (finalestage == 2 && event->type == EV_KeyDown)
 	{ // We're showing the water pic; make any key kick to demo mode
 		finalestage = 4;
 		V_ForceBlend (0, 0, 0, 0);
@@ -223,15 +226,15 @@ void F_TextWrite (void)
 		int lump = W_CheckNumForName (finaleflat, ns_flats);
 		if (lump >= 0)
 		{
-			screen->FlatFill (0,0, screen->width, screen->height,
+			screen->FlatFill (0,0, SCREENWIDTH, SCREENHEIGHT,
 						(byte *)W_CacheLumpNum (lump, PU_CACHE));
 		}
 		else
 		{
-			screen->Clear (0, 0, screen->width, screen->height, 0);
+			screen->Clear (0, 0, SCREENWIDTH, SCREENHEIGHT, 0);
 		}
 	}
-	V_MarkRect (0, 0, screen->width, screen->height);
+	V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
 	
 	if (finalecount < 11)
 		return;
@@ -262,22 +265,22 @@ void F_TextWrite (void)
 		}
 
 		data = screen->Font->GetChar (c, &w, &h, &xo, &yo);
-		if (cx+w > screen->width)
+		if (cx+w > SCREENWIDTH)
 			continue;
 		if (data != NULL)
 		{
 			if (scale)
 			{
 				screen->ScaleMaskedBlock (
-					(cx - xo) * CleanXfac + screen->width / 2,
-					(cy - yo) * CleanYfac + screen->height / 2,
+					(cx - xo) * CleanXfac + SCREENWIDTH / 2,
+					(cy - yo) * CleanYfac + SCREENHEIGHT / 2,
 					w, h, w * CleanXfac, h * CleanYfac, data, range);
 			}
 			else
 			{
 				screen->DrawMaskedBlock (
-					(cx - xo) + screen->width / 2,
-					(cy - yo) + screen->height / 2,
+					(cx - xo) + SCREENWIDTH / 2,
+					(cy - yo) + SCREENHEIGHT / 2,
 					w, h, data, range);
 			}
 		}
@@ -293,32 +296,32 @@ void F_TextWrite (void)
 //
 typedef struct
 {
-	char		*name;
-	const char	*type;
-	const FActorInfo *info;
+	int				name;
+	const char		*type;
+	const AActor	*info;
 } castinfo_t;
 
 castinfo_t castorder[] =
 {
-	{NULL, "ZombieMan"},
-	{NULL, "ShotgunGuy"},
-	{NULL, "ChaingunGuy"},
-	{NULL, "DoomImp"},
-	{NULL, "Demon"},
-	{NULL, "LostSoul"},
-	{NULL, "Cacodemon"},
-	{NULL, "HellKnight"},
-	{NULL, "BaronOfHell"},
-	{NULL, "Arachnotron"},
-	{NULL, "PainElemental"},
-	{NULL, "Revenant"},
-	{NULL, "Fatso"},
-	{NULL, "Archvile"},
-	{NULL, "SpiderMastermind"},
-	{NULL, "Cyberdemon"},
-	{NULL, "DoomPlayer"},
+	{CC_ZOMBIE,		"ZombieMan"},
+	{CC_SHOTGUN,	"ShotgunGuy"},
+	{CC_HEAVY,		"ChaingunGuy"},
+	{CC_IMP,		"DoomImp"},
+	{CC_DEMON,		"Demon"},
+	{CC_LOST,		"LostSoul"},
+	{CC_CACO,		"Cacodemon"},
+	{CC_HELL,		"HellKnight"},
+	{CC_BARON,		"BaronOfHell"},
+	{CC_ARACH,		"Arachnotron"},
+	{CC_PAIN,		"PainElemental"},
+	{CC_REVEN,		"Revenant"},
+	{CC_MANCU,		"Fatso"},
+	{CC_ARCH,		"Archvile"},
+	{CC_SPIDER,		"SpiderMastermind"},
+	{CC_CYBER,		"Cyberdemon"},
+	{CC_HERO,		"DoomPlayer"},
 
-	{NULL, NULL}
+	{0, NULL}
 };
 
 struct
@@ -378,39 +381,17 @@ extern	gamestate_t 	wipegamestate;
 
 void F_StartCast (void)
 {
-	static FActorInfo dummyinfo;
-
 	const TypeInfo *type;
 	int i;
 
-	// [RH] Set the names for the cast
-	castorder[0].name = CC_ZOMBIE;
-	castorder[1].name = CC_SHOTGUN;
-	castorder[2].name = CC_HEAVY;
-	castorder[3].name = CC_IMP;
-	castorder[4].name = CC_DEMON;
-	castorder[5].name = CC_LOST;
-	castorder[6].name = CC_CACO;
-	castorder[7].name = CC_HELL;
-	castorder[8].name = CC_BARON;
-	castorder[9].name = CC_ARACH;
-	castorder[10].name = CC_PAIN;
-	castorder[11].name = CC_REVEN;
-	castorder[12].name = CC_MANCU;
-	castorder[13].name = CC_ARCH;
-	castorder[14].name = CC_SPIDER;
-	castorder[15].name = CC_CYBER;
-	castorder[16].name = CC_HERO;
-
-	AActor::SetDefaults (&dummyinfo);
-
+	// [RH] Set the names and defaults for the cast
 	for (i = 0; castorder[i].type; i++)
 	{
 		type = TypeInfo::FindType (castorder[i].type);
 		if (type == NULL)
-			castorder[i].info = &dummyinfo;
+			castorder[i].info = GetDefault<AActor>();
 		else
-			castorder[i].info = type->ActorInfo;
+			castorder[i].info = GetDefaultByType (type);
 	}
 
 	for (i = 0; atkstates[i].type; i++)
@@ -419,9 +400,9 @@ void F_StartCast (void)
 		if (type != NULL)
 		{
 			if (atkstates[i].melee)
-				atkstates[i].match = type->ActorInfo->meleestate + atkstates[i].ofs;
+				atkstates[i].match = ((AActor *)(type->ActorInfo->Defaults))->MeleeState + atkstates[i].ofs;
 			else
-				atkstates[i].match = type->ActorInfo->missilestate + atkstates[i].ofs;
+				atkstates[i].match = ((AActor *)(type->ActorInfo->Defaults))->MissileState + atkstates[i].ofs;
 		}
 		else
 		{
@@ -431,22 +412,22 @@ void F_StartCast (void)
 
 	type = TypeInfo::FindType ("DoomPlayer");
 	if (type != NULL)
-		advplayerstate = type->ActorInfo->missilestate;
+		advplayerstate = ((AActor *)(type->ActorInfo->Defaults))->MissileState;
 
 	wipegamestate = GS_FORCEWIPE;
 	castnum = 0;
-	caststate = castorder[castnum].info->seestate;
+	caststate = castorder[castnum].info->SeeState;
 	if (castnum == 16)
 		castsprite = skins[players[consoleplayer].userinfo.skin].sprite;
 	else
 		castsprite = caststate->sprite.index;
-	casttics = caststate->tics;
+	casttics = caststate->GetTics ();
 	castdeath = false;
 	finalestage = 3;
 	castframes = 0;
 	castonmelee = 0;
 	castattacking = false;
-	S_ChangeMusic ("d_evil", true);
+	S_ChangeMusic ("d_evil");
 }
 
 
@@ -460,22 +441,22 @@ void F_CastTicker (void)
 	if (--casttics > 0)
 		return; 				// not time to change state yet
 				
-	if (caststate->tics == -1 || caststate->nextstate == NULL)
+	if (caststate->GetTics() == -1 || caststate->GetNextState() == NULL)
 	{
 		// switch from deathstate to next monster
 		castnum++;
 		castdeath = false;
-		if (castorder[castnum].name == NULL)
+		if (castorder[castnum].name == 0)
 			castnum = 0;
-		if (castorder[castnum].info->seesound)
+		if (castorder[castnum].info->SeeSound)
 		{
 			if (castorder[castnum].info->flags2 & MF2_BOSS)
 				atten = ATTN_SURROUND;
 			else
 				atten = ATTN_NONE;
-			S_Sound (CHAN_VOICE, castorder[castnum].info->seesound, 1, atten);
+			S_SoundID (CHAN_VOICE, castorder[castnum].info->SeeSound, 1, atten);
 		}
-		caststate = castorder[castnum].info->seestate;
+		caststate = castorder[castnum].info->SeeState;
 		if (castnum == 16)
 			castsprite = skins[players[consoleplayer].userinfo.skin].sprite;
 		else
@@ -487,7 +468,7 @@ void F_CastTicker (void)
 		// just advance to next state in animation
 		if (caststate == advplayerstate)
 			goto stopattack;	// Oh, gross hack!
-		caststate = caststate->nextstate;
+		caststate = caststate->GetNextState();
 		castframes++;
 		
 		// sound hacks....
@@ -512,32 +493,32 @@ void F_CastTicker (void)
 		// go into attack frame
 		castattacking = true;
 		if (castonmelee)
-			caststate = castorder[castnum].info->meleestate;
+			caststate = castorder[castnum].info->MeleeState;
 		else
-			caststate = castorder[castnum].info->missilestate;
+			caststate = castorder[castnum].info->MissileState;
 		castonmelee ^= 1;
 		if (caststate == NULL)
 		{
 			if (castonmelee)
-				caststate = castorder[castnum].info->meleestate;
+				caststate = castorder[castnum].info->MeleeState;
 			else
-				caststate = castorder[castnum].info->missilestate;
+				caststate = castorder[castnum].info->MissileState;
 		}
 	}
 		
 	if (castattacking)
 	{
 		if (castframes == 24
-			|| caststate == castorder[castnum].info->seestate )
+			|| caststate == castorder[castnum].info->SeeState )
 		{
 		  stopattack:
 			castattacking = false;
 			castframes = 0;
-			caststate = castorder[castnum].info->seestate;
+			caststate = castorder[castnum].info->SeeState;
 		}
 	}
 		
-	casttics = caststate->tics;
+	casttics = caststate->GetTics();
 	if (casttics == -1)
 		casttics = 15;
 }
@@ -551,7 +532,7 @@ BOOL F_CastResponder (event_t* ev)
 {
 	int attn;
 
-	if (ev->type != ev_keydown)
+	if (ev->type != EV_KeyDown)
 		return false;
 				
 	if (castdeath)
@@ -559,11 +540,11 @@ BOOL F_CastResponder (event_t* ev)
 				
 	// go into death frame
 	castdeath = true;
-	caststate = castorder[castnum].info->deathstate;
-	casttics = caststate->tics;
+	caststate = castorder[castnum].info->DeathState;
+	casttics = caststate->GetTics();
 	castframes = 0;
 	castattacking = false;
-	if (castorder[castnum].info->deathsound)
+	if (castorder[castnum].info->DeathSound)
 	{
 		if (castnum == 15 || castnum == 14)
 			attn = ATTN_SURROUND;
@@ -578,15 +559,21 @@ BOOL F_CastResponder (event_t* ev)
 
 			sprintf (nametest, sndtemplate, skins[players[consoleplayer].userinfo.skin].name);
 			sndnum = S_FindSound (nametest);
-			if (sndnum == -1) {
+			if (sndnum == 0)
+			{
 				sprintf (nametest, sndtemplate, genders[players[consoleplayer].userinfo.gender]);
 				sndnum = S_FindSound (nametest);
-				if (sndnum == -1)
+				if (sndnum == 0)
+				{
 					sndnum = S_FindSound ("player/male/death1");
+				}
 			}
 			S_SoundID (CHAN_VOICE, sndnum, 1, ATTN_NONE);
-		} else
-			S_Sound (CHAN_VOICE, castorder[castnum].info->deathsound, 1, attn);
+		}
+		else
+		{
+			S_SoundID (CHAN_VOICE, castorder[castnum].info->DeathSound, 1, attn);
+		}
 	}
 		
 	return true;
@@ -607,12 +594,12 @@ void F_CastDrawer (void)
 	screen->DrawPatchIndirect ((patch_t *)W_CacheLumpName ("BOSSBACK", PU_CACHE), 0, 0);
 
 	screen->DrawTextClean (CR_RED,
-		(screen->width - screen->StringWidth (castorder[castnum].name) * CleanXfac)/2,
-		(screen->height * 180) / 200, castorder[castnum].name);
+		(SCREENWIDTH - screen->StringWidth (GStrings(castorder[castnum].name)) * CleanXfac)/2,
+		(SCREENHEIGHT * 180) / 200, GStrings(castorder[castnum].name));
 	
 	// draw the current frame in the middle of the screen
 	sprdef = &sprites[castsprite];
-	sprframe = &sprdef->spriteframes[caststate->frame & FF_FRAMEMASK];
+	sprframe = &sprdef->spriteframes[caststate->GetFrame()];
 	lump = sprframe->lump[0];
 	flip = (BOOL)sprframe->flip[0];
 						
@@ -645,7 +632,7 @@ void F_DrawPatchCol (int x, const patch_t *patch, int col, const DCanvas *scrn)
 
 	// [RH] figure out how many times to repeat this column
 	// (for screens wider than 320 pixels)
-	mul = scrn->width / (float)320;
+	mul = SCREENWIDTH / 320.f;
 	fx = (float)x;
 	repeat = (int)(floor (mul*(fx+1)) - floor(mul*fx));
 	if (repeat == 0)
@@ -655,12 +642,12 @@ void F_DrawPatchCol (int x, const patch_t *patch, int col, const DCanvas *scrn)
 	x = (int)floor (mul*x);
 
 	// [RH] Figure out per-row fixed-point step
-	step = (200<<16) / scrn->height;
-	invstep = (scrn->height<<16) / 200;
+	step = (200<<16) / SCREENHEIGHT;
+	invstep = (SCREENHEIGHT<<16) / 200;
 
 	column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
-	desttop = scrn->buffer + x;
-	pitch = scrn->pitch;
+	desttop = scrn->GetBuffer() + x;
+	pitch = scrn->GetPitch();
 
 	// step through the posts in a column
 	while (column->topdelta != 0xff )
@@ -778,19 +765,21 @@ void F_DrawUnderwater(void)
 	switch (finalestage)
 	{
 	case 1:
+		{
+		PalEntry *palette;
 		byte *orgpal;
-		DWORD setpal[256];
 		int i;
 
 		orgpal = (byte *)W_CacheLumpName ("E2PAL", PU_CACHE);
-		for (i = 0; i < 256; i++)
+		palette = screen->GetPalette ();
+		for (i = 256; i > 0; i--, orgpal += 3)
 		{
-			setpal[i] = MAKERGB(orgpal[0], orgpal[1], orgpal[2]);
-			orgpal += 3;
+			*palette++ = PalEntry (orgpal[0], orgpal[1], orgpal[2]);
 		}
-		I_SetPalette (setpal);
+		screen->UpdatePalette ();
 		screen->DrawPageBlock ((byte *)W_CacheLumpName ("E2END", PU_CACHE));
 		finalestage = 2;
+		}
 
 		// intentional fall-through
 	case 2:
@@ -824,7 +813,7 @@ void F_BunnyScroll (void)
 	p1 = (patch_t *)W_CacheLumpName ("PFUB2", PU_LEVEL);
 	p2 = (patch_t *)W_CacheLumpName ("PFUB1", PU_LEVEL);
 
-	V_MarkRect (0, 0, screen->width, screen->height);
+	V_MarkRect (0, 0, SCREENWIDTH, SCREENHEIGHT);
 
 	scrolled = 320 - ((signed)finalecount-230)/2;
 	if (scrolled > 320)

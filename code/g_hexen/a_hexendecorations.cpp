@@ -4,39 +4,47 @@
 // Convenient macros --------------------------------------------------------
 
 #define _DECCOMMON(cls,ednum,rad,hi,ns) \
-	class cls : public AActor { DECLARE_STATELESS_ACTOR (cls, AActor); static FState States[ns]; }; \
-	IMPLEMENT_DEF_SERIAL (cls, AActor); \
-	REGISTER_ACTOR (cls, Hexen); \
-	void cls::SetDefaults (FActorInfo *info) { \
-		INHERIT_DEFS; \
-		info->doomednum = ednum; \
-		info->spawnstate = &States[0]; \
-		info->radius = rad * FRACUNIT; \
-		info->height = hi * FRACUNIT;
+	class cls : public AActor { DECLARE_STATELESS_ACTOR (cls, AActor) static FState States[ns]; }; \
+	IMPLEMENT_ACTOR (cls, Hexen, ednum, 0) \
+		PROP_SpawnState (0) \
+		PROP_RadiusFixed (rad) \
+		PROP_HeightFixed (hi)
 
 #define _DECSTARTSTATES(cls,ns) \
-	FState cls::States[ns] =
+	END_DEFAULTS  FState cls::States[ns] =
 
 #define DEC(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SOLID; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns) \
+		PROP_Flags (MF_SOLID) \
+	_DECSTARTSTATES(cls,ns)
 
 #define DECNS(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns) _DECSTARTSTATES(cls,ns)
 
 #define DECHANG(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns) \
+		PROP_Flags (MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY) \
+	_DECSTARTSTATES(cls,ns)
 
 #define DECHANGNB(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_NOBLOCKMAP|MF_SPAWNCEILING|MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns) \
+		PROP_Flags (MF_NOBLOCKMAP|MF_SPAWNCEILING|MF_NOGRAVITY) \
+	_DECSTARTSTATES(cls,ns)
 
 #define DECHANGNS(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SPAWNCEILING|MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns) \
+		PROP_Flags (MF_SPAWNCEILING|MF_NOGRAVITY) \
+	_DECSTARTSTATES(cls,ns)
 
 #define DECNBLOCK(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_NOBLOCKMAP; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns) \
+		PROP_Flags (MF_NOBLOCKMAP) \
+	_DECSTARTSTATES(cls,ns)
 
 #define DECNBNG(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns) \
+		PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY) \
+	_DECSTARTSTATES(cls,ns)
 
 // Definitions --------------------------------------------------------------
 

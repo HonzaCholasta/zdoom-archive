@@ -7,18 +7,20 @@
 
 class DSectorEffect : public DThinker
 {
-	DECLARE_SERIAL (DSectorEffect, DThinker)
+	DECLARE_CLASS (DSectorEffect, DThinker)
 public:
 	DSectorEffect (sector_t *sector);
 	~DSectorEffect ();
+
+	void Serialize (FArchive &arc);
 protected:
 	DSectorEffect ();
-	sector_t	*m_Sector;
+	sector_t *m_Sector;
 };
 
 class DMover : public DSectorEffect
 {
-	DECLARE_SERIAL (DMover, DSectorEffect);
+	DECLARE_CLASS (DMover, DSectorEffect)
 public:
 	DMover (sector_t *sector);
 protected:
@@ -47,7 +49,7 @@ protected:
 
 class DMovingFloor : public DMover
 {
-	DECLARE_SERIAL (DMovingFloor, DMover);
+	DECLARE_CLASS (DMovingFloor, DMover)
 public:
 	DMovingFloor (sector_t *sector);
 protected:
@@ -56,7 +58,7 @@ protected:
 
 class DMovingCeiling : public DMover
 {
-	DECLARE_SERIAL (DMovingCeiling, DMover);
+	DECLARE_CLASS (DMovingCeiling, DMover)
 public:
 	DMovingCeiling (sector_t *sector);
 protected:

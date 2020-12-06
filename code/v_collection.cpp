@@ -64,19 +64,14 @@ void FImageCollection::Init (const char **patchNames, int numPatches, int namesp
 		}
 	}
 
-	for (i = 0; i < 255; i++)
+	translate[0] = Near0;
+	for (i = 1; i < 256; i++)
 	{
 		translate[i] = i;
 	}
 
-	translate[255] = BestColor (DefaultPalette->basecolors,
-		RPART(DefaultPalette->basecolors[255]),
-		GPART(DefaultPalette->basecolors[255]),
-		BPART(DefaultPalette->basecolors[255]),
-		255);
-
 	Bitmaps = new byte[neededsize];
-	memset (Bitmaps, 255, neededsize);
+	memset (Bitmaps, 0, neededsize);
 
 	for (i = neededsize = 0; i < numPatches; i++)
 	{
@@ -107,7 +102,7 @@ void FImageCollection::Init (const char **patchNames, int numPatches, int namesp
 							source += code+1;
 							destSize -= code+1;
 						}
-						else if (code != 0x80)
+						else if (code != -128)
 						{
 							memset (dest, *source, (-code)+1);
 							dest += (-code)+1;

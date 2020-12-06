@@ -63,32 +63,38 @@ BOOL PTR_SightTraverse (intercept_t *in)
 
 	li = in->d.line;
 
+	fixed_t oldbottom, oldtop;
+
 //
 // crosses a two sided line
 //
-	P_LineOpening (li);
+	oldbottom = openbottom;
+	oldtop = opentop;
 
-	if (openbottom >= opentop)		// quick test for totally closed doors
-		return false;	// stop
+	P_LineOpening (li, trace.x + FixedMul (trace.dx, in->frac),
+		trace.y + FixedMul (trace.dy, in->frac));
 
-	if (li->frontsector->floorheight != li->backsector->floorheight)
+	if (openrange <= 0)		// quick test for totally closed doors
+		return false;		// stop
+
+	if (oldbottom < openbottom)
 	{
-		slope = FixedDiv (openbottom - sightzstart , in->frac);
+		slope = FixedDiv (openbottom - sightzstart, in->frac);
 		if (slope > bottomslope)
 			bottomslope = slope;
 	}
 
-	if (li->frontsector->ceilingheight != li->backsector->ceilingheight)
+	if (oldtop > opentop)
 	{
-		slope = FixedDiv (opentop - sightzstart , in->frac);
+		slope = FixedDiv (opentop - sightzstart, in->frac);
 		if (slope < topslope)
 			topslope = slope;
 	}
 
 	if (topslope <= bottomslope)
-		return false;	// stop
+		return false;		// stop
 
-	return true;	// keep going
+	return true;			// keep going
 }
 
 
@@ -223,10 +229,12 @@ BOOL P_SightTraverseIntercepts ()
 // go through in order
 //
 	in = 0;					// shut up compiler warning
+	openbottom = FIXED_MIN;
+	opentop = FIXED_MAX;
 
 	while (count--)
 	{
-		dist = MAXINT;
+		dist = FIXED_MAX;
 		for (scanpos = 0; scanpos < intercepts.Size (); scanpos++)
 		{
 			scan = &intercepts[scanpos];
@@ -239,7 +247,7 @@ BOOL P_SightTraverseIntercepts ()
 
 		if (!PTR_SightTraverse (in))
 			return false;					// don't bother going farther
-		in->frac = MAXINT;
+		in->frac = FIXED_MAX;
 	}
 
 	return true;			// everything was traversed
@@ -335,13 +343,11 @@ BOOL P_SightPathTraverse (fixed_t x1, fixed_t y1, fixed_t x2, fixed_t y2)
 	}
 	xintercept = (x1>>MAPBTOFRAC) + FixedMul (partial, xstep);
 
-
 //
 // step through map blocks
 // Count is present to prevent a round off error from skipping the break
 	mapx = xt1;
 	mapy = yt1;
-
 
 	for (count = 0 ; count < 64 ; count++)
 	{
@@ -412,7 +418,10 @@ sightcounts[0]++;
 //
 	// [RH] Andy Baker's stealth monsters:
 	// Cannot see an invisible object
-	if (!ignoreInvisibility && t2->translucency == 0)
+	if (!ignoreInvisibility &&
+		(t2->RenderStyle == STYLE_None ||
+		 (t2->RenderStyle >= STYLE_Translucent && t2->alpha == 0) ||
+		 (t2->renderflags & RF_INVISIBLE)))
 	{ // small chance of an attack being made anyway
 		if (P_Random (bglobal.m_Thinking ? pr_botchecksight : pr_checksight) > 50)
 			return false;
@@ -421,17 +430,23 @@ sightcounts[0]++;
 	// killough 4/19/98: make fake floors and ceilings block monster view
 
 	if ((s1->heightsec  &&
-		((t1->z + t1->height <= s1->heightsec->floorheight &&
-		  t2->z >= s1->heightsec->floorheight) ||
-		 (t1->z >= s1->heightsec->ceilingheight &&
-		  t2->z + t1->height <= s1->heightsec->ceilingheight)))
+		((t1->z + t1->height <= s1->heightsec->floorplane.ZatPoint (t1->x, t1->y) &&
+		  t2->z >= s1->heightsec->floorplane.ZatPoint (t2->x, t2->y)) ||
+		 (t1->z >= s1->heightsec->ceilingplane.ZatPoint (t1->x, t1->y) &&
+		  t2->z + t1->height <= s1->heightsec->ceilingplane.ZatPoint (t2->x, t2->y))))
 		||
 		(s2->heightsec &&
-		 ((t2->z + t2->height <= s2->heightsec->floorheight &&
-		   t1->z >= s2->heightsec->floorheight) ||
-		  (t2->z >= s2->heightsec->ceilingheight &&
-		   t1->z + t2->height <= s2->heightsec->ceilingheight))))
+		 ((t2->z + t2->height <= s2->heightsec->floorplane.ZatPoint (t2->x, t2->y) &&
+		   t1->z >= s2->heightsec->floorplane.ZatPoint (t1->x, t1->y)) ||
+		  (t2->z >= s2->heightsec->ceilingplane.ZatPoint (t2->x, t2->y) &&
+		   t1->z + t2->height <= s2->heightsec->ceilingplane.ZatPoint (t1->x, t1->y)))))
+	{
 		return false;
+	}
+
+	// killough 11/98: shortcut for melee situations
+	if (t1->subsector == t2->subsector)     // same subsector? obviously visible
+		return true;
 
 	sightzstart = t1->z + t1->height - (t1->height >> 2);
 	bottomslope = (t2->z) - sightzstart;

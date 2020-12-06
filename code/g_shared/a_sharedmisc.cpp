@@ -5,43 +5,30 @@
 
 // Default actor for unregistered doomednums -------------------------------
 
-IMPLEMENT_DEF_SERIAL (AUnknown, AActor);
-REGISTER_ACTOR (AUnknown, Any);
-
 FState AUnknown::States[] =
 {
 	S_NORMAL (UNKN, 'A',   -1, NULL 						, NULL)
 };
 
-void AUnknown::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->radius = 32 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->flags = MF_NOGRAVITY|MF_NOBLOCKMAP;
-}
+IMPLEMENT_ACTOR (AUnknown, Any, -1, 0)
+	PROP_RadiusFixed (32)
+	PROP_HeightFixed (56)
+	PROP_Flags (MF_NOGRAVITY|MF_NOBLOCKMAP)
 
-// Navigation way point ----------------------------------------------------
+	PROP_SpawnState (0)
+END_DEFAULTS
 
-IMPLEMENT_DEF_SERIAL (AWayPoint, AActor);
-REGISTER_ACTOR (AWayPoint, Any);
+// Route node for monster patrols -------------------------------------------
 
-void AWayPoint::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->doomednum = 9024;
-	info->radius = 8 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->mass = 10;
-	info->flags = MF_NOBLOCKMAP;
-	info->flags2 = MF2_DONTDRAW;
-}
+IMPLEMENT_STATELESS_ACTOR (APatrolPoint, Any, 9024, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (8)
+	PROP_Mass (10)
+	PROP_Flags (MF_NOBLOCKMAP)
+	PROP_RenderFlags (RF_INVISIBLE)
+END_DEFAULTS
 
-// Blood sprite, adjusts itself for each game ------------------------------
-
-IMPLEMENT_DEF_SERIAL (ABlood, AActor);
-REGISTER_ACTOR (ABlood, Any);
+// Blood sprite - adjusts itself for each game -----------------------------
 
 FState ABlood::States[] =
 {
@@ -53,73 +40,76 @@ FState ABlood::States[] =
 #define S_HBLOOD (S_DBLOOD+3)
 	S_NORMAL (BLOD, 'C',	8, NULL							, &States[S_HBLOOD+1]),
 	S_NORMAL (BLOD, 'B',	8, NULL							, &States[S_HBLOOD+2]),
-	S_NORMAL (BLOD, 'A',	8, NULL,						, NULL),
+	S_NORMAL (BLOD, 'A',	8, NULL							, NULL)
 };
 
-void ABlood::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABlood, Any, -1, 130)
+	PROP_Flags (MF_NOBLOCKMAP)
+	PROP_Mass (5)
+END_DEFAULTS
+
+AT_GAME_SET (Blood)
 {
-	INHERIT_DEFS;
-	info->spawnid = 130;
-	if (gameinfo.gametype == GAME_Doom)
-		info->spawnstate = &States[S_DBLOOD];
-	else
-		info->spawnstate = &States[S_HBLOOD];
-	info->flags = MF_NOBLOCKMAP;
-	info->mass = 5;
+	ABlood *def = GetDefault<ABlood>();
+
+	def->SpawnState = &ABlood::States[gameinfo.gametype == GAME_Doom ? S_DBLOOD : S_HBLOOD];
 }
 
 // Map spot ----------------------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (AMapSpot, AActor);
-REGISTER_ACTOR (AMapSpot, Any);
-
-void AMapSpot::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->doomednum = 9001;
-	info->flags = MF_NOBLOCKMAP|MF_NOSECTOR|MF_NOGRAVITY;
-};
+IMPLEMENT_STATELESS_ACTOR (AMapSpot, Any, 9001, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR|MF_NOGRAVITY)
+	PROP_RenderFlags (RF_INVISIBLE)
+END_DEFAULTS
 
 // Map spot with gravity ---------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (AMapSpotGravity, AMapSpot);
-REGISTER_ACTOR (AMapSpotGravity, Any);
-
-void AMapSpotGravity::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->doomednum = 9013;
-	info->flags = 0;
-	info->flags2 = MF2_DONTDRAW;
-}
+IMPLEMENT_STATELESS_ACTOR (AMapSpotGravity, Any, 9013, 0)
+	PROP_Flags (0)
+END_DEFAULTS
 
 // Bloody gibs -------------------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (AGibs, AActor);
-REGISTER_ACTOR (AGibs, Any);
-
-FState AGibs::States[] =
+FState ARealGibs::States[] =
 {
 	S_NORMAL (POL5, 'A', -1, NULL, NULL),
 	S_NORMAL (GIBS, 'A', -1, NULL, NULL),
 };
 
-void AGibs::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ARealGibs, Any, -1, 0)
+	PROP_Flags (MF_DROPOFF|MF_CORPSE)
+	PROP_Flags2 (MF2_NOTELEPORT)
+	PROP_Flags3 (MF3_DONTGIB)
+END_DEFAULTS
+
+AT_GAME_SET (RealGibs)
 {
-	INHERIT_DEFS;
-	info->flags = MF_NOBLOCKMAP|MF_DROPOFF|MF_CORPSE;
-	info->flags2 = MF2_NOTELEPORT;
+	ARealGibs *def = GetDefault<ARealGibs>();
+
 	if (gameinfo.gametype == GAME_Doom)
 	{
-		info->doomednum = 24;
-		info->spawnstate = &States[0];
+		def->SpawnState = &ARealGibs::States[0];
 	}
-	else if (gameinfo.gametype == GAME_Hexen)
+	else if (gameinfo.gametype == GAME_Heretic)
 	{
-		info->spawnstate = &States[1];
+		def->SpawnState = &ARealGibs::States[1];
 	}
 	else
 	{
-		info->flags2 |= MF2_DONTDRAW;
+		def->RenderStyle = STYLE_None;
 	}
 }
+
+// Gibs that can be placed on a map. ---------------------------------------
+//
+// These need to be a separate class from the above, in case someone uses
+// a deh patch to change the gibs, since ZDoom actually creates a gib actor
+// for actors that get crushed instead of changing their state as Doom did.
+
+class AGibs : public ARealGibs
+{
+	DECLARE_STATELESS_ACTOR (AGibs, ARealGibs)
+};
+
+IMPLEMENT_STATELESS_ACTOR (AGibs, Doom, 24, 146)
+END_DEFAULTS

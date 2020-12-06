@@ -7,6 +7,7 @@
 #include "s_sound.h"
 #include "m_random.h"
 #include "a_sharedglobal.h"
+#include "gstrings.h"
 
 void A_Sor1Chase (AActor *);
 void A_Sor1Pain (AActor *);
@@ -29,14 +30,12 @@ void A_GenWizard (AActor *);
 
 class ABossSpot : public AActor
 {
-	DECLARE_STATELESS_ACTOR (ABossSpot, AActor);
+	DECLARE_STATELESS_ACTOR (ABossSpot, AActor)
 public:
 	ABossSpot *NextSpot;
+	void Serialize (FArchive &arc);
 	void BeginPlay ();
 };
-
-IMPLEMENT_SERIAL (ABossSpot, AActor);
-REGISTER_ACTOR (ABossSpot, Heretic);
 
 void ABossSpot::Serialize (FArchive &arc)
 {
@@ -44,12 +43,9 @@ void ABossSpot::Serialize (FArchive &arc)
 	arc << NextSpot;
 }
 
-void ABossSpot::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->doomednum = 56;
-	info->flags2 = MF2_DONTDRAW;
-}
+IMPLEMENT_STATELESS_ACTOR (ABossSpot, Heretic, 56, 0)
+	PROP_RenderFlags (RF_INVISIBLE)
+END_DEFAULTS
 
 void ABossSpot::BeginPlay ()
 {
@@ -61,11 +57,11 @@ void ABossSpot::BeginPlay ()
 
 class ASorcerer1 : public AActor
 {
-	DECLARE_ACTOR (ASorcerer1, AActor);
+	DECLARE_ACTOR (ASorcerer1, AActor)
+public:
+	const char *GetObituary ();
+	const char *GetHitObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (ASorcerer1, AActor);
-REGISTER_ACTOR (ASorcerer1, Heretic);
 
 FState ASorcerer1::States[] =
 {
@@ -111,40 +107,46 @@ FState ASorcerer1::States[] =
 	S_NORMAL (SRCR, 'P',   -1, A_SorcererRise			, NULL)
 };
 
-void ASorcerer1::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASorcerer1, Heretic, 7, 0)
+	PROP_SpawnHealth (2000)
+	PROP_RadiusFixed (28)
+	PROP_HeightFixed (100)
+	PROP_Mass (800)
+	PROP_SpeedFixed (16)
+	PROP_PainChance (56)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PASSMOBJ|MF2_BOSS)
+	PROP_Flags3 (MF3_DONTMORPH|MF3_NORADIUSDMG|MF3_NOTARGET)
+
+	PROP_SpawnState (S_SRCR1_LOOK)
+	PROP_SeeState (S_SRCR1_WALK)
+	PROP_PainState (S_SRCR1_PAIN)
+	PROP_MissileState (S_SRCR1_ATK)
+	PROP_DeathState (S_SRCR1_DIE)
+
+	PROP_SeeSound ("dsparilserpent/sight")
+	PROP_AttackSound ("dsparilserpent/attack")
+	PROP_PainSound ("dsparilserpent/pain")
+	PROP_DeathSound ("dsparilserpent/death")
+	PROP_ActiveSound ("dsparilserpent/active")
+END_DEFAULTS
+
+const char *ASorcerer1::GetObituary ()
 {
-	INHERIT_DEFS;
-	info->doomednum = 7;
-	info->spawnstate = &States[S_SRCR1_LOOK];
-	info->spawnhealth = 2000;
-	info->seestate = &States[S_SRCR1_WALK];
-	info->seesound = "dsparilserpent/sight";
-	info->attacksound = "dsparilserpent/attack";
-	info->painstate = &States[S_SRCR1_PAIN];
-	info->painchance = 56;
-	info->painsound = "dsparilserpent/pain";
-	info->missilestate = &States[S_SRCR1_ATK];
-	info->deathstate = &States[S_SRCR1_DIE];
-	info->deathsound = "dsparilserpent/death";
-	info->speed = 16;
-	info->radius = 28 * FRACUNIT;
-	info->height = 100 * FRACUNIT;
-	info->mass = 800;
-	info->activesound = "dsparilserpent/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_FLOORCLIP|MF2_PASSMOBJ|MF2_BOSS;
-	info->flags3 = MF3_DONTMORPH|MF3_NORADIUSDMG|MF3_NOTARGET;
+	return GStrings(OB_DSPARIL1);
+}
+
+const char *ASorcerer1::GetHitObituary ()
+{
+	return GStrings(OB_DSPARIL1HIT);
 }
 
 // Sorcerer FX 1 ------------------------------------------------------------
 
 class ASorcererFX1 : public AActor
 {
-	DECLARE_ACTOR (ASorcererFX1, AActor);
+	DECLARE_ACTOR (ASorcererFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASorcererFX1, AActor);
-REGISTER_ACTOR (ASorcererFX1, Heretic);
 
 FState ASorcererFX1::States[] =
 {
@@ -161,23 +163,24 @@ FState ASorcererFX1::States[] =
 	S_BRIGHT (FX14, 'H',	5, NULL 					, NULL)
 };
 
-void ASorcererFX1::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASorcererFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (10)
+	PROP_SpeedFixed (20)
+	PROP_Damage (10)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_FIREDAMAGE)
+
+	PROP_SpawnState (S_SRCRFX1)
+	PROP_DeathState (S_SRCRFXI1)
+END_DEFAULTS
+
+AT_SPEED_SET (SorcererFX1, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SRCRFX1];
-	info->deathstate = &States[S_SRCRFXI1];
-	info->speed = GameSpeed != SPEED_Fast ? 20 * FRACUNIT : 28 * FRACUNIT;
-	info->radius = 10 * FRACUNIT;
-	info->height = 10 * FRACUNIT;
-	info->damage = 10;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_FIREDAMAGE;
+	SimpleSpeedSetter (ASorcererFX1, 20*FRACUNIT, 28*FRACUNIT, speed);
 }
 
 // Sorcerer 2 (D'Sparil without his serpent) --------------------------------
-
-IMPLEMENT_SERIAL (ASorcerer2, AActor);
-REGISTER_ACTOR (ASorcerer2, Heretic);
 
 FState ASorcerer2::States[] =
 {
@@ -235,28 +238,28 @@ FState ASorcerer2::States[] =
 	S_NORMAL (SDTH, 'O',   -1, A_BossDeath				, NULL)
 };
 
-void ASorcerer2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SOR2_LOOK];
-	info->spawnhealth = 3500;
-	info->seestate = &States[S_SOR2_WALK];
-	info->seesound = "dsparil/sight";
-	info->attacksound = "dsparil/attack";
-	info->painstate = &States[S_SOR2_PAIN];
-	info->painchance = 32;
-	info->painsound = "dsparil/pain";
-	info->missilestate = &States[S_SOR2_ATK];
-	info->deathstate = &States[S_SOR2_DIE];
-	info->speed = 14;
-	info->radius = 16 * FRACUNIT;
-	info->height = 70 * FRACUNIT;
-	info->mass = 300;
-	info->activesound = "dsparil/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_DROPOFF;
-	info->flags2 = MF2_FLOORCLIP|MF2_PASSMOBJ|MF2_BOSS;
-	info->flags3 = MF3_DONTMORPH|MF3_FULLVOLACTIVE|MF3_NORADIUSDMG|MF3_NOTARGET;
-}
+IMPLEMENT_ACTOR (ASorcerer2, Heretic, -1, 0)
+	PROP_SpawnHealth (3500)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (70)
+	PROP_Mass (300)
+	PROP_SpeedFixed (14)
+	PROP_PainChance (32)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_DROPOFF)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PASSMOBJ|MF2_BOSS)
+	PROP_Flags3 (MF3_DONTMORPH|MF3_FULLVOLACTIVE|MF3_NORADIUSDMG|MF3_NOTARGET)
+
+	PROP_SpawnState (S_SOR2_LOOK)
+	PROP_SeeState (S_SOR2_WALK)
+	PROP_PainState (S_SOR2_PAIN)
+	PROP_MissileState (S_SOR2_ATK)
+	PROP_DeathState (S_SOR2_DIE)
+
+	PROP_SeeSound ("dsparil/sight")
+	PROP_AttackSound ("dsparil/attack")
+	PROP_PainSound ("dsparil/pain")
+	PROP_ActiveSound ("dsparil/active")
+END_DEFAULTS
 
 void ASorcerer2::Serialize (FArchive &arc)
 {
@@ -286,17 +289,24 @@ bool ASorcerer2::NewTarget (AActor *other)
 	return !other->IsKindOf (RUNTIME_CLASS(AWizard));
 }
 
+const char *ASorcerer2::GetObituary ()
+{
+	return GStrings(OB_DSPARIL2);
+}
+
+const char *ASorcerer2::GetHitObituary ()
+{
+	return GStrings(OB_DSPARIL2HIT);
+}
+
 // Sorcerer 2 FX 1 ----------------------------------------------------------
 
 class ASorcerer2FX1 : public AActor
 {
-	DECLARE_ACTOR (ASorcerer2FX1, AActor);
+	DECLARE_ACTOR (ASorcerer2FX1, AActor)
 public:
 	void GetExplodeParms (int &damage, int &distance, bool &hurtSource);
 };
-
-IMPLEMENT_DEF_SERIAL (ASorcerer2FX1, AActor);
-REGISTER_ACTOR (ASorcerer2FX1, Heretic);
 
 FState ASorcerer2FX1::States[] =
 {
@@ -314,20 +324,24 @@ FState ASorcerer2FX1::States[] =
 	S_BRIGHT (FX16, 'L',	5, NULL 					, NULL)
 };
 
-void ASorcerer2FX1::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASorcerer2FX1, Heretic, -1, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (20)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_SOR2FX1)
+	PROP_DeathState (S_SOR2FXI1)
+END_DEFAULTS
+
+AT_SPEED_SET (Sorcerer2FX1, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SOR2FX1];
-	info->deathstate = &States[S_SOR2FXI1];
-	info->speed = GameSpeed != SPEED_Fast ? 20 * FRACUNIT : 28 * FRACUNIT;
-	info->radius = 10 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
+	SimpleSpeedSetter (ASorcerer2FX1, 20*FRACUNIT, 28*FRACUNIT, speed);
 }
 
-void ASorcerer2FX1::GetExplodeParms (int &damage, fixed_t &distance, bool &hurtSource)
+void ASorcerer2FX1::GetExplodeParms (int &damage, int &distance, bool &hurtSource)
 {
 	damage = 80 + (P_Random() & 31);
 }
@@ -336,11 +350,8 @@ void ASorcerer2FX1::GetExplodeParms (int &damage, fixed_t &distance, bool &hurtS
 
 class ASorcerer2FXSpark : public AActor
 {
-	DECLARE_ACTOR (ASorcerer2FXSpark, AActor);
+	DECLARE_ACTOR (ASorcerer2FXSpark, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASorcerer2FXSpark, AActor);
-REGISTER_ACTOR (ASorcerer2FXSpark, Heretic);
 
 FState ASorcerer2FXSpark::States[] =
 {
@@ -350,25 +361,21 @@ FState ASorcerer2FXSpark::States[] =
 	S_BRIGHT (FX16, 'F',   12, NULL 					, NULL)
 };
 
-void ASorcerer2FXSpark::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SOR2FXSPARK];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_CANNOTPUSH;
-}
+IMPLEMENT_ACTOR (ASorcerer2FXSpark, Heretic, -1, 0)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_CANNOTPUSH)
+
+	PROP_SpawnState (S_SOR2FXSPARK)
+END_DEFAULTS
 
 // Sorcerer 2 FX 2 ----------------------------------------------------------
 
 class ASorcerer2FX2 : public AActor
 {
-	DECLARE_ACTOR (ASorcerer2FX2, AActor);
+	DECLARE_ACTOR (ASorcerer2FX2, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASorcerer2FX2, AActor);
-REGISTER_ACTOR (ASorcerer2FX2, Heretic);
 
 FState ASorcerer2FX2::States[] =
 {
@@ -385,28 +392,24 @@ FState ASorcerer2FX2::States[] =
 	S_BRIGHT (FX11, 'G',	5, NULL 					, NULL)
 };
 
-void ASorcerer2FX2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SOR2FX2];
-	info->deathstate = &States[S_SOR2FXI2];
-	info->speed = 6 * FRACUNIT;
-	info->radius = 10 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 10;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
-}
+IMPLEMENT_ACTOR (ASorcerer2FX2, Heretic, -1, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (6)
+	PROP_Damage (10)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_SOR2FX2)
+	PROP_DeathState (S_SOR2FXI2)
+END_DEFAULTS
 
 // Sorcerer 2 Telefade ------------------------------------------------------
 
 class ASorcerer2Telefade : public AActor
 {
-	DECLARE_ACTOR (ASorcerer2Telefade, AActor);
+	DECLARE_ACTOR (ASorcerer2Telefade, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASorcerer2Telefade, AActor);
-REGISTER_ACTOR (ASorcerer2Telefade, Heretic);
 
 FState ASorcerer2Telefade::States[] =
 {
@@ -419,12 +422,10 @@ FState ASorcerer2Telefade::States[] =
 	S_NORMAL (SOR2, 'L',	6, NULL 					, NULL)
 };
 
-void ASorcerer2Telefade::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SOR2TELEFADE];
-	info->flags = MF_NOBLOCKMAP;
-}
+IMPLEMENT_ACTOR (ASorcerer2Telefade, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP)
+	PROP_SpawnState (S_SOR2TELEFADE)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -472,27 +473,27 @@ void A_Srcr1Attack (AActor *actor)
 	{
 		return;
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->AttackSound, 1, ATTN_NORM);
 	if (P_CheckMeleeRange (actor))
 	{
-		P_DamageMobj (actor->target, actor, actor, HITDICE(8));
+		P_DamageMobj (actor->target, actor, actor, HITDICE(8), MOD_HIT);
 		return;
 	}
-	if (actor->health > (GetInfo (actor)->spawnhealth/3)*2)
+	if (actor->health > (actor->GetDefault()->health/3)*2)
 	{ // Spit one fireball
 		P_SpawnMissileZ (actor, actor->z + 48*FRACUNIT, actor->target, RUNTIME_CLASS(ASorcererFX1));
 	}
 	else
 	{ // Spit three fireballs
 		mo = P_SpawnMissileZ (actor, actor->z + 48*FRACUNIT, actor->target, RUNTIME_CLASS(ASorcererFX1));
-		if (mo)
+		if (mo != NULL)
 		{
 			momz = mo->momz;
 			angle = mo->angle;
 			P_SpawnMissileAngleZ (actor, actor->z + 48*FRACUNIT, RUNTIME_CLASS(ASorcererFX1), angle-ANGLE_1*3, momz);
 			P_SpawnMissileAngleZ (actor, actor->z + 48*FRACUNIT, RUNTIME_CLASS(ASorcererFX1), angle+ANGLE_1*3, momz);
 		}
-		if (actor->health < GetInfo (actor)->spawnhealth/3)
+		if (actor->health < actor->GetDefault()->health/3)
 		{ // Maybe attack again
 			if (actor->special1)
 			{ // Just attacked, so don't attack again
@@ -593,7 +594,7 @@ void A_Srcr2Decide (AActor *actor)
 		192, 120, 120, 120, 64, 64, 32, 16, 0
 	};
 
-	if (P_Random() < chance[actor->health / (GetInfo (actor)->spawnhealth/8)])
+	if (P_Random() < chance[actor->health / (actor->GetDefault()->health/8)])
 	{
 		P_DSparilTeleport (actor);
 	}
@@ -613,13 +614,13 @@ void A_Srcr2Attack (AActor *actor)
 	{
 		return;
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->attacksound, 1, ATTN_NONE);
+	S_SoundID (actor, CHAN_BODY, actor->AttackSound, 1, ATTN_NONE);
 	if (P_CheckMeleeRange(actor))
 	{
-		P_DamageMobj (actor->target, actor, actor, HITDICE(20));
+		P_DamageMobj (actor->target, actor, actor, HITDICE(20), MOD_HIT);
 		return;
 	}
-	chance = actor->health < GetInfo (actor)->spawnhealth/2 ? 96 : 48;
+	chance = actor->health < actor->GetDefault()->health/2 ? 96 : 48;
 	if (P_Random() < chance)
 	{ // Wizard spawners
 		P_SpawnMissileAngle (actor, RUNTIME_CLASS(ASorcerer2FX2),
@@ -664,14 +665,14 @@ void A_GenWizard (AActor *actor)
 	AActor *mo;
 
 	mo = Spawn<AWizard> (actor->x, actor->y,
-		actor->z - RUNTIME_CLASS(AWizard)->ActorInfo->height/2);
+		actor->z - GetDefault<AWizard>()->height/2);
 	if (P_TestMobjLocation(mo) == false)
 	{ // Didn't fit
 		mo->Destroy ();
 		return;
 	}
 	actor->momx = actor->momy = actor->momz = 0;
-	actor->SetState (GetInfo (actor)->deathstate);
+	actor->SetState (actor->DeathState);
 	actor->flags &= ~MF_MISSILE;
 	Spawn<ATeleportFog> (actor->x, actor->y, actor->z);
 }

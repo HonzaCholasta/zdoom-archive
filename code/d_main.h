@@ -38,6 +38,8 @@ void D_DoomMain (void);
 // Called by IO functions when input is detected.
 void D_PostEvent (const event_t* ev);
 
+// [RH] Passed true if just drawing for a screenshot
+void D_Display (bool screenshot);
 
 
 //
@@ -51,5 +53,30 @@ void D_StartTitle (void);
 
 // [RH] Set this to something to draw an icon during the next screen refresh.
 extern char *D_DrawIcon;
+
+
+enum EIWADType
+{
+	IWAD_Doom2TNT,
+	IWAD_Doom2Plutonia,
+	IWAD_Hexen,
+	IWAD_Doom2,
+	IWAD_HereticShareware,
+	IWAD_HereticExtended,
+	IWAD_Heretic,
+	IWAD_DoomShareware,
+	IWAD_UltimateDoom,
+	IWAD_DoomRegistered,
+
+	NUM_IWAD_TYPES
+};
+
+struct WadStuff
+{
+	char *Path;
+	EIWADType Type;
+};
+
+extern const char *IWADTypeNames[NUM_IWAD_TYPES];
 
 #endif

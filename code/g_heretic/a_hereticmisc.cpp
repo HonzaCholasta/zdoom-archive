@@ -8,7 +8,7 @@
 #include "m_random.h"
 #include "p_local.h"
 #include "s_sound.h"
-#include "hstrings.h"
+#include "gstrings.h"
 
 // --- Pods -----------------------------------------------------------------
 
@@ -20,13 +20,16 @@ void A_MakePod (AActor *);
 
 class APod : public AExplosiveBarrel
 {
-	DECLARE_ACTOR (APod, AExplosiveBarrel);
+	DECLARE_ACTOR (APod, AExplosiveBarrel)
+	HAS_OBJECT_POINTERS
 public:
 	void BeginPlay ();
 	AActor *Generator;
+
+	void Serialize (FArchive &arc);
 };
 
-IMPLEMENT_POINTY_SERIAL (APod, AExplosiveBarrel)
+IMPLEMENT_POINTY_CLASS (APod)
 	DECLARE_POINTER (Generator)
 END_POINTERS;
 
@@ -35,8 +38,6 @@ void APod::Serialize (FArchive &arc)
 	Super::Serialize (arc);
 	arc << Generator;
 }
-
-REGISTER_ACTOR (APod, Heretic);
 
 FState APod::States[] =
 {
@@ -63,22 +64,21 @@ FState APod::States[] =
 	S_NORMAL (PPOD, 'P',	3, NULL 						, &States[S_POD_WAIT+0])
 };
 
-void APod::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2035;
-	info->spawnstate = &States[S_POD_WAIT];
-	info->spawnhealth = 45;
-	info->painstate = &States[S_POD_PAIN];
-	info->painchance = 255;
-	info->deathstate = &States[S_POD_DIE];
-	info->deathsound = "world/podexplode";
-	info->radius = 16 * FRACUNIT;
-	info->height = 54 * FRACUNIT;
-	info->flags = MF_SOLID|MF_NOBLOOD|MF_SHOOTABLE|MF_DROPOFF;
-	info->flags2 = MF2_WINDTHRUST|MF2_PUSHABLE|MF2_SLIDE|MF2_PASSMOBJ|MF2_TELESTOMP;
-	info->flags3 = MF3_DONTMORPH;
-}
+BEGIN_DEFAULTS (APod, Heretic, 2035, 0)
+	PROP_SpawnHealth (45)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (54)
+	PROP_PainChance (255)
+	PROP_Flags (MF_SOLID|MF_NOBLOOD|MF_SHOOTABLE|MF_DROPOFF)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_PUSHABLE|MF2_SLIDE|MF2_PASSMOBJ|MF2_TELESTOMP)
+	PROP_Flags3 (MF3_DONTMORPH)
+
+	PROP_SpawnState (S_POD_WAIT)
+	PROP_PainState (S_POD_PAIN)
+	PROP_DeathState (S_POD_DIE)
+
+	PROP_DeathSound ("world/podexplode")
+END_DEFAULTS
 
 void APod::BeginPlay ()
 {
@@ -90,11 +90,8 @@ void APod::BeginPlay ()
 
 class APodGoo : public AActor
 {
-	DECLARE_ACTOR (APodGoo, AActor);
+	DECLARE_ACTOR (APodGoo, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (APodGoo, AActor);
-REGISTER_ACTOR (APodGoo, Heretic);
 
 FState APodGoo::States[] =
 {
@@ -106,38 +103,31 @@ FState APodGoo::States[] =
 	S_NORMAL (PPOD, 'G',   10, NULL 						, NULL)
 };
 
-void APodGoo::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_PODGOO];
-	info->radius = 2 * FRACUNIT;
-	info->height = 4 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_NOTELEPORT|MF2_LOGRAV|MF2_CANNOTPUSH;
-}
+IMPLEMENT_ACTOR (APodGoo, Heretic, -1, 0)
+	PROP_RadiusFixed (2)
+	PROP_HeightFixed (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_LOGRAV|MF2_CANNOTPUSH)
+
+	PROP_SpawnState (S_PODGOO)
+END_DEFAULTS
 
 // Pod generator ------------------------------------------------------------
 
 class APodGenerator : public AActor
 {
-	DECLARE_ACTOR (APodGenerator, AActor);
+	DECLARE_ACTOR (APodGenerator, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (APodGenerator, AActor);
-REGISTER_ACTOR (APodGenerator, Heretic);
 
 FState APodGenerator::States[] =
 {
 	S_NORMAL (TNT1, 'A',   35, A_MakePod					, &States[0])
 };
 
-void APodGenerator::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 43;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOSECTOR;
-}
+IMPLEMENT_ACTOR (APodGenerator, Heretic, 43, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // --- Pod action functions -------------------------------------------------
 
@@ -233,57 +223,42 @@ void A_AccTeleGlitter (AActor *);
 
 class ATeleGlitterGenerator1 : public AActor
 {
-	DECLARE_ACTOR (ATeleGlitterGenerator1, AActor);
+	DECLARE_ACTOR (ATeleGlitterGenerator1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ATeleGlitterGenerator1, AActor);
-REGISTER_ACTOR (ATeleGlitterGenerator1, Heretic);
 
 FState ATeleGlitterGenerator1::States[] =
 {
 	S_NORMAL (TGLT, 'A',	8, A_SpawnTeleGlitter			, &States[0])
 };
 
-void ATeleGlitterGenerator1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 74;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY|MF_NOSECTOR;
-}
+IMPLEMENT_ACTOR (ATeleGlitterGenerator1, Heretic, 74, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY|MF_NOSECTOR)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Teleglitter generator 2 --------------------------------------------------
 
 class ATeleGlitterGenerator2 : public AActor
 {
-	DECLARE_ACTOR (ATeleGlitterGenerator2, AActor);
+	DECLARE_ACTOR (ATeleGlitterGenerator2, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ATeleGlitterGenerator2, AActor);
-REGISTER_ACTOR (ATeleGlitterGenerator2, Heretic);
 
 FState ATeleGlitterGenerator2::States[] =
 {
 	S_NORMAL (TGLT, 'F',	8, A_SpawnTeleGlitter2			, &States[0])
 };
 
-void ATeleGlitterGenerator2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 52;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY|MF_NOSECTOR;
-}
+IMPLEMENT_ACTOR (ATeleGlitterGenerator2, Heretic, 52, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY|MF_NOSECTOR)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Teleglitter 1 ------------------------------------------------------------
 
 class ATeleGlitter1 : public AActor
 {
-	DECLARE_ACTOR (ATeleGlitter1, AActor);
+	DECLARE_ACTOR (ATeleGlitter1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ATeleGlitter1, AActor);
-REGISTER_ACTOR (ATeleGlitter1, Heretic);
 
 FState ATeleGlitter1::States[] =
 {
@@ -294,22 +269,17 @@ FState ATeleGlitter1::States[] =
 	S_BRIGHT (TGLT, 'E',	2, NULL 						, &States[0])
 };
 
-void ATeleGlitter1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY|MF_MISSILE;
-}
+IMPLEMENT_ACTOR (ATeleGlitter1, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY|MF_MISSILE)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Teleglitter 2 ------------------------------------------------------------
 
 class ATeleGlitter2 : public AActor
 {
-	DECLARE_ACTOR (ATeleGlitter2, AActor);
+	DECLARE_ACTOR (ATeleGlitter2, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ATeleGlitter2, AActor);
-REGISTER_ACTOR (ATeleGlitter2, Heretic);
 
 FState ATeleGlitter2::States[] =
 {
@@ -320,12 +290,11 @@ FState ATeleGlitter2::States[] =
 	S_BRIGHT (TGLT, 'J',	2, NULL 						, &States[0])
 };
 
-void ATeleGlitter2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY|MF_MISSILE;
-}
+IMPLEMENT_ACTOR (ATeleGlitter2, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY|MF_MISSILE)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // --- Teleglitter action functions -----------------------------------------
 
@@ -342,7 +311,7 @@ void A_SpawnTeleGlitter (AActor *actor)
 	mo = Spawn<ATeleGlitter1> (
 		actor->x+((P_Random()&31)-16)*FRACUNIT,
 		actor->y+((P_Random()&31)-16)*FRACUNIT,
-		actor->subsector->sector->floorheight);
+		actor->subsector->sector->floorplane.ZatPoint (actor->x, actor->y));
 	mo->momz = FRACUNIT/4;
 }
 
@@ -359,7 +328,7 @@ void A_SpawnTeleGlitter2 (AActor *actor)
 	mo = Spawn<ATeleGlitter2> (
 		actor->x+((P_Random()&31)-16)*FRACUNIT,
 		actor->y+((P_Random()&31)-16)*FRACUNIT,
-		actor->subsector->sector->floorheight);
+		actor->subsector->sector->floorplane.ZatPoint (actor->x, actor->y));
 	mo->momz = FRACUNIT/4;
 }
 
@@ -379,9 +348,9 @@ void A_AccTeleGlitter (AActor *actor)
 
 // Super map ----------------------------------------------------------------
 
-class ASuperMap : public APickup
+class ASuperMap : public AInventory
 {
-	DECLARE_ACTOR (ASuperMap, APickup);
+	DECLARE_ACTOR (ASuperMap, AInventory)
 protected:
 	bool TryPickup (AActor *toucher)
 	{
@@ -389,12 +358,9 @@ protected:
 	}
 	const char *PickupMessage ()
 	{
-		return TXT_ITEMSUPERMAP;
+		return GStrings(TXT_ITEMSUPERMAP);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ASuperMap, APickup);
-REGISTER_ACTOR (ASuperMap, Heretic);
 
 FState ASuperMap::States[] =
 {
@@ -402,14 +368,12 @@ FState ASuperMap::States[] =
 	S_NORMAL (SPMP, 'A',   -1, NULL 						, NULL)
 };
 
-void ASuperMap::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 35;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-}
+IMPLEMENT_ACTOR (ASuperMap, Heretic, 35, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // --- Volcano --------------------------------------------------------------
 
@@ -422,11 +386,8 @@ extern void A_BeastPuff (AActor *);
 
 class AVolcano : public AActor
 {
-	DECLARE_ACTOR (AVolcano, AActor);
+	DECLARE_ACTOR (AVolcano, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AVolcano, AActor);
-REGISTER_ACTOR (AVolcano, Heretic);
 
 FState AVolcano::States[] =
 {
@@ -441,25 +402,20 @@ FState AVolcano::States[] =
 	S_NORMAL (VLCO, 'E',   10, A_VolcanoBlast			, &States[1])
 };
 
-void AVolcano::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 87;
-	info->spawnstate = &States[0];
-	info->radius = 12 * FRACUNIT;
-	info->height = 20 * FRACUNIT;
-	info->flags = MF_SOLID;
-}
+IMPLEMENT_ACTOR (AVolcano, Heretic, 87, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (20)
+	PROP_Flags (MF_SOLID)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Volcano blast ------------------------------------------------------------
 
 class AVolcanoBlast : public AActor
 {
-	DECLARE_ACTOR (AVolcanoBlast, AActor);
+	DECLARE_ACTOR (AVolcanoBlast, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AVolcanoBlast, AActor);
-REGISTER_ACTOR (AVolcanoBlast, Heretic);
 
 FState AVolcanoBlast::States[] =
 {
@@ -476,29 +432,26 @@ FState AVolcanoBlast::States[] =
 	S_NORMAL (XPL1, 'F',	4, NULL 					, NULL)
 };
 
-void AVolcanoBlast::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_VOLCANOBALL];
-	info->deathstate = &States[S_VOLCANOBALLX];
-	info->deathsound = "world/volcanoblast";
-	info->speed = 2 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 2;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_LOGRAV|MF2_NOTELEPORT|MF2_FIREDAMAGE;
-}
+IMPLEMENT_ACTOR (AVolcanoBlast, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (2)
+	PROP_Damage (2)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_LOGRAV|MF2_NOTELEPORT|MF2_FIREDAMAGE)
+
+	PROP_SpawnState (S_VOLCANOBALL)
+	PROP_DeathState (S_VOLCANOBALLX)
+
+	PROP_DeathSound ("world/volcano/blast")
+END_DEFAULTS
 
 // Volcano T Blast ----------------------------------------------------------
 
 class AVolcanoTBlast : public AActor
 {
-	DECLARE_ACTOR (AVolcanoTBlast, AActor);
+	DECLARE_ACTOR (AVolcanoTBlast, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AVolcanoTBlast, AActor);
-REGISTER_ACTOR (AVolcanoTBlast, Heretic);
 
 FState AVolcanoTBlast::States[] =
 {
@@ -516,18 +469,17 @@ FState AVolcanoTBlast::States[] =
 	S_NORMAL (SFFI, 'E',	4, NULL 					, NULL)
 };
 
-void AVolcanoTBlast::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_VOLCANOTBALL];
-	info->deathstate = &States[S_VOLCANOTBALLX];
-	info->speed = 2 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_LOGRAV|MF2_NOTELEPORT|MF2_FIREDAMAGE;
-}
+IMPLEMENT_ACTOR (AVolcanoTBlast, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (2)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_LOGRAV|MF2_NOTELEPORT|MF2_FIREDAMAGE)
+
+	PROP_SpawnState (S_VOLCANOTBALL)
+	PROP_DeathState (S_VOLCANOTBALLX)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -565,7 +517,7 @@ void A_VolcanoBlast (AActor *volcano)
 		blast->momx = FixedMul (1*FRACUNIT, finecosine[angle]);
 		blast->momy = FixedMul (1*FRACUNIT, finesine[angle]);
 		blast->momz = (FRACUNIT*5/2) + (P_Random() << 10);
-		S_Sound (blast, CHAN_BODY, "volcano/shoot", 1, ATTN_NORM);
+		S_Sound (blast, CHAN_BODY, "world/volcano/shoot", 1, ATTN_NORM);
 		P_CheckMissileSpawn (blast);
 	}
 }

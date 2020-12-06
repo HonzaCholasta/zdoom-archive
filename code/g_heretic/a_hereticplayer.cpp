@@ -18,13 +18,10 @@ void A_FlameSnd (AActor *);
 
 class AHereticPlayer : public APlayerPawn
 {
-	DECLARE_ACTOR (AHereticPlayer, APlayerPawn);
+	DECLARE_ACTOR (AHereticPlayer, APlayerPawn)
 public:
 	void GiveDefaultInventory ();
 };
-
-IMPLEMENT_DEF_SERIAL (AHereticPlayer, APlayerPawn);
-REGISTER_ACTOR (AHereticPlayer, Heretic);
 
 FState AHereticPlayer::States[] =
 {
@@ -87,34 +84,31 @@ FState AHereticPlayer::States[] =
 	S_BRIGHT (FDTH, 'P',	4, NULL 						, &States[S_PLAY_FDTH+16]),
 	S_BRIGHT (FDTH, 'Q',	5, NULL 						, &States[S_PLAY_FDTH+17]),
 	S_BRIGHT (FDTH, 'R',	4, NULL 						, &States[S_PLAY_FDTH+18]),
-	S_NORMAL (ACLO, 'E',   35, A_CheckBurnGone				, &States[S_PLAY_FDTH+18]),
+	S_NORMAL (ACLO, 'E',   35, A_CheckBurnGone				, &States[S_PLAY_FDTH+19]),
 	S_NORMAL (ACLO, 'E',	8, NULL 						, NULL)
 };
 
-void AHereticPlayer::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_PLAY];
-	info->spawnhealth = 100;
-	info->seestate = &States[S_PLAY_RUN];
-	info->painstate = &States[S_PLAY_PAIN];
-	info->painchance = 255;
-	info->painsound = "*pain100_1";
-	info->missilestate = &States[S_PLAY_ATK];
-	info->deathstate = &States[S_PLAY_DIE];
-	info->xdeathstate = &States[S_PLAY_XDIE];
-	info->bdeathstate = &States[S_PLAY_FDTH];
-	info->deathsound = "*death1";
-	info->radius = 16 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 100;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_PICKUP|MF_NOTDMATCH;
-	info->flags2 = MF2_WINDTHRUST|MF2_FLOORCLIP|MF2_SLIDE|MF2_PASSMOBJ|MF2_PUSHWALL|MF2_TELESTOMP;
-}
+IMPLEMENT_ACTOR (AHereticPlayer, Heretic, -1, 0)
+	PROP_SpawnHealth (100)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (56)
+	PROP_Mass (100)
+	PROP_PainChance (255)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_PICKUP|MF_NOTDMATCH)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_FLOORCLIP|MF2_SLIDE|MF2_PASSMOBJ|MF2_PUSHWALL|MF2_TELESTOMP)
+
+	PROP_SpawnState (S_PLAY)
+	PROP_SeeState (S_PLAY_RUN)
+	PROP_PainState (S_PLAY_PAIN)
+	PROP_MissileState (S_PLAY_ATK)
+	PROP_DeathState (S_PLAY_DIE)
+	PROP_XDeathState (S_PLAY_XDIE)
+	PROP_BDeathState (S_PLAY_FDTH)
+END_DEFAULTS
 
 void AHereticPlayer::GiveDefaultInventory ()
 {
-	player->health = GetInfo (this)->spawnhealth;
+	player->health = GetDefault()->health;
 	player->readyweapon = player->pendingweapon = wp_goldwand;
 	player->weaponowned[wp_staff] = true;
 	player->weaponowned[wp_goldwand] = true;
@@ -125,11 +119,8 @@ void AHereticPlayer::GiveDefaultInventory ()
 
 class ABloodySkull : public APlayerPawn
 {
-	DECLARE_ACTOR (ABloodySkull, APlayerPawn);
+	DECLARE_ACTOR (ABloodySkull, APlayerPawn)
 };
-
-IMPLEMENT_DEF_SERIAL (ABloodySkull, APlayerPawn);
-REGISTER_ACTOR (ABloodySkull, Heretic);
 
 FState ABloodySkull::States[] =
 {
@@ -147,16 +138,15 @@ FState ABloodySkull::States[] =
 	S_NORMAL (BSKL, 'F', 1050, NULL 						, NULL)
 };
 
-void ABloodySkull::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_BLOODYSKULL];
-	info->radius = 4*FRACUNIT;
-	info->height = 4*FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_DROPOFF;
-	info->flags2 = MF2_LOGRAV|MF2_CANNOTPUSH;
-	info->flags3 = MF3_SKYEXPLODE;
-}
+IMPLEMENT_ACTOR (ABloodySkull, Heretic, -1, 0)
+	PROP_RadiusFixed (4)
+	PROP_HeightFixed (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_DROPOFF)
+	PROP_Flags2 (MF2_LOGRAV|MF2_CANNOTPUSH)
+	PROP_Flags3 (MF3_SKYEXPLODE)
+
+	PROP_SpawnState (S_BLOODYSKULL)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -199,7 +189,7 @@ void A_CheckSkullFloor (AActor *actor)
 {
 	if (actor->z <= actor->floorz)
 	{
-		actor->SetState (&AHereticPlayer::States[S_BLOODYSKULLX1]);
+		actor->SetState (&ABloodySkull::States[S_BLOODYSKULLX1]);
 	}
 }
 
@@ -213,7 +203,7 @@ void A_CheckSkullDone (AActor *actor)
 {
 	if (actor->special2 == 666)
 	{
-		actor->SetState (&AHereticPlayer::States[S_BLOODYSKULLX2]);
+		actor->SetState (&ABloodySkull::States[S_BLOODYSKULLX2]);
 	}
 }
 
@@ -239,10 +229,6 @@ void A_CheckBurnGone (AActor *actor)
 
 void A_FlameSnd (AActor *actor)
 {
-	if (actor->player != NULL)
-	{
-		actor->player->cheats |= CF_NOSKIN;
-	}
 	S_Sound (actor, CHAN_BODY, "misc/burn", 1, ATTN_NORM);	// Burn sound
 }
 

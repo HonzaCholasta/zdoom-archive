@@ -7,21 +7,15 @@
 
 class ASecretTrigger : public AActor
 {
-	DECLARE_STATELESS_ACTOR (ASecretTrigger, AActor);
+	DECLARE_STATELESS_ACTOR (ASecretTrigger, AActor)
 public:
 	void PostBeginPlay ();
 	void Activate (AActor *activator);
 };
 
-IMPLEMENT_DEF_SERIAL (ASecretTrigger, AActor);
-REGISTER_ACTOR (ASecretTrigger, Any);
-
-void ASecretTrigger::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->doomednum = 9046;
-	info->flags = MF_NOBLOCKMAP|MF_NOSECTOR|MF_NOGRAVITY;
-}
+IMPLEMENT_STATELESS_ACTOR (ASecretTrigger, Any, 9046, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR|MF_NOGRAVITY)
+END_DEFAULTS
 
 void ASecretTrigger::PostBeginPlay ()
 {

@@ -24,6 +24,7 @@
 #include <stdio.h>
 
 #include "doomdef.h"
+#include "templates.h"
 #include "g_level.h"
 #include "z_zone.h"
 #include "doomdef.h"
@@ -46,7 +47,7 @@
 #include "r_state.h"
 
 // Data.
-#include "dstrings.h"
+#include "gstrings.h"
 
 #include "am_map.h"
 
@@ -58,31 +59,43 @@ static int Background, YourColor, WallColor, TSWallColor,
 		   AlmostBackground,
 		   IntraTeleportColor, InterTeleportColor;
 
-CVAR (am_rotate,			"0",		CVAR_ARCHIVE)
-CVAR (am_overlay,			"0",		CVAR_ARCHIVE)
-CVAR (am_showsecrets,		"1",		CVAR_ARCHIVE)
-CVAR (am_showmonsters,		"1",		CVAR_ARCHIVE)
-CVAR (am_showtime,			"1",		CVAR_ARCHIVE)
-CVAR (am_usecustomcolors,	"1",		CVAR_ARCHIVE)
-CVAR (am_backcolor,			"6c 54 40",	CVAR_ARCHIVE)
-CVAR (am_yourcolor,			"fc e8 d8",	CVAR_ARCHIVE)
-CVAR (am_wallcolor,			"2c 18 08",	CVAR_ARCHIVE)
-CVAR (am_tswallcolor,		"88 88 88",	CVAR_ARCHIVE)
-CVAR (am_fdwallcolor,		"88 70 58",	CVAR_ARCHIVE)
-CVAR (am_cdwallcolor,		"4c 38 20",	CVAR_ARCHIVE)
-CVAR (am_thingcolor,		"fc fc fc",	CVAR_ARCHIVE)
-CVAR (am_gridcolor,			"8b 5a 2b",	CVAR_ARCHIVE)
-CVAR (am_xhaircolor,		"80 80 80",	CVAR_ARCHIVE)
-CVAR (am_notseencolor,		"6c 6c 6c",	CVAR_ARCHIVE)
-CVAR (am_lockedcolor,		"00 78 00",	CVAR_ARCHIVE)
-CVAR (am_ovyourcolor,		"fc e8 d8",	CVAR_ARCHIVE)
-CVAR (am_ovwallcolor,		"00 ff 00",	CVAR_ARCHIVE)
-CVAR (am_ovthingcolor,		"e8 88 00",	CVAR_ARCHIVE)
-CVAR (am_ovotherwallscolor,	"00 88 44",	CVAR_ARCHIVE)
-CVAR (am_ovunseencolor,		"00 22 6e",	CVAR_ARCHIVE)
-CVAR (am_ovtelecolor,		"ff ff 00", CVAR_ARCHIVE)
-CVAR (am_intralevelcolor,	"00 00 ff", CVAR_ARCHIVE)
-CVAR (am_interlevelcolor,	"ff 00 00", CVAR_ARCHIVE)
+static int DoomColors[11];
+static byte DoomPaletteVals[11*3] =
+{
+	0x00,0x00,0x00, 0xff,0xff,0xff, 0x10,0x10,0x10,
+	0xfc,0x00,0x00, 0x80,0x80,0x80, 0xbc,0x78,0x48,
+	0xfc,0xfc,0x00, 0x74,0xfc,0x6c, 0x4c,0x4c,0x4c,
+	0x80,0x80,0x80, 0x6c,0x6c,0x6c
+};
+
+static int WeightingScale;
+
+CVAR (Bool,  am_rotate,				false,		CVAR_ARCHIVE);
+CVAR (Bool,  am_overlay,			false,		CVAR_ARCHIVE);
+CVAR (Bool,  am_showsecrets,		true,		CVAR_ARCHIVE);
+CVAR (Bool,  am_showmonsters,		true,		CVAR_ARCHIVE);
+CVAR (Bool,  am_showtime,			true,		CVAR_ARCHIVE);
+CVAR (Bool,  am_usecustomcolors,	true,		CVAR_ARCHIVE);
+CVAR (Float, am_ovtrans,			1.f,		CVAR_ARCHIVE);
+CVAR (Color, am_backcolor,			0x6c5440,	CVAR_ARCHIVE);
+CVAR (Color, am_yourcolor,			0xfce8d8,	CVAR_ARCHIVE);
+CVAR (Color, am_wallcolor,			0x2c1808,	CVAR_ARCHIVE);
+CVAR (Color, am_tswallcolor,		0x888888,	CVAR_ARCHIVE);
+CVAR (Color, am_fdwallcolor,		0x887058,	CVAR_ARCHIVE);
+CVAR (Color, am_cdwallcolor,		0x4c3820,	CVAR_ARCHIVE);
+CVAR (Color, am_thingcolor,			0xfcfcfc,	CVAR_ARCHIVE);
+CVAR (Color, am_gridcolor,			0x8b5a2b,	CVAR_ARCHIVE);
+CVAR (Color, am_xhaircolor,			0x808080,	CVAR_ARCHIVE);
+CVAR (Color, am_notseencolor,		0x6c6c6c,	CVAR_ARCHIVE);
+CVAR (Color, am_lockedcolor,		0x007800,	CVAR_ARCHIVE);
+CVAR (Color, am_ovyourcolor,		0xfce8d8,	CVAR_ARCHIVE);
+CVAR (Color, am_ovwallcolor,		0x00ff00,	CVAR_ARCHIVE);
+CVAR (Color, am_ovthingcolor,		0xe88800,	CVAR_ARCHIVE);
+CVAR (Color, am_ovotherwallscolor,	0x008844,	CVAR_ARCHIVE);
+CVAR (Color, am_ovunseencolor,		0x00226e,	CVAR_ARCHIVE);
+CVAR (Color, am_ovtelecolor,		0xffff00,	CVAR_ARCHIVE);
+CVAR (Color, am_intralevelcolor,	0x0000ff,	CVAR_ARCHIVE);
+CVAR (Color, am_interlevelcolor,	0xff0000,	CVAR_ARCHIVE);
 
 // drawing stuff
 #define	FB		(screen)
@@ -267,7 +280,7 @@ static fixed_t scale_mtof = (fixed_t)INITSCALEMTOF;
 // used by FTOM to scale from frame-buffer-to-map coords (=1/scale_mtof)
 static fixed_t scale_ftom;
 
-static patch_t *marknums[10]; // numbers used for marking by the automap
+static int marknums[10]; // numbers used for marking by the automap
 static mpoint_t markpoints[AM_NUMMARKPOINTS]; // where the points are
 static int markpointnum = 0; // next point to be assigned
 
@@ -316,7 +329,7 @@ void AM_getIslope (mline_t *ml, islope_t *is)
 //
 //
 //
-void AM_activateNewScale(void)
+void AM_activateNewScale ()
 {
 	m_x += m_w/2;
 	m_y += m_h/2;
@@ -331,7 +344,7 @@ void AM_activateNewScale(void)
 //
 //
 //
-void AM_saveScaleAndLoc(void)
+void AM_saveScaleAndLoc ()
 {
 	old_m_x = m_x;
 	old_m_y = m_y;
@@ -342,7 +355,7 @@ void AM_saveScaleAndLoc(void)
 //
 //
 //
-void AM_restoreScaleAndLoc(void)
+void AM_restoreScaleAndLoc ()
 {
 	m_w = old_m_w;
 	m_h = old_m_h;
@@ -367,7 +380,7 @@ void AM_restoreScaleAndLoc(void)
 //
 // adds a marker at the current location
 //
-void AM_addMark(void)
+void AM_addMark ()
 {
 	markpoints[markpointnum].x = m_x + m_w/2;
 	markpoints[markpointnum].y = m_y + m_h/2;
@@ -378,14 +391,14 @@ void AM_addMark(void)
 // Determines bounding box of all vertices,
 // sets global variables controlling zoom range.
 //
-void AM_findMinMaxBoundaries(void)
+void AM_findMinMaxBoundaries ()
 {
 	int i;
 	fixed_t a;
 	fixed_t b;
 
-	min_x = min_y =  MAXINT;
-	max_x = max_y = -MAXINT;
+	min_x = min_y = FIXED_MAX;
+	max_x = max_y = FIXED_MIN;
   
 	for (i=0;i<numvertexes;i++) {
 		if (vertexes[i].x < min_x)
@@ -405,22 +418,22 @@ void AM_findMinMaxBoundaries(void)
 	min_w = 2*PLAYERRADIUS; // const? never changed?
 	min_h = 2*PLAYERRADIUS;
 
-	a = FixedDiv((screen->width)<<FRACBITS, max_w);
-	b = FixedDiv((screen->height)<<FRACBITS, max_h);
+	a = FixedDiv (SCREENWIDTH << FRACBITS, max_w);
+	b = FixedDiv (SCREENHEIGHT << FRACBITS, max_h);
 
 	min_scale_mtof = a < b ? a : b;
-	max_scale_mtof = FixedDiv((screen->height)<<FRACBITS, 2*PLAYERRADIUS);
+	max_scale_mtof = FixedDiv (SCREENHEIGHT << FRACBITS, 2*PLAYERRADIUS);
 }
 
 
 //
 //
 //
-void AM_changeWindowLoc(void)
+void AM_changeWindowLoc ()
 {
 	if (m_paninc.x || m_paninc.y) {
 		followplayer = 0;
-		f_oldloc.x = MAXINT;
+		f_oldloc.x = FIXED_MAX;
 	}
 
 	m_x += m_paninc.x;
@@ -444,22 +457,21 @@ void AM_changeWindowLoc(void)
 //
 //
 //
-void AM_initVariables(void)
+void AM_initVariables ()
 {
 	int pnum;
-	static event_t st_notify = { ev_keyup, AM_MSGENTERED };
 
 	automapactive = true;
 
-	f_oldloc.x = MAXINT;
+	f_oldloc.x = FIXED_MAX;
 	amclock = 0;
 
 	m_paninc.x = m_paninc.y = 0;
 	ftom_zoommul = FRACUNIT;
 	mtof_zoommul = FRACUNIT;
 
-	m_w = FTOM(screen->width);
-	m_h = FTOM(screen->height);
+	m_w = FTOM(SCREENWIDTH);
+	m_h = FTOM(SCREENHEIGHT);
 
 	// find player to center on initially
 	if (!playeringame[pnum = consoleplayer])
@@ -476,9 +488,6 @@ void AM_initVariables(void)
 	old_m_y = m_y;
 	old_m_w = m_w;
 	old_m_h = m_h;
-
-	// inform the status bar of the change
-	ST_Responder (&st_notify);
 }
 
 static void GetComponents (int color, DWORD *palette, float &r, float &g, float &b)
@@ -491,91 +500,94 @@ static void GetComponents (int color, DWORD *palette, float &r, float &g, float 
 	b = (float)BPART(color);
 }
 
-void AM_initColors (BOOL overlayed)
+static void AM_initColors (BOOL overlayed)
 {
+	static DWORD *lastpal = NULL;
+	static int lastback = -1;
 	DWORD *palette;
 	
-	if (screen->is8bit)
-		palette = DefaultPalette->colors;
-	else
-		palette = NULL;
+	palette = (DWORD *)GPalette.BaseColors;
+
+	if (lastpal != palette)
+	{
+		int i, j;
+
+		for (i = j = 0; i < 11; i++, j += 3)
+		{
+			DoomColors[i] = palette
+				? ColorMatcher.Pick (DoomPaletteVals[j], DoomPaletteVals[j+1], DoomPaletteVals[j+2])
+				: MAKERGB(DoomPaletteVals[j], DoomPaletteVals[j+1], DoomPaletteVals[j+2]);
+		}
+	}
 
 	if (overlayed)
 	{
-		YourColor = V_GetColorFromString (palette, am_ovyourcolor.string);
-		SecretWallColor =
-			WallColor = V_GetColorFromString (palette, am_ovwallcolor.string);
-		ThingColor = V_GetColorFromString (palette, am_ovthingcolor.string);
-		FDWallColor =
-			CDWallColor =
-			LockedColor = V_GetColorFromString (palette, am_ovotherwallscolor.string);
-		NotSeenColor =
-			TSWallColor = V_GetColorFromString (palette, am_ovunseencolor.string);
-		IntraTeleportColor =
-			InterTeleportColor = V_GetColorFromString (palette, am_ovtelecolor.string);
+		YourColor = am_ovyourcolor.GetIndex ();
+		SecretWallColor = WallColor = am_ovwallcolor.GetIndex ();
+		ThingColor = am_ovthingcolor.GetIndex ();
+		FDWallColor = CDWallColor = LockedColor = am_ovotherwallscolor.GetIndex ();
+		NotSeenColor = TSWallColor = am_ovunseencolor.GetIndex ();
+		IntraTeleportColor = InterTeleportColor = am_ovtelecolor.GetIndex ();
 	}
-	else if (am_usecustomcolors.value)
+	else if (*am_usecustomcolors)
 	{
 		/* Use the custom colors in the am_* cvars */
-		Background = V_GetColorFromString (palette, am_backcolor.string);
-		YourColor = V_GetColorFromString (palette, am_yourcolor.string);
-		SecretWallColor =
-			WallColor = V_GetColorFromString (palette, am_wallcolor.string);
-		TSWallColor = V_GetColorFromString (palette, am_tswallcolor.string);
-		FDWallColor = V_GetColorFromString (palette, am_fdwallcolor.string);
-		CDWallColor = V_GetColorFromString (palette, am_cdwallcolor.string);
-		ThingColor = V_GetColorFromString (palette, am_thingcolor.string);
-		GridColor = V_GetColorFromString (palette, am_gridcolor.string);
-		XHairColor = V_GetColorFromString (palette, am_xhaircolor.string);
-		NotSeenColor = V_GetColorFromString (palette, am_notseencolor.string);
-		LockedColor = V_GetColorFromString (palette, am_lockedcolor.string);
-		InterTeleportColor = V_GetColorFromString (palette, am_interlevelcolor.string);
-		IntraTeleportColor = V_GetColorFromString (palette, am_intralevelcolor.string);
-		{
-			unsigned int ba = V_GetColorFromString (NULL, am_backcolor.string);
-			int r = RPART(ba) - 16;
-			int g = GPART(ba) - 16;
-			int b = BPART(ba) - 16;
-			if (r < 0)
-				r += 32;
-			if (g < 0)
-				g += 32;
-			if (b < 0)
-				b += 32;
+		Background = am_backcolor.GetIndex ();
+		YourColor = am_yourcolor.GetIndex ();
+		SecretWallColor = WallColor = am_wallcolor.GetIndex ();
+		TSWallColor = am_tswallcolor.GetIndex ();
+		FDWallColor = am_fdwallcolor.GetIndex ();
+		CDWallColor = am_cdwallcolor.GetIndex ();
+		ThingColor = am_thingcolor.GetIndex ();
+		GridColor = am_gridcolor.GetIndex ();
+		XHairColor = am_xhaircolor.GetIndex ();
+		NotSeenColor = am_notseencolor.GetIndex ();
+		LockedColor = am_lockedcolor.GetIndex ();
+		InterTeleportColor = am_interlevelcolor.GetIndex ();
+		IntraTeleportColor = am_intralevelcolor.GetIndex ();
 
-			if (screen->is8bit)
-				AlmostBackground = BestColor (DefaultPalette->basecolors, r, g , b, DefaultPalette->numcolors);
-			else
-				AlmostBackground = MAKERGB(r,g,b);
-		}
+		DWORD ba = *am_backcolor;
+
+		int r = RPART(ba) - 16;
+		int g = GPART(ba) - 16;
+		int b = BPART(ba) - 16;
+
+		if (r < 0)
+			r += 32;
+		if (g < 0)
+			g += 32;
+		if (b < 0)
+			b += 32;
+
+		AlmostBackground = ColorMatcher.Pick (r, g, b);
 	}
 	else
-	{
-		/* Use colors corresponding to the original Doom's */
-		Background = V_GetColorFromString (palette, "00 00 00");
-		YourColor = V_GetColorFromString (palette, "FF FF FF");
-		AlmostBackground = V_GetColorFromString (palette, "10 10 10");
+	{ // Use colors corresponding to the original Doom's
+		Background = DoomColors[0];
+		YourColor = DoomColors[1];
+		AlmostBackground = DoomColors[2];
 		SecretWallColor =
-			WallColor = V_GetColorFromString (palette, "fc 00 00");
-		TSWallColor = V_GetColorFromString (palette, "80 80 80");
-		FDWallColor = V_GetColorFromString (palette, "bc 78 48");
+			WallColor = DoomColors[3];
+		TSWallColor = DoomColors[4];
+		FDWallColor = DoomColors[5];
 		LockedColor =
-			CDWallColor = V_GetColorFromString (palette, "fc fc 00");
-		ThingColor = V_GetColorFromString (palette, "74 fc 6c");
-		GridColor = V_GetColorFromString (palette, "4c 4c 4c");
-		XHairColor = V_GetColorFromString (palette, "80 80 80");
-		NotSeenColor = V_GetColorFromString (palette, "6c 6c 6c");
+			CDWallColor = DoomColors[6];
+		ThingColor = DoomColors[7];
+		GridColor = DoomColors[8];
+		XHairColor = DoomColors[9];
+		NotSeenColor = DoomColors[10];
 	}
 
 	// initialize the anti-aliased lines
-	static const struct
+	static struct
 	{
 		int *color;
+		int prevcolor;
 		int falseColor;
 	} aliasedLines[3] = {
-		{ &WallColor, WALLCOLORS },
-		{ &FDWallColor, FDWALLCOLORS },
-		{ &CDWallColor, CDWALLCOLORS }
+		{ &WallColor, -1, WALLCOLORS },
+		{ &FDWallColor, -1, FDWALLCOLORS },
+		{ &CDWallColor, -1, CDWALLCOLORS }
 	};
 	float backRed, backGreen, backBlue;
 
@@ -583,62 +595,58 @@ void AM_initColors (BOOL overlayed)
 
 	for (int alias = 0; alias < NUMALIASES; alias++)
 	{
-		float foreRed, foreGreen, foreBlue;
-
-		GetComponents (*(aliasedLines[alias].color), palette, foreRed, foreGreen, foreBlue);
-
-		for (int i = 0; i < NUMWEIGHTS; i++)
+		if (aliasedLines[alias].prevcolor != *(aliasedLines[alias].color) ||
+			lastpal != palette || lastback != Background)
 		{
-			float step = (float)i;
-			float fore = (NUMWEIGHTS-1 - step) / (NUMWEIGHTS-1);
-			float back = step / (NUMWEIGHTS-1);
-			int red = (int)(backRed * back + foreRed * fore);
-			int green = (int)(backGreen * back + foreGreen * fore);
-			int blue = (int)(backGreen * back + foreBlue * fore);
-			if (palette)
-				antialias[alias][i] = BestColor (palette, red, green, blue, 256);
-			else
-				antialias[alias][i] = MAKERGB(red, green, blue);
+			float foreRed, foreGreen, foreBlue;
+
+			aliasedLines[alias].prevcolor = *(aliasedLines[alias].color);
+			GetComponents (*(aliasedLines[alias].color), palette, foreRed, foreGreen, foreBlue);
+
+			for (int i = 0; i < NUMWEIGHTS; i++)
+			{
+				float step = (float)i;
+				float fore = (NUMWEIGHTS-1 - step) / (NUMWEIGHTS-1);
+				float back = step / (NUMWEIGHTS-1);
+				int red = (int)(backRed * back + foreRed * fore);
+				int green = (int)(backGreen * back + foreGreen * fore);
+				int blue = (int)(backGreen * back + foreBlue * fore);
+				if (palette)
+					antialias[alias][i] = ColorMatcher.Pick (red, green, blue);
+				else
+					antialias[alias][i] = MAKERGB(red, green, blue);
+			}
+			*(aliasedLines[alias].color) = aliasedLines[alias].falseColor;
 		}
-		*(aliasedLines[alias].color) = aliasedLines[alias].falseColor;
 	}
+	lastpal = palette;
+	lastback = Background;
 }
 
 //
 // 
 //
-void AM_loadPics(void)
+void AM_loadPics ()
 {
 	int i;
-	int lump;
 	char namebuf[9];
   
 	for (i = 0; i < 10; i++)
 	{
 		sprintf (namebuf, "AMMNUM%d", i);
-		lump = W_CheckNumForName (namebuf);
-		if (lump != -1)
-			marknums[i] = (patch_t *)W_CacheLumpNum (lump, PU_STATIC);
-		else
-			marknums[i] = NULL;
-	}
-}
-
-void AM_unloadPics(void)
-{
-	int i;
-  
-	for (i = 0; i < 10; i++)
-	{
-		if (marknums[i])
+		marknums[i] = R_CheckTileNumForName (namebuf, TILE_Patch);
+		if (marknums[i] != -1)
 		{
-			Z_ChangeTag (marknums[i], PU_CACHE);
-			marknums[i] = NULL;
+			R_CacheTileNum (marknums[i], PU_CACHE);
 		}
 	}
 }
 
-void AM_clearMarks(void)
+void AM_unloadPics ()
+{
+}
+
+void AM_clearMarks ()
 {
 	int i;
 
@@ -651,7 +659,7 @@ void AM_clearMarks(void)
 // should be called at the start of every level
 // right now, i figure it out myself
 //
-void AM_LevelInit (void)
+void AM_LevelInit ()
 {
 	leveljuststarted = 0;
 
@@ -670,22 +678,19 @@ void AM_LevelInit (void)
 //
 //
 //
-void AM_Stop (void)
+void AM_Stop ()
 {
-	static event_t st_notify = { ev_keyup, AM_MSGEXITED };
-
 	AM_unloadPics ();
 	automapactive = false;
-	ST_Responder (&st_notify);
 	stopped = true;
-	BorderNeedRefresh = true;
+	BorderNeedRefresh = screen->GetPageCount ();
 	viewactive = true;
 }
 
 //
 //
 //
-void AM_Start (void)
+void AM_Start ()
 {
 	static char lastmap[8] = "";
 
@@ -703,7 +708,7 @@ void AM_Start (void)
 //
 // set the window scale to the maximum size
 //
-void AM_minOutWindowScale(void)
+void AM_minOutWindowScale ()
 {
 	scale_mtof = min_scale_mtof;
 	scale_ftom = FixedDiv(FRACUNIT, scale_mtof);
@@ -712,41 +717,37 @@ void AM_minOutWindowScale(void)
 //
 // set the window scale to the minimum size
 //
-void AM_maxOutWindowScale(void)
+void AM_maxOutWindowScale ()
 {
 	scale_mtof = max_scale_mtof;
 	scale_ftom = FixedDiv(FRACUNIT, scale_mtof);
 }
 
 
-BEGIN_COMMAND (togglemap)
+CCMD (togglemap)
 {
 	if (gamestate != GS_LEVEL)
 		return;
 
-	SB_state = -1;
+	SB_state = screen->GetPageCount ();
 	if (!automapactive)
 	{
 		AM_Start ();
-		viewactive = (am_overlay.value != 0.f);
+		viewactive = (*am_overlay != 0.f);
 	}
 	else
 	{
-		if (am_overlay.value && viewactive)
+		if (*am_overlay && viewactive)
 		{
 			viewactive = false;
-			SB_state = -1;
+			SB_state = screen->GetPageCount ();
 		}
 		else
 		{
 			AM_Stop ();
 		}
 	}
-
-	if (automapactive)
-		AM_initColors (viewactive);
 }
-END_COMMAND (togglemap)
 
 //
 // Handle events (user inputs) in automap mode
@@ -759,10 +760,10 @@ BOOL AM_Responder (event_t *ev)
 
 	rc = false;
 
-	if (automapactive && ev->type == ev_keydown)
+	if (automapactive && ev->type == EV_KeyDown)
 	{
 		rc = true;
-		switch(ev->data1)
+		switch (ev->data1)
 		{
 		case AM_PANRIGHTKEY: // pan right
 			if (!followplayer)
@@ -813,20 +814,20 @@ BOOL AM_Responder (event_t *ev)
 			{
 			case AM_FOLLOWKEY:
 				followplayer = !followplayer;
-				f_oldloc.x = MAXINT;
-				Printf (PRINT_HIGH, "%s\n", followplayer ? AMSTR_FOLLOWON : AMSTR_FOLLOWOFF);
+				f_oldloc.x = FIXED_MAX;
+				Printf ("%s\n", GStrings(followplayer ? AMSTR_FOLLOWON : AMSTR_FOLLOWOFF));
 				break;
 			case AM_GRIDKEY:
 				grid = !grid;
-				Printf (PRINT_HIGH, "%s\n", grid ? AMSTR_GRIDON : AMSTR_GRIDOFF);
+				Printf ("%s\n", GStrings(grid ? AMSTR_GRIDON : AMSTR_GRIDOFF));
 				break;
 			case AM_MARKKEY:
-				Printf (PRINT_HIGH, "%s %d\n", AMSTR_MARKEDSPOT, markpointnum);
+				Printf ("%s %d\n", GStrings(AMSTR_MARKEDSPOT), markpointnum);
 				AM_addMark();
 				break;
 			case AM_CLEARMARKKEY:
 				AM_clearMarks();
-				Printf (PRINT_HIGH, "%s\n", AMSTR_MARKSCLEARED);
+				Printf ("%s\n", GStrings(AMSTR_MARKSCLEARED));
 				break;
 			default:
 				cheatstate = 0;
@@ -834,7 +835,7 @@ BOOL AM_Responder (event_t *ev)
 			}
 		}
 	}
-	else if (ev->type == ev_keyup)
+	else if (ev->type == EV_KeyUp)
 	{
 		rc = false;
 		switch (ev->data1)
@@ -868,7 +869,7 @@ BOOL AM_Responder (event_t *ev)
 //
 // Zooming
 //
-void AM_changeWindowScale (void)
+void AM_changeWindowScale ()
 {
 	// Change the scaling multipliers
 	scale_mtof = FixedMul(scale_mtof, mtof_zoommul);
@@ -884,7 +885,7 @@ void AM_changeWindowScale (void)
 //
 //
 //
-void AM_doFollowPlayer(void)
+void AM_doFollowPlayer ()
 {
     if (f_oldloc.x != players[consoleplayer].camera->x ||
 		f_oldloc.y != players[consoleplayer].camera->y)
@@ -901,7 +902,7 @@ void AM_doFollowPlayer(void)
 //
 // Updates on Game Tick
 //
-void AM_Ticker (void)
+void AM_Ticker ()
 {
 	if (!automapactive)
 		return;
@@ -926,26 +927,7 @@ void AM_Ticker (void)
 //
 void AM_clearFB (int color)
 {
-	int y;
-
-	if (screen->is8bit) {
-		if (f_w == f_p)
-			memset (fb, color, f_w*f_h);
-		else
-			for (y = 0; y < f_h; y++)
-				memset (fb + y * f_p, color, f_w);
-	} else {
-		int x;
-		int *line;
-
-		line = (int *)(fb);
-		for (y = 0; y < f_h; y++) {
-			for (x = 0; x < f_w; x++) {
-				line[x] = color;
-			}
-			line += f_p >> 2;
-		}
-	}
+	screen->Clear (0, 0, f_w, f_h, color);
 }
 
 
@@ -954,7 +936,7 @@ void AM_clearFB (int color)
 //
 // Based on Cohen-Sutherland clipping algorithm but with a slightly
 // faster reject and precalculated slopes.  If the speed is needed,
-// use a hash algorithm to handle  the common cases.
+// use a hash algorithm to handle the common cases.
 //
 BOOL AM_clipMline (mline_t *ml, fline_t *fl)
 {
@@ -962,9 +944,9 @@ BOOL AM_clipMline (mline_t *ml, fline_t *fl)
 		LEFT	=1,
 		RIGHT	=2,
 		BOTTOM	=4,
-		TOP	=8
+		TOP		=8
 	};
-    
+
 	register int outcode1 = 0;
 	register int outcode2 = 0;
 	register int outside;
@@ -973,7 +955,6 @@ BOOL AM_clipMline (mline_t *ml, fline_t *fl)
 	int dx;
 	int dy;
 
-    
 #define DOOUTCODE(oc, mx, my) \
 	(oc) = 0; \
 	if ((my) < 0) (oc) |= TOP; \
@@ -991,7 +972,7 @@ BOOL AM_clipMline (mline_t *ml, fline_t *fl)
 		outcode2 = TOP;
 	else if (ml->b.y < m_y)
 		outcode2 = BOTTOM;
-    
+
 	if (outcode1 & outcode2)
 		return false; // trivially outside
 
@@ -999,12 +980,12 @@ BOOL AM_clipMline (mline_t *ml, fline_t *fl)
 		outcode1 |= LEFT;
 	else if (ml->a.x > m_x2)
 		outcode1 |= RIGHT;
-    
+
 	if (ml->b.x < m_x)
 		outcode2 |= LEFT;
 	else if (ml->b.x > m_x2)
 		outcode2 |= RIGHT;
-    
+
 	if (outcode1 & outcode2)
 		return false; // trivially outside
 
@@ -1029,32 +1010,42 @@ BOOL AM_clipMline (mline_t *ml, fline_t *fl)
 			outside = outcode2;
 	
 		// clip to each side
-		if (outside & TOP) {
+		if (outside & TOP)
+		{
 			dy = fl->a.y - fl->b.y;
 			dx = fl->b.x - fl->a.x;
 			tmp.x = fl->a.x + (dx*(fl->a.y))/dy;
 			tmp.y = 0;
-		} else if (outside & BOTTOM) {
+		}
+		else if (outside & BOTTOM)
+		{
 			dy = fl->a.y - fl->b.y;
 			dx = fl->b.x - fl->a.x;
 			tmp.x = fl->a.x + (dx*(fl->a.y-f_h))/dy;
 			tmp.y = f_h-1;
-		} else if (outside & RIGHT) {
+		}
+		else if (outside & RIGHT)
+		{
 			dy = fl->b.y - fl->a.y;
 			dx = fl->b.x - fl->a.x;
 			tmp.y = fl->a.y + (dy*(f_w-1 - fl->a.x))/dx;
 			tmp.x = f_w-1;
-		} else if (outside & LEFT) {
+		}
+		else if (outside & LEFT)
+		{
 			dy = fl->b.y - fl->a.y;
 			dx = fl->b.x - fl->a.x;
 			tmp.y = fl->a.y + (dy*(-fl->a.x))/dx;
 			tmp.x = 0;
 		}
 
-		if (outside == outcode1) {
+		if (outside == outcode1)
+		{
 			fl->a = tmp;
 			DOOUTCODE(outcode1, fl->a.x, fl->a.y);
-		} else {
+		}
+		else
+		{
 			fl->b = tmp;
 			DOOUTCODE(outcode2, fl->b.x, fl->b.y);
 		}
@@ -1100,7 +1091,6 @@ void AM_drawFline (fline_t *fl, int color)
 			register int d;
 
 #define PUTDOTP(xx,yy,cc) fb[(yy)*f_p+(xx)]=(cc)
-#define PUTDOTD(xx,yy,cc) *((int *)(fb+(yy)*f_p+((xx)<<2)))=(cc)
 
 			fl->a.x += f_x;
 			fl->b.x += f_x;
@@ -1120,57 +1110,29 @@ void AM_drawFline (fline_t *fl, int color)
 
 			if (ax > ay) {
 				d = ay - ax/2;
-				if (screen->is8bit) {
-					while (1) {
-						PUTDOTP(x,y,(byte)color);
-						if (x == fl->b.x)
-							return;
-						if (d>=0) {
-							y += sy;
-							d -= ax;
-						}
-						x += sx;
-						d += ay;
+				for (;;) {
+					PUTDOTP(x,y,(byte)color);
+					if (x == fl->b.x)
+						return;
+					if (d>=0) {
+						y += sy;
+						d -= ax;
 					}
-				} else {
-					while (1) {
-						PUTDOTD(x,y,color);
-						if (x == fl->b.x)
-							return;
-						if (d>=0) {
-							y += sy;
-							d -= ax;
-						}
-						x += sx;
-						d += ay;
-					}
+					x += sx;
+					d += ay;
 				}
 			} else {
 				d = ax - ay/2;
-				if (screen->is8bit) {
-					while (1) {
-						PUTDOTP(x, y, (byte)color);
-						if (y == fl->b.y)
-							return;
-						if (d >= 0) {
-							x += sx;
-							d -= ay;
-						}
-						y += sy;
-						d += ax;
+				for (;;) {
+					PUTDOTP(x, y, (byte)color);
+					if (y == fl->b.y)
+						return;
+					if (d >= 0) {
+						x += sx;
+						d -= ay;
 					}
-				} else {
-					while (1) {
-						PUTDOTD(x, y, color);
-						if (y == fl->b.y)
-							return;
-						if (d >= 0) {
-							x += sx;
-							d -= ay;
-						}
-						y += sy;
-						d += ax;
-					}
+					y += sy;
+					d += ax;
 				}
 			}
 		}
@@ -1217,17 +1179,17 @@ void PUTDOT (int xx, int yy,byte *cc, byte *cm)
 	if (yy == oldyy+1)
 	{
 		oldyy++;
-		oldyyshifted += screen->pitch;
+		oldyyshifted += SCREENPITCH;
 	}
 	else if (yy == oldyy-1)
 	{
 		oldyy--;
-		oldyyshifted -= screen->pitch;
+		oldyyshifted -= SCREENPITCH;
 	}
 	else if (yy != oldyy)
 	{
 		oldyy = yy;
-		oldyyshifted = yy*screen->pitch;
+		oldyyshifted = yy*SCREENPITCH;
 	}
 	fb[oldyyshifted+xx] = *(cc);
 }
@@ -1392,26 +1354,27 @@ void PUTTRANSDOT (int xx, int yy, int basecolor, int level)
 	if (yy == oldyy+1)
 	{
 		oldyy++;
-		oldyyshifted += screen->pitch;
+		oldyyshifted += SCREENPITCH;
 	}
 	else if (yy == oldyy-1)
 	{
 		oldyy--;
-		oldyyshifted -= screen->pitch;
+		oldyyshifted -= SCREENPITCH;
 	}
 	else if (yy != oldyy)
 	{
 		oldyy = yy;
-		oldyyshifted = yy*screen->pitch;
+		oldyyshifted = yy*SCREENPITCH;
 	}
 
 	byte *spot = fb + oldyyshifted + xx;
-	unsigned int *bg2rgb = Col2RGB8[1+level];
-	unsigned int *fg2rgb = Col2RGB8[63-level];
-	unsigned int fg = fg2rgb[basecolor];
-	unsigned int bg = bg2rgb[*spot];
+	DWORD *bg2rgb = Col2RGB8[1+level];
+	DWORD *fg2rgb = Col2RGB8[63-level];
+	DWORD fg = fg2rgb[basecolor];
+	DWORD bg = bg2rgb[*spot];
 	bg = (fg+bg) | 0x1f07c1f;
 	*spot = RGB32k[0][0][bg&(bg>>15)];
+	TransArea++;
 }
 
 void DrawTransWuLine (int x0, int y0, int x1, int y1, byte baseColor)
@@ -1440,25 +1403,26 @@ void DrawTransWuLine (int x0, int y0, int x1, int y1, byte baseColor)
 	{ // horizontal line
 		if (x0 > x1)
 		{
-			int temp = x0; x0 = x1; x1 = temp;
+			swap (x0, x1);
 		}
-		memset (screen->buffer + y0*screen->pitch + x0, baseColor, deltaX+1);
+		memset (screen->GetBuffer() + y0*screen->GetPitch() + x0, baseColor, deltaX+1);
 		return;
 	}
 	if (deltaX == 0)
 	{ // vertical line
-		byte *spot = screen->buffer + y0*screen->pitch + x0;
+		byte *spot = screen->GetBuffer() + y0*screen->GetPitch() + x0;
+		int pitch = screen->GetPitch ();
 		do
 		{
 			*spot = baseColor;
-			spot += screen->pitch;
+			spot += pitch;
 		} while (--deltaY != 0);
 		return;
 	}
 	if (deltaX == deltaY)
 	{ // diagonal line.
-		byte *spot = screen->buffer + y0*screen->pitch + x0;
-		int advance = screen->pitch + xDir;
+		byte *spot = screen->GetBuffer() + y0*screen->GetPitch() + x0;
+		int advance = screen->GetPitch() + xDir;
 		do
 		{
 			*spot = baseColor;
@@ -1475,26 +1439,56 @@ void DrawTransWuLine (int x0, int y0, int x1, int y1, byte baseColor)
 		fixed_t errorAdj = (((unsigned)deltaX << FRACBITS) / (unsigned)deltaY) & 0xffff;
 		if (xDir < 0)
 		{
-			while (--deltaY)
+			if (WeightingScale == 0)
 			{
-				errorAcc += errorAdj;
-				y0++;
-				int weighting = (errorAcc >> WEIGHTSHIFT) & WEIGHTMASK;
-				PUTTRANSDOT (x0 - (errorAcc >> FRACBITS), y0, baseColor, weighting);
-				PUTTRANSDOT (x0 - (errorAcc >> FRACBITS) - 1, y0,
-						baseColor, WEIGHTMASK - weighting);
+				while (--deltaY)
+				{
+					errorAcc += errorAdj;
+					y0++;
+					int weighting = (errorAcc >> WEIGHTSHIFT) & WEIGHTMASK;
+					PUTTRANSDOT (x0 - (errorAcc >> FRACBITS), y0, baseColor, weighting);
+					PUTTRANSDOT (x0 - (errorAcc >> FRACBITS) - 1, y0,
+							baseColor, WEIGHTMASK - weighting);
+				}
+			}
+			else
+			{
+				while (--deltaY)
+				{
+					errorAcc += errorAdj;
+					y0++;
+					int weighting = ((errorAcc * WeightingScale) >> (WEIGHTSHIFT+8)) & WEIGHTMASK;
+					PUTTRANSDOT (x0 - (errorAcc >> FRACBITS), y0, baseColor, weighting);
+					PUTTRANSDOT (x0 - (errorAcc >> FRACBITS) - 1, y0,
+							baseColor, WEIGHTMASK - weighting);
+				}
 			}
 		}
 		else
 		{
-			while (--deltaY)
+			if (WeightingScale == 0)
 			{
-				errorAcc += errorAdj;
-				y0++;
-				int weighting = (errorAcc >> WEIGHTSHIFT) & WEIGHTMASK;
-				PUTTRANSDOT (x0 + (errorAcc >> FRACBITS), y0, baseColor, weighting);
-				PUTTRANSDOT (x0 + (errorAcc >> FRACBITS) + xDir, y0,
-						baseColor, WEIGHTMASK - weighting);
+				while (--deltaY)
+				{
+					errorAcc += errorAdj;
+					y0++;
+					int weighting = (errorAcc >> WEIGHTSHIFT) & WEIGHTMASK;
+					PUTTRANSDOT (x0 + (errorAcc >> FRACBITS), y0, baseColor, weighting);
+					PUTTRANSDOT (x0 + (errorAcc >> FRACBITS) + xDir, y0,
+							baseColor, WEIGHTMASK - weighting);
+				}
+			}
+			else
+			{
+				while (--deltaY)
+				{
+					errorAcc += errorAdj;
+					y0++;
+					int weighting = ((errorAcc * WeightingScale) >> (WEIGHTSHIFT+8)) & WEIGHTMASK;
+					PUTTRANSDOT (x0 + (errorAcc >> FRACBITS), y0, baseColor, weighting);
+					PUTTRANSDOT (x0 + (errorAcc >> FRACBITS) + xDir, y0,
+							baseColor, WEIGHTMASK - weighting);
+				}
 			}
 		}
 	}
@@ -1502,14 +1496,29 @@ void DrawTransWuLine (int x0, int y0, int x1, int y1, byte baseColor)
 	{ // x-major line
 		fixed_t errorAdj = (((DWORD) deltaY << 16) / (DWORD) deltaX) & 0xffff;
 
-		while (--deltaX)
+		if (WeightingScale == 0)
 		{
-			errorAcc += errorAdj;
-			x0 += xDir;
-			int weighting = (errorAcc >> WEIGHTSHIFT) & WEIGHTMASK;
-			PUTTRANSDOT (x0, y0 + (errorAcc >> FRACBITS), baseColor, weighting);
-			PUTTRANSDOT (x0, y0 + (errorAcc >> FRACBITS) + 1,
-					baseColor, WEIGHTMASK - weighting);
+			while (--deltaX)
+			{
+				errorAcc += errorAdj;
+				x0 += xDir;
+				int weighting = (errorAcc >> WEIGHTSHIFT) & WEIGHTMASK;
+				PUTTRANSDOT (x0, y0 + (errorAcc >> FRACBITS), baseColor, weighting);
+				PUTTRANSDOT (x0, y0 + (errorAcc >> FRACBITS) + 1,
+						baseColor, WEIGHTMASK - weighting);
+			}
+		}
+		else
+		{
+			while (--deltaX)
+			{
+				errorAcc += errorAdj;
+				x0 += xDir;
+				int weighting = ((errorAcc * WeightingScale) >> (WEIGHTSHIFT+8)) & WEIGHTMASK;
+				PUTTRANSDOT (x0, y0 + (errorAcc >> FRACBITS), baseColor, weighting);
+				PUTTRANSDOT (x0, y0 + (errorAcc >> FRACBITS) + 1,
+						baseColor, WEIGHTMASK - weighting);
+			}
 		}
 	}
 
@@ -1532,7 +1541,7 @@ void AM_drawMline (mline_t *ml, int color)
 //
 // Draws flat (floor/ceiling tile) aligned grid lines.
 //
-void AM_drawGrid(int color)
+void AM_drawGrid (int color)
 {
 	fixed_t x, y;
 	fixed_t start, end;
@@ -1548,10 +1557,12 @@ void AM_drawGrid(int color)
 	// draw vertical gridlines
 	ml.a.y = m_y;
 	ml.b.y = m_y+m_h;
-	for (x=start; x<end; x+=(MAPBLOCKUNITS<<FRACBITS)) {
+	for (x = start; x < end; x += (MAPBLOCKUNITS<<FRACBITS))
+	{
 		ml.a.x = x;
 		ml.b.x = x;
-		if (am_rotate.value) {
+		if (*am_rotate)
+		{
 			AM_rotatePoint (&ml.a.x, &ml.a.y);
 			AM_rotatePoint (&ml.b.x, &ml.b.y);
 		}
@@ -1568,14 +1579,16 @@ void AM_drawGrid(int color)
 	// draw horizontal gridlines
 	ml.a.x = m_x;
 	ml.b.x = m_x + m_w;
-	for (y=start; y<end; y+=(MAPBLOCKUNITS<<FRACBITS)) {
+	for (y=start; y<end; y+=(MAPBLOCKUNITS<<FRACBITS))
+	{
 		ml.a.y = y;
 		ml.b.y = y;
-		if (am_rotate.value) {
+		if (*am_rotate)
+		{
 			AM_rotatePoint (&ml.a.x, &ml.a.y);
 			AM_rotatePoint (&ml.b.x, &ml.b.y);
 		}
-		AM_drawMline(&ml, color);
+		AM_drawMline (&ml, color);
 	}
 }
 
@@ -1583,18 +1596,20 @@ void AM_drawGrid(int color)
 // Determines visible lines, draws them.
 // This is LineDef based, not LineSeg based.
 //
-void AM_drawWalls(void)
+void AM_drawWalls ()
 {
 	int i;
 	static mline_t l;
 
-	for (i=0;i<numlines;i++) {
+	for (i = 0; i < numlines; i++)
+	{
 		l.a.x = lines[i].v1->x;
 		l.a.y = lines[i].v1->y;
 		l.b.x = lines[i].v2->x;
 		l.b.y = lines[i].v2->y;
 
-		if (am_rotate.value) {
+		if (*am_rotate)
+		{
 			AM_rotatePoint (&l.a.x, &l.a.y);
 			AM_rotatePoint (&l.b.x, &l.b.y);
 		}
@@ -1635,13 +1650,13 @@ void AM_drawWalls(void)
 				{
 					AM_drawMline (&l, LockedColor);  // locked special
 				}
-				else if (lines[i].backsector->floorheight
-					  != lines[i].frontsector->floorheight)
+				else if (lines[i].backsector->floorplane
+					  != lines[i].frontsector->floorplane)
 				{
 					AM_drawMline(&l, FDWallColor); // floor level change
 				}
-				else if (lines[i].backsector->ceilingheight
-					  != lines[i].frontsector->ceilingheight)
+				else if (lines[i].backsector->ceilingplane
+					  != lines[i].frontsector->ceilingplane)
 				{
 					AM_drawMline(&l, CDWallColor); // ceiling level change
 				}
@@ -1734,14 +1749,14 @@ AM_drawLineCharacter
 	}
 }
 
-void AM_drawPlayers(void)
+void AM_drawPlayers ()
 {
 	angle_t angle;
 	int i;
 
 	if (!multiplayer)
 	{
-		if (am_rotate.value)
+		if (*am_rotate)
 			angle = ANG90;
 		else
 			angle = players[consoleplayer].camera->angle;
@@ -1764,27 +1779,22 @@ void AM_drawPlayers(void)
 		mpoint_t pt;
 
 		if (!playeringame[i] ||
-			(deathmatch.value && !demoplayback) && p != players[consoleplayer].camera->player)
+			(*deathmatch && !demoplayback) && p != players[consoleplayer].camera->player)
 		{
 			continue;
 		}
 
 		if (p->powers[pw_invisibility])
 			color = AlmostBackground;
-		else if (screen->is8bit)
-			color = BestColor (DefaultPalette->basecolors,
-							   RPART(p->userinfo.color),
-							   GPART(p->userinfo.color),
-							   BPART(p->userinfo.color),
-							   DefaultPalette->numcolors);
 		else
-			color = p->userinfo.color;
+			color = ColorMatcher.Pick
+				(RPART(p->userinfo.color), GPART(p->userinfo.color), BPART(p->userinfo.color));
 				
 		pt.x = p->mo->x;
 		pt.y = p->mo->y;
 		angle = p->mo->angle;
 
-		if (am_rotate.value)
+		if (*am_rotate)
 		{
 			AM_rotatePoint (&pt.x, &pt.y);
 			angle -= players[consoleplayer].camera->angle - ANG90;
@@ -1812,7 +1822,7 @@ void AM_drawThings (int color)
 			p.y = t->y;
 			angle = t->angle;
 
-			if (am_rotate.value)
+			if (*am_rotate)
 			{
 				AM_rotatePoint (&p.x, &p.y);
 				angle += ANG90 - players[consoleplayer].camera->angle;
@@ -1826,7 +1836,7 @@ void AM_drawThings (int color)
 	}
 }
 
-void AM_drawMarks (void)
+void AM_drawMarks ()
 {
 	int i, fx, fy, w, h;
 	mpoint_t pt;
@@ -1835,22 +1845,22 @@ void AM_drawMarks (void)
 	{
 		if (markpoints[i].x != -1)
 		{
-			//      w = SHORT(marknums[i]->width);
-			//      h = SHORT(marknums[i]->height);
+			//      w = TileSizes[i].width;
+			//      h = TileSizes[i].height;
 			w = 5; // because something's wrong with the wad, i guess
 			h = 6; // because something's wrong with the wad, i guess
 
 			pt.x = markpoints[i].x;
 			pt.y = markpoints[i].y;
 
-			if (am_rotate.value)
+			if (*am_rotate)
 				AM_rotatePoint (&pt.x, &pt.y);
 
 			fx = CXMTOF(pt.x);
 			fy = CYMTOF(pt.y) - 3;
 
-			if (fx >= f_x && fx <= f_w - w && fy >= f_y && fy <= f_h - h && marknums[i])
-				FB->DrawPatchCleanNoMove (marknums[i], fx, fy);
+			if (fx >= f_x && fx <= f_w - w && fy >= f_y && fy <= f_h - h && marknums[i] != -1)
+				FB->DrawPatchCleanNoMove (TileCache[marknums[i]], fx, fy);
 		}
 	}
 }
@@ -1860,20 +1870,23 @@ void AM_drawCrosshair (int color)
 	fb[f_p*((f_h+1)/2)+(f_w/2)] = (byte)color; // single point for now
 }
 
-void AM_Drawer (void)
+void AM_Drawer ()
 {
 	if (!automapactive)
 		return;
 
-	fb = screen->buffer;
+	AM_initColors (viewactive);
+
+	fb = screen->GetBuffer ();
 	if (!viewactive)
 	{
 		// [RH] Set f_? here now to handle automap overlaying
 		// and view size adjustments.
 		f_x = f_y = 0;
-		f_w = screen->width;
+		f_w = screen->GetWidth ();
 		f_h = ST_Y;
-		f_p = screen->pitch;
+		f_p = screen->GetPitch ();
+		WeightingScale = 0;
 
 		AM_clearFB(Background);
 	}
@@ -1883,7 +1896,12 @@ void AM_Drawer (void)
 		f_y = viewwindowy;
 		f_w = realviewwidth;
 		f_h = realviewheight;
-		f_p = screen->pitch;
+		f_p = screen->GetPitch ();
+		WeightingScale = (int)(*am_ovtrans * 256.f);
+		if (WeightingScale < 0 || WeightingScale >= 256)
+		{
+			WeightingScale = 0;
+		}
 	}
 	AM_activateNewScale();
 

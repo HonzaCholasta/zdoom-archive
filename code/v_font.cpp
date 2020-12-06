@@ -4,6 +4,7 @@
 #include <math.h>
 #include <ctype.h>
 
+#include "templates.h"
 #include "doomtype.h"
 #include "m_swap.h"
 #include "v_font.h"
@@ -12,6 +13,27 @@
 #include "r_data.h"
 #include "z_zone.h"
 #include "i_system.h"
+#include "gi.h"
+
+static const byte myislower[256] =
+{
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0
+};
 
 FFont::FFont (const char *nametemplate, int first, int count, int start)
 {
@@ -33,6 +55,12 @@ FFont::FFont (const char *nametemplate, int first, int count, int start)
 	{
 		sprintf (buffer, nametemplate, i + start);
 		lump = W_CheckNumForName (buffer);
+		if (gameinfo.gametype == GAME_Doom && lump >= 0 &&
+			i + start == 121 && lumpinfo[lump].wadnum == 1)
+		{ // HACKHACK: Don't load STCFN121 in doom(2).wad, because
+		  // it's not really a lower-case 'y'
+			lump = -1;
+		}
 		if (lump >= 0)
 		{
 			patch_t *patch = (patch_t *)W_CacheLumpNum (lump, PU_CACHE);
@@ -55,12 +83,17 @@ FFont::FFont (const char *nametemplate, int first, int count, int start)
 	SpaceWidth = (Chars['N' - first].Width + 1) / 2;
 	ActiveColors = SimpleTranslation (usedcolors, translated, identity, &luminosity);
 	Bitmaps = new byte[neededsize];
-	memset (Bitmaps, 255, neededsize);
+	memset (Bitmaps, 0, neededsize);
 
 	for (i = neededsize = 0; i < count; i++)
 	{
 		sprintf (buffer, nametemplate, i + start);
 		lump = W_CheckNumForName (buffer);
+		if (gameinfo.gametype == GAME_Doom && lump >= 0 &&
+			i + start == 121 && lumpinfo[lump].wadnum == 1)
+		{ // HACKHACK: See above
+			lump = -1;
+		}
 		if (lump >= 0)
 		{
 			Chars[i].Data = Bitmaps + neededsize;
@@ -72,51 +105,6 @@ FFont::FFont (const char *nametemplate, int first, int count, int start)
 		{
 			Chars[i].Data = NULL;
 		}
-	}
-
-	BuildTranslations (usedcolors, translated, identity, luminosity);
-
-	delete[] luminosity;
-}
-
-FFont::FFont (int firstlump, int first, int count)
-{
-	int neededsize;
-	int i;
-	byte usedcolors[256], translated[256], identity[256];
-	double *luminosity;
-
-	memset (usedcolors, 0, 256);
-	Bitmaps = NULL;
-	Ranges = NULL;
-	FirstChar = first;
-	LastChar = first + count - 1;
-	FontHeight = 0;
-	Chars = new CharData[count];
-
-	for (i = neededsize = 0; i < count; i++)
-	{
-		patch_t *patch = (patch_t *)W_CacheLumpNum (firstlump + i, PU_CACHE);
-		Chars[i].Width = SHORT(patch->width);
-		Chars[i].Height = SHORT(patch->height);
-		if (Chars[i].Height > FontHeight)
-			FontHeight = Chars[i].Height;
-		Chars[i].XOffs = SHORT(patch->leftoffset);
-		Chars[i].YOffs = SHORT(patch->topoffset);
-		neededsize += Chars[i].Width * Chars[i].Height;
-		RecordPatchColors (patch, usedcolors);
-	}
-
-	SpaceWidth = (Chars['N' - first].Width + 1) / 2;
-	ActiveColors = SimpleTranslation (usedcolors, translated, identity, &luminosity);
-	Bitmaps = new byte[neededsize];
-	memset (Bitmaps, 255, neededsize);
-
-	for (i = neededsize = 0; i < count; i++)
-	{
-		Chars[i].Data = Bitmaps + neededsize;
-		RawDrawPatch ((patch_t *)W_CacheLumpNum (firstlump + i, PU_CACHE), Chars[i].Data, translated);
-		neededsize += Chars[i].Width * Chars[i].Height;
 	}
 
 	BuildTranslations (usedcolors, translated, identity, luminosity);
@@ -164,7 +152,6 @@ void RecordPatchColors (patch_t *patch, byte *usedcolors)
 void RawDrawPatch (patch_t *patch, byte *out, byte *tlate)
 {
 	int width = SHORT(patch->width);
-	int height = SHORT(patch->height);
 	byte *desttop = out;
 	int x;
 
@@ -191,12 +178,12 @@ void RawDrawPatch (patch_t *patch, byte *out, byte *tlate)
 
 static int STACK_ARGS compare (const void *arg1, const void *arg2)
 {
-	if (RPART(DefaultPalette->basecolors[*((byte *)arg1)]) * 0.299 +
-		GPART(DefaultPalette->basecolors[*((byte *)arg1)]) * 0.587 +
-		BPART(DefaultPalette->basecolors[*((byte *)arg1)]) * 0.114  <
-		RPART(DefaultPalette->basecolors[*((byte *)arg2)]) * 0.299 +
-		GPART(DefaultPalette->basecolors[*((byte *)arg2)]) * 0.587 +
-		BPART(DefaultPalette->basecolors[*((byte *)arg2)]) * 0.114)
+	if (RPART(GPalette.BaseColors[*((byte *)arg1)]) * 299 +
+		GPART(GPalette.BaseColors[*((byte *)arg1)]) * 587 +
+		BPART(GPalette.BaseColors[*((byte *)arg1)]) * 114  <
+		RPART(GPalette.BaseColors[*((byte *)arg2)]) * 299 +
+		GPART(GPalette.BaseColors[*((byte *)arg2)]) * 587 +
+		BPART(GPalette.BaseColors[*((byte *)arg2)]) * 114)
 		return -1;
 	else
 		return 1;
@@ -207,9 +194,9 @@ int FFont::SimpleTranslation (byte *colorsused, byte *translation, byte *reverse
 	double min, max, diver;
 	int i, j;
 
-	memset (translation, 255, 256);
+	memset (translation, 0, 256);
 
-	for (i = j = 0; i < 256; i++)
+	for (i = 0, j = 1; i < 256; i++)
 	{
 		if (colorsused[i])
 		{
@@ -217,25 +204,25 @@ int FFont::SimpleTranslation (byte *colorsused, byte *translation, byte *reverse
 		}
 	}
 
-	qsort (reverse, j, 1, compare);
+	qsort (reverse+1, j-1, 1, compare);
 
 	*luminosity = new double[j];
 	max = 0.0;
 	min = 100000000.0;
-	for (i = 0; i < j; i++)
+	for (i = 1; i < j; i++)
 	{
 		translation[reverse[i]] = i;
 
-		(*luminosity)[i] = RPART(DefaultPalette->basecolors[reverse[i]]) * 0.299 +
-							GPART(DefaultPalette->basecolors[reverse[i]]) * 0.587 +
-							BPART(DefaultPalette->basecolors[reverse[i]]) * 0.114;
+		(*luminosity)[i] = RPART(GPalette.BaseColors[reverse[i]]) * 0.299 +
+						   GPART(GPalette.BaseColors[reverse[i]]) * 0.587 +
+						   BPART(GPalette.BaseColors[reverse[i]]) * 0.114;
 		if ((*luminosity)[i] > max)
 			max = (*luminosity)[i];
 		if ((*luminosity)[i] < min)
 			min = (*luminosity)[i];
 	}
 	diver = 1.0 / (max - min);
-	for (i = 0; i < j; i++)
+	for (i = 1; i < j; i++)
 	{
 		(*luminosity)[i] = ((*luminosity)[i] - min) * diver;
 	}
@@ -245,8 +232,21 @@ int FFont::SimpleTranslation (byte *colorsused, byte *translation, byte *reverse
 
 void FFont::BuildTranslations (const byte *usedcolors, const byte *tlate, const byte *identity, const double *luminosity)
 {
+	static const struct tp { double mul, add; } transParm[CR_YELLOW][3] =
+	{
+		{{ 184.0,  71.0 }, { 184.0,  0.0 }, { 184.0,  0.0 }},	// CR_BRICK
+		{{ 204.0,  51.0 }, { 192.0, 43.0 }, { 204.0, 19.0 }},	// CR_TAN
+		{{ 200.0,  39.0 }, { 200.0, 39.0 }, { 200.0, 39.0 }},	// CR_GRAY
+		{{ 108.0,  11.0 }, { 232.0, 23.0 }, { 104.0,  7.0 }},	// CR_GREEN
+		{{ 108.0,  83.0 }, { 104.0, 63.0 }, {  96.0, 47.0 }},	// CR_BROWN
+		{{ 140.0, 115.0 }, { 212.0, 43.0 }, { 115.0,  0.0 }},	// CR_GOLD
+		{{ 192.0,  63.0 }, {   0.0,  0.0 }, {   0.0,  0.0 }},	// CR_RED
+		{{   0.0,   0.0 }, {   0.0,  0.0 }, { 216.0, 39.0 }},	// CR_BLUE
+		{{ 223.0,  32.0 }, { 128.0,  0.0 }, {   0.0,  0.0 }},	// CR_ORANGE
+		{{ 219.0,  36.0 }, { 219.0, 36.0 }, { 219.0, 36.0 }}	// CR_WHITE
+	};
+
 	byte colors[3*17];
-	byte *playpal = (byte *)W_CacheLumpName ("PLAYPAL", PU_STATIC);
 	int i, j, k;
 	double v;
 	byte *base;
@@ -257,126 +257,48 @@ void FFont::BuildTranslations (const byte *usedcolors, const byte *tlate, const 
 	// Create different translations for different color ranges
 	for (i = 0; i < CR_UNTRANSLATED; i++)
 	{
+		const tp *parms = &transParm[i][0];
 		base = colors;
 
-		switch (i)
+		if (i != CR_YELLOW)
 		{
-		case CR_BRICK:
 			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
 			{
-				*base++ = (int)((v * 184.0) + 71.0);	// R
-				*base++ = (int)(v * 184.0);				// G
-				*base++ = (int)(v * 184.0);				// B
+				base[0] = (int)(v * parms[0].mul + parms[0].add);	// red
+				base[1] = (int)(v * parms[1].mul + parms[1].add);	// green
+				base[2] = (int)(v * parms[2].mul + parms[2].add);	// blue
+				base += 3;
 			}
-			break;
-
-		case CR_TAN:
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = (int)((v * 204.0) + 51.0);	// R
-				*base++ = (int)((v * 192.0) + 43.0);	// G
-				*base++ = (int)((v * 204.0) + 19.0);	// B
-			}
-			break;
-
-		case CR_GRAY:
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = (int)((v * 200.0) + 39.0);	// R
-				*base++ = (int)((v * 200.0) + 39.0);	// G
-				*base++ = (int)((v * 200.0) + 39.0);	// B
-			}
-			break;
-
-		case CR_GREEN:
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = (int)((v * 108.0) + 11.0);	// R
-				*base++ = (int)((v * 232.0) + 23.0);	// G
-				*base++ = (int)((v * 104.0) + 7.0);		// B
-			}
-			break;
-
-		case CR_BROWN:
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = (int)((v * 108.0) + 83.0);	// R
-				*base++ = (int)((v * 104.0) + 63.0);	// G
-				*base++ = (int)((v * 96.0) + 47.0);		// B
-			}
-			break;
-
-		case CR_GOLD:
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = (int)((v * 140.0) + 115.0);	// R
-				*base++ = (int)((v * 212.0) + 43.0);	// G
-				*base++ = (int)((v * 115.0) + 0.0);		// B
-			}
-			break;
-
-		case CR_RED:
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = (int)((v * 192.0) + 63.0);	// R
-				*base++ = 0;							// G
-				*base++ = 0;							// B
-			}
-			break;
-
-		case CR_BLUE:
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = 0;							// R
-				*base++ = 0;							// G
-				*base++ = (int)((v * 216.0) + 39.0);	// B
-			}
-			break;
-
-		case CR_ORANGE:
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = (int)(v * 223.0 + 32.f);
-				*base++ = (int)(v * 128.0);
-				*base++ = 0;
-			}
-			break;
-
-		case CR_WHITE:		// Heretic/Hexen white
-			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
-			{
-				*base++ = (int)((v * 219.0) + 36.0);
-				*base++ = (int)((v * 219.0) + 36.0);
-				*base++ = (int)((v * 219.0) + 36.0);
-			}
-			break;
-
-		case CR_YELLOW:		// Heretic/Hexen yellow
+		}
+		else
+		{ // Hexen yellow
 			for (v = 0.0, k = 17; k > 0; k--, v += 0.0625f)
 			{
 				if (v <= 0.25)
 				{
-					*base++ = (int)((v * 168.0) + 39.0);
-					*base++ = (int)((v * 168.0) + 39.0);
-					*base++ = (int)((v * 168.0) + 39.0);
+					base[0] = (int)((v * 168.0) + 39.0);
+					base[1] = (int)((v * 168.0) + 39.0);
+					base[2] = (int)((v * 168.0) + 39.0);
 				}
 				else if (v < 0.8125)
 				{
-					*base++ = (int)((v * 230.0) + 61.9);
-					*base++ = (int)((v * 172.5) + 29.4);
-					*base++ = 24;
+					base[0] = (int)((v * 230.0) + 61.9);
+					base[1] = (int)((v * 172.5) + 29.4);
+					base[2] = 24;
 				}
 				else
 				{
-					*base++ = (int)((v * 46.8) + 205.2);
-					*base++ = (int)((v * 210.6) - 2.6);
-					*base++ = (int)((v * 292.5) - 195.5);
+					base[0] = (int)((v * 46.8) + 205.2);
+					base[1] = (int)((v * 210.6) - 2.6);
+					base[2] = (int)((v * 292.5) - 195.5);
 				}
+				base += 3;
 			}
-			break;
 		}
 
-		for (j = 0; j < ActiveColors; j++)
+		range++;
+
+		for (j = 1; j < ActiveColors; j++)
 		{
 			double p1 = luminosity[j];
 			double i1 = p1 * 16.0;
@@ -399,7 +321,7 @@ void FFont::BuildTranslations (const byte *usedcolors, const byte *tlate, const 
 				g = colors[3*16+1];
 				b = colors[3*16+2];
 			}
-			*range++ = BestColor (DefaultPalette->basecolors, r, g, b, DefaultPalette->numcolors);
+			*range++ = ColorMatcher.Pick (r, g, b);
 		}
 	}
 
@@ -417,42 +339,59 @@ byte *FFont::GetColorTranslation (EColorRange range) const
 
 byte *FFont::GetChar (int code, int *const width, int *const height, int *const xoffs, int *const yoffs) const
 {
-	if (code > LastChar)
-		code = toupper (code);
 	if (code < FirstChar ||
 		code > LastChar ||
 		Chars[code - FirstChar].Data == NULL)
 	{
-		*width = SpaceWidth;
-		return NULL;
+		if (myislower[code])
+		{
+			code -= 32;
+			if (code < FirstChar ||
+				code > LastChar ||
+				Chars[code - FirstChar].Data == NULL)
+			{
+				*width = SpaceWidth;
+				return NULL;
+			}
+		}
+		else
+		{
+			*width = SpaceWidth;
+			return NULL;
+		}
 	}
-	else
-	{
-		code -= FirstChar;
-		*width = Chars[code].Width;
-		*height = Chars[code].Height;
-		*xoffs = Chars[code].XOffs;
-		*yoffs = Chars[code].YOffs;
-		return Chars[code].Data;
-	}
+
+	code -= FirstChar;
+	*width = Chars[code].Width;
+	*height = Chars[code].Height;
+	*xoffs = Chars[code].XOffs;
+	*yoffs = Chars[code].YOffs;
+	return Chars[code].Data;
 }
 
 int FFont::GetCharWidth (int code) const
 {
-	if (code > LastChar)
-	{
-		code = toupper (code);
-	}
 	if (code < FirstChar ||
 		code > LastChar ||
 		Chars[code - FirstChar].Data == NULL)
 	{
-		return SpaceWidth;
+		if (myislower[code])
+		{
+			code -= 32;
+			if (code < FirstChar ||
+				code > LastChar ||
+				Chars[code - FirstChar].Data == NULL)
+			{
+				return SpaceWidth;
+			}
+		}
+		else
+		{
+			return SpaceWidth;
+		}
 	}
-	else
-	{
-		return Chars[code - FirstChar].Width;
-	}
+
+	return Chars[code - FirstChar].Width;
 }
 
 
@@ -512,7 +451,7 @@ FConsoleFont::FConsoleFont (int lump)
 				data_p += code+1;
 				destSize -= code+1;
 			}
-			else if (code != 0x80)
+			else if (code != -128)
 			{
 				memset (dest, *data_p, (-code)+1);
 				dest += (-code)+1;
@@ -525,140 +464,61 @@ FConsoleFont::FConsoleFont (int lump)
 
 void FConsoleFont::BuildTranslations ()
 {
+	// Create different translations for different color ranges
+	// These are not the same as FFont::BuildTranslations()
+	static const struct tp { short mul, add; } transParmLo[CR_UNTRANSLATED][3] =
+	{
+		{{ 184, 71 }, { 184,  0 }, { 184,  0 }},	// CR_BRICK
+		{{ 204, 51 }, { 192, 43 }, { 204, 19 }},	// CR_TAN
+		{{ 200, 39 }, { 200, 39 }, { 200, 39 }},	// CR_GRAY
+		{{   0,  0 }, { 255,  0 }, {   0,  0 }},	// CR_GREEN
+		{{ 255,  0 }, { 128,  0 }, {   0,  0 }},	// CR_BROWN
+		{{ 255,  0 }, { 383,  0 }, { 128,  0 }},	// CR_GOLD
+		{{ 255,  0 }, {   0,  0 }, {   0,  0 }},	// CR_RED
+		{{   0,  0 }, {   0,  0 }, { 255,  0 }},	// CR_BLUE
+		{{ 223, 32 }, { 128,  0 }, {   0,  0 }},	// CR_ORANGE
+		{{ 255,  0 }, { 255,  0 }, { 255,  0 }},	// CR_WHITE
+		{{ 255,  0 }, { 255,  0 }, {   0,  0 }}		// CR_YELLOW
+	};
+	static const tp transParmHi[CR_UNTRANSLATED][3] =
+	{
+		{{ 127, 128 }, { 254,   0 }, { 254,   0 }},	// CR_BRICK
+		{{ 102, 153 }, { 116, 139 }, { 134, 121 }},	// CR_TAN
+		{{ 192,  63 }, { 192,  63 }, { 192,  63 }},	// CR_GRAY
+		{{ 254,   0 }, {   0, 255 }, { 254,   0 }},	// CR_GREEN
+		{{ 188,  67 }, { 184,  47 }, { 176,  31 }},	// CR_BROWN
+		{{   0, 223 }, {  64, 191 }, { 254,   0 }},	// CR_GOLD
+		{{   0, 255 }, { 254,   0 }, { 254,   0 }},	// CR_RED
+		{{ 191,  64 }, { 191,  64 }, {   0, 255 }},	// CR_BLUE
+		{{   0, 255 }, { 127, 127 }, { 254,   0 }},	// CR_ORANGE
+		{{ 127, 128 }, { 127, 128 }, { 127, 128 }},	// CR_WHITE
+		{{   0, 255 }, {   0, 255 }, { 254,   0 }}	// CR_YELLOW
+	};
+
 	byte *range;
 	range = Ranges = new byte[NUM_TEXT_COLORS * ActiveColors];
 	int i, j, r, g, b;
 
-	// Create different translations for different color ranges
-	// These are not the same as FFont::BuildTranslations()
 	for (i = 0; i < CR_UNTRANSLATED; i++)
 	{
+		const tp *parm;
+
+		parm = &transParmLo[i][0];
 		for (j = 0; j < 127; j++)
 		{
-			switch (i)
-			{
-			case CR_BRICK:
-				r = j*184/255 + 71;
-				g = j*184/255;
-				b = j*184/255;
-				break;
-
-			case CR_TAN:
-				r = j*204/255 + 51;
-				g = j*192/255 + 43;
-				b = j*204/255 + 19;
-				break;
-
-			case CR_GRAY:
-				r = g = b = j*200/255 + 39;
-				break;
-
-			case CR_GREEN:
-				r = b = 0;
-				g = j;
-				break;
-
-			case CR_BROWN:
-				r = j;
-				g = j/2;
-				b = 0;
-				break;
-
-			case CR_GOLD:
-				r = j;
-				g = j*3/2;
-				b = j/2;
-				break;
-
-			case CR_RED:
-				r = j;
-				g = b = 0;
-				break;
-
-			case CR_BLUE:
-				b = j;
-				r = g = 0;
-				break;
-
-			case CR_ORANGE:
-				r = j*223/255 + 32;
-				g = j/2;
-				b = 0;
-				break;
-
-			case CR_WHITE:
-				r = g = b = j;
-				break;
-
-			case CR_YELLOW:
-				r = g = j;
-				b = 0;
-				break;
-			}
-			*range++ = BestColor (DefaultPalette->basecolors, r, g, b, DefaultPalette->numcolors);
+			r = j * parm[0].mul / 255 + parm[0].add;
+			g = j * parm[1].mul / 255 + parm[1].add;
+			b = j * parm[2].mul / 255 + parm[2].add;
+			*range++ = ColorMatcher.Pick (r, g, b);
 		}
+
+		parm = &transParmHi[i][0];
 		for (j = 0; j < 128; j++)
 		{
-			switch (i)
-			{
-			case CR_BRICK:
-				r = j+128;
-				b = g = j*2;
-				break;
-
-			case CR_TAN:
-				r = 153+j*102/127;
-				g = 139+j*116/127;
-				b = 121+j*134/127;
-				break;
-
-			case CR_GRAY:
-				r = g = b = 63+j*192/127;
-				break;
-
-			case CR_GREEN:
-				r = b = j*2;
-				g = 255;
-				break;
-
-			case CR_BROWN:
-				r = 108+j*147/127;
-				g = 104+j*151/127;
-				b = 96+j*159/127;
-				break;
-
-			case CR_GOLD:
-				r = 255;
-				g = MIN(191+j*64/127,255);
-				b = j*2;
-				break;
-
-			case CR_RED:
-				r = 255;
-				g = b = j*2;
-				break;
-
-			case CR_BLUE:
-				b = 255;
-				r = g = 64+j*3/2;
-				break;
-
-			case CR_ORANGE:
-				r = 255;
-				g = 127+j;
-				b = j*2;
-				break;
-
-			case CR_WHITE:
-				r = g = b = j+128;
-				break;
-
-			case CR_YELLOW:
-				r = g = 255;
-				b = j*2;
-				break;
-			}
-			*range++ = BestColor (DefaultPalette->basecolors, r, g, b, DefaultPalette->numcolors);
+			r = j * parm[0].mul / 127 + parm[0].add;
+			g = MIN (j * parm[1].mul / 127 + parm[1].add, 255);
+			b = j * parm[2].mul / 127 + parm[2].add;
+			*range++ = ColorMatcher.Pick (r, g, b);
 		}
 	}
 }

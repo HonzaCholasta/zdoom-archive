@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <string.h>
 
 #include <dinput.h>
 
@@ -19,10 +20,10 @@
 #include "v_video.h"
 
 #include "d_main.h"
+#include "d_gui.h"
 #include "c_console.h"
 #include "c_cvars.h"
 #include "i_system.h"
-#include "i_video.h"
 
 #include "s_sound.h"
 
@@ -30,20 +31,21 @@
 
 extern HINSTANCE g_hInst;
 
-static void KeyRead (void);
-static BOOL DI_Init2 (void);
-static void MouseRead_DI (void);
-static void MouseRead_Win32 (void);
-static void GrabMouse_Win32 (void);
-static void UngrabMouse_Win32 (void);
-static BOOL I_GetDIMouse (void);
-static void I_GetWin32Mouse (void);
-static void CenterMouse_Win32 (void);
-static void WheelMoved (void);
+static void KeyRead ();
+static BOOL DI_Init2 ();
+static void MouseRead_DI ();
+static void MouseRead_Win32 ();
+static void GrabMouse_Win32 ();
+static void UngrabMouse_Win32 ();
+static BOOL I_GetDIMouse ();
+static void I_GetWin32Mouse ();
+static void CenterMouse_Win32 ();
+static void WheelMoved ();
 static void DI_Acquire (LPDIRECTINPUTDEVICE mouse);
 static void DI_Unacquire (LPDIRECTINPUTDEVICE mouse);
 static void SetCursorState (int visible);
 
+static bool GUICapture;
 static BOOL mousepaused;
 static BOOL WindowActive;
 static BOOL MakeMouseEvents;
@@ -51,7 +53,8 @@ static BOOL MakeMouseEvents;
 extern BOOL vidactive;
 extern HWND Window;
 
-EXTERN_CVAR (fullscreen)
+EXTERN_CVAR (Bool, fullscreen)
+EXTERN_CVAR (String, language)
 
 
 // [RH] As of 1.14, ZDoom no longer needs to be linked with dinput.lib.
@@ -75,10 +78,6 @@ static BOOL havefocus = FALSE;
 static BOOL noidle = FALSE;
 static int WheelMove;
 
-// Used by the console for making keys repeat
-int KeyRepeatDelay;
-int KeyRepeatRate;
-
 static LPDIRECTINPUT			g_pdi;
 static LPDIRECTINPUTDEVICE		g_pKey;
 static LPDIRECTINPUTDEVICE		g_pMouse;
@@ -88,25 +87,27 @@ static int GDx,GDy;
 
 extern constate_e ConsoleState;
 
-CVAR (i_remapkeypad, "1", CVAR_ARCHIVE)
-CVAR (use_mouse, "1", CVAR_ARCHIVE)
+BOOL AppActive = TRUE;
 
-CVAR (use_joystick, "0", CVAR_ARCHIVE)
-CVAR (joy_speedmultiplier, "1", CVAR_ARCHIVE)
-CVAR (joy_xsensitivity, "1", CVAR_ARCHIVE)
-CVAR (joy_ysensitivity, "-1", CVAR_ARCHIVE)
-CVAR (joy_xthreshold, "0.15", CVAR_ARCHIVE)
-CVAR (joy_ythreshold, "0.15", CVAR_ARCHIVE)
+CVAR (Bool,  i_remapkeypad,			true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Bool,  use_mouse,				true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
-BEGIN_CUSTOM_CVAR (in_mouse, "0", CVAR_ARCHIVE)
+CVAR (Bool,  use_joystick,			false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Float, joy_speedmultiplier,	1.f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Float, joy_xsensitivity,		1.f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Float, joy_ysensitivity,		-1.f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Float, joy_xthreshold,		0.15f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Float, joy_ythreshold,		0.15f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+
+CUSTOM_CVAR (Int, in_mouse, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
-	if (var.value < 0)
+	if (*var < 0)
 	{
-		var.Set (0.0f);
+		var = 0;
 	}
-	else if (var.value > 2)
+	else if (*var > 2)
 	{
-		var.Set (2.0f);
+		var = 2;
 	}
 	else if (!g_pdi)
 	{
@@ -116,7 +117,7 @@ BEGIN_CUSTOM_CVAR (in_mouse, "0", CVAR_ARCHIVE)
 	{
 		int new_mousemode;
 
-		if (var.value == 1 || (var.value == 0 && OSPlatform == os_WinNT))
+		if (*var == 1 || (*var == 0 && OSPlatform == os_WinNT))
 			new_mousemode = win32;
 		else
 			new_mousemode = dinput;
@@ -128,15 +129,18 @@ BEGIN_CUSTOM_CVAR (in_mouse, "0", CVAR_ARCHIVE)
 			else
 				if (!I_GetDIMouse ())
 					I_GetWin32Mouse ();
-			if (!fullscreen.value && mousepaused)
+			if (!*fullscreen && mousepaused)
 				I_PauseMouse ();
 		}
 	}
 }
-END_CUSTOM_CVAR (in_mouse)
+
+static BYTE KeyState[256];
+static BYTE DIKState[2][NUM_KEYS];
+static int ActiveDIKState;
 
 // Convert DIK_* code to ASCII using Qwerty keymap
-static const byte Convert []={
+static const byte Convert [] = {
   //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
 	  0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=',   8,   9, // 0
 	'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']',  13,   0, 'a', 's', // 1
@@ -156,208 +160,274 @@ static const byte Convert []={
 
 };
 
-// Convert DIK_* code to ASCII using user keymap (built at run-time)
-// New on 19.7.1998 - Now has 8 tables for each possible combination
-// of CTRL, ALT, and SHIFT.
-static byte Convert2[256][8];
+static void FlushDIKState ()
+{
+	int i;
+	event_t event;
+	BYTE *state = DIKState[ActiveDIKState];
 
-#define SHIFT_SHIFT 0
-#define CTRL_SHIFT 1
-#define ALT_SHIFT 2
+	memset (&event, 0, sizeof(event));
+	event.type = EV_KeyUp;
+	for (i = 0; i < NUM_KEYS; i++)
+	{
+		if (state[i])
+		{
+			event.data1 = i;
+			event.data2 = Convert[i];
+			D_PostEvent (&event);
+		}
+	}
+	memset (state, 0, NUM_KEYS);
+}
 
-static BOOL altdown, shiftdown, ctrldown;
+extern int WaitingForKey, chatmodeon;
+
+static void I_CheckGUICapture ()
+{
+	bool wantCapt;
+
+	wantCapt = 
+		ConsoleState == c_down ||
+		ConsoleState == c_falling ||
+		(menuactive && !WaitingForKey) ||
+		chatmodeon;
+
+	if (wantCapt != GUICapture)
+	{
+		GUICapture = wantCapt;
+		if (wantCapt)
+		{
+			FlushDIKState ();
+		}
+	}
+}
 
 LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	event_t event;
 
-	event.data1 = event.data2 = event.data3 = 0;
+	memset (&event, 0, sizeof(event));
 
-	switch(message)
+	switch (message)
 	{
-		case WM_DESTROY:
-			SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-			//PostQuitMessage (0);
-			exit (0);
-			break;
+	case WM_DESTROY:
+		SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+		//PostQuitMessage (0);
+		exit (0);
+		break;
 
-		case WM_HOTKEY:
-			break;
+	case WM_HOTKEY:
+		break;
 
-		case WM_PAINT:
-			return DefWindowProc (hWnd, message, wParam, lParam);
+	case WM_PAINT:
+		return DefWindowProc (hWnd, message, wParam, lParam);
 
-		case WM_KILLFOCUS:
-			if (g_pKey) g_pKey->Unacquire ();
-			if (g_pMouse) DI_Unacquire (g_pMouse);
-			if (altdown) {
-				altdown = FALSE;
-				event.type = ev_keyup;
-				event.data1 = DIK_LALT;
-				D_PostEvent (&event);
-			}
-			if (shiftdown) {
-				shiftdown = FALSE;
-				event.type = ev_keyup;
-				event.data1 = DIK_LSHIFT;
-				D_PostEvent (&event);
-			}
-			if (ctrldown) {
-				ctrldown = FALSE;
-				event.type = ev_keyup;
-				event.data1 = DIK_LCONTROL;
-				D_PostEvent (&event);
-			}
-			havefocus = FALSE;
-			if (!paused)
-				S_PauseSound ();
-			if (!noidle)
-				SetPriorityClass (GetCurrentProcess(), IDLE_PRIORITY_CLASS);
-			break;
+	case WM_SETTINGCHANGE:
+		// In case regional settings were changed, reget preferred languages
+		language.Callback ();
+		return 0;
 
-		case WM_SETFOCUS:
+	case WM_KILLFOCUS:
+		if (g_pKey) g_pKey->Unacquire ();
+		if (g_pMouse) DI_Unacquire (g_pMouse);
+		
+		FlushDIKState ();
+		havefocus = FALSE;
+		if (!paused)
+			S_PauseSound ();
+		if (!noidle)
+			SetPriorityClass (GetCurrentProcess(), IDLE_PRIORITY_CLASS);
+		break;
+
+	case WM_SETFOCUS:
 #ifdef _DEBUG
-			SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+		SetPriorityClass (GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
 #else
-			SetPriorityClass (GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+		SetPriorityClass (GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 #endif
-			if (g_pKey)
-				DI_Acquire (g_pKey);
-			havefocus = TRUE;
-			if (g_pMouse && (fullscreen.value || !mousepaused))
-				I_ResumeMouse ();
-			if (!paused)
-				S_ResumeSound ();
-			break;
+		if (g_pKey)
+			DI_Acquire (g_pKey);
+		havefocus = TRUE;
+		if (g_pMouse && (!mousepaused || *fullscreen))
+			I_ResumeMouse ();
+		if (!paused)
+			S_ResumeSound ();
+		break;
 
-		case WM_ACTIVATE:
-			if (LOWORD(wParam)) {
-				WindowActive = TRUE;
-				if (mousemode == win32 && MakeMouseEvents &&
-					(!mousepaused || fullscreen.value)) {
-					GrabMouse_Win32 ();
+	case WM_ACTIVATE:
+		if (LOWORD(wParam))
+		{
+			WindowActive = TRUE;
+			if (mousemode == win32 &&
+				gamestate != GS_STARTUP &&
+				(!mousepaused || *fullscreen))
+			{
+				GrabMouse_Win32 ();
+			}
+		}
+		else
+		{
+			WindowActive = FALSE;
+			if (mousemode == win32 && gamestate != GS_STARTUP)
+			{
+				UngrabMouse_Win32 ();
+			}
+		}
+		break;
+
+	// Being forced to separate my keyboard input handler into
+	// two pieces like this really stinks. (IMHO)
+	case WM_KEYDOWN:
+	case WM_KEYUP:
+		GetKeyboardState (KeyState);
+		if (GUICapture)
+		{
+			event.type = EV_GUI_Event;
+			if (message == WM_KEYUP)
+			{
+				event.subtype = EV_GUI_KeyUp;
+			}
+			else
+			{
+				event.subtype = (lParam & 0x40000000) ? EV_GUI_KeyRepeat : EV_GUI_KeyDown;
+			}
+			event.data3 = ((KeyState[VK_SHIFT]&128) ? GKM_SHIFT : 0) |
+						  ((KeyState[VK_CONTROL]&128) ? GKM_CTRL : 0) |
+						  ((KeyState[VK_MENU]&128) ? GKM_ALT : 0);
+			if ( (event.data1 = MapVirtualKey (wParam, 2)) )
+			{
+				ToAscii (wParam, (lParam >> 16) & 255, KeyState, (LPWORD)&event.data2, 0);
+				D_PostEvent (&event);
+			}
+			else
+			{
+				switch (wParam)
+				{
+				case VK_PRIOR:	event.data1 = GK_PGUP;		break;
+				case VK_NEXT:	event.data1 = GK_PGDN;		break;
+				case VK_END:	event.data1 = GK_END;		break;
+				case VK_HOME:	event.data1 = GK_HOME;		break;
+				case VK_LEFT:	event.data1 = GK_LEFT;		break;
+				case VK_RIGHT:	event.data1 = GK_RIGHT;		break;
+				case VK_UP:		event.data1 = GK_UP;		break;
+				case VK_DOWN:	event.data1 = GK_DOWN;		break;
+				case VK_DELETE:	event.data1 = GK_DEL;		break;
+				case VK_ESCAPE:	event.data1 = GK_ESCAPE;	break;
 				}
-			} else {
-				WindowActive = FALSE;
-				if (mousemode == win32) {
-					UngrabMouse_Win32 ();
+				if (event.data1 != 0)
+				{
+					event.data2 = event.data1;
+					D_PostEvent (&event);
 				}
 			}
-			break;
-
-		// Being forced to separate my keyboard input handler into
-		// two pieces like this really stinks. (IMHO)
-		case WM_KEYDOWN:
-		case WM_KEYUP:
-			if (message == WM_KEYUP) {
-				event.type = ev_keyup;
-			} else {
+		}
+		else
+		{
+			if (message == WM_KEYUP)
+			{
+				event.type = EV_KeyUp;
+			}
+			else
+			{
 				if (lParam & 0x40000000)
 					return 0;
 				else
-					event.type = ev_keydown;
+					event.type = EV_KeyDown;
 			}
 
-			switch (wParam) {
+			switch (wParam)
+			{
 				case VK_PAUSE:
 					event.data1 = KEY_PAUSE;
 					break;
 				case VK_TAB:
 					event.data1 = DIK_TAB;
 					event.data2 = '\t';
-					event.data3 = Convert2[DIK_TAB][(shiftdown << SHIFT_SHIFT) |
-													(ctrldown << CTRL_SHIFT) |
-													(altdown << ALT_SHIFT)];
 					break;
 				case VK_NUMLOCK:
 					event.data1 = DIK_NUMLOCK;
 					break;
-				case VK_SHIFT:
-					event.data1 = KEY_LSHIFT;
-					shiftdown = (event.type == ev_keydown);
-					break;
-				case VK_CONTROL:
-					event.data1 = KEY_LCTRL;
-					ctrldown = (event.type == ev_keydown);
-					break;
 			}
 			if (event.data1)
-				D_PostEvent (&event);
-			break;
-
-		case WM_SYSKEYDOWN:
-			SendMessage (hWnd, WM_KEYDOWN, wParam, lParam);
-			break;
-
-		case WM_SYSKEYUP:
-			SendMessage (hWnd, WM_KEYUP, wParam, lParam);
-			break;
-
-		case WM_SYSCOMMAND:
 			{
-				WPARAM cmdType = wParam & 0xfff0;
-
-				// Prevent activation of the window menu with Alt-Space
-				if (cmdType != SC_KEYMENU)
-					return DefWindowProc (hWnd, message, wParam, lParam);
-			}
-			break;
-
-		case WM_LBUTTONDOWN:
-		case WM_LBUTTONUP:
-		case WM_RBUTTONDOWN:
-		case WM_RBUTTONUP:
-		case WM_MBUTTONDOWN:
-		case WM_MBUTTONUP:
-			if (MakeMouseEvents && mousemode == win32) {
-				event.type = ((message - WM_LBUTTONDOWN) % 3) ? ev_keyup : ev_keydown;
-				event.data1 = KEY_MOUSE1 + (message - WM_LBUTTONDOWN) / 3;
-				event.data2 = event.data3 = 0;
+				DIKState[ActiveDIKState][event.data1] = (event.type == EV_KeyDown);
 				D_PostEvent (&event);
 			}
-			break;
+		}
+		break;
 
-		case WM_MOUSEWHEEL:
-			if (MakeMouseEvents && mousemode == win32)
-			{
-				WheelMove += (short) HIWORD(wParam);
-				WheelMoved ();
-			}
-			break;
+	case WM_SYSKEYDOWN:
+		SendMessage (hWnd, WM_KEYDOWN, wParam, lParam);
+		break;
 
-		case WM_GETMINMAXINFO:
-			if (screen)
-			{
-				LPMINMAXINFO mmi = (LPMINMAXINFO)lParam;
-				mmi->ptMinTrackSize.x = screen->width + GetSystemMetrics (SM_CXSIZEFRAME) * 2;
-				mmi->ptMinTrackSize.y = screen->height + GetSystemMetrics (SM_CYSIZEFRAME) * 2 +
-									    GetSystemMetrics (SM_CYCAPTION);
-				return 0;
-			}
-			break;
+	case WM_SYSKEYUP:
+		SendMessage (hWnd, WM_KEYUP, wParam, lParam);
+		break;
 
-		default:
-			return DefWindowProc (hWnd, message, wParam, lParam);
+	case WM_SYSCOMMAND:
+		{
+			WPARAM cmdType = wParam & 0xfff0;
+
+			// Prevent activation of the window menu with Alt-Space
+			if (cmdType != SC_KEYMENU)
+				return DefWindowProc (hWnd, message, wParam, lParam);
+		}
+		break;
+
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONUP:
+		if (MakeMouseEvents && mousemode == win32)
+		{
+			event.type = ((message - WM_LBUTTONDOWN) % 3) ? EV_KeyUp : EV_KeyDown;
+			event.data1 = KEY_MOUSE1 + (message - WM_LBUTTONDOWN) / 3;
+			D_PostEvent (&event);
+		}
+		break;
+
+	case WM_MOUSEWHEEL:
+		if (MakeMouseEvents && mousemode == win32)
+		{
+			WheelMove += (short) HIWORD(wParam);
+			WheelMoved ();
+		}
+		break;
+
+	case WM_GETMINMAXINFO:
+		if (screen)
+		{
+			LPMINMAXINFO mmi = (LPMINMAXINFO)lParam;
+			mmi->ptMinTrackSize.x = SCREENWIDTH + GetSystemMetrics (SM_CXSIZEFRAME) * 2;
+			mmi->ptMinTrackSize.y = SCREENHEIGHT + GetSystemMetrics (SM_CYSIZEFRAME) * 2 +
+									GetSystemMetrics (SM_CYCAPTION);
+			return 0;
+		}
+		break;
+
+	case WM_ACTIVATEAPP:
+		AppActive = wParam;
+		break;
+
+	case WM_PALETTECHANGED:
+		if ((HWND)wParam == Window)
+			break;
+		// intentional fall-through
+
+	case WM_QUERYNEWPALETTE:
+		if (screen != NULL)
+		{
+			return screen->QueryNewPalette ();
+		}
+		// intentional fall-through
+
+	default:
+		return DefWindowProc (hWnd, message, wParam, lParam);
 	}
 
 	return 0;
-}
-
-static void BuildCvt2Table (void)
-{
-	byte vk2scan[256];
-	int i;
-
-	memset (vk2scan, 0, 256);
-	for (i = 0; i < 256; i++)
-		vk2scan[MapVirtualKey (i, 1)] = i;
-
-	vk2scan[0] = 0;
-
-	for (i = 0; i < 256; i++) {
-		int code = VkKeyScan ((TCHAR)i);
-		Convert2[vk2scan[code & 0xff]][(code >> 8) & 7] =  i;
-	}
 }
 
 /****** Stuff from Andy Bay's myjoy.c ******/
@@ -386,70 +456,58 @@ void DI_JoyCheck (void)
 	fixed_t xscale, yscale;
 	int xdead, ydead;
 
-	if (JoyActive) {
+	if (JoyActive)
+	{
 		JoyStats.dwFlags = JOY_RETURNALL;
-		if (joyGetPosEx (JoyDevice, &JoyStats)) {
+		if (joyGetPosEx (JoyDevice, &JoyStats))
+		{
 			JoyActive = 0;
 			return;
 		}
-		joyevent.type = ev_joystick;
-		joyevent.data1 = 0;
-		joyevent.data2 = JoyStats.dwXpos - JoyBias.X;
-		joyevent.data3 = JoyStats.dwYpos - JoyBias.Y;
+		memset (&joyevent, 0, sizeof(joyevent));
+		joyevent.type = EV_Joystick;
+		joyevent.x = JoyStats.dwXpos - JoyBias.X;
+		joyevent.y = JoyStats.dwYpos - JoyBias.Y;
 
-		xdead = (int)((float)JoyBias.X * joy_xthreshold.value);
-		ydead = (int)((float)JoyBias.Y * joy_ythreshold.value);
-		xscale = (int)(16777216 / ((float)JoyBias.X * (1 - joy_xthreshold.value)) * joy_xsensitivity.value * joy_speedmultiplier.value);
-		yscale = (int)(16777216 / ((float)JoyBias.Y * (1 - joy_ythreshold.value)) * joy_ysensitivity.value * joy_speedmultiplier.value);
+		xdead = (int)((float)JoyBias.X * *joy_xthreshold);
+		ydead = (int)((float)JoyBias.Y * *joy_ythreshold);
+		xscale = (int)(16777216 / ((float)JoyBias.X * (1 - *joy_xthreshold)) * *joy_xsensitivity * *joy_speedmultiplier);
+		yscale = (int)(16777216 / ((float)JoyBias.Y * (1 - *joy_ythreshold)) * *joy_ysensitivity * *joy_speedmultiplier);
 
-		if (abs (joyevent.data2) < xdead)
-			joyevent.data2 = 0;
-		else if (joyevent.data2 > 0) {
-			joyevent.data2 = FixedMul (joyevent.data2 - xdead, xscale);
-		} else if (joyevent.data2 < 0) {
-			joyevent.data2 = FixedMul (joyevent.data2 + xdead, xscale);
+		if (abs (joyevent.x) < xdead)
+		{
+			joyevent.x = 0;
 		}
-		if (joyevent.data2 > 256)
-			joyevent.data2 = 256;
-		else if (joyevent.data2 < -256)
-			joyevent.data2 = -256;
+		else if (joyevent.x > 0)
+		{
+			joyevent.x = FixedMul (joyevent.x - xdead, xscale);
+		}
+		else if (joyevent.x < 0)
+		{
+			joyevent.x = FixedMul (joyevent.x + xdead, xscale);
+		}
+		if (joyevent.x > 256)
+			joyevent.x = 256;
+		else if (joyevent.x < -256)
+			joyevent.x = -256;
 
-		if (abs (joyevent.data3) < ydead)
-			joyevent.data3 = 0;
-		else if (joyevent.data3 > 0) {
-			joyevent.data3 = FixedMul (joyevent.data3 - ydead, yscale);
-		} else if (joyevent.data3 < 0) {
-			joyevent.data3 = FixedMul (joyevent.data3 + ydead, yscale);
+		if (abs (joyevent.y) < ydead)
+		{
+			joyevent.y = 0;
 		}
-		if (joyevent.data3 > 256)
-			joyevent.data3 = 256;
-		else if (joyevent.data3 < -256)
-			joyevent.data3 = -256;
-/*
-		joyevent.type = ev_joystick;
-		joyevent.data1 = 0;
-		joyevent.data2 = JoyStats.dwXpos - JoyBias.X;
+		else if (joyevent.y > 0)
+		{
+			joyevent.y = FixedMul (joyevent.y - ydead, yscale);
+		}
+		else if (joyevent.y < 0)
+		{
+			joyevent.y = FixedMul (joyevent.y + ydead, yscale);
+		}
+		if (joyevent.y > 256)
+			joyevent.y = 256;
+		else if (joyevent.y < -256)
+			joyevent.y = -256;
 
-		//Doom thinks it is digital.  ugh.
-		if (joyevent.data2 > JoyBias.X / 2){
-			joyevent.data2 = 1;
-		}
-		else if(joyevent.data2 < -JoyBias.X / 2){
-			joyevent.data2 = -1;
-		}
-		else
-			joyevent.data2 = 0;
-
-		joyevent.data3 = JoyStats.dwYpos - JoyBias.Y;
-		if (joyevent.data3 > JoyBias.Y / 2) {
-			joyevent.data3 = 1;
-		}
-		else if (joyevent.data3 < -JoyBias.Y / 2) {
-			joyevent.data3 = -1;
-		}
-		else
-			joyevent.data3 = 0;
-*/
 		D_PostEvent (&joyevent);
 
 		{	/* Send out button up/down events */
@@ -461,13 +519,15 @@ void DI_JoyCheck (void)
 			mask = buttons ^ oldButtons;
 
 			joyevent.data2 = joyevent.data3 = 0;
-			for (i = 0; i < 32; i++, buttons >>= 1, mask >>= 1) {
-				if (mask & 1) {
+			for (i = 0; i < 32; i++, buttons >>= 1, mask >>= 1)
+			{
+				if (mask & 1)
+				{
 					joyevent.data1 = KEY_JOY1 + i;
 					if (buttons & 1)
-						joyevent.type = ev_keydown;
+						joyevent.type = EV_KeyDown;
 					else
-						joyevent.type = ev_keyup;
+						joyevent.type = EV_KeyUp;
 					D_PostEvent (&joyevent);
 				}
 			}
@@ -484,7 +544,8 @@ BOOL DI_InitJoy (void)
 	JoyStats.dwSize = sizeof(JOYINFOEX);
 	JoyDevice = -1;
 
-	for (i = JOYSTICKID1; i <= JOYSTICKID2; i++) {
+	for (i = JOYSTICKID1; i <= JOYSTICKID2; i++)
+	{
 		if (joyGetDevCaps (i, &JoyCaps, sizeof(JOYCAPS)) != JOYERR_NOERROR)
 			continue;
 
@@ -519,33 +580,39 @@ static void DI_Unacquire (LPDIRECTINPUTDEVICE mouse)
 	SetCursorState (TRUE);
 }
 
-void I_PauseMouse (void)
+void I_PauseMouse ()
 {
-	if (fullscreen.value)
+	if (*fullscreen)
 		return;
 
 	mousepaused = TRUE;
-	if (g_pMouse) {
+	if (g_pMouse)
+	{
 		DI_Unacquire (g_pMouse);
-	} else {
+	}
+	else
+	{
 		UngrabMouse_Win32 ();
 	}
 }
 
-void I_ResumeMouse (void)
+void I_ResumeMouse ()
 {
-	if (!fullscreen.value && gamestate == GS_FULLCONSOLE)
+	if (!*fullscreen && gamestate == GS_FULLCONSOLE && !menuactive)
 		return;
 
 	mousepaused = FALSE;
-	if (!g_pMouse) {
+	if (!g_pMouse)
+	{
 		GrabMouse_Win32 ();
-	} else {
+	}
+	else
+	{
 		DI_Acquire (g_pMouse);
 	}
 }
 
-/****** Stuff from Andy Bay's mymouse.c ******
+/****** Stuff from Andy Bay's mymouse.c ******/
 
 /****************************************************************************
  *
@@ -556,7 +623,7 @@ void I_ResumeMouse (void)
  ****************************************************************************/
 
 // [RH] Obtain the mouse using standard Win32 calls. Should always work.
-static void I_GetWin32Mouse (void)
+static void I_GetWin32Mouse ()
 {
 	mousemode = win32;
 
@@ -570,7 +637,7 @@ static void I_GetWin32Mouse (void)
 
 // [RH] Used to obtain DirectInput access to the mouse.
 //		(Preferred for Win95, but buggy under NT.)
-static BOOL I_GetDIMouse (void)
+static BOOL I_GetDIMouse ()
 {
 	HRESULT hr;
 	DIPROPDWORD dipdw =
@@ -590,7 +657,7 @@ static BOOL I_GetDIMouse (void)
 	mousemode = win32;	// Assume failure
 	UngrabMouse_Win32 ();
 
-	if (in_mouse.value == 1 || (in_mouse.value == 0 && OSPlatform == os_WinNT))
+	if (*in_mouse == 1 || (*in_mouse == 0 && OSPlatform == os_WinNT))
 		return FALSE;
 
 	// Obtain an interface to the system mouse device.
@@ -602,7 +669,8 @@ static BOOL I_GetDIMouse (void)
 	// Set the data format to "mouse format".
 	hr = g_pMouse->SetDataFormat (&c_dfDIMouse);
 
-	if (FAILED(hr)) {
+	if (FAILED(hr))
+	{
 		g_pMouse->Release ();
 		g_pMouse = NULL;
 		return FALSE;
@@ -612,7 +680,8 @@ static BOOL I_GetDIMouse (void)
 	hr = g_pMouse->SetCooperativeLevel ((HWND)Window,
 									   DISCL_EXCLUSIVE | DISCL_FOREGROUND);
 
-	if (FAILED(hr)) {
+	if (FAILED(hr))
+	{
 		g_pMouse->Release ();
 		g_pMouse = NULL;
 		return FALSE;
@@ -623,8 +692,9 @@ static BOOL I_GetDIMouse (void)
 	// The buffer size is a DWORD property associated with the device.
 	hr = g_pMouse->SetProperty (DIPROP_BUFFERSIZE, &dipdw.diph);
 
-	if (FAILED(hr)) {
-		Printf (PRINT_HIGH, "Could not set mouse buffer size");
+	if (FAILED(hr))
+	{
+		Printf ("Could not set mouse buffer size");
 		g_pMouse->Release ();
 		g_pMouse = NULL;
 		return FALSE;
@@ -671,25 +741,29 @@ BOOL I_InitInput (void *hwnd)
 
 
 // Free all input resources
-void STACK_ARGS I_ShutdownInput (void)
+void STACK_ARGS I_ShutdownInput ()
 {
-	if (g_pKey) {
+	if (g_pKey)
+	{
 		g_pKey->Unacquire ();
 		g_pKey->Release ();
 		g_pKey = NULL;
 	}
-	if (g_pMouse) {
+	if (g_pMouse)
+	{
 		DI_Unacquire (g_pMouse);
 		g_pMouse->Release ();
 		g_pMouse = NULL;
 	}
 	UngrabMouse_Win32 ();
-	if (g_pdi) {
+	if (g_pdi)
+	{
 		g_pdi->Release ();
 		g_pdi = NULL;
 	}
 	// [RH] Close dinput.dll
-	if (DirectInputInstance) {
+	if (DirectInputInstance)
+	{
 		FreeLibrary (DirectInputInstance);
 		DirectInputInstance = NULL;
 	}
@@ -697,8 +771,8 @@ void STACK_ARGS I_ShutdownInput (void)
 
 static LONG PrevX, PrevY;
 
-static void CenterMouse_Win32 (void)
- {
+static void CenterMouse_Win32 ()
+{
 	RECT rect;
 
 	GetWindowRect (Window, &rect);
@@ -708,21 +782,22 @@ static void CenterMouse_Win32 (void)
 }
 
 static void SetCursorState (int visible)
- {
+{
 	int count;
-	BOOL direction = visible;
-	
-	do {
+	BOOL direction = visible--;
+
+	do
+	{
 		count = ShowCursor (direction);
-		if (visible && count > 0)
+		if (visible == 0 && count > 0)
 			direction = FALSE;
-		else if (!visible && count < -1)
+		else if (visible < 0 && count < -1)
 			direction = TRUE;
-	} while (count != visible - 1);
+	} while (count != visible);
 }
 
-static void GrabMouse_Win32 (void)
- {
+static void GrabMouse_Win32 ()
+{
 	RECT rect;
 
 	ClipCursor (NULL);		// helps with Win95?
@@ -733,56 +808,87 @@ static void GrabMouse_Win32 (void)
 	MakeMouseEvents = TRUE;
 }
 
-static void UngrabMouse_Win32 (void)
- {
+static void UngrabMouse_Win32 ()
+{
 	ClipCursor (NULL);
 	SetCursorState (TRUE);
 	MakeMouseEvents = FALSE;
 }
 
-static void WheelMoved (void)
+static void WheelMoved ()
 {
 	event_t event;
 	int dir;
 
-	event.data2 = event.data3 = 0;
-	if (WheelMove < 0) {
-		dir = WHEEL_DELTA;
-		event.data1 = KEY_MWHEELDOWN;
-	} else {
-		dir = -WHEEL_DELTA;
-		event.data1 = KEY_MWHEELUP;
+	memset (&event, 0, sizeof(event));
+	if (GUICapture)
+	{
+		event.type = EV_GUI_Event;
+		if (WheelMove < 0)
+		{
+			dir = WHEEL_DELTA;
+			event.subtype = EV_GUI_WheelDown;
+		}
+		else
+		{
+			dir = -WHEEL_DELTA;
+			event.subtype = EV_GUI_WheelUp;
+		}
+		while (abs (WheelMove) >= WHEEL_DELTA)
+		{
+			D_PostEvent (&event);
+			WheelMove += dir;
+		}
 	}
-	while (abs (WheelMove) >= WHEEL_DELTA) {
-		event.type = ev_keydown;
-		D_PostEvent (&event);
-		event.type = ev_keyup;
-		D_PostEvent (&event);
-		WheelMove += dir;
+	else
+	{
+		if (WheelMove < 0)
+		{
+			dir = WHEEL_DELTA;
+			event.data1 = KEY_MWHEELDOWN;
+		}
+		else
+		{
+			dir = -WHEEL_DELTA;
+			event.data1 = KEY_MWHEELUP;
+		}
+		while (abs (WheelMove) >= WHEEL_DELTA)
+		{
+			event.type = EV_KeyDown;
+			D_PostEvent (&event);
+			event.type = EV_KeyUp;
+			D_PostEvent (&event);
+			WheelMove += dir;
+		}
 	}
 }
 
-static void MouseRead_Win32 (void) {
+static void MouseRead_Win32 ()
+{
 	POINT pt;
 	event_t ev;
+	int x, y;
 
 	if (!WindowActive || !MakeMouseEvents || !GetCursorPos (&pt))
 		return;
 
-	ev.data2 = (pt.x - PrevX) * 3;
-	ev.data3 = (PrevY - pt.y) << 1;
+	x = (pt.x - PrevX) * 3;
+	y = (PrevY - pt.y) << 1;
 
 	CenterMouse_Win32 ();
 
-	if (ev.data2 || ev.data3) {
-		ev.type = ev_mouse;
-		ev.data1 = 0;
+	if (x | y)
+	{
+		memset (&ev, 0, sizeof(ev));
+		ev.x = x;
+		ev.y = y;
+		ev.type = EV_Mouse;
 		D_PostEvent (&ev);
 	}
 }
 
-static void MouseRead_DI (void) {
-	static int lastx = 0, lasty = 0;
+static void MouseRead_DI ()
+{
 	DIDEVICEOBJECTDATA od;
 	DWORD dwElements;
 	HRESULT hr;
@@ -795,12 +901,14 @@ static void MouseRead_DI (void) {
 	if (!g_pMouse)
 		return;
 
-	event.data2 = event.data3 = 0;
-	while (1) {
+	memset (&event, 0, sizeof(event));
+	for (;;)
+	{
 		dwElements = 1;
 		hr = g_pMouse->GetDeviceData (sizeof(DIDEVICEOBJECTDATA), &od,
 							 &dwElements, 0);
-		if (hr == DIERR_INPUTLOST) {
+		if (hr == DIERR_INPUTLOST)
+		{
 			DI_Acquire (g_pMouse);
 			hr = g_pMouse->GetDeviceData (sizeof(DIDEVICEOBJECTDATA), &od,
 								 &dwElements, 0);
@@ -813,68 +921,34 @@ static void MouseRead_DI (void) {
 		count++;
 
 		/* Look at the element to see what happened */
-		switch (od.dwOfs) {
-
-		/* DIMOFS_X: Mouse horizontal motion */
-			case DIMOFS_X:
-				GDx += od.dwData;
-				break;
-		/* DIMOFS_Y: Mouse vertical motion */
-			case DIMOFS_Y:
-				GDy += od.dwData;
-				break;
-
-		/* DIMOFS_Z: Mouse wheel motion */
-			case DIMOFS_Z:
-				WheelMove += od.dwData;
-				WheelMoved ();
-				break;
+		switch (od.dwOfs)
+		{
+		case DIMOFS_X:	GDx += od.dwData;						break;
+		case DIMOFS_Y:	GDy += od.dwData;						break;
+		case DIMOFS_Z:	WheelMove += od.dwData; WheelMoved ();	break;
 
 		/* [RH] Mouse button events now mimic keydown/up events */
-			case DIMOFS_BUTTON0:
-				if(od.dwData & 0x80) {
-					event.type = ev_keydown;
-				} else {
-					event.type = ev_keyup;
-				}
-				event.data1 = KEY_MOUSE1;
+		case DIMOFS_BUTTON0:
+		case DIMOFS_BUTTON1:
+		case DIMOFS_BUTTON2:
+		case DIMOFS_BUTTON3:
+			if (!GUICapture)
+			{
+				event.type = (od.dwData & 0x80) ? EV_KeyDown : EV_KeyUp;
+				event.data1 = KEY_MOUSE1 + (od.dwOfs - DIMOFS_BUTTON0);
+				DIKState[ActiveDIKState][event.data1] = (event.type == EV_KeyDown);
 				D_PostEvent (&event);
-				break;
-			case DIMOFS_BUTTON1:
-				if(od.dwData & 0x80) {
-					event.type = ev_keydown;
-				} else {
-					event.type = ev_keyup;
-				}
-				event.data1 = KEY_MOUSE2;
-				D_PostEvent (&event);
-				break;
-			case DIMOFS_BUTTON2:
-				if(od.dwData & 0x80) {
-					event.type = ev_keydown;
-				} else {
-					event.type = ev_keyup;
-				}
-				event.data1 = KEY_MOUSE3;
-				D_PostEvent (&event);
-				break;
-			case DIMOFS_BUTTON3:
-				if(od.dwData & 0x80) {
-					event.type = ev_keydown;
-				} else {
-					event.type = ev_keyup;
-				}
-				event.data1 = KEY_MOUSE4;
-				D_PostEvent (&event);
-				break;
+			}
+			break;
 		}
 	}
 
-	if (count) {
-		event.type = ev_mouse;
-		event.data1 = 0;
-		event.data2 = GDx<<2;
-		event.data3 = -GDy;
+	if (count)
+	{
+		memset (&event, 0, sizeof(event));
+		event.type = EV_Mouse;
+		event.x = GDx<<2;
+		event.y = -GDy;
 		D_PostEvent (&event);
 	}
 }
@@ -883,42 +957,12 @@ static void MouseRead_DI (void) {
 static BOOL DI_Init2 (void)
 {
 	int hr;
-	DWORD repeatStuff;
-	DIPROPDWORD dipdw =
-		{
-			{
-				sizeof(DIPROPDWORD),		// diph.dwSize
-				sizeof(DIPROPHEADER),		// diph.dwHeaderSize
-				0,							// diph.dwObj
-				DIPH_DEVICE,				// diph.dwHow
-			},
-			DINPUT_BUFFERSIZE,				// dwData
-		};
-
-	BuildCvt2Table ();
-
-	// [RH] The timing values for these SPI_* parameters are described in
-	//		MS Knowledge Base article Q102978.
-	if (SystemParametersInfo (SPI_GETKEYBOARDDELAY, 0, &repeatStuff, 0)) {
-		// 0 = 250 ms, 3 = 1000 ms
-		KeyRepeatDelay = ((repeatStuff * 250 + 250) * TICRATE) / 1000;
-	} else {
-		KeyRepeatDelay = (250 * TICRATE) / 1000;
-	}
-	DPrintf ("KeyRepeatDelay = %u tics\n", KeyRepeatDelay);
-
-	if (SystemParametersInfo (SPI_GETKEYBOARDSPEED, 0, &repeatStuff, 0)) {
-		// 0 = 2/sec, 31 = 30/sec
-		KeyRepeatRate = TICRATE / (2 + repeatStuff);
-	} else {
-		KeyRepeatRate = TICRATE / 15;
-	}
-	DPrintf ("KeyRepeatRate = %u tics\n", KeyRepeatRate);
 
 	// Obtain an interface to the system key device.
 	hr = g_pdi->CreateDevice (GUID_SysKeyboard, &g_pKey, NULL);
 
-	if (FAILED(hr)) {
+	if (FAILED(hr))
+	{
 		I_FatalError ("Could not create keyboard device");
 	}
 
@@ -928,25 +972,17 @@ static BOOL DI_Init2 (void)
 	// Set the data format to "keyboard format".
 	hr = g_pKey->SetDataFormat (&c_dfDIKeyboard);
 
-	if (FAILED(hr)) {
+	if (FAILED(hr))
+	{
 		I_FatalError ("Could not set keyboard data format");
 	}
 
-
 	// Set the cooperative level.
-	hr = g_pKey->SetCooperativeLevel (Window,
-									  DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+	hr = g_pKey->SetCooperativeLevel (Window, DISCL_FOREGROUND|DISCL_NONEXCLUSIVE);
 
-	if (FAILED(hr)) {
+	if (FAILED(hr))
+	{
 		I_FatalError("Could not set keyboard cooperative level");
-	}
-
-	// Set the buffer size to DINPUT_BUFFERSIZE elements.
-	// The buffer size is a DWORD property associated with the device.
-	hr = g_pKey->SetProperty (DIPROP_BUFFERSIZE, &dipdw.diph);
-
-	if (FAILED(hr)) {
-		I_FatalError ("Could not set keyboard buffer size");
 	}
 
 	g_pKey->Acquire ();
@@ -955,171 +991,98 @@ static BOOL DI_Init2 (void)
 	return TRUE;
 }
 
-static void KeyRead (void) {
-	HRESULT  hr;
+static void KeyRead ()
+{
+	HRESULT hr;
 	event_t event;
+	BYTE *fromState, *toState;
+	int i;
 
-	DIDEVICEOBJECTDATA data[DINPUT_BUFFERSIZE];
-	DWORD dwElements, elem;
+	memset (&event, 0, sizeof(event));
+	fromState = DIKState[ActiveDIKState];
+	toState = DIKState[ActiveDIKState ^ 1];
 
-	do {
-		dwElements = DINPUT_BUFFERSIZE;
-
-		hr = g_pKey->GetDeviceData (sizeof(DIDEVICEOBJECTDATA), data, &dwElements, 0);
-		if (hr == DIERR_INPUTLOST) {
-			hr = g_pKey->Acquire ();
-			hr = g_pKey->GetDeviceData (sizeof(DIDEVICEOBJECTDATA), data, &dwElements, 0);
+	hr = g_pKey->GetDeviceState (256, toState);
+	if (hr == DIERR_INPUTLOST)
+	{
+		hr = g_pKey->Acquire ();
+		if (hr != DI_OK)
+		{
+			return;
 		}
+		hr = g_pKey->GetDeviceState (256, toState);
+	}
+	if (hr != DI_OK)
+	{
+		return;
+	}
 
-		if (SUCCEEDED (hr) && dwElements) {
-			int key;
+	// Successfully got the buffer
+	ActiveDIKState ^= 1;
 
-			for (elem = 0; elem < dwElements; elem++) {
-				key = data[elem].dwOfs;
+	// Copy key states not handled here from the old to the new buffer
+	memcpy (toState + KEY_PAUSE, fromState + KEY_PAUSE, NUM_KEYS - KEY_PAUSE);
+	toState[DIK_TAB] = fromState[DIK_TAB];
+	toState[DIK_NUMLOCK] = fromState[DIK_NUMLOCK];
 
-				if (data[elem].dwData & 0x80) {
-					event.type = ev_keydown;
-				} else {
-					event.type = ev_keyup;
-				}
+	// "Merge" multiple keys that are considered to be the same.
+	// Also clear out the alternate versions after merging.
+	toState[DIK_RETURN]		|= toState[DIK_NUMPADENTER];
+	toState[DIK_LMENU]		|= toState[DIK_RMENU];
+	toState[DIK_LCONTROL]	|= toState[DIK_RCONTROL];
+	toState[DIK_LSHIFT]		|= toState[DIK_RSHIFT];
 
-				switch (key)
-				{
-					case DIK_NUMPADENTER:	// These keys always translated
-						key = DIK_RETURN;
-						break;
-					case DIK_RMENU:
-						key = DIK_LMENU;
-						break;
-					case DIK_RCONTROL:		// These keys are handled by the message handler
-					case DIK_LCONTROL:
-					case DIK_RSHIFT:
-					case DIK_LSHIFT:
-					case DIK_TAB:
-					case DIK_NUMLOCK:
-						key = 0;
-						break;
-					default:
-						if (!menuactive &&
-							(ConsoleState == c_falling || ConsoleState == c_down))
-						{
-							switch (key)
-							{
-								case DIK_NUMPAD4:
-									key = DIK_4;
-									break;
-								case DIK_NUMPAD6:
-									key = DIK_6;
-									break;
-								case DIK_NUMPAD8:
-									key = DIK_8;
-									break;
-								case DIK_NUMPAD2:
-									key = DIK_2;
-									break;
-								case DIK_NUMPAD7:
-									key = DIK_7;
-									break;
-								case DIK_NUMPAD9:
-									key = DIK_9;
-									break;
-								case DIK_NUMPAD3:
-									key = DIK_3;
-									break;
-								case DIK_NUMPAD1:
-									key = DIK_1;
-									break;
-								case DIK_NUMPAD0:
-									key = DIK_0;
-									break;
-								case DIK_NUMPAD5:
-									key = DIK_5;
-									break;
-							}
-						}
-						else if (i_remapkeypad.value)
-						{
-							switch (key)
-							{
-								case DIK_NUMPAD4:
-									key = DIK_LEFT;
-									break;
-								case DIK_NUMPAD6:
-									key = DIK_RIGHT;
-									break;
-								case DIK_NUMPAD8:
-									key = DIK_UP;
-									break;
-								case DIK_NUMPAD2:
-									key = DIK_DOWN;
-									break;
-								case DIK_NUMPAD7:
-									key = DIK_HOME;
-									break;
-								case DIK_NUMPAD9:
-									key = DIK_PRIOR;
-									break;
-								case DIK_NUMPAD3:
-									key = DIK_NEXT;
-									break;
-								case DIK_NUMPAD1:
-									key = DIK_END;
-									break;
-								case DIK_NUMPAD0:
-									key = DIK_INSERT;
-									break;
-								case DIK_DECIMAL:
-									key = DIK_DELETE;
-									break;
-							}
-						}
-				}
+	toState[DIK_NUMPADENTER] = 0;
+	toState[DIK_RMENU]		 = 0;
+	toState[DIK_RCONTROL]	 = 0;
+	toState[DIK_RSHIFT]		 = 0;
 
-				if (key) {
-					event.data1 = key;
-					if (ConsoleState == c_falling || ConsoleState == c_down) {
-						switch (event.data1) {
-							case DIK_DIVIDE:
-								event.data2 = event.data3 = '/';
-								break;
-							case DIK_MULTIPLY:
-								event.data2 = event.data3 = '*';
-								break;
-							case DIK_ADD:
-								event.data2 = event.data3 = '+';
-								break;
-							case DIK_SUBTRACT:
-								event.data2 = event.data3 = '-';
-								break;
-							case DIK_DECIMAL:
-								event.data2 = event.data3 = '.';
-								break;
-							default:
-								event.data2 = Convert[key];
-								event.data3 = Convert2[key][(altdown << ALT_SHIFT) |
-															(shiftdown << SHIFT_SHIFT) |
-															(ctrldown << CTRL_SHIFT)];
-						}
-					} else {
-						event.data2 = Convert[key];
-						event.data3 = Convert2[key][(altdown << ALT_SHIFT) |
-													(shiftdown << SHIFT_SHIFT) |
-													(ctrldown << CTRL_SHIFT)];
-					}
-					D_PostEvent (&event);
-					if (key == DIK_LALT)
-						altdown = (event.type == ev_keydown);
-				}
+	if (*i_remapkeypad)
+	{
+		toState[DIK_LEFT]	|= toState[DIK_NUMPAD4];
+		toState[DIK_RIGHT]	|= toState[DIK_NUMPAD6];
+		toState[DIK_UP]		|= toState[DIK_NUMPAD8];
+		toState[DIK_DOWN]	|= toState[DIK_NUMPAD2];
+		toState[DIK_HOME]	|= toState[DIK_NUMPAD7];
+		toState[DIK_PRIOR]	|= toState[DIK_NUMPAD9];
+		toState[DIK_NEXT]	|= toState[DIK_NUMPAD3];
+		toState[DIK_END]	|= toState[DIK_NUMPAD1];
+		toState[DIK_INSERT]	|= toState[DIK_NUMPAD0];
+		toState[DIK_DELETE]	|= toState[DIK_DECIMAL];
+
+		toState[DIK_NUMPAD4] = 0;
+		toState[DIK_NUMPAD6] = 0;
+		toState[DIK_NUMPAD8] = 0;
+		toState[DIK_NUMPAD2] = 0;
+		toState[DIK_NUMPAD7] = 0;
+		toState[DIK_NUMPAD9] = 0;
+		toState[DIK_NUMPAD3] = 0;
+		toState[DIK_NUMPAD1] = 0;
+		toState[DIK_NUMPAD0] = 0;
+		toState[DIK_DECIMAL] = 0;
+	}
+
+	// Now generate events for any keys that differ between the states
+	if (!GUICapture)
+	{
+		for (i = 1; i < KEY_PAUSE; i++)
+		{
+			if (toState[i] != fromState[i])
+			{
+				event.type = toState[i] ? EV_KeyDown : EV_KeyUp;
+				event.data1 = i;
+				event.data2 = Convert[i];
+				D_PostEvent (&event);
 			}
 		}
-	} while (SUCCEEDED (hr) && dwElements);
+	}
 }
 
-void I_GetEvent(void)
+void I_GetEvent ()
 {
 	MSG mess;
 
-//	while (1) {
+//	for (;;) {
 		while (PeekMessage (&mess, NULL, 0, 0, PM_REMOVE))
 		{
 			if (mess.message == WM_QUIT)
@@ -1133,14 +1096,14 @@ void I_GetEvent(void)
 
 	KeyRead ();
 
-	if (use_mouse.value)
+	if (*use_mouse)
 	{
 		if (mousemode == dinput)
 			MouseRead_DI ();
 		else
 			MouseRead_Win32 ();
 	}
-	if (use_joystick.value)
+	if (*use_joystick)
 		DI_JoyCheck ();
 }
 
@@ -1148,14 +1111,64 @@ void I_GetEvent(void)
 //
 // I_StartTic
 //
-void I_StartTic (void)
+void I_StartTic ()
 {
+	I_CheckGUICapture ();
 	I_GetEvent ();
 }
 
 //
 // I_StartFrame
 //
-void I_StartFrame (void)
+void I_StartFrame ()
 {
+}
+
+void I_PutInClipboard (const char *str)
+{
+	if (str == NULL || !OpenClipboard (Window))
+		return;
+	EmptyClipboard ();
+
+	HGLOBAL cliphandle = GlobalAlloc (GMEM_DDESHARE, strlen (str) + 1);
+	if (cliphandle != NULL)
+	{
+		char *ptr = (char *)GlobalLock (cliphandle);
+		strcpy (ptr, str);
+		GlobalUnlock (cliphandle);
+		SetClipboardData (CF_TEXT, cliphandle);
+	}
+	CloseClipboard ();
+}
+
+char *I_GetFromClipboard ()
+{
+	char *retstr = NULL;
+	HGLOBAL cliphandle;
+	char *clipstr;
+	char *nlstr;
+
+	if (!IsClipboardFormatAvailable (CF_TEXT) || !OpenClipboard (Window))
+		return NULL;
+
+	cliphandle = GetClipboardData (CF_TEXT);
+	if (cliphandle != NULL)
+	{
+		clipstr = (char *)GlobalLock (cliphandle);
+		if (clipstr != NULL)
+		{
+			retstr = copystring (clipstr);
+			GlobalUnlock (clipstr);
+			nlstr = retstr;
+
+			// Convert CR-LF pairs to just LF
+			while ( (nlstr = strstr (retstr, "\r\n")) )
+			{
+				memmove (nlstr, nlstr + 1, strlen (nlstr) - 1);
+			}
+		}
+	}
+
+	CloseClipboard ();
+	return retstr;
 }

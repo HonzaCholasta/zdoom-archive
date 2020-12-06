@@ -43,7 +43,7 @@ enum
 	wipe_NUMWIPES
 };
 
-CVAR (wipetype, "1", CVAR_ARCHIVE);
+CVAR (Int, wipetype, 1, CVAR_ARCHIVE);
 static int CurrentWipeType;
 
 static short *wipe_scr_start;
@@ -67,15 +67,15 @@ void wipe_shittyColMajorXform (short *array)
 {
 	int x, y;
 	short *dest;
-	int width = screen->width / 2;
+	int width = SCREENWIDTH / 2;
 
-	dest = new short[width*screen->height*2];
+	dest = new short[width*SCREENHEIGHT*2];
 
-	for(y = 0; y < screen->height; y++)
+	for(y = 0; y < SCREENHEIGHT; y++)
 		for(x = 0; x < width; x++)
-			dest[x*screen->height+y] = array[y*width+x];
+			dest[x*SCREENHEIGHT+y] = array[y*width+x];
 
-	memcpy(array, dest, screen->width*screen->height);
+	memcpy(array, dest, SCREENWIDTH*SCREENHEIGHT);
 
 	delete[] dest;
 }
@@ -85,7 +85,7 @@ int wipe_initMelt (int ticks)
 	int i, r;
 	
 	// copy start screen to main screen
-	screen->DrawBlock (0, 0, screen->width, screen->height, (byte *)wipe_scr_start);
+	screen->DrawBlock (0, 0, SCREENWIDTH, SCREENHEIGHT, (byte *)wipe_scr_start);
 	
 	// makes this wipe faster (in theory)
 	// to have stuff in column-major format
@@ -94,9 +94,9 @@ int wipe_initMelt (int ticks)
 	
 	// setup initial column positions
 	// (y<0 => not ready to scroll yet)
-	y = new int[screen->width*sizeof(int)];
+	y = new int[SCREENWIDTH*sizeof(int)];
 	y[0] = -(M_Random()&0xf);
-	for (i = 1; i < screen->width; i++)
+	for (i = 1; i < SCREENWIDTH; i++)
 	{
 		r = (M_Random()%3) - 1;
 		y[i] = y[i-1] + r;
@@ -118,38 +118,39 @@ int wipe_doMelt (int ticks)
 	short*		d;
 	BOOL	 	done = true;
 
-	int width = screen->width / 2;
+	int width = SCREENWIDTH / 2;
 
 	while (ticks--)
 	{
 		for (i = 0; i < width; i++)
 		{
-			if (y[i]<0)
+			if (y[i] < 0)
 			{
 				y[i]++; done = false;
 			} 
-			else if (y[i] < screen->height)
+			else if (y[i] < SCREENHEIGHT)
 			{
+				int pitch = screen->GetPitch() / 2;
 				dy = (y[i] < 16) ? y[i]+1 : 8;
-				dy = (dy * screen->height) / 200;
-				if (y[i]+dy >= screen->height)
-					dy = screen->height - y[i];
-				s = &wipe_scr_end[i*screen->height+y[i]];
-				d = &((short *)screen->buffer)[y[i]*(screen->pitch/2)+i];
+				dy = (dy * SCREENHEIGHT) / 200;
+				if (y[i]+dy >= SCREENHEIGHT)
+					dy = SCREENHEIGHT - y[i];
+				s = &wipe_scr_end[i*SCREENHEIGHT+y[i]];
+				d = &((short *)screen->GetBuffer())[y[i]*pitch+i];
 				idx = 0;
 				for (j=dy;j;j--)
 				{
 					d[idx] = *(s++);
-					idx += screen->pitch/2;
+					idx += pitch;
 				}
 				y[i] += dy;
-				s = &wipe_scr_start[i*screen->height];
-				d = &((short *)screen->buffer)[y[i]*(screen->pitch/2)+i];
+				s = &wipe_scr_start[i*SCREENHEIGHT];
+				d = &((short *)screen->GetBuffer())[y[i]*pitch+i];
 				idx = 0;
-				for (j=screen->height-y[i];j;j--)
+				for (j=SCREENHEIGHT-y[i];j;j--)
 				{
 					d[idx] = *(s++);
-					idx += screen->pitch/2;
+					idx += pitch;
 				}
 				done = false;
 			}
@@ -270,16 +271,16 @@ int wipe_doBurn (int ticks)
 		int x, y;
 		byte *to, *fromold, *fromnew;
 
-		xstep = (FIREWIDTH * FRACUNIT) / screen->width;
-		ystep = (FIREHEIGHT * FRACUNIT) / screen->height;
-		to = screen->buffer;
+		xstep = (FIREWIDTH * FRACUNIT) / SCREENWIDTH;
+		ystep = (FIREHEIGHT * FRACUNIT) / SCREENHEIGHT;
+		to = screen->GetBuffer();
 		fromold = (byte *)wipe_scr_start;
 		fromnew = (byte *)wipe_scr_end;
 		done = true;
 
-		for (y = 0, firey = 0; y < screen->height; y++, firey += ystep)
+		for (y = 0, firey = 0; y < SCREENHEIGHT; y++, firey += ystep)
 		{
-			for (x = 0, firex = 0; x < screen->width; x++, firex += xstep)
+			for (x = 0, firex = 0; x < SCREENWIDTH; x++, firex += xstep)
 			{
 				int fglevel;
 
@@ -296,18 +297,18 @@ int wipe_doBurn (int ticks)
 				else
 				{
 					int bglevel = 64-fglevel;
-					unsigned int *fg2rgb = Col2RGB8[fglevel];
-					unsigned int *bg2rgb = Col2RGB8[bglevel];
-					unsigned int fg = fg2rgb[fromnew[x]];
-					unsigned int bg = bg2rgb[fromold[x]];
+					DWORD *fg2rgb = Col2RGB8[fglevel];
+					DWORD *bg2rgb = Col2RGB8[bglevel];
+					DWORD fg = fg2rgb[fromnew[x]];
+					DWORD bg = bg2rgb[fromold[x]];
 					fg = (fg+bg) | 0x1f07c1f;
 					to[x] = RGB32k[0][0][fg & (fg>>15)];
 					done = false;
 				}
 			}
-			fromold += screen->width;
-			fromnew += screen->width;
-			to += screen->pitch;
+			fromold += SCREENWIDTH;
+			fromnew += SCREENWIDTH;
+			to += SCREENPITCH;
 		}
 	}
 
@@ -335,31 +336,31 @@ int wipe_doFade (int ticks)
 	fade += ticks;
 	if (fade > 64)
 	{
-		screen->DrawBlock (0, 0, screen->width, screen->height, (byte *)wipe_scr_end);
+		screen->DrawBlock (0, 0, SCREENWIDTH, SCREENHEIGHT, (byte *)wipe_scr_end);
 		return 1;
 	}
 	else
 	{
 		int x, y;
 		fixed_t bglevel = 64 - fade;
-		unsigned int *fg2rgb = Col2RGB8[fade];
-		unsigned int *bg2rgb = Col2RGB8[bglevel];
+		DWORD *fg2rgb = Col2RGB8[fade];
+		DWORD *bg2rgb = Col2RGB8[bglevel];
 		byte *fromnew = (byte *)wipe_scr_end;
 		byte *fromold = (byte *)wipe_scr_start;
-		byte *to = screen->buffer;
+		byte *to = screen->GetBuffer();
 
-		for (y = 0; y < screen->height; y++)
+		for (y = 0; y < SCREENHEIGHT; y++)
 		{
-			for (x = 0; x < screen->width; x++)
+			for (x = 0; x < SCREENWIDTH; x++)
 			{
-				unsigned int fg = fg2rgb[fromnew[x]];
-				unsigned int bg = bg2rgb[fromold[x]];
+				DWORD fg = fg2rgb[fromnew[x]];
+				DWORD bg = bg2rgb[fromold[x]];
 				fg = (fg+bg) | 0x1f07c1f;
 				to[x] = RGB32k[0][0][fg & (fg>>15)];
 			}
-			fromnew += screen->width;
-			fromold += screen->width;
-			to += screen->pitch;
+			fromnew += SCREENWIDTH;
+			fromold += SCREENWIDTH;
+			to += SCREENPITCH;
 		}
 	}
 	fade++;
@@ -375,7 +376,7 @@ int wipe_exitFade (int ticks)
 
 int wipe_StartScreen (void)
 {
-	CurrentWipeType = (int)wipetype.value;
+	CurrentWipeType = *wipetype;
 	if (CurrentWipeType < 0)
 		CurrentWipeType = 0;
 	else if (CurrentWipeType >= wipe_NUMWIPES)
@@ -383,12 +384,9 @@ int wipe_StartScreen (void)
 
 	if (CurrentWipeType)
 	{
-		if (screen->is8bit)
-			wipe_scr_start = new short[screen->width * screen->height / 2];
-		else
-			wipe_scr_start = new short[screen->width * screen->height * 2];
+		wipe_scr_start = new short[SCREENWIDTH * SCREENHEIGHT / 2];
 
-		screen->GetBlock (0, 0, screen->width, screen->height, (byte *)wipe_scr_start);
+		screen->GetBlock (0, 0, SCREENWIDTH, SCREENHEIGHT, (byte *)wipe_scr_start);
 	}
 
 	return 0;
@@ -398,13 +396,10 @@ int wipe_EndScreen (void)
 {
 	if (CurrentWipeType)
 	{
-		if (screen->is8bit)
-			wipe_scr_end = new short[screen->width * screen->height / 2];
-		else
-			wipe_scr_end = new short[screen->width * screen->height * 2];
+		wipe_scr_end = new short[SCREENWIDTH * SCREENHEIGHT / 2];
 
-		screen->GetBlock (0, 0, screen->width, screen->height, (byte *)wipe_scr_end);
-		screen->DrawBlock (0, 0, screen->width, screen->height, (byte *)wipe_scr_start); // restore start scr.
+		screen->GetBlock (0, 0, SCREENWIDTH, SCREENHEIGHT, (byte *)wipe_scr_end);
+		screen->DrawBlock (0, 0, SCREENWIDTH, SCREENHEIGHT, (byte *)wipe_scr_start); // restore start scr.
 	}
 
 	return 0;
@@ -432,7 +427,7 @@ int wipe_ScreenWipe (int ticks)
 	}
 
 	// do a piece of wipe-in
-	V_MarkRect(0, 0, screen->width, screen->height);
+	V_MarkRect(0, 0, SCREENWIDTH, SCREENHEIGHT);
 	rc = (*wipes[(CurrentWipeType-1)*3+1])(ticks);
 
 	// final stuff

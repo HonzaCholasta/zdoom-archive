@@ -1,5 +1,5 @@
 #include "a_hexenglobal.h"
 
-IMPLEMENT_DEF_SERIAL (ADarkServant, AMinotaur);
-IMPLEMENT_DEF_SERIAL (ALightning, AActor);
-IMPLEMENT_DEF_SERIAL (APoisonCloud, AActor);
+IMPLEMENT_CLASS (ADarkServant)
+IMPLEMENT_CLASS (ALightning)
+IMPLEMENT_CLASS (APoisonCloud)

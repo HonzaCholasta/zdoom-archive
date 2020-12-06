@@ -23,7 +23,6 @@
 #ifndef __F_FINALE__
 #define __F_FINALE__
 
-
 #include "doomtype.h"
 #include "d_event.h"
 //
@@ -40,14 +39,6 @@ void F_Ticker (void);
 void F_Drawer (void);
 
 
-void F_StartFinale (char *music, char *flat, char *text);
-
-
-
+void F_StartFinale (char *music, int musicorder, int cdtrack, unsigned int cdid, char *flat, char *text);
 
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------

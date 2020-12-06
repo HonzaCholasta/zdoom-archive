@@ -37,11 +37,30 @@ void R_PrecacheLevel (void);
 
 
 // Retrieval.
-// Floor/ceiling opaque texture tiles,
-// lookup by name. For animation?
+// Floor/ceiling opaque texture tiles, lookup by name.
 int R_FlatNumForName (const char *name);
 inline int R_FlatNumForName (const byte *name) { return R_FlatNumForName ((const char *)name); }
 
+
+// [RH] "Tile" management. Currently only handles patches.
+struct FTileSize
+{
+	WORD Width, Height, LeftOffset, TopOffset;
+};
+enum ETileType
+{
+	TILE_Patch,
+	TILE_Sprite,
+
+	NUM_TILE_TYPES
+};
+
+extern FTileSize *TileSizes;
+extern patch_t **TileCache;
+
+int R_CacheTileNum (int picnum, int purgelevel);
+int R_CacheTileName (const char *name, ETileType type, int purgelevel);
+int R_CheckTileNumForName (const char *name, ETileType type);
 
 // Called by P_Ticker for switches and animations,
 // returns the texture number for the texture name.
@@ -51,9 +70,9 @@ int R_CheckTextureNumForName (const char *name);
 inline int R_TextureNumForName (const byte *name) { return R_TextureNumForName ((const char *)name); }
 inline int R_CheckTextureNumForName (const byte *name) { return R_CheckTextureNumForName ((const char *)name); }
 
-int R_ColormapNumForName(const char *name);		// killough 4/4/98
+DWORD R_ColormapNumForName(const char *name);	// killough 4/4/98
 void R_SetDefaultColormap (const char *name);	// [RH] change normal fadetable
-unsigned int R_BlendForColormap (int map);		// [RH] return calculated blend for a colormap
+DWORD R_BlendForColormap (DWORD map);		// [RH] return calculated blend for a colormap
 extern byte *realcolormaps;						// [RH] make the colormaps externally visible
 extern size_t numfakecmaps;
 

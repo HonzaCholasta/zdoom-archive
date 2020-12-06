@@ -28,7 +28,6 @@ class FFont
 {
 public:
 	FFont (const char *nametemplate, int first, int count, int base);
-	FFont (int firstlump, int first, int count);
 	~FFont ();
 
 	byte *GetChar (int code, int *const width, int *const height, int *const xoffs, int *const yoffs) const;

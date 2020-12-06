@@ -5,9 +5,6 @@
 
 // Water --------------------------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (AWaterSplash, AActor);
-REGISTER_ACTOR (AWaterSplash, Any);
-
 FState AWaterSplash::States[] =
 {
 #define S_SPLASH 0
@@ -20,20 +17,16 @@ FState AWaterSplash::States[] =
 	S_NORMAL (SPSH, 'D',   10, NULL, NULL)
 };
 
-void AWaterSplash::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SPLASH];
-	info->deathstate = &States[S_SPLASHX];
-	info->radius = 2 * FRACUNIT;
-	info->height = 4 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_NOTELEPORT|MF2_LOGRAV|MF2_CANNOTPUSH;
-	info->flags3 = MF3_DONTSPLASH;
-}
+IMPLEMENT_ACTOR (AWaterSplash, Any, -1, 0)
+	PROP_RadiusFixed (2)
+	PROP_HeightFixed (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_LOGRAV|MF2_CANNOTPUSH)
+	PROP_Flags3 (MF3_DONTSPLASH)
 
-IMPLEMENT_DEF_SERIAL (AWaterSplashBase, AActor)
-REGISTER_ACTOR (AWaterSplashBase, Any);
+	PROP_SpawnState (S_SPLASH)
+	PROP_DeathState (S_SPLASHX)
+END_DEFAULTS
 
 FState AWaterSplashBase::States[] =
 {
@@ -46,18 +39,14 @@ FState AWaterSplashBase::States[] =
 	S_NORMAL (SPSH, 'K',	5, NULL, NULL)
 };
 
-void AWaterSplashBase::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOCLIP;
-	info->flags3 = MF3_DONTSPLASH;
-}
+IMPLEMENT_ACTOR (AWaterSplashBase, Any, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOCLIP|MF_NOGRAVITY)
+	PROP_Flags3 (MF3_DONTSPLASH)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Lava ---------------------------------------------------------------------
-
-IMPLEMENT_DEF_SERIAL (ALavaSplash, AActor);
-REGISTER_ACTOR (ALavaSplash, Any);
 
 FState ALavaSplash::States[] =
 {
@@ -69,16 +58,12 @@ FState ALavaSplash::States[] =
 	S_BRIGHT (LVAS, 'F',	5, NULL, NULL)
 };
 
-void ALavaSplash::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOCLIP;
-	info->flags3 = MF3_DONTSPLASH;
-}
+IMPLEMENT_ACTOR (ALavaSplash, Any, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOCLIP|MF_NOGRAVITY)
+	PROP_Flags3 (MF3_DONTSPLASH)
 
-IMPLEMENT_DEF_SERIAL (ALavaSmoke, AActor);
-REGISTER_ACTOR (ALavaSmoke, Any);
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 FState ALavaSmoke::States[] =
 {
@@ -89,18 +74,15 @@ FState ALavaSmoke::States[] =
 	S_BRIGHT (LVAS, 'K',	5, NULL, NULL)
 };
 
-void ALavaSmoke::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY|MF_NOCLIP;
-	info->translucency = gameinfo.gametype == GAME_Heretic ? HR_SHADOW : HX_SHADOW;
-}
+IMPLEMENT_ACTOR (ALavaSmoke, Any, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY|MF_NOCLIP)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (gameinfo.gametype==GAME_Heretic?HR_SHADOW:HX_SHADOW)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Sludge -------------------------------------------------------------------
-
-IMPLEMENT_DEF_SERIAL (ASludgeChunk, AActor);
-REGISTER_ACTOR (ASludgeChunk, Any);
 
 FState ASludgeChunk::States[] =
 {
@@ -114,20 +96,16 @@ FState ASludgeChunk::States[] =
 	S_NORMAL (SLDG, 'D',	6, NULL, NULL)
 };
 
-void ASludgeChunk::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SLUDGECHUNK];
-	info->deathstate = &States[S_SLUDGECHUNKX];
-	info->radius = 2 * FRACUNIT;
-	info->height = 4 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_NOTELEPORT|MF2_LOGRAV|MF2_CANNOTPUSH;
-	info->flags3 = MF3_DONTSPLASH;
-}
+IMPLEMENT_ACTOR (ASludgeChunk, Any, -1, 0)
+	PROP_RadiusFixed (2)
+	PROP_HeightFixed (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_LOGRAV|MF2_CANNOTPUSH)
+	PROP_Flags3 (MF3_DONTSPLASH)
 
-IMPLEMENT_DEF_SERIAL (ASludgeSplash, AActor);
-REGISTER_ACTOR (ASludgeSplash, Any);
+	PROP_SpawnState (S_SLUDGECHUNK)
+	PROP_DeathState (S_SLUDGECHUNKX)
+END_DEFAULTS
 
 FState ASludgeSplash::States[] =
 {
@@ -137,10 +115,9 @@ FState ASludgeSplash::States[] =
 	S_NORMAL (SLDG, 'H',	6, NULL, NULL)
 };
 
-void ASludgeSplash::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOCLIP;
-	info->flags3 = MF3_DONTSPLASH;
-}
+IMPLEMENT_ACTOR (ASludgeSplash, Any, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOCLIP|MF_NOGRAVITY)
+	PROP_Flags3 (MF3_DONTSPLASH)
+
+	PROP_SpawnState (0)
+END_DEFAULTS

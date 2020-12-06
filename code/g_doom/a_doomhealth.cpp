@@ -1,14 +1,14 @@
 #include "info.h"
 #include "a_pickups.h"
 #include "d_player.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "p_local.h"
 
 // Health bonus -------------------------------------------------------------
 
 class AHealthBonus : public AHealth
 {
-	DECLARE_ACTOR (AHealthBonus, AHealth);
+	DECLARE_ACTOR (AHealthBonus, AHealth)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -21,12 +21,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTHTHBONUS;
+		return GStrings(GOTHTHBONUS);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AHealthBonus, AHealth);
-REGISTER_ACTOR (AHealthBonus, Doom);
 
 FState AHealthBonus::States[] =
 {
@@ -38,21 +35,19 @@ FState AHealthBonus::States[] =
 	S_NORMAL (BON1, 'B',	6, NULL 				, &States[0])
 };
 
-void AHealthBonus::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2014;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (AHealthBonus, Doom, 2014, 0)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Stimpack -----------------------------------------------------------------
 
 class AStimpack : public AHealth
 {
-	DECLARE_ACTOR (AStimpack, AHealth);
+	DECLARE_ACTOR (AStimpack, AHealth)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -60,34 +55,28 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTSTIM;
+		return GStrings(GOTSTIM);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AStimpack, AHealth);
-REGISTER_ACTOR (AStimpack, Doom);
 
 FState AStimpack::States[] =
 {
 	S_NORMAL (STIM, 'A',   -1, NULL 				, NULL)
 };
 
-void AStimpack::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2011;
-	info->spawnid = 23;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (AStimpack, Doom, 2011, 23)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Medikit ------------------------------------------------------------------
 
 class AMedikit : public AHealth
 {
-	DECLARE_ACTOR (AMedikit, AHealth);
+	DECLARE_ACTOR (AMedikit, AHealth)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -96,27 +85,20 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return (PrevHealth < 25) ? GOTMEDINEED : GOTMEDIKIT;
+		return GStrings((PrevHealth < 25) ? GOTMEDINEED : GOTMEDIKIT);
 	}
 	int PrevHealth;
 };
-
-IMPLEMENT_DEF_SERIAL (AMedikit, AHealth);
-REGISTER_ACTOR (AMedikit, Doom);
 
 FState AMedikit::States[] =
 {
 	S_NORMAL (MEDI, 'A',   -1, NULL 				, NULL)
 };
 
-void AMedikit::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2012;
-	info->spawnid = 24;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (AMedikit, Doom, 2012, 24)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
 
+	PROP_SpawnState (0)
+END_DEFAULTS

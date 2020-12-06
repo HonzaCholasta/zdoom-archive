@@ -60,12 +60,11 @@ private:
 	static FStat *m_CurrStat;
 };
 
-#define BEGIN_STAT(n) \
+#define ADD_STAT(n,out) \
 	static class Stat_##n : public FStat { \
 		public: \
 			Stat_##n () : FStat (#n) {} \
-			void GetStats (char *out)
-
-#define END_STAT(n)		} Istaticstat##n;
+		void GetStats (char *out); } Istaticstat##n; \
+	void Stat_##n::GetStats (char *out)
 
 #endif //__STATS_H__

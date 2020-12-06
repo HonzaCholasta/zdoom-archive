@@ -52,8 +52,8 @@
 #define NCMD_CHECKSUM			0x0fffffff
 
 extern byte		*demo_p;		// [RH] Special "ticcmds" get recorded in demos
-extern char		savedescription[32];
-extern int		savegameslot;
+extern char		savedescription[SAVESTRINGSIZE];
+extern char		*savegamefile;
 
 doomcom_t*		doomcom;		
 doomdata_t* 	netbuffer;		// points inside doomcom
@@ -212,6 +212,16 @@ static struct TicSpecial
 		{
 			CheckSpace (4);
 			WriteLong (it, &streamptr);
+		}
+		return *this;
+	}
+
+	TicSpecial &operator << (float it)
+	{
+		if (streamptr)
+		{
+			CheckSpace (4);
+			WriteFloat (it, &streamptr);
 		}
 		return *this;
 	}
@@ -471,15 +481,15 @@ void GetPackets (void)
 			nodeingame[netnode] = false;
 			playeringame[netconsole] = false;
 
-			if (deathmatch.value)
+			if (*deathmatch)
 			{
-				Printf (PRINT_HIGH, "%s left the game with %d frags\n",
+				Printf ("%s left the game with %d frags\n",
 						 players[netconsole].userinfo.netname,
 						 players[netconsole].fragcount);
 			}
 			else
 			{
-				Printf (PRINT_HIGH, "%s left the game\n", players[netconsole].userinfo.netname);
+				Printf ("%s left the game\n", players[netconsole].userinfo.netname);
 			}
 
 			// [RH] Make the player disappear
@@ -489,7 +499,7 @@ void GetPackets (void)
 			if (netconsole == Net_Arbitrator)
 			{
 				bglobal.RemoveAllBots (true);
-				Printf (PRINT_HIGH, "Removed all bots\n");
+				Printf ("Removed all bots\n");
 
 				// Pick a new network arbitrator
 				for (int i = 0; i < MAXPLAYERS; i++)
@@ -497,7 +507,7 @@ void GetPackets (void)
 					if (playeringame[i] && !players[i].isbot)
 					{
 						Net_Arbitrator = i;
-						Printf (PRINT_HIGH, "%s is the new arbitrator\n",
+						Printf ("%s is the new arbitrator\n",
 							players[i].userinfo.netname);
 						break;
 					}
@@ -646,7 +656,7 @@ void NetUpdate (void)
 		if (maketic - gameticdiv >= BACKUPTICS/2-1)
 			break;			// can't hold any more
 		
-		//Printf (PRINT_HIGH, "mk:%i ",maketic);
+		//Printf ("mk:%i ",maketic);
 		int block = maketic%BACKUPTICS;
 		G_BuildTiccmd (&localcmds[block]);
 		//Added by MC: For some of that bot stuff. The main bot function.
@@ -754,7 +764,7 @@ BOOL CheckAbort (void)
 {
 	event_t *ev;
 
-	Printf (PRINT_HIGH, "");	// [RH] Give the console a chance to redraw itself
+	Printf ("");	// [RH] Give the console a chance to redraw itself
 	// This WaitForTic is to avoid flooding the network with packets on startup.
 	I_WaitForTic (I_GetTime () + TICRATE/4);
 	I_StartTic ();
@@ -762,7 +772,7 @@ BOOL CheckAbort (void)
 		  ; eventtail = (++eventtail)&(MAXEVENTS-1) ) 
 	{ 
 		ev = &events[eventtail]; 
-		if (ev->type == ev_keydown && ev->data1 == KEY_ESCAPE)
+		if (ev->type == EV_KeyDown && ev->data1 == KEY_ESCAPE)
 			return true;
 	}
 	return false;
@@ -792,7 +802,7 @@ void D_ArbitrateNetStart (void)
 	nodesdetected[0] = 1;	// Detect ourselves
 
 	// [RH] Rewrote this loop based on Doom Legacy 1.11's code.
-	Printf (PRINT_HIGH, "Waiting for %d more player%s...\n",
+	Printf ("Waiting for %d more player%s...\n",
 		doomcom->numnodes - 1, (doomcom->numnodes == 2) ? "" : "s");
 	do 
 	{
@@ -838,7 +848,7 @@ void D_ArbitrateNetStart (void)
 
 							D_ReadUserInfoStrings (netbuffer->player, &stream, false);
 
-							Printf (PRINT_HIGH, "%s connected (node %d, player %d)\n",
+							Printf ("%s connected (node %d, player %d)\n",
 									players[netbuffer->player].userinfo.netname,
 									doomcom->remotenode,
 									netbuffer->player);
@@ -868,7 +878,7 @@ void D_ArbitrateNetStart (void)
 			HSendPacket (i, NCMD_SETUP|NCMD_KILL, (ptrdiff_t)stream - (ptrdiff_t)netbuffer);
 		}
 
-		// If we're the key player, also send the game info packet
+		// If we're the arbitrator, also send the game info packet
 		if (consoleplayer == Net_Arbitrator)
 		{
 			for (i = 1; i < doomcom->numnodes; i++)
@@ -932,7 +942,7 @@ void D_CheckNetGame (void)
 	for (i = 0; i < doomcom->numnodes; i++)
 		nodeingame[i] = true;
 
-	Printf (PRINT_HIGH, "player %i of %i (%i nodes)\n",
+	Printf ("player %i of %i (%i nodes)\n",
 			consoleplayer+1, doomcom->numplayers, doomcom->numnodes);
 }
 
@@ -986,7 +996,7 @@ void TryRunTics (void)
 	// get available tics
 	NetUpdate ();
 
-	lowtic = MAXINT;
+	lowtic = INT_MAX;
 	numplaying = 0;
 	for (i=0 ; i<doomcom->numnodes ; i++)
 	{
@@ -1055,7 +1065,7 @@ void TryRunTics (void)
 	while (lowtic < gametic/ticdup + counts)
 	{
 		NetUpdate ();
-		lowtic = MAXINT;
+		lowtic = INT_MAX;
 
 		for (i=0 ; i<doomcom->numnodes ; i++)
 			if (nodeingame[i] && nettics[i] < lowtic)
@@ -1127,9 +1137,20 @@ void Net_WriteLong (int it)
 	specials << it;
 }
 
+void Net_WriteFloat (float it)
+{
+	specials << it;
+}
+
 void Net_WriteString (const char *it)
 {
 	specials << it;
+}
+
+void Net_WriteBytes (const byte *block, int len)
+{
+	while (len--)
+		specials << *block++;
 }
 
 //==========================================================================
@@ -1194,13 +1215,12 @@ void Net_DoCommand (int type, byte **stream, int player)
 			byte who = ReadByte (stream);
 
 			s = ReadString (stream);
-			if ((who == 0) || players[player].userinfo.team[0] == 0)
+			if ((who == 0) || players[player].userinfo.team == TEAM_None)
 			{ // Said to everyone
 				Printf (PRINT_CHAT, "%s: %s\n", players[player].userinfo.netname, s);
 				S_Sound (CHAN_VOICE, gameinfo.chatSound, 1, ATTN_NONE);
 			}
-			else if (!stricmp (players[player].userinfo.team,
-								 players[consoleplayer].userinfo.team))
+			else if (players[player].userinfo.team == players[consoleplayer].userinfo.team)
 			{ // Said only to members of the player's team
 				Printf (PRINT_TEAMCHAT, "(%s): %s\n", players[player].userinfo.netname, s);
 				S_Sound (CHAN_VOICE, gameinfo.chatSound, 1, ATTN_NONE);
@@ -1210,12 +1230,12 @@ void Net_DoCommand (int type, byte **stream, int player)
 
 	case DEM_MUSICCHANGE:
 		s = ReadString (stream);
-		S_ChangeMusic (s, true);
+		S_ChangeMusic (s);
 		break;
 
 	case DEM_PRINT:
 		s = ReadString (stream);
-		Printf (PRINT_HIGH, s);
+		Printf (s);
 		break;
 
 	case DEM_CENTERPRINT:
@@ -1261,7 +1281,7 @@ void Net_DoCommand (int type, byte **stream, int player)
 
 	case DEM_KILLBOTS:
 		bglobal.RemoveAllBots (true);
-		Printf (PRINT_HIGH, "Removed all bots\n");
+		Printf ("Removed all bots\n");
 		break;
 
 	case DEM_INVSEL:
@@ -1311,7 +1331,7 @@ void Net_DoCommand (int type, byte **stream, int player)
 		{
 			byte which = ReadByte (stream);
 			FWeaponInfo **infos = (players[player].powers[pw_weaponlevel2]
-				&& deathmatch.value) ? wpnlev2info : wpnlev1info;
+				&& *deathmatch) ? wpnlev2info : wpnlev1info;
 
 			if (which < NUMWEAPONS
 				&& which != players[player].readyweapon
@@ -1388,13 +1408,14 @@ void Net_DoCommand (int type, byte **stream, int player)
 			S_PauseSound ();
 			I_PauseMouse ();
 		}
-		BorderNeedRefresh = true;
+		BorderNeedRefresh = screen->GetPageCount ();
 		break;
 
 	case DEM_SAVEGAME:
-		if (!savedescription[0])
-			strcpy (savedescription, "NET GAME");
-		savegameslot = ReadByte (stream);
+		savegamefile = ReadString (stream);
+		s = ReadString (stream);
+		memset (savedescription, 0, sizeof(savedescription));
+		strcpy (savedescription, s);
 		gameaction = ga_savegame;
 		break;
 
@@ -1409,6 +1430,7 @@ void Net_DoCommand (int type, byte **stream, int player)
 
 void Net_SkipCommand (int type, byte **stream)
 {
+	BYTE t;
 	int skip;
 
 	switch (type)
@@ -1422,7 +1444,6 @@ void Net_SkipCommand (int type, byte **stream)
 		case DEM_PRINT:
 		case DEM_CENTERPRINT:
 		case DEM_UINFCHANGED:
-		case DEM_SINFCHANGED:
 		case DEM_GIVECHEAT:
 		case DEM_CHANGEMAP:
 		case DEM_SUMMON:
@@ -1433,27 +1454,47 @@ void Net_SkipCommand (int type, byte **stream)
 		case DEM_DROPPLAYER:
 		case DEM_INVSEL:
 		case DEM_INVUSE:
-		case DEM_SAVEGAME:
 		case DEM_WEAPSEL:
 		case DEM_WEAPSLOT:
 			skip = 1;
 			break;
 
+		case DEM_SAVEGAME:
+			skip = strlen ((char *)(*stream)) + 1;
+			skip += strlen ((char *)(*stream) + skip) + 1;
+			break;
+
+		case DEM_SINFCHANGED:
+			t = **stream;
+			skip = 1 + (t & 63);
+			switch (t >> 6)
+			{
+			case CVAR_Bool:
+				skip += 1;
+				break;
+			case CVAR_Int: case CVAR_Float:
+				skip += 4;
+				break;
+			case CVAR_String:
+				skip += strlen ((char *)(*stream + skip));
+				break;
+			}
+			break;
+
 		default:
-			return;;
+			return;
 	}
 
 	*stream += skip;
 }
 
 // [RH] List "ping" times
-BEGIN_COMMAND (pings)
+CCMD (pings)
 {
 	int i;
 
 	for (i = 0; i < MAXPLAYERS; i++)
 		if (playeringame[i])
-			Printf (PRINT_HIGH, "% 4u %s\n", currrecvtime[i] - lastrecvtime[i],
+			Printf ("% 4d %s\n", currrecvtime[i] - lastrecvtime[i],
 					players[i].userinfo.netname);
 }
-END_COMMAND (pings)

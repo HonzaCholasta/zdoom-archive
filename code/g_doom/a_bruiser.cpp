@@ -5,21 +5,18 @@
 #include "p_local.h"
 #include "p_enemy.h"
 #include "doomstat.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_BruisAttack (AActor *);
 
 class ABaronOfHell : public AActor
 {
-	DECLARE_ACTOR (ABaronOfHell, AActor);
+	DECLARE_ACTOR (ABaronOfHell, AActor)
 public:
-	const char *GetObituary () { return OB_BARON; }
-	const char *GetHitObituary () { return OB_BARONHIT; }
+	const char *GetObituary () { return GStrings(OB_BARON); }
+	const char *GetHitObituary () { return GStrings(OB_BARONHIT); }
 };
-
-IMPLEMENT_DEF_SERIAL (ABaronOfHell, AActor);
-REGISTER_ACTOR (ABaronOfHell, Doom);
 
 FState ABaronOfHell::States[] =
 {
@@ -65,59 +62,48 @@ FState ABaronOfHell::States[] =
 	S_NORMAL (BOSS, 'I',	8, NULL 						, &States[S_BOSS_RUN+0])
 };
 
-void ABaronOfHell::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 3003;
-	info->spawnid = 3;
-	info->spawnstate = &States[S_BOSS_STND];
-	info->spawnhealth = 1000;
-	info->seestate = &States[S_BOSS_RUN];
-	info->seesound = "baron/sight";
-	info->painstate = &States[S_BOSS_PAIN];
-	info->painchance = 50;
-	info->painsound = "baron/pain";
-	info->meleestate = &States[S_BOSS_ATK];
-	info->missilestate = &States[S_BOSS_ATK];
-	info->deathstate = &States[S_BOSS_DIE];
-	info->deathsound = "baron/death";
-	info->speed = 8;
-	info->radius = 24 * FRACUNIT;
-	info->height = 64 * FRACUNIT;
-	info->mass = 1000;
-	info->activesound = "baron/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_BOSS_RAISE];
-};
+IMPLEMENT_ACTOR (ABaronOfHell, Doom, 3003, 3)
+	PROP_SpawnHealth (1000)
+	PROP_RadiusFixed (24)
+	PROP_HeightFixed (64)
+	PROP_Mass (1000)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (50)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_BOSS_STND)
+	PROP_SeeState (S_BOSS_RUN)
+	PROP_PainState (S_BOSS_PAIN)
+	PROP_MeleeState (S_BOSS_ATK)
+	PROP_MissileState (S_BOSS_ATK)
+	PROP_DeathState (S_BOSS_DIE)
+	PROP_RaiseState (S_BOSS_RAISE)
+
+	PROP_SeeSound ("baron/sight")
+	PROP_PainSound ("baron/pain")
+	PROP_DeathSound ("baron/death")
+	PROP_ActiveSound ("baron/active")
+END_DEFAULTS
 
 class AStealthBaron : public ABaronOfHell
 {
-	DECLARE_STATELESS_ACTOR (AStealthBaron, ABaronOfHell);
+	DECLARE_STATELESS_ACTOR (AStealthBaron, ABaronOfHell)
 public:
-	const char *GetObituary () { return OB_STEALTHBARON; }
-	const char *GetHitObituary () { return OB_STEALTHBARON; }
+	const char *GetObituary () { return GStrings(OB_STEALTHBARON); }
+	const char *GetHitObituary () { return GStrings(OB_STEALTHBARON); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthBaron, ABaronOfHell);
-REGISTER_ACTOR (AStealthBaron, Doom);
-
-void AStealthBaron::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9052;
-	info->spawnid = 100;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthBaron, Doom, 9052, 100)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 class ABaronBall : public AActor
 {
-	DECLARE_ACTOR (ABaronBall, AActor);
+	DECLARE_ACTOR (ABaronBall, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABaronBall, AActor);
-REGISTER_ACTOR (ABaronBall, Doom);
 
 FState ABaronBall::States[] =
 {
@@ -131,32 +117,34 @@ FState ABaronBall::States[] =
 	S_BRIGHT (BAL7, 'E',	6, NULL 						, NULL)
 };
 
-void ABaronBall::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABaronBall, Doom, -1, 0)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (16)
+	PROP_SpeedFixed (15)
+	PROP_Damage (8)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_BRBALL)
+	PROP_DeathState (S_BRBALLX)
+
+	PROP_SeeSound ("baron/attack")
+	PROP_DeathSound ("baron/shotx")
+END_DEFAULTS
+
+AT_SPEED_SET (BaronBall, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_BRBALL];
-	info->seesound = "baron/attack";
-	info->deathstate = &States[S_BRBALLX];
-	info->deathsound = "baron/shotx";
-	info->speed = GameSpeed != SPEED_Fast ? 15 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 6 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->damage = 8;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-	info->translucency = TRANSLUC75;
+	SimpleSpeedSetter (ABaronBall, 15*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 class AHellKnight : public ABaronOfHell
 {
-	DECLARE_ACTOR (AHellKnight, ABaronOfHell);
+	DECLARE_ACTOR (AHellKnight, ABaronOfHell)
 public:
-	const char *GetObituary () { return OB_KNIGHT; }
-	const char *GetHitObituary () { return OB_KNIGHTHIT; }
+	const char *GetObituary () { return GStrings(OB_KNIGHT); }
+	const char *GetHitObituary () { return GStrings(OB_KNIGHTHIT); }
 };
-
-IMPLEMENT_DEF_SERIAL (AHellKnight, ABaronOfHell);
-REGISTER_ACTOR (AHellKnight, Doom);
 
 FState AHellKnight::States[] =
 {
@@ -202,51 +190,43 @@ FState AHellKnight::States[] =
 	S_NORMAL (BOS2, 'I',	8, NULL 						, &States[S_BOS2_RUN+0])
 };
 
-void AHellKnight::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 69;
-	info->spawnid = 113;
-	info->spawnstate = &States[S_BOS2_STND];
-	info->spawnhealth = 500;
-	info->seestate = &States[S_BOS2_RUN];
-	info->seesound = "knight/sight";
-	info->painstate = &States[S_BOS2_PAIN];
-	info->painchance = 50;
-	info->painsound = "knight/pain";
-	info->meleestate = &States[S_BOS2_ATK];
-	info->missilestate = &States[S_BOS2_ATK];
-	info->deathstate = &States[S_BOS2_DIE];
-	info->deathsound = "knight/death";
-	info->speed = 8;
-	info->radius = 24 * FRACUNIT;
-	info->height = 64 * FRACUNIT;
-	info->mass = 1000;
-	info->activesound = "knight/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_BOS2_RAISE];
-}
+IMPLEMENT_ACTOR (AHellKnight, Doom, 69, 113)
+	PROP_SpawnHealth (500)
+	PROP_RadiusFixed (24)
+	PROP_HeightFixed (64)
+	PROP_Mass (1000)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (50)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_BOS2_STND)
+	PROP_SeeState (S_BOS2_RUN)
+	PROP_PainState (S_BOS2_PAIN)
+	PROP_MeleeState (S_BOS2_ATK)
+	PROP_MissileState (S_BOS2_ATK)
+	PROP_DeathState (S_BOS2_DIE)
+	PROP_RaiseState (S_BOS2_RAISE)
+
+	PROP_SeeSound ("knight/sight")
+	PROP_PainSound ("knight/pain")
+	PROP_DeathSound ("knight/death")
+	PROP_ActiveSound ("knight/active")
+END_DEFAULTS
 
 class AStealthHellKnight : public AHellKnight
 {
-	DECLARE_STATELESS_ACTOR (AStealthHellKnight, AHellKnight);
+	DECLARE_STATELESS_ACTOR (AStealthHellKnight, AHellKnight)
 public:
-	const char *GetObituary () { return OB_STEALTHKNIGHT; }
-	const char *GetHitObituary () { return OB_STEALTHKNIGHT; }
+	const char *GetObituary () { return GStrings(OB_STEALTHKNIGHT); }
+	const char *GetHitObituary () { return GStrings(OB_STEALTHKNIGHT); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthHellKnight, AHellKnight);
-REGISTER_ACTOR (AStealthHellKnight, Doom);
-
-void AStealthHellKnight::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9056;
-	info->spawnid = 101;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthHellKnight, Doom, 9056, 101)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_Alpha (0)
+	PROP_RenderStyle (STYLE_Translucent)
+END_DEFAULTS
 
 void A_BruisAttack (AActor *self)
 {

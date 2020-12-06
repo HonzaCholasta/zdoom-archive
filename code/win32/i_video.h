@@ -32,37 +32,20 @@ extern BOOL Fullscreen;
 
 
 // [RH] Set the display mode
-void I_SetMode (int &width, int &height, int &bits);
+DFrameBuffer *I_SetMode (int &width, int &height, DFrameBuffer *old);
 
-// Takes full 8 bit values.
-void I_SetPalette (DWORD *palette);
-
-void I_BeginUpdate (void);		// [RH] Locks screen[0]
-void I_FinishUpdate (void);
-void I_FinishUpdateNoBlit (void);
-
-// Wait for vertical retrace or pause a bit.
+// Pause a bit.
+// [RH] Despite the name, it apparently never waited for the VBL, even in
+// the original DOS version (if the Heretic/Hexen source is any indicator).
 void I_WaitVBL(int count);
-
-void I_ReadScreen (byte *scr);
-
-void I_BeginRead (void);
-void I_EndRead (void);
 
 bool I_CheckResolution (int width, int height, int bpp);
 void I_ClosestResolution (int *width, int *height, int bits);
-bool I_SetResolution (int width, int height, int bpp);
 
 void I_StartModeIterator (int bits);
 bool I_NextMode (int *width, int *height);
 
-bool I_AllocateScreen (DCanvas *canvas, int width, int height, int bits);
-void I_FreeScreen (DCanvas *canvas);
-
-void I_LockScreen (DCanvas *canvas);
-void I_UnlockScreen (DCanvas *canvas);
-void I_Blit (DCanvas *from, int srcx, int srcy, int srcwidth, int srcheight,
-			 DCanvas *to, int destx, int desty, int destwidth, int destheight);
+DCanvas *I_NewStaticCanvas (int width, int height);
 
 enum EDisplayType
 {

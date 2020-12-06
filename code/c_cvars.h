@@ -12,65 +12,100 @@ CVARS (console variables)
 ==========================================================
 */
 
-#define CVAR_ARCHIVE	1	// set to cause it to be saved to vars.rc
-#define CVAR_USERINFO	2	// added to userinfo  when changed
-#define CVAR_SERVERINFO	4	// added to serverinfo when changed
-#define CVAR_NOSET		8	// don't allow change from console at all,
-							// but can be set from the command line
-#define CVAR_LATCH		16	// save changes until server restart
-#define CVAR_UNSETTABLE	32	// can unset this var from console
-#define CVAR_DEMOSAVE	64	// save the value of this cvar_t in a demo
-#define CVAR_MODIFIED	128	// set each time the cvar_t is changed
-#define CVAR_ISDEFAULT	256	// is cvar unchanged since creation?
-#define CVAR_AUTO		512	// allocated, needs to be freed when destroyed
+enum
+{
+	CVAR_ARCHIVE		= 1,	// set to cause it to be saved to config
+	CVAR_USERINFO		= 2,	// added to userinfo  when changed
+	CVAR_SERVERINFO		= 4,	// added to serverinfo when changed
+	CVAR_NOSET			= 8,	// don't allow change from console at all,
+								// but can be set from the command line
+	CVAR_LATCH			= 16,	// save changes until server restart
+	CVAR_UNSETTABLE		= 32,	// can unset this var from console
+	CVAR_DEMOSAVE		= 64,	// save the value of this FBaseCVar in a demo
+	CVAR_ISDEFAULT		= 128,	// is cvar unchanged since creation?
+	CVAR_AUTO			= 256,	// allocated; needs to be freed when destroyed
+	CVAR_NOINITCALL		= 512,	// don't call callback at game start
+	CVAR_GLOBALCONFIG	= 1024,	// cvar is saved to global config section
+};
 
-class cvar_t
+union UCVarValue
+{
+	bool Bool;
+	int Int;
+	float Float;
+	char *String;
+};
+
+enum ECVarType
+{
+	CVAR_Bool,
+	CVAR_Int,
+	CVAR_Float,
+	CVAR_String,
+	CVAR_Color,		// stored as CVAR_Int
+	CVAR_Dummy		// just redirects to another cvar
+};
+
+class FConfigFile;
+class AActor;
+
+class FBaseCVar
 {
 public:
-	cvar_t (const char *name, const char *def, DWORD flags);
-	cvar_t (const char *name, const char *def, DWORD flags, void (*callback)(cvar_t &));
-	virtual ~cvar_t ();
-
-#if CVAR_IMPLEMENTOR
-	char *name;
-	char *string;
-	float value;
-	unsigned int flags;
-#else
-	const char *const name;
-	const char *const string;
-	const float value;
-	const unsigned int flags;
-#endif
+	FBaseCVar (const char *name, DWORD flags, void (*callback)(FBaseCVar &));
+	virtual ~FBaseCVar ();
 
 	inline void Callback () { if (m_Callback) m_Callback (*this); }
 
-	void SetDefault (const char *value);
-	void Set (const char *value);
-	void Set (float value);
-	void ForceSet (const char *value);
-	void ForceSet (float value);
+	inline const char *GetName () const { return Name; }
+	inline DWORD GetFlags () const { return Flags; }
 
-	inline void Set (const byte *value) { Set ((const char *)value); }
-	inline void ForceSet (const byte *value) { ForceSet ((const char *)value); }
+	void ForceSet (UCVarValue value, ECVarType type);
+	void SetGenericRep (UCVarValue value, ECVarType type);
+	void ResetToDefault ();
+
+	virtual ECVarType GetRealType () const = 0;
+
+	virtual UCVarValue GetGenericRep (ECVarType type) const = 0;
+	virtual UCVarValue GetFavoriteRep (ECVarType *type) const = 0;
+
+	virtual UCVarValue GetGenericRepDefault (ECVarType type) const = 0;
+	virtual UCVarValue GetFavoriteRepDefault (ECVarType *type) const = 0;
+	virtual void SetGenericRepDefault (UCVarValue value, ECVarType type) = 0;
+
+	FBaseCVar &operator= (const FBaseCVar &var)
+		{ UCVarValue val; ECVarType type; val = var.GetFavoriteRep (&type); SetGenericRep (val, type); return *this; }
 
 	static void EnableNoSet ();		// enable the honoring of CVAR_NOSET
 	static void EnableCallbacks ();
+	static void ResetColors ();		// recalc color cvars' indices after screen change
+
+protected:
+	virtual void DoSet (UCVarValue value, ECVarType type) = 0;
+
+	static bool ToBool (UCVarValue value, ECVarType type);
+	static int ToInt (UCVarValue value, ECVarType type);
+	static float ToFloat (UCVarValue value, ECVarType type);
+	static char *ToString (UCVarValue value, ECVarType type);
+	static UCVarValue FromBool (bool value, ECVarType type);
+	static UCVarValue FromInt (int value, ECVarType type);
+	static UCVarValue FromFloat (float value, ECVarType type);
+	static UCVarValue FromString (const char *value, ECVarType type);
+
+	char *Name;
+	DWORD Flags;
 
 private:
-	cvar_t (const cvar_t &var);
-	cvar_t &operator= (const cvar_t &var);
+	FBaseCVar (const char *name, DWORD flags);
+	FBaseCVar (const FBaseCVar &var);
 
-	void InitSelf (const char *name, const char *def, DWORD flags, void (*callback)(cvar_t &));
-	void (*m_Callback)(cvar_t &);
-	cvar_t *m_Next;
-	char *m_LatchedString;
-	char *m_Default;
+	void (*m_Callback)(FBaseCVar &);
+	FBaseCVar *m_Next;
 
 	static bool m_UseCallback;
 	static bool m_DoNoSet;
 
-	friend class Cmd_cvarlist;
+	friend void Cmd_cvarlist (int, char **, const char *, AActor *);
 
 	// Writes all cvars that could effect demo sync to *demo_p. These are
 	// cvars that have either CVAR_SERVERINFO or CVAR_DEMOSAVE set.
@@ -84,35 +119,172 @@ private:
 	friend void C_BackupCVars (void);
 
 	// Finds a named cvar
-	friend cvar_t *FindCVar (const char *var_name, cvar_t **prev);
+	friend FBaseCVar *FindCVar (const char *var_name, FBaseCVar **prev);
 
 	// Called from G_InitNew()
 	friend void UnlatchCVars (void);
 
 	// archive cvars to FILE f
-	friend void C_ArchiveCVars (void *f);
+	friend void C_ArchiveCVars (FConfigFile *f, int type);
 
 	// initialize cvars to default values after they are created
 	friend void C_SetCVarsToDefaults (void);
 
-	friend BOOL SetServerVar (char *name, char *value);
-
-	friend void FilterCompactCVars (TArray<cvar_t *> &cvars, DWORD filter);
-
- protected:
-#if CVAR_IMPLEMENTOR
-	cvar_t () {}
-#else
-	cvar_t () : name(0), string(0), value(0.f), flags(0) {}
-#endif
+	friend void FilterCompactCVars (TArray<FBaseCVar *> &cvars, DWORD filter);
 };
 
-// console variable interaction
-cvar_t *cvar_set (const char *var_name, const char *value);
-cvar_t *cvar_forceset (const char *var_name, const char *value);
+class FBoolCVar : public FBaseCVar
+{
+public:
+	FBoolCVar (const char *name, bool def, DWORD flags, void (*callback)(FBoolCVar &)=NULL);
 
-inline cvar_t *cvar_set (const char *var_name, const byte *value) { return cvar_set (var_name, (const char *)value); }
-inline cvar_t *cvar_forceset (const char *var_name, const byte *value) { return cvar_forceset (var_name, (const char *)value); }
+	virtual ECVarType GetRealType () const;
+
+	virtual UCVarValue GetGenericRep (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRep (ECVarType *type) const;
+	virtual UCVarValue GetGenericRepDefault (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRepDefault (ECVarType *type) const;
+	virtual void SetGenericRepDefault (UCVarValue value, ECVarType type);
+
+	inline bool operator= (bool boolval)
+		{ UCVarValue val; val.Bool = boolval; SetGenericRep (val, CVAR_Bool); return boolval; }
+	inline bool operator* () { return Value; }
+
+protected:
+	virtual void DoSet (UCVarValue value, ECVarType type);
+
+	bool Value;
+	bool DefaultValue;
+};
+
+class FIntCVar : public FBaseCVar
+{
+public:
+	FIntCVar (const char *name, int def, DWORD flags, void (*callback)(FIntCVar &)=NULL);
+
+	virtual ECVarType GetRealType () const;
+
+	virtual UCVarValue GetGenericRep (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRep (ECVarType *type) const;
+	virtual UCVarValue GetGenericRepDefault (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRepDefault (ECVarType *type) const;
+	virtual void SetGenericRepDefault (UCVarValue value, ECVarType type);
+
+	int operator= (int intval)
+		{ UCVarValue val; val.Int = intval; SetGenericRep (val, CVAR_Int); return intval; }
+	inline int operator* () { return Value; }
+
+protected:
+	virtual void DoSet (UCVarValue value, ECVarType type);
+
+	int Value;
+	int DefaultValue;
+
+	friend class FFlagCVar;
+};
+
+class FFloatCVar : public FBaseCVar
+{
+public:
+	FFloatCVar (const char *name, float def, DWORD flags, void (*callback)(FFloatCVar &)=NULL);
+
+	virtual ECVarType GetRealType () const;
+
+	virtual UCVarValue GetGenericRep (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRep (ECVarType *type) const;
+	virtual UCVarValue GetGenericRepDefault (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRepDefault (ECVarType *type) const;
+	virtual void SetGenericRepDefault (UCVarValue value, ECVarType type);
+
+	float operator= (float floatval)
+		{ UCVarValue val; val.Float = floatval; SetGenericRep (val, CVAR_Float); return floatval; }
+	inline float operator* () { return Value; }
+
+protected:
+	virtual void DoSet (UCVarValue value, ECVarType type);
+
+	float Value;
+	float DefaultValue;
+};
+
+class FStringCVar : public FBaseCVar
+{
+public:
+	FStringCVar (const char *name, const char *def, DWORD flags, void (*callback)(FStringCVar &)=NULL);
+
+	virtual ECVarType GetRealType () const;
+
+	virtual UCVarValue GetGenericRep (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRep (ECVarType *type) const;
+	virtual UCVarValue GetGenericRepDefault (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRepDefault (ECVarType *type) const;
+	virtual void SetGenericRepDefault (UCVarValue value, ECVarType type);
+
+	char *operator= (char *stringrep)
+		{ UCVarValue val; val.String = stringrep; SetGenericRep (val, CVAR_String); return stringrep; }
+	inline const char *operator* () { return Value; }
+
+protected:
+	virtual void DoSet (UCVarValue value, ECVarType type);
+
+	char *Value;
+	char *DefaultValue;
+};
+
+class FColorCVar : public FIntCVar
+{
+public:
+	FColorCVar (const char *name, int def, DWORD flags, void (*callback)(FColorCVar &)=NULL);
+
+	virtual ECVarType GetRealType () const;
+
+	virtual UCVarValue GetGenericRep (ECVarType type) const;
+	virtual UCVarValue GetGenericRepDefault (ECVarType type) const;
+	virtual void SetGenericRepDefault (UCVarValue value, ECVarType type);
+
+	inline int operator* () { return Value; }
+	inline int GetIndex () { return Index; }
+
+protected:
+	virtual void DoSet (UCVarValue value, ECVarType type);
+	
+	static UCVarValue FromInt2 (int value, ECVarType type);
+	static int ToInt2 (UCVarValue value, ECVarType type);
+
+	int Index;
+};
+
+class FFlagCVar : public FBaseCVar
+{
+public:
+	FFlagCVar (const char *name, FIntCVar &realvar, DWORD bitval);
+
+	virtual ECVarType GetRealType () const;
+
+	virtual UCVarValue GetGenericRep (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRep (ECVarType *type) const;
+	virtual UCVarValue GetGenericRepDefault (ECVarType type) const;
+	virtual UCVarValue GetFavoriteRepDefault (ECVarType *type) const;
+	virtual void SetGenericRepDefault (UCVarValue value, ECVarType type);
+
+	bool operator= (bool boolval)
+		{ UCVarValue val; val.Bool = boolval; SetGenericRep (val, CVAR_Bool); return boolval; }
+	inline int operator* () { return (*ValueVar & BitVal); }
+
+protected:
+	virtual void DoSet (UCVarValue value, ECVarType type);
+
+	FIntCVar &ValueVar;
+	DWORD BitVal;
+};
+
+extern int cvar_defflags;
+
+FBaseCVar *cvar_set (const char *var_name, const char *value);
+FBaseCVar *cvar_forceset (const char *var_name, const char *value);
+
+inline FBaseCVar *cvar_set (const char *var_name, const byte *value) { return cvar_set (var_name, (const char *)value); }
+inline FBaseCVar *cvar_forceset (const char *var_name, const byte *value) { return cvar_forceset (var_name, (const char *)value); }
 
 
 
@@ -125,17 +297,15 @@ inline cvar_t *cvar_forceset (const char *var_name, const byte *value) { return 
 void C_RestoreCVars (void);
 
 
-#define BEGIN_CUSTOM_CVAR(name,def,flags) \
-	static void cvarfunc_##name(cvar_t &); \
-	cvar_t name (#name, def, flags, cvarfunc_##name); \
-	static void cvarfunc_##name(cvar_t &var)
-	
-#define END_CUSTOM_CVAR(name)
+#define CUSTOM_CVAR(type,name,def,flags) \
+	static void cvarfunc_##name(F##type##CVar &); \
+	F##type##CVar name (#name, def, flags, cvarfunc_##name); \
+	static void cvarfunc_##name(F##type##CVar &var)
 
-#define CVAR(name,def,flags) \
-	cvar_t name (#name, def, flags);
+#define CVAR(type,name,def,flags) \
+	F##type##CVar name (#name, def, flags);
 
-#define EXTERN_CVAR(name) extern cvar_t name;
+#define EXTERN_CVAR(type,name) extern F##type##CVar name;
 
 
 #endif //__C_CVARS_H__

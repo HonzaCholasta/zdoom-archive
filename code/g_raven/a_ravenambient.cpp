@@ -10,47 +10,47 @@ void A_WaterfallSound (AActor *);
 
 class ASoundWind : public AActor
 {
-	DECLARE_ACTOR (ASoundWind, AActor);
+	DECLARE_ACTOR (ASoundWind, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASoundWind, AActor);
-REGISTER_ACTOR (ASoundWind, Raven);
 
 FState ASoundWind::States[] =
 {
-	S_NORMAL (TNT1, 'A',  100, A_WindSound, &States[0])
+	S_NORMAL (TNT1, 'A',   2, A_WindSound, &States[0])
 };
 
-void ASoundWind::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASoundWind, Raven, -1, 0)
+	PROP_SpawnState (0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR)
+END_DEFAULTS
+
+AT_GAME_SET (SoundWind)
 {
-	INHERIT_DEFS;
-	info->doomednum = (gameinfo.gametype == GAME_Heretic) ? 42 : 1410;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOSECTOR;
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		DoomEdMap.AddType (42, RUNTIME_CLASS(ASoundWind));
+	}
+	else if (gameinfo.gametype == GAME_Hexen)
+	{
+		DoomEdMap.AddType (1410, RUNTIME_CLASS(ASoundWind));
+	}
 }
 
 // Waterfall ----------------------------------------------------------------
 
 class ASoundWaterfall : public AActor
 {
-	DECLARE_ACTOR (ASoundWaterfall, AActor);
+	DECLARE_ACTOR (ASoundWaterfall, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASoundWaterfall, AActor);
-REGISTER_ACTOR (ASoundWaterfall, Raven);
 
 FState ASoundWaterfall::States[] =
 {
-	S_NORMAL (TNT1, 'A',   85, A_WaterfallSound, &States[0])
+	S_NORMAL (TNT1, 'A',   2, A_WaterfallSound, &States[0])
 };
 
-void ASoundWaterfall::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 41;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOSECTOR;
-}
+IMPLEMENT_ACTOR (ASoundWaterfall, Raven, 41, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -60,7 +60,10 @@ void ASoundWaterfall::SetDefaults (FActorInfo *info)
 
 void A_WindSound (AActor *self)
 {
-	S_Sound (self, CHAN_BODY, "world/wind", 1, ATTN_NORM);
+	if (!S_GetSoundPlayingInfo (self, S_FindSound ("world/wind")))
+	{
+		S_LoopedSound (self, CHAN_BODY, "world/wind", 1, ATTN_NORM);
+	}
 }
 
 //----------------------------------------------------------------------------
@@ -79,5 +82,8 @@ void A_WaterfallSound (AActor *self)
 // For Heretic, we *do* define "world/waterfall", so it will be audible in
 // Heretic.
 
-	S_Sound (self, CHAN_BODY, "world/waterfall", 1, ATTN_NORM);
+	if (!S_GetSoundPlayingInfo (self, S_FindSound ("world/waterfall")))
+	{
+		S_LoopedSound (self, CHAN_BODY, "world/waterfall", 1, ATTN_NORM);
+	}
 }

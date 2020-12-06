@@ -39,7 +39,8 @@
 
 
 
-
+#define MAXWIDTH 1600
+#define MAXHEIGHT 1200
 
 // Silhouette, needed for clipping Segs (mainly)
 // and sprites representing things.
@@ -82,32 +83,185 @@ class player_s;
 struct dyncolormap_s;
 
 class DSectorEffect;
+struct sector_t;
 
-struct sector_s
+enum
 {
-	fixed_t 	floorheight;
-	fixed_t 	ceilingheight;
-	short		floorpic;
-	short		ceilingpic;
-	short		lightlevel;
+	SECSPAC_Enter		= 1,	// Trigger when player enters
+	SECSPAC_Exit		= 2,	// Trigger when player exits
+	SECSPAC_HitFloor	= 4,	// Trigger when player hits floor
+	SECSPAC_HitCeiling	= 8,	// Trigger when player hits ceiling
+	SECSPAC_Use			= 16,	// Trigger when player uses
+	SECSPAC_UseWall		= 32,	// Trigger when player uses a wall
+};
+
+class ASectorAction : public AActor
+{
+	DECLARE_ACTOR (ASectorAction, AActor)
+public:
+	void Destroy ();
+	void BeginPlay ();
+	void Activate (AActor *source);
+	void Deactivate (AActor *source);
+	virtual bool TriggerAction (AActor *triggerer, int activationType);
+protected:
+	bool CheckTrigger (AActor *triggerer) const;
+};
+
+class ASkyViewpoint;
+
+struct secplane_t
+{
+	// the plane is defined as a*x + b*y + c*z + d = 0
+	// ic is 1/c, for faster Z calculations
+
+	fixed_t a, b, c, d, ic;
+
+	fixed_t ZatPoint (fixed_t x, fixed_t y) const
+	{
+		return FixedMul (ic, -d - DMulScale16 (a, x, b, y));
+	}
+
+	fixed_t ZatPoint (const vertex_t *v) const
+	{
+		return FixedMul (ic, -d - DMulScale16 (a, v->x, b, v->y));
+	}
+
+	fixed_t ZatPointDist (fixed_t x, fixed_t y, fixed_t dist) const
+	{
+		return FixedMul (ic, -dist - DMulScale16 (a, x, b, y));
+	}
+
+	fixed_t ZatPointDist (const vertex_t *v, fixed_t dist)
+	{
+		return FixedMul (ic, -dist - DMulScale16 (a, v->x, b, v->y));
+	}
+
+	bool operator== (const secplane_t &other) const
+	{
+		return a == other.a && b == other.b && c == other.c && d == other.d;
+	}
+
+	bool operator!= (const secplane_t &other) const
+	{
+		return a != other.a || b != other.b || c != other.c || d != other.d;
+	}
+
+	void ChangeHeight (fixed_t hdiff)
+	{ // Move the plane up or down by hdiff units
+		d = d - FixedMul (hdiff, c);
+	}
+
+	fixed_t HeightDiff (fixed_t oldd) const
+	{
+		return FixedMul (oldd - d, ic);
+	}
+
+	fixed_t PointToDist (fixed_t x, fixed_t y, fixed_t z) const
+	{
+		return -TMulScale16 (a, x, y, b, z, c);
+	}
+
+	fixed_t PointToDist (const vertex_t *v, fixed_t z) const
+	{
+		return -TMulScale16 (a, v->x, b, v->y, z, c);
+	}
+};
+
+inline FArchive &operator<< (FArchive &arc, secplane_t &plane)
+{
+	arc << plane.a << plane.b << plane.c << plane.d;
+	if (plane.c != 0)
+	{
+		plane.ic = DivScale32 (1, plane.c);
+	}
+	return arc;
+}
+
+// Ceiling/floor flags
+enum
+{
+	SECF_ABSLIGHTING	= 1		// floor/ceiling light is absolute, not relative
+};
+
+// Misc sector flags
+enum
+{
+	SECF_SILENT			= 1		// actors in sector make no noise
+};
+
+struct FDynamicColormap;
+
+struct sector_t
+{
+	// Member functions
+	fixed_t FindLowestFloorSurrounding (vertex_t **v) const;
+	fixed_t FindHighestFloorSurrounding (vertex_t **v) const;
+	fixed_t FindNextHighestFloor (vertex_t **v) const;
+	fixed_t FindNextLowestFloor (vertex_t **v) const;
+	fixed_t FindLowestCeilingSurrounding (vertex_t **v) const;			// jff 2/04/98
+	fixed_t FindHighestCeilingSurrounding (vertex_t **v) const;			// jff 2/04/98
+	fixed_t FindNextLowestCeiling (vertex_t **v) const;					// jff 2/04/98
+	fixed_t FindNextHighestCeiling (vertex_t **v) const;				// jff 2/04/98
+	fixed_t FindShortestTextureAround () const;							// jff 2/04/98
+	fixed_t FindShortestUpperAround () const;							// jff 2/04/98
+	sector_t *FindModelFloorSector (fixed_t floordestheight) const;		// jff 2/04/98
+	sector_t *FindModelCeilingSector (fixed_t floordestheight) const;	// jff 2/04/98
+	int FindMinSurroundingLight (int max) const;
+	sector_t *NextSpecialSector (int type, sector_t *prev) const;		// [RH]
+	fixed_t FindLowestCeilingPoint (vertex_t **v) const;
+	fixed_t FindHighestFloorPoint (vertex_t **v) const;
+
+	// Member variables
+	fixed_t		CenterFloor () const { return floorplane.ZatPoint (soundorg[0], soundorg[1]); }
+	fixed_t		CenterCeiling () const { return ceilingplane.ZatPoint (soundorg[0], soundorg[1]); }
+
+	// [RH] store floor and ceiling planes instead of heights
+	secplane_t	floorplane, ceilingplane;
+	fixed_t		floortexz, ceilingtexz;	// [RH] used for wall texture mapping
+
+	// [RH] give floor and ceiling even more properties
+	FDynamicColormap *floorcolormap;	// [RH] Per-sector colormap
+	FDynamicColormap *ceilingcolormap;
+
+	// killough 3/7/98: floor and ceiling texture offsets
+	fixed_t		  floor_xoffs,   floor_yoffs;
+	fixed_t		ceiling_xoffs, ceiling_yoffs;
+
+	// [RH] floor and ceiling texture scales
+	fixed_t		  floor_xscale,   floor_yscale;
+	fixed_t		ceiling_xscale, ceiling_yscale;
+
+	// [RH]		floor and ceiling texture rotation
+	angle_t		floor_angle, ceiling_angle;
+
+	fixed_t		base_ceiling_angle, base_ceiling_yoffs;
+	fixed_t		base_floor_angle, base_floor_yoffs;
+
+	BYTE		FloorLight, CeilingLight;
+	BYTE		FloorFlags, CeilingFlags;
+	short		floorpic, ceilingpic;
+	BYTE		lightlevel;
+
+	byte 		soundtraversed;	// 0 = untraversed, 1,2 = sndlines -1
+
 	short		special;
 	short		tag;
 	int			nexttag,firsttag;	// killough 1/30/98: improves searches for tags.
 
-	int 		soundtraversed;	// 0 = untraversed, 1,2 = sndlines -1
+	WORD		sky;
+	short		seqType;		// this sector's sound sequence
+
 	AActor* 	soundtarget;	// thing that made a sound (or null)
 //	int 		blockbox[4];	// mapblock bounding box for height changes
 	fixed_t		soundorg[3];	// origin for any sounds played by the sector
 	int 		validcount;		// if == validcount, already checked
 	AActor* 	thinglist;		// list of mobjs in sector
-	int			seqType;		// this sector's sound sequence
-
-	int sky;
 
 	// killough 8/28/98: friction is a sector property, not an mobj property.
 	// these fields used to be in AActor, but presented performance problems
 	// when processed as mobj properties. Fix is to make them sector properties.
-	int friction, movefactor;
+	fixed_t		friction, movefactor;
 
 	// thinker_t for reversable actions
 	DSectorEffect *floordata;			// jff 2/22/98 make thinkers on
@@ -115,57 +269,54 @@ struct sector_s
 	DSectorEffect *lightingdata;		// independent of one another
 
 	// jff 2/26/98 lockout machinery for stairbuilding
-	int stairlock;		// -2 on first locked -1 after thinker done 0 normally
-	int prevsec;		// -1 or number of sector for previous step
-	int nextsec;		// -1 or number of next step sector
+	SBYTE stairlock;	// -2 on first locked -1 after thinker done 0 normally
+	SWORD prevsec;		// -1 or number of sector for previous step
+	SWORD nextsec;		// -1 or number of next step sector
 
-	// killough 3/7/98: floor and ceiling texture offsets
-	fixed_t   floor_xoffs,   floor_yoffs;
-	fixed_t ceiling_xoffs, ceiling_yoffs;
-
-	// [RH] floor and ceiling texture scales
-	fixed_t   floor_xscale,   floor_yscale;
-	fixed_t ceiling_xscale, ceiling_yscale;
-
-	// [RH] floor and ceiling texture rotation
-	angle_t	floor_angle, ceiling_angle;
-
-	fixed_t base_ceiling_angle, base_ceiling_yoffs;
-	fixed_t base_floor_angle, base_floor_yoffs;
+	short linecount;
+	struct line_s **lines;		// [linecount] size
 
 	// killough 3/7/98: support flat heights drawn at another sector's heights
-	struct sector_s *heightsec;		// other sector, or NULL if no other sector
+	sector_t *heightsec;		// other sector, or NULL if no other sector
 
-	// killough 4/11/98: support for lightlevels coming from another sector
-	struct sector_s *floorlightsec, *ceilinglightsec;
-
-	unsigned int bottommap, midmap, topmap; // killough 4/4/98: dynamic colormaps
-											// [RH] these can also be blend values if
-											//		the alpha mask is non-zero
+	DWORD bottommap, midmap, topmap;	// killough 4/4/98: dynamic colormaps
+										// [RH] these can also be blend values if
+										//		the alpha mask is non-zero
 
 	// list of mobjs that are at least partially in the sector
 	// thinglist is a subset of touching_thinglist
 	struct msecnode_s *touching_thinglist;				// phares 3/14/98
 
-	int linecount;
-	struct line_s **lines;		// [linecount] size
-	
 	float gravity;		// [RH] Sector gravity (1.0 is normal)
 	short damage;		// [RH] Damage to do while standing on floor
 	short mod;			// [RH] Means-of-death for applied damage
-	struct dyncolormap_s *floorcolormap;	// [RH] Per-sector colormap
-	struct dyncolormap_s *ceilingcolormap;
 
 	bool alwaysfake;	// [RH] Always apply heightsec modifications?
 	byte waterzone;		// [RH] Sector is underwater?
+	WORD MoreFlags;		// [RH] Misc sector flags
+
+	// [RH] Action specials for sectors. Like Skull Tag, but more
+	// flexible in a Bloody way. SecActTarget forms a list of actors
+	// joined by their tracer fields. When a potential sector action
+	// occurs, SecActTarget's TriggerAction method is called.
+	ASectorAction *SecActTarget;
+
+	// [RH] The sky box to render for this sector. NULL means use a
+	// regular sky.
+	ASkyViewpoint *SkyBox;
 };
-typedef struct sector_s sector_t;
 
 
 
 //
 // The SideDef.
 //
+
+enum
+{
+	WALLF_ABSLIGHTING	= 1,	// Light is absolute instead of relative
+	WALLF_NOAUTODECALS	= 2,	// Do not attach impact decals to this wall
+};
 
 struct side_s
 {
@@ -174,8 +325,10 @@ struct side_s
 	sector_t*	sector;			// Sector the SideDef is facing.
 	short		toptexture, bottomtexture, midtexture;	// texture indices
 	short		linenum;
-	short		special;		// [RH] Bah. Had to add these for BOOM stuff
-	short		tag;
+	WORD		TexelLength;
+	SBYTE		Light;
+	BYTE		Flags;
+	AActor*		BoundActors;	// [RH] Wall sprites bound to the wall (aka decals)
 };
 typedef struct side_s side_t;
 
@@ -197,7 +350,7 @@ struct line_s
 	fixed_t 	dx, dy;		// precalculated v2 - v1 for side checking
 	short		flags;
 	byte		special;	// [RH] specials are only one byte (like Hexen)
-	byte		lucency;	// <--- translucency (0-255/255=opaque)
+	byte		alpha;		// <--- translucency (0-255/255=opaque)
 	short		id;			// <--- same as tag or set with Line_SetIdentification
 	short		args[5];	// <--- hexen-style arguments
 							//		note that these are shorts in order to support
@@ -247,8 +400,6 @@ struct seg_s
 	vertex_t*	v1;
 	vertex_t*	v2;
 	
-	fixed_t 	offset;
-
 	angle_t 	angle;
 
 	side_t* 	sidedef;
@@ -338,24 +489,6 @@ typedef post_t	column_t;
 
 typedef byte lighttable_t;	// This could be wider for >8 bit display.
 
-struct drawseg_s
-{
-	seg_t*		curline;
-	int 		x1, x2;
-	fixed_t 	scale1, scale2, scalestep;
-	fixed_t		light, lightstep;
-	int 		silhouette;		// 0=none, 1=bottom, 2=top, 3=both
-	fixed_t 	bsilheight;		// don't clip sprites above this
-	fixed_t 	tsilheight;		// don't clip sprites below this
-// Pointers to lists for sprite clipping,
-// all three adjusted so [x1] is first value.
-	short*		sprtopclip; 			
-	short*		sprbottomclip;	
-	short*		maskedtexturecol;
-};
-typedef struct drawseg_s drawseg_t;
-
-
 // Patches.
 // A patch holds one or more columns.
 // Patches are used for sprites and all masked pictures, and we compose
@@ -385,12 +518,14 @@ struct vissprite_s
 	fixed_t			xiscale;		// negative if flipped
 	fixed_t			depth;
 	fixed_t			texturemid;
-	int				patch;
+	short			picnum;
+	short 			renderflags;
+	BYTE			RenderStyle;
+	DWORD			AlphaColor;
 	lighttable_t	*colormap;
-	int 			mobjflags;		// for shadow draw
 	byte			*translation;	// [RH] for translation;
 	sector_t		*heightsec;		// killough 3/27/98: height sector for underwater/fake ceiling
-	fixed_t			translucency;
+	fixed_t			alpha;
 	fixed_t			floorclip;
 };
 typedef struct vissprite_s vissprite_t;
@@ -409,15 +544,9 @@ struct spriteframe_s
 {
 	// Note: as eight entries are available,
 	//	we might as well insert the same name eight times.
-	BOOL	 	rotate;		// if false, use 0 for any position.
+	byte	 	rotate;		// if false, use 0 for any position.
 	short		lump[8];	// lump to use for view angles 0-7
 	byte		flip[8];	// flip (1 = flip) to use for view angles 0-7.
-
-	// [RH] Move some data out of spritewidth, spriteoffset,
-	//		and spritetopoffset arrays.
-	fixed_t		width[8];
-	fixed_t		topoffset[8];
-	fixed_t		offset[8];
 };
 typedef struct spriteframe_s spriteframe_t;
 
@@ -436,38 +565,16 @@ typedef struct spritedef_s spritedef_t;
 //
 // [RH] Internal "skin" definition.
 //
-struct playerskin_s
+class FPlayerSkin
 {
+public:
 	char		name[17];	// 16 chars + NULL
 	char		face[3];
-	byte		gender;		// This skin's gender (not used)
+	byte		gender;		// This skin's gender (not really used)
 	byte		range0start;
 	byte		range0end;
 	int			sprite;
 	int			namespc;	// namespace for this skin
 };
-typedef struct playerskin_s playerskin_t;
-
-//
-// The infamous visplane
-// 
-struct visplane_s
-{
-	struct visplane_s *next;		// Next visplane in hash chain -- killough
-
-	fixed_t		height;
-	int			picnum;
-	int			lightlevel;
-	fixed_t		xoffs, yoffs;		// killough 2/28/98: Support scrolling flats
-	int			minx, maxx;
-	byte		*colormap;			// [RH] Support multiple colormaps
-	fixed_t		xscale, yscale;		// [RH] Support flat scaling
-	angle_t		angle;				// [RH] Support flat rotation
-
-	unsigned short *bottom;			// [RH] bottom and top arrays are dynamically
-	unsigned short pad;				//		allocated immediately after the
-	unsigned short top[3];			//		visplane.
-};
-typedef struct visplane_s visplane_t;
 
 #endif

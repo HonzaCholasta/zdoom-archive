@@ -69,8 +69,10 @@ void P_SerializeWorld (FArchive &arc)
 	// do sectors
 	for (i = 0, sec = sectors; i < numsectors; i++, sec++)
 	{
-		arc << sec->floorheight
-			<< sec->ceilingheight
+		arc << sec->floorplane
+			<< sec->ceilingplane
+			<< sec->floortexz
+			<< sec->ceilingtexz
 			<< sec->floorpic
 			<< sec->ceilingpic
 			<< sec->lightlevel
@@ -88,38 +90,40 @@ void P_SerializeWorld (FArchive &arc)
 			<< sec->prevsec
 			<< sec->nextsec
 			<< sec->floor_xoffs << sec->floor_yoffs
-			<< sec->ceiling_xoffs << sec->ceiling_xoffs
+			<< sec->ceiling_xoffs << sec->ceiling_yoffs
 			<< sec->floor_xscale << sec->floor_yscale
 			<< sec->ceiling_xscale << sec->ceiling_yscale
 			<< sec->floor_angle << sec->ceiling_angle
 			<< sec->base_ceiling_angle << sec->base_ceiling_yoffs
 			<< sec->base_floor_angle << sec->base_floor_yoffs
 			<< sec->heightsec
-			<< sec->floorlightsec << sec->ceilinglightsec
 			<< sec->bottommap << sec->midmap << sec->topmap
 			<< sec->gravity
 			<< sec->damage
 			<< sec->mod
 			<< sec->alwaysfake
-			<< sec->waterzone;
+			<< sec->waterzone
+			<< sec->SecActTarget
+			<< sec->FloorLight
+			<< sec->CeilingLight
+			<< sec->FloorFlags
+			<< sec->CeilingFlags
+			<< sec->sky
+			<< sec->MoreFlags;
 		if (arc.IsStoring ())
 		{
-			arc << sec->floorcolormap->color
-				<< sec->floorcolormap->fade
-				<< sec->ceilingcolormap->color
-				<< sec->ceilingcolormap->fade;
+			arc << sec->floorcolormap->Color
+				<< sec->floorcolormap->Fade
+				<< sec->ceilingcolormap->Color
+				<< sec->ceilingcolormap->Fade;
 		}
 		else
 		{
-			unsigned int color, fade;
+			PalEntry color, fade;
 			arc << color << fade;
-			sec->floorcolormap = GetSpecialLights (
-				RPART(color), GPART(color), BPART(color),
-				RPART(fade), GPART(fade), BPART(fade));
+			sec->floorcolormap = GetSpecialLights (color, fade);
 			arc << color << fade;
-			sec->ceilingcolormap = GetSpecialLights (
-				RPART(color), GPART(color), BPART(color),
-				RPART(fade), GPART(fade), BPART(fade));
+			sec->ceilingcolormap = GetSpecialLights (color, fade);
 		}
 	}
 
@@ -128,7 +132,7 @@ void P_SerializeWorld (FArchive &arc)
 	{
 		arc << li->flags
 			<< li->special
-			<< li->lucency
+			<< li->alpha
 			<< li->id
 			<< li->args[0] << li->args[1] << li->args[2] << li->args[3] << li->args[4];
 
@@ -170,6 +174,21 @@ void P_SerializeThinkers (FArchive &arc, bool hubLoad)
 void P_SerializeSounds (FArchive &arc)
 {
 	DSeqNode::SerializeSequences (arc);
+	char *name = NULL;
+	BYTE order;
+
+	if (arc.IsStoring ())
+	{
+		order = S_GetMusic (&name);
+	}
+	arc << name << order;
+	if (arc.IsLoading ())
+	{
+		if (!S_ChangeMusic (name, order))
+			if (level.cdtrack == 0 || !S_ChangeCDMusic (level.cdtrack, level.cdid))
+				S_ChangeMusic (level.music, level.musicorder);
+	}
+	delete[] name;
 }
 
 //==========================================================================

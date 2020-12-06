@@ -17,11 +17,8 @@ static int orbitTableY[256];
 
 class ABridgeBall : public AActor
 {
-	DECLARE_ACTOR (ABridgeBall, AActor);
+	DECLARE_ACTOR (ABridgeBall, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABridgeBall, AActor);
-REGISTER_ACTOR (ABridgeBall, Any);
 
 FState ABridgeBall::States[] =
 {
@@ -29,23 +26,19 @@ FState ABridgeBall::States[] =
 	S_NORMAL (TLGL, 'A',    5, A_BridgeOrbit                , &States[1])
 };
 
-void ABridgeBall::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
-};
+IMPLEMENT_ACTOR (ABridgeBall, Any, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // The bridge itself -------------------------------------------------------
 
 class ABridge : public AActor
 {
-	DECLARE_ACTOR (ABridge, AActor);
+	DECLARE_ACTOR (ABridge, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABridge, AActor);
-REGISTER_ACTOR (ABridge, Any);
 
 FState ABridge::States[] =
 {
@@ -66,23 +59,27 @@ FState ABridge::States[] =
 	S_NORMAL (TLGL, 'A',  300, NULL                         , NULL)
 };
 
-void ABridge::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABridge, Any, 118, 21)
+	PROP_Flags (MF_SOLID|MF_NOGRAVITY)
+END_DEFAULTS
+
+AT_GAME_SET (Bridge)
 {
-	INHERIT_DEFS (info);
-	info->doomednum = 118;
-	info->flags = MF_SOLID|MF_NOGRAVITY;
-	if (gameinfo.gametype != GAME_Doom)
+	ABridge *def = GetDefault<ABridge> ();
+
+	if (gameinfo.gametype == GAME_Doom)
 	{
-		info->spawnstate = &States[S_BRIDGE];
-		info->radius = 32 * FRACUNIT;
-		info->height = 2 * FRACUNIT;
-		info->flags2 = MF2_DONTDRAW;
+		def->SpawnState = &ABridge::States[S_DBRIDGE];
+		def->radius = 36 * FRACUNIT;
+		def->height = 4 * FRACUNIT;
+		def->RenderStyle = STYLE_Normal;
 	}
 	else
 	{
-		info->spawnstate = &States[S_DBRIDGE];
-		info->radius = 36 * FRACUNIT;
-		info->height = 4 * FRACUNIT;
+		def->SpawnState = &ABridge::States[S_BRIDGE];
+		def->radius = 32 * FRACUNIT;
+		def->height = 2 * FRACUNIT;
+		def->RenderStyle = STYLE_None;
 	}
 }
 
@@ -165,3 +162,64 @@ void A_BridgeRemove (AActor *self)
 	self->SetState (&ABridge::States[S_FREE_BRIDGE]);
 }
 
+// Invisible bridge --------------------------------------------------------
+
+class AInvisibleBridge : public ABridge
+{
+	DECLARE_ACTOR (AInvisibleBridge, ABridge)
+public:
+	void BeginPlay ();
+};
+
+FState AInvisibleBridge::States[] =
+{
+	S_NORMAL (TNT1, 'A', -1, NULL, NULL)
+};
+
+IMPLEMENT_ACTOR (AInvisibleBridge, Any, 9990, 0)
+	PROP_RenderFlags (RF_INVISIBLE)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+void AInvisibleBridge::BeginPlay ()
+{
+	Super::BeginPlay ();
+	if (args[0])
+		radius = args[0] << FRACBITS;
+	if (args[1])
+		height = args[1] << FRACBITS;
+}
+
+// And some invisible bridges from Skull Tag -------------------------------
+
+class AInvisibleBridge32 : public AInvisibleBridge
+{
+	DECLARE_STATELESS_ACTOR (AInvisibleBridge32, AInvisibleBridge)
+};
+
+IMPLEMENT_STATELESS_ACTOR (AInvisibleBridge32, Any, 5061, 0)
+	PROP_RadiusFixed (32)
+	PROP_HeightFixed (8)
+END_DEFAULTS
+
+
+class AInvisibleBridge16 : public AInvisibleBridge
+{
+	DECLARE_STATELESS_ACTOR (AInvisibleBridge16, AInvisibleBridge)
+};
+
+IMPLEMENT_STATELESS_ACTOR (AInvisibleBridge16, Any, 5064, 0)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (8)
+END_DEFAULTS
+
+
+class AInvisibleBridge8 : public AInvisibleBridge
+{
+	DECLARE_STATELESS_ACTOR (AInvisibleBridge8, AInvisibleBridge)
+};
+
+IMPLEMENT_STATELESS_ACTOR (AInvisibleBridge8, Any, 5065, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (8)
+END_DEFAULTS

@@ -7,7 +7,7 @@
 #include "g_level.h"
 #include "s_sndseq.h"
 
-IMPLEMENT_SERIAL (DPillar, DMover)
+IMPLEMENT_CLASS (DPillar)
 
 DPillar::DPillar ()
 {
@@ -27,6 +27,10 @@ void DPillar::Serialize (FArchive &arc)
 void DPillar::RunThink ()
 {
 	int r, s;
+	fixed_t oldfloor, oldceiling;
+
+	oldfloor = m_Sector->floorplane.d;
+	oldceiling = m_Sector->ceilingplane.d;
 
 	if (m_Type == pillarBuild)
 	{
@@ -44,13 +48,25 @@ void DPillar::RunThink ()
 		SN_StopSequence (m_Sector);
 		Destroy ();
 	}
+	else
+	{
+		if (r == crushed)
+		{
+			MoveFloor (m_FloorSpeed, oldfloor, -1, -1);
+		}
+		if (s == crushed)
+		{
+			MoveCeiling (m_CeilingSpeed, oldceiling, -1, 1);
+		}
+	}
 }
 
 DPillar::DPillar (sector_t *sector, EPillar type, fixed_t speed,
-				  fixed_t height, fixed_t height2, int crush)
+				  fixed_t floordist, fixed_t ceilingdist, int crush)
 	: DMover (sector)
 {
-	fixed_t	ceilingdist, floordist;
+	fixed_t newheight;
+	vertex_t *spot;
 
 	sector->floordata = sector->ceilingdata = this;
 
@@ -60,43 +76,46 @@ DPillar::DPillar (sector_t *sector, EPillar type, fixed_t speed,
 	if (type == pillarBuild)
 	{
 		// If the pillar height is 0, have the floor and ceiling meet halfway
-		if (height == 0)
+		if (floordist == 0)
 		{
-			m_FloorTarget = m_CeilingTarget =
-				(sector->ceilingheight - sector->floorheight) / 2 + sector->floorheight;
-			floordist = m_FloorTarget - sector->floorheight;
+			newheight = (sector->CenterFloor () + sector->CenterCeiling ()) / 2;
+			m_FloorTarget = sector->floorplane.PointToDist (sector->soundorg[0], sector->soundorg[1], newheight);
+			m_CeilingTarget = sector->ceilingplane.PointToDist (sector->soundorg[0], sector->soundorg[1], newheight);
+			floordist = newheight - sector->CenterFloor ();
 		}
 		else
 		{
-			m_FloorTarget = m_CeilingTarget =
-				sector->floorheight + height;
-			floordist = height;
+			newheight = sector->CenterFloor () + floordist;
+			m_FloorTarget = sector->floorplane.PointToDist (sector->soundorg[0], sector->soundorg[1], newheight);
+			m_CeilingTarget = sector->ceilingplane.PointToDist (sector->soundorg[0], sector->soundorg[1], newheight);
 		}
-		ceilingdist = sector->ceilingheight - m_CeilingTarget;
+		ceilingdist = sector->CenterCeiling () - newheight;
 	}
 	else
 	{
 		// If one of the heights is 0, figure it out based on the
 		// surrounding sectors
-		if (height == 0)
+		if (floordist == 0)
 		{
-			m_FloorTarget = P_FindLowestFloorSurrounding (sector);
-			floordist = sector->floorheight - m_FloorTarget;
+			newheight = sector->FindLowestFloorSurrounding (&spot);
+			m_FloorTarget = sector->floorplane.PointToDist (spot, newheight);
+			floordist = sector->floorplane.ZatPoint (spot) - newheight;
 		}
 		else
 		{
-			floordist = height;
-			m_FloorTarget = sector->floorheight - height;
+			newheight = sector->floorplane.ZatPoint (0, 0) - floordist;
+			m_FloorTarget = sector->floorplane.PointToDist (0, 0, newheight);
 		}
-		if (height2 == 0)
+		if (ceilingdist == 0)
 		{
-			m_CeilingTarget = P_FindHighestCeilingSurrounding (sector);
-			ceilingdist = m_CeilingTarget - sector->ceilingheight;
+			newheight = sector->FindHighestCeilingSurrounding (&spot);
+			m_CeilingTarget = sector->ceilingplane.PointToDist (spot, newheight);
+			ceilingdist = newheight - sector->ceilingplane.ZatPoint (spot);
 		}
 		else
 		{
-			m_CeilingTarget = sector->ceilingheight + height2;
-			ceilingdist = height2;
+			newheight = sector->ceilingplane.ZatPoint (0, 0) + ceilingdist;
+			m_CeilingTarget = sector->ceilingplane.PointToDist (0, 0, newheight);
 		}
 	}
 
@@ -106,12 +125,12 @@ DPillar::DPillar (sector_t *sector, EPillar type, fixed_t speed,
 	if (floordist > ceilingdist)
 	{
 		m_FloorSpeed = speed;
-		m_CeilingSpeed = FixedDiv (FixedMul (speed, ceilingdist), floordist);
+		m_CeilingSpeed = Scale (speed, ceilingdist, floordist);
 	}
 	else
 	{
 		m_CeilingSpeed = speed;
-		m_FloorSpeed = FixedDiv (FixedMul (speed, floordist), ceilingdist);
+		m_FloorSpeed = Scale (speed, floordist, ceilingdist);
 	}
 
 	if (sector->seqType >= 0)
@@ -120,10 +139,10 @@ DPillar::DPillar (sector_t *sector, EPillar type, fixed_t speed,
 		SN_StartSequence (sector, "Floor");
 }
 
-BOOL EV_DoPillar (DPillar::EPillar type, int tag, fixed_t speed, fixed_t height,
+bool EV_DoPillar (DPillar::EPillar type, int tag, fixed_t speed, fixed_t height,
 				  fixed_t height2, int crush)
 {
-	BOOL rtn = false;
+	bool rtn = false;
 	int secnum = -1;
 
 	while ((secnum = P_FindSectorFromTag (tag, secnum)) >= 0)
@@ -133,10 +152,15 @@ BOOL EV_DoPillar (DPillar::EPillar type, int tag, fixed_t speed, fixed_t height,
 		if (sec->floordata || sec->ceilingdata)
 			continue;
 
-		if (type == DPillar::pillarBuild && sec->floorheight == sec->ceilingheight)
+		fixed_t flor, ceil;
+
+		flor = sec->CenterFloor ();
+		ceil = sec->CenterCeiling ();
+
+		if (type == DPillar::pillarBuild && flor == ceil)
 			continue;
 
-		if (type == DPillar::pillarOpen && sec->floorheight != sec->ceilingheight)
+		if (type == DPillar::pillarOpen && flor != ceil)
 			continue;
 
 		rtn = true;

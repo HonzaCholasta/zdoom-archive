@@ -6,6 +6,7 @@
 #include "p_enemy.h"
 #include "a_hereticglobal.h"
 #include "a_action.h"
+#include "gstrings.h"
 
 void A_WizAtk1 (AActor *);
 void A_WizAtk2 (AActor *);
@@ -13,9 +14,6 @@ void A_WizAtk3 (AActor *);
 void A_GhostOff (AActor *);
 
 // Class definitions --------------------------------------------------------
-
-IMPLEMENT_DEF_SERIAL (AWizard, AActor);
-REGISTER_ACTOR (AWizard, Heretic);
 
 FState AWizard::States[] =
 {
@@ -59,34 +57,33 @@ FState AWizard::States[] =
 	S_NORMAL (WZRD, 'M',   -1, NULL 						, NULL)
 };
 
-void AWizard::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 15;
-	info->spawnstate = &States[S_WIZARD_LOOK];
-	info->spawnhealth = 100;
-	info->seestate = &States[S_WIZARD_WALK];
-	info->seesound = "wizard/sight";
-	info->attacksound = "wizard/attack";
-	info->painstate = &States[S_WIZARD_PAIN];
-	info->painchance = 64;
-	info->painsound = "wizard/pain";
-	info->missilestate = &States[S_WIZARD_ATK];
-	info->deathstate = &States[S_WIZARD_DIE];
-	info->deathsound = "wizard/death";
-	info->speed = 12;
-	info->radius = 16 * FRACUNIT;
-	info->height = 68 * FRACUNIT;
-	info->mass = 100;
-	info->activesound = "wizard/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_FLOAT|MF_NOGRAVITY;
-	info->flags2 = MF2_PASSMOBJ;
-	info->flags3 = MF3_SEEISALSOACTIVE|MF3_DONTOVERLAP;
-}
+IMPLEMENT_ACTOR (AWizard, Heretic, 15, 0)
+	PROP_SpawnHealth (180)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (68)
+	PROP_Mass (100)
+	PROP_SpeedFixed (12)
+	PROP_PainChance (64)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_FLOAT|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PASSMOBJ)
+	PROP_Flags3 (MF3_SEEISALSOACTIVE|MF3_DONTOVERLAP)
+
+	PROP_SpawnState (S_WIZARD_LOOK)
+	PROP_SeeState (S_WIZARD_WALK)
+	PROP_PainState (S_WIZARD_PAIN)
+	PROP_MissileState (S_WIZARD_ATK)
+	PROP_DeathState (S_WIZARD_DIE)
+
+	PROP_SeeSound ("wizard/sight")
+	PROP_AttackSound ("wizard/attack")
+	PROP_PainSound ("wizard/pain")
+	PROP_DeathSound ("wizard/death")
+	PROP_ActiveSound ("wizard/active")
+END_DEFAULTS
 
 void AWizard::NoBlockingSet ()
 {
-	P_DropItem (this, "BlasterWimpy", 10, 84);
+	P_DropItem (this, "BlasterAmmo", 10, 84);
 	P_DropItem (this, "ArtiTomeOfPower", 0, 4);
 }
 
@@ -95,13 +92,20 @@ bool AWizard::NewTarget (AActor *other)
 	return !other->IsKindOf (RUNTIME_CLASS(ASorcerer2));
 }
 
+const char *AWizard::GetObituary ()
+{
+	return GStrings (OB_WIZARD);
+}
+
+const char *AWizard::GetHitObituary ()
+{
+	return GStrings (OB_WIZARDHIT);
+}
+
 class AWizardFX1 : public AActor
 {
-	DECLARE_ACTOR (AWizardFX1, AActor);
+	DECLARE_ACTOR (AWizardFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AWizardFX1, AActor);
-REGISTER_ACTOR (AWizardFX1, Heretic);
 
 FState AWizardFX1::States[] =
 {
@@ -117,17 +121,21 @@ FState AWizardFX1::States[] =
 	S_BRIGHT (FX11, 'G',	5, NULL 						, NULL)
 };
 
-void AWizardFX1::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AWizardFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (18)
+	PROP_Damage (3)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_WIZFX1)
+	PROP_DeathState (S_WIZFXI1)
+END_DEFAULTS
+
+AT_SPEED_SET (WizardFX1, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_WIZFX1];
-	info->deathstate = &States[S_WIZFXI1];
-	info->speed = GameSpeed != SPEED_Fast ? 18 * FRACUNIT : 24 * FRACUNIT;
-	info->radius = 10 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 3;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
+	SimpleSpeedSetter (AWizardFX1, 18*FRACUNIT, 24*FRACUNIT, speed);
 }
 
 // --- Action functions -----------------------------------------------------
@@ -140,7 +148,7 @@ void AWizardFX1::SetDefaults (FActorInfo *info)
 
 void A_GhostOff (AActor *actor)
 {
-	actor->translucency = OPAQUE;
+	actor->RenderStyle = STYLE_Normal;
 	actor->flags3 &= ~MF3_GHOST;
 }
 
@@ -165,7 +173,8 @@ void A_WizAtk1 (AActor *actor)
 void A_WizAtk2 (AActor *actor)
 {
 	A_FaceTarget (actor);
-	actor->translucency = HR_SHADOW;
+	actor->alpha = HR_SHADOW;
+	actor->RenderStyle = STYLE_Translucent;
 	actor->flags3 |= MF3_GHOST;
 }
 
@@ -184,14 +193,14 @@ void A_WizAtk3 (AActor *actor)
 	{
 		return;
 	}
-	S_Sound (actor, CHAN_WEAPON, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_WEAPON, actor->AttackSound, 1, ATTN_NORM);
 	if (P_CheckMeleeRange(actor))
 	{
-		P_DamageMobj (actor->target, actor, actor, HITDICE(4));
+		P_DamageMobj (actor->target, actor, actor, HITDICE(4), MOD_HIT);
 		return;
 	}
 	mo = P_SpawnMissile (actor, actor->target, RUNTIME_CLASS(AWizardFX1));
-	if (mo)
+	if (mo != NULL)
 	{
 		P_SpawnMissileAngle(actor, RUNTIME_CLASS(AWizardFX1), mo->angle-(ANG45/8), mo->momz);
 		P_SpawnMissileAngle(actor, RUNTIME_CLASS(AWizardFX1), mo->angle+(ANG45/8), mo->momz);

@@ -5,6 +5,7 @@
 #include "p_local.h"
 #include "p_enemy.h"
 #include "a_action.h"
+#include "gstrings.h"
 
 void A_BeastAttack (AActor *);
 void A_BeastPuff (AActor *);
@@ -13,13 +14,11 @@ void A_BeastPuff (AActor *);
 
 class ABeast : public AActor
 {
-	DECLARE_ACTOR (ABeast, AActor);
+	DECLARE_ACTOR (ABeast, AActor)
 public:
 	void NoBlockingSet ();
+	const char *GetObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (ABeast, AActor);
-REGISTER_ACTOR (ABeast, Heretic);
 
 FState ABeast::States[] =
 {
@@ -65,34 +64,38 @@ FState ABeast::States[] =
 	S_NORMAL (BEAS, 'Q',   -1, NULL 					, NULL)
 };
 
-void ABeast::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 70;
-	info->spawnstate = &States[S_BEAST_LOOK];
-	info->spawnhealth = 220;
-	info->seestate = &States[S_BEAST_WALK];
-	info->seesound = "beast/sight";
-	info->attacksound = "beast/attack";
-	info->painstate = &States[S_BEAST_PAIN];
-	info->painchance = 100;
-	info->painsound = "beast/pain";
-	info->missilestate = &States[S_BEAST_ATK];
-	info->deathstate = &States[S_BEAST_DIE];
-	info->xdeathstate = &States[S_BEAST_XDIE];
-	info->deathsound = "beast/death";
-	info->speed = 14;
-	info->radius = 32 * FRACUNIT;
-	info->height = 74 * FRACUNIT;
-	info->mass = 200;
-	info->activesound = "beast/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_FLOORCLIP|MF2_PASSMOBJ;
-}
+IMPLEMENT_ACTOR (ABeast, Heretic, 70, 0)
+	PROP_SpawnHealth (220)
+	PROP_RadiusFixed (32)
+	PROP_HeightFixed (74)
+	PROP_Mass (200)
+	PROP_SpeedFixed (14)
+	PROP_PainChance (100)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PASSMOBJ)
+
+	PROP_SpawnState (S_BEAST_LOOK)
+	PROP_SeeState (S_BEAST_WALK)
+	PROP_PainState (S_BEAST_PAIN)
+	PROP_MissileState (S_BEAST_ATK)
+	PROP_DeathState (S_BEAST_DIE)
+	PROP_XDeathState (S_BEAST_XDIE)
+
+	PROP_SeeSound ("beast/sight")
+	PROP_AttackSound ("beast/attack")
+	PROP_PainSound ("beast/pain")
+	PROP_DeathSound ("beast/death")
+	PROP_ActiveSound ("beast/active")
+END_DEFAULTS
 
 void ABeast::NoBlockingSet ()
 {
-	P_DropItem (this, "CrossbowWimpy", 10, 84);
+	P_DropItem (this, "CrossbowAmmo", 10, 84);
+}
+
+const char *ABeast::GetObituary ()
+{
+	return GStrings(OB_BEAST);
 }
 
 // Beast ball ---------------------------------------------------------------
@@ -102,11 +105,8 @@ void ABeast::NoBlockingSet ()
 
 class ABeastBall : public AActor
 {
-	DECLARE_ACTOR (ABeastBall, AActor);
+	DECLARE_ACTOR (ABeastBall, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABeastBall, AActor);
-REGISTER_ACTOR (ABeastBall, Heretic);
 
 FState ABeastBall::States[] =
 {
@@ -126,28 +126,29 @@ FState ABeastBall::States[] =
 	S_NORMAL (FRB1, 'H',	4, NULL 					, NULL)
 };
 
-void ABeastBall::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABeastBall, Heretic, -1, 0)
+	PROP_RadiusFixed (9)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (12)
+	PROP_Damage (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_BEASTBALL)
+	PROP_DeathState (S_BEASTBALLX)
+END_DEFAULTS
+
+AT_SPEED_SET (BeastBall, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_BEASTBALL];
-	info->deathstate = &States[S_BEASTBALLX];
-	info->speed = GameSpeed != SPEED_Fast ? 12 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 9 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 4;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_WINDTHRUST|MF2_NOTELEPORT;
+	SimpleSpeedSetter (ABeastBall, 12*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 // Puffy --------------------------------------------------------------------
 
 class APuffy : public AActor
 {
-	DECLARE_ACTOR (APuffy, AActor);
+	DECLARE_ACTOR (APuffy, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (APuffy, AActor);
-REGISTER_ACTOR (APuffy, Heretic);
 
 FState APuffy::States[] =
 {
@@ -158,17 +159,16 @@ FState APuffy::States[] =
 	S_NORMAL (FRB1, 'H',	4, NULL 					, NULL)
 };
 
-void APuffy::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->speed = 10 * FRACUNIT;
-	info->radius = 6 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 2;
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY|MF_MISSILE;
-	info->flags2 = MF2_NOTELEPORT;
-}
+IMPLEMENT_ACTOR (APuffy, Heretic, -1, 0)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (10)
+	PROP_Damage (2)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY|MF_MISSILE)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -182,10 +182,10 @@ void A_BeastAttack (AActor *actor)
 	{
 		return;
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->AttackSound, 1, ATTN_NORM);
 	if (P_CheckMeleeRange(actor))
 	{
-		P_DamageMobj (actor->target, actor, actor, HITDICE(3));
+		P_DamageMobj (actor->target, actor, actor, HITDICE(3), MOD_HIT);
 		return;
 	}
 	P_SpawnMissile (actor, actor->target, RUNTIME_CLASS(ABeastBall));

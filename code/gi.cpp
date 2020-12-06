@@ -5,6 +5,11 @@
 
 gameinfo_t gameinfo;
 
+const char *GameNames[5] =
+{
+	NULL, "Doom", "Heretic", NULL, "Hexen"
+};
+
 static char *quitsounds[8] =
 {
 	"player/male/death1",
@@ -61,7 +66,7 @@ gameinfo_t HexenGameInfo =
 	"CREDIT",
 	"CREDIT",
 	"CREDIT",
-	{ { "TITLE", 4 } },
+	{ { "TITLE", {4} } },
 	NULL,
 	33,
 	"F_022",
@@ -87,7 +92,7 @@ gameinfo_t HereticGameInfo =
 	"CREDIT",
 	"CREDIT",
 	"CREDIT",
-	{ { "TITLE", 4 } },
+	{ { "TITLE", {4} } },
 	NULL,
 	17,
 	"FLAT513",
@@ -113,7 +118,7 @@ gameinfo_t HereticSWGameInfo =
 	"ORDER",
 	"CREDIT",
 	"CREDIT",
-	{ { "TITLE", 5 } },
+	{ { "TITLE", {5} } },
 	NULL,
 	17,
 	"FLOOR04",

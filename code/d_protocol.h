@@ -81,7 +81,7 @@ enum EDemoCommand
 	DEM_INVSEL,			// Byte: inventory item to select, for status bar
 	DEM_INVUSE,			// Byte: inventory item to use
 	DEM_PAUSE,			// Pause game
-	DEM_SAVEGAME,		// Byte: Savegame slot to use
+	DEM_SAVEGAME,		// String: Filename, String: Description
 	DEM_WEAPSEL,		// Byte: weapontype_t to change to
 	DEM_WEAPSLOT,		// Byte: Weapon slot to pick a weapon from
 	DEM_WEAPNEXT,		// Select next weapon
@@ -115,7 +115,9 @@ enum ECheatCommand
 	CHT_TAKEWEAPS,
 	CHT_NOWUDIE,
 	CHT_ALLARTI,
-	CHT_PUZZLE
+	CHT_PUZZLE,
+	CHT_MDK,			// Kill actor player is aiming at
+	CHT_ANUBIS,
 };
 
 void StartChunk (int id, byte **stream);
@@ -135,10 +137,12 @@ void RunNetSpecs (int player, int buf);
 int ReadByte (byte **stream);
 int ReadWord (byte **stream);
 int ReadLong (byte **stream);
+float ReadFloat (byte **stream);
 char *ReadString (byte **stream);
 void WriteByte (byte val, byte **stream);
 void WriteWord (short val, byte **stream);
 void WriteLong (int val, byte **stream);
+void WriteFloat (float val, byte **stream);
 void WriteString (const char *string, byte **stream);
 
 #endif //__D_PROTOCOL_H__

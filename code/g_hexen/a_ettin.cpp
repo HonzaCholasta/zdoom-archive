@@ -13,13 +13,10 @@ void A_DropMace (AActor *);
 
 class AEttin : public AActor
 {
-	DECLARE_ACTOR (AEttin, AActor);
+	DECLARE_ACTOR (AEttin, AActor)
 public:
 	void Howl ();
 };
-
-IMPLEMENT_DEF_SERIAL (AEttin, AActor);
-REGISTER_ACTOR (AEttin, Hexen);
 
 FState AEttin::States[] =
 {
@@ -70,34 +67,31 @@ FState AEttin::States[] =
 	S_NORMAL (ETTN, 'R',	5, A_FreezeDeath			, &States[S_ETTIN_ICE+1]),
 	S_NORMAL (ETTN, 'R',	1, A_FreezeDeathChunks		, &States[S_ETTIN_ICE+1])
 };
+IMPLEMENT_ACTOR (AEttin, Hexen, 10030, 4)
+	PROP_SpawnHealth (175)
+	PROP_RadiusFixed (25)
+	PROP_HeightFixed (68)
+	PROP_Mass (175)
+	PROP_SpeedFixed (13)
+	PROP_Damage (3)
+	PROP_PainChance (60)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PUSHWALL|MF2_MCROSS|MF2_TELESTOMP)
 
-void AEttin::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 10030;
-	info->spawnid = 4;
-	info->spawnstate = &States[S_ETTIN_LOOK];
-	info->spawnhealth = 175;
-	info->seestate = &States[S_ETTIN_CHASE];
-	info->seesound = "EttinSight";
-	info->attacksound = "EttinAttack";
-	info->painstate = &States[S_ETTIN_PAIN];
-	info->painchance = 60;
-	info->painsound = "EttinPain";
-	info->meleestate = &States[S_ETTIN_ATK1];
-	info->deathstate = &States[S_ETTIN_DEATH1];
-	info->xdeathstate = &States[S_ETTIN_DEATH2];
-	info->deathsound = "EttinDeath";
-	info->ideathstate = &States[S_ETTIN_ICE];
-	info->speed = 13;
-	info->radius = 25 * FRACUNIT;
-	info->height = 68 * FRACUNIT;
-	info->mass = 175;
-	info->damage = 3;
-	info->activesound = "EttinActive";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_FLOORCLIP|MF2_PUSHWALL|MF2_MCROSS|MF2_TELESTOMP;
-}
+	PROP_SpawnState (S_ETTIN_LOOK)
+	PROP_SeeState (S_ETTIN_CHASE)
+	PROP_PainState (S_ETTIN_PAIN)
+	PROP_MeleeState (S_ETTIN_ATK1)
+	PROP_DeathState (S_ETTIN_DEATH1)
+	PROP_XDeathState (S_ETTIN_DEATH2)
+	PROP_IDeathState (S_ETTIN_ICE)
+
+	PROP_SeeSound ("EttinSight")
+	PROP_AttackSound ("EttinAttack")
+	PROP_PainSound ("EttinPain")
+	PROP_DeathSound ("EttinDeath")
+	PROP_ActiveSound ("EttinActive")
+END_DEFAULTS
 
 void AEttin::Howl ()
 {
@@ -112,11 +106,8 @@ void AEttin::Howl ()
 
 class AEttinMace : public AActor
 {
-	DECLARE_ACTOR (AEttinMace, AActor);
+	DECLARE_ACTOR (AEttinMace, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AEttinMace, AActor);
-REGISTER_ACTOR (AEttinMace, Hexen);
 
 FState AEttinMace::States[] =
 {
@@ -129,37 +120,32 @@ FState AEttinMace::States[] =
 	S_NORMAL (ETTB, 'S',   -1, NULL 					, NULL)
 };
 
-void AEttinMace::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->deathstate = &States[4];
-	info->radius = 5 * FRACUNIT;
-	info->height = 5 * FRACUNIT;
-	info->flags = MF_DROPOFF|MF_CORPSE;
-	info->flags2 = MF2_NOTELEPORT|MF2_FLOORCLIP;
-}
+IMPLEMENT_ACTOR (AEttinMace, Hexen, -1, 0)
+	PROP_RadiusFixed (5)
+	PROP_HeightFixed (5)
+	PROP_Flags (MF_DROPOFF|MF_CORPSE)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_FLOORCLIP)
+
+	PROP_SpawnState (0)
+	PROP_DeathState (4)
+END_DEFAULTS
 
 // Ettin mash ---------------------------------------------------------------
 
 class AEttinMash : public AEttin
 {
-	DECLARE_STATELESS_ACTOR (AEttinMash, AEttin);
+	DECLARE_STATELESS_ACTOR (AEttinMash, AEttin)
 };
 
-IMPLEMENT_DEF_SERIAL (AEttinMash, AEttin);
-REGISTER_ACTOR (AEttinMash, Hexen);
+IMPLEMENT_STATELESS_ACTOR (AEttinMash, Hexen, -1, 102)
+	PROP_FlagsSet (MF_NOBLOOD)
+	PROP_Flags2Set (MF2_FLOORCLIP|MF2_PASSMOBJ|MF2_MCROSS|MF2_PUSHWALL|MF2_BLASTED)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HX_ALTSHADOW)
 
-void AEttinMash::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->spawnid = 102;
-	info->deathstate = NULL;
-	info->xdeathstate = NULL;
-	info->flags |= MF_NOBLOOD;
-	info->flags2 |= MF2_FLOORCLIP|MF2_PASSMOBJ|MF2_MCROSS|MF2_PUSHWALL|MF2_BLASTED;
-	info->translucency = HX_ALTSHADOW;
-}
+	PROP_DeathState (~0)
+	PROP_XDeathState (~0)
+END_DEFAULTS
 
 //============================================================================
 // Ettin AI

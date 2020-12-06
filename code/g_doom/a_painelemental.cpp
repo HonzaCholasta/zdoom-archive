@@ -5,18 +5,12 @@
 #include "a_doomglobal.h"
 #include "a_action.h"
 
+CVAR (Bool, limitpainelemental, false, CVAR_SERVERINFO)
+
 void A_PainAttack (AActor *);
 void A_PainDie (AActor *);
 
 void A_SkullAttack (AActor *self);
-
-class APainElemental : public AActor
-{
-	DECLARE_ACTOR (APainElemental, AActor);
-};
-
-IMPLEMENT_DEF_SERIAL (APainElemental, AActor);
-REGISTER_ACTOR (APainElemental, Doom);
 
 FState APainElemental::States[] =
 {
@@ -58,30 +52,28 @@ FState APainElemental::States[] =
 	S_NORMAL (PAIN, 'H',	8, NULL 						, &States[S_PAIN_RUN+0])
 };
 
-void APainElemental::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 71;
-	info->spawnid = 115;
-	info->spawnstate = &States[S_PAIN_STND];
-	info->spawnhealth = 400;
-	info->seestate = &States[S_PAIN_RUN];
-	info->seesound = "pain/sight";
-	info->painstate = &States[S_PAIN_PAIN];
-	info->painchance = 128;
-	info->painsound = "pain/pain";
-	info->missilestate = &States[S_PAIN_ATK];
-	info->deathstate = &States[S_PAIN_DIE];
-	info->deathsound = "pain/death";
-	info->speed = 8;
-	info->radius = 31 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 400;
-	info->activesound = "pain/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_PAIN_RAISE];
-}
+IMPLEMENT_ACTOR (APainElemental, Doom, 71, 115)
+	PROP_SpawnHealth (400)
+	PROP_RadiusFixed (31)
+	PROP_HeightFixed (56)
+	PROP_Mass (400)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (128)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_PAIN_STND)
+	PROP_SeeState (S_PAIN_RUN)
+	PROP_PainState (S_PAIN_PAIN)
+	PROP_MissileState (S_PAIN_ATK)
+	PROP_DeathState (S_PAIN_DIE)
+	PROP_RaiseState (S_PAIN_RAISE)
+
+	PROP_SeeSound ("pain/sight")
+	PROP_PainSound ("pain/pain")
+	PROP_DeathSound ("pain/death")
+	PROP_ActiveSound ("pain/active")
+END_DEFAULTS
 
 //
 // A_PainShootSkull
@@ -94,25 +86,27 @@ void A_PainShootSkull (AActor *self, angle_t angle)
 	AActor *other;
 	angle_t an;
 	int prestep;
-	int count;
 
-	// count total number of skull currently on the level
-	// if there are already 20 skulls on the level, don't spit another one
-	count = 20;
-
-	TThinkerIterator<ALostSoul> iterator;
-
-	while ( (other = iterator.Next ()) )
+	// [RH] make the optional
+	if (*limitpainelemental)
 	{
-		if (--count == 0)
-			return;
+		// count total number of skulls currently on the level
+		// if there are already 20 skulls on the level, don't spit another one
+		int count = 20;
+		TThinkerIterator<ALostSoul> iterator;
+
+		while ( (other = iterator.Next ()) )
+		{
+			if (--count == 0)
+				return;
+		}
 	}
 
 	// okay, there's room for another one
 	an = angle >> ANGLETOFINESHIFT;
 	
 	prestep = 4*FRACUNIT +
-		3*(RUNTIME_TYPE(self)->ActorInfo->radius + RUNTIME_CLASS(ALostSoul)->ActorInfo->radius)/2;
+		3*(self->radius + GetDefault<ALostSoul>()->radius)/2;
 	
 	x = self->x + FixedMul (prestep, finecosine[an]);
 	y = self->y + FixedMul (prestep, finesine[an]);
@@ -131,8 +125,8 @@ void A_PainShootSkull (AActor *self, angle_t angle)
 	// ceiling of its new sector, or below the floor. If so, kill it.
 
 	if ((other->z >
-         (other->subsector->sector->ceilingheight - other->height)) ||
-        (other->z < other->subsector->sector->floorheight))
+         (other->subsector->sector->ceilingplane.ZatPoint (other->x, other->y) - other->height)) ||
+        (other->z < other->subsector->sector->floorplane.ZatPoint (other->x, other->y)))
 	{
 		// kill it immediately
 		P_DamageMobj (other, self, self, 10000, MOD_UNKNOWN);		//   ^

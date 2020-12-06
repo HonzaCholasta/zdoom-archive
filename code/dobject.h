@@ -49,7 +49,8 @@ struct FActorInfo;
 
 struct TypeInfo
 {
-	TypeInfo () : Pointers (NULL) {}
+#if !defined(_MSC_VER) && !defined(__GNUC__)
+	TypeInfo () : Pointers (NULL) { RegisterType(); }
 	TypeInfo (const size_t *p, const char *inName, const TypeInfo *inParentType, unsigned int inSize)
 		: Name (inName),
 		  ParentType (inParentType),
@@ -58,7 +59,7 @@ struct TypeInfo
 		  TypeIndex (0),
 		  ActorInfo (NULL),
 		  HashNext (0)
-	{}
+	{ RegisterType(); }
 	TypeInfo (const size_t *p, const char *inName, const TypeInfo *inParentType, unsigned int inSize, DObject *(*inNew)())
 		: Name (inName),
 		  ParentType (inParentType),
@@ -68,16 +69,19 @@ struct TypeInfo
 		  TypeIndex(0),
 		  ActorInfo (NULL),
 		  HashNext (0)
-	{}
+	{ RegisterType(); }
+#else
+	static void StaticInit ();
+#endif
 
 	const char *Name;
-	const TypeInfo *ParentType;
+	TypeInfo *ParentType;
 	unsigned int SizeOf;
-	const size_t *const Pointers;
+	const size_t *Pointers;
 	DObject *(*CreateNew)();
-	unsigned short TypeIndex;
 	FActorInfo *ActorInfo;
 	unsigned int HashNext;
+	unsigned short TypeIndex;
 
 	void RegisterType ();
 
@@ -107,88 +111,72 @@ struct TypeInfo
 	static unsigned int TypeHash[HASH_SIZE];
 };
 
-struct ClassInit
-{
-	ClassInit (TypeInfo *newClass);
-};
-
 #define RUNTIME_TYPE(object)	(object->StaticType())
 #define RUNTIME_CLASS(cls)		(&cls::_StaticType)
 
-#define _DECLARE_CLASS(cls,parent) \
+#define DECLARE_ABSTRACT_CLASS(cls,parent) \
+public: \
+	static TypeInfo _StaticType; \
 	virtual TypeInfo *StaticType() const { return RUNTIME_CLASS(cls); } \
 private: \
 	typedef parent Super; \
-	typedef cls ThisClass; \
-protected:
+	typedef cls ThisClass;
 
 #define DECLARE_CLASS(cls,parent) \
-public: \
-	static const size_t cls##Pointers[]; \
-	static TypeInfo _StaticType; \
-	_DECLARE_CLASS(cls,parent)
+	DECLARE_ABSTRACT_CLASS(cls,parent) \
+	protected: static DObject *CreateObject (); private:
 
-#define _DECLARE_SERIAL(cls,parent) \
-	static DObject *CreateObject (); \
-public: \
-	bool CanSerialize() { return true; } \
-	void Serialize (FArchive &); \
-	inline friend FArchive &operator<< (FArchive &arc, cls* &object) \
-	{ \
-		if (arc.IsStoring ()) \
-			return arc.WriteObject (object); \
-		else \
-			return arc.ReadObject ((DObject* &)object, RUNTIME_CLASS(cls)); \
-	}
+#define HAS_OBJECT_POINTERS \
+	static const size_t _Pointers_[];
 
-#define BEGIN_POINTERS(cls)		const size_t cls::cls##Pointers[] = {
 #define DECLARE_POINTER(field)	((size_t)&((ThisClass *)0)->field),
 #define END_POINTERS			~0 };
-#define NO_POINTERS(cls)		const size_t cls::cls##Pointers[] = { ~0 };
 
-#define DECLARE_SERIAL(cls,parent) \
-	DECLARE_CLASS(cls,parent) \
-	_DECLARE_SERIAL(cls,parent)
+#if !defined(_MSC_VER) && !defined(__GNUC__)
+#	define _IMP_TYPEINFO(cls,ptr,create) \
+		TypeInfo cls::_StaticType (ptr, #cls, RUNTIME_CLASS(cls::Super), sizeof(cls), create);
+#else
 
-#define _IMPLEMENT_CLASS(cls,parent,new) \
-	TypeInfo cls::_StaticType (cls::cls##Pointers, #cls, RUNTIME_CLASS(parent), sizeof(cls), new);
+#	if defined(_MSC_VER)
+#		pragma data_seg(".creg$u")
+#		pragma data_seg()
+#		define _DECLARE_TI(cls) __declspec(allocate(".creg$u")) TypeInfo *_##cls##AddType = &cls::_StaticType;
+#	else
+#		define _DECLARE_TI(cls) TypeInfo *_##cls##AddType __attribute__((section("creg"))) = &cls::_StaticType;
+#	endif
 
-#define IMPLEMENT_POINTY_CLASS(cls,parent) \
-	_IMPLEMENT_CLASS(cls,parent,NULL) \
-	BEGIN_POINTERS(cls)
+#	define _IMP_TYPEINFO(cls,ptrs,create) \
+		TypeInfo cls::_StaticType = { \
+			#cls, \
+			RUNTIME_CLASS(cls::Super), \
+			sizeof(cls), \
+			ptrs, \
+			create, }; \
+		_DECLARE_TI(cls)
 
-#define IMPLEMENT_CLASS(cls,parent) \
-	_IMPLEMENT_CLASS(cls,parent,NULL) \
-	NO_POINTERS(cls)
+#endif
 
-#define _IMPLEMENT_SERIAL(cls,parent) \
-	_IMPLEMENT_CLASS(cls,parent,cls::CreateObject) \
-	DObject *cls::CreateObject() { return new cls; } \
-	static ClassInit _Init##cls(RUNTIME_CLASS(cls));
+#define _IMP_CREATE_OBJ(cls) \
+	DObject *cls::CreateObject() { return new cls; }
 
-#define IMPLEMENT_POINTY_SERIAL(cls,parent) \
-	_IMPLEMENT_SERIAL(cls,parent) \
-	BEGIN_POINTERS(cls)
+#define IMPLEMENT_POINTY_CLASS(cls) \
+	_IMP_CREATE_OBJ(cls) \
+	_IMP_TYPEINFO(cls,cls::_Pointers_,cls::CreateObject) \
+	const size_t cls::_Pointers_[] = {
 
-#define IMPLEMENT_SERIAL(cls,parent) \
-	_IMPLEMENT_SERIAL(cls,parent) \
-	NO_POINTERS(cls)
+#define IMPLEMENT_CLASS(cls) \
+	_IMP_CREATE_OBJ(cls) \
+	_IMP_TYPEINFO(cls,NULL,cls::CreateObject)
 
-#define _DEF_SERIAL(cls) \
-	void cls::Serialize (FArchive &arc) { \
-		Super::Serialize (arc); \
-	}
-
-#define IMPLEMENT_DEF_SERIAL(cls,parent) \
-	_IMPLEMENT_SERIAL(cls,parent) \
-	_DEF_SERIAL(cls) \
-	NO_POINTERS(cls)
+#define IMPLEMENT_ABSTRACT_CLASS(cls) \
+	_IMP_TYPEINFO(cls,NULL,NULL)
 
 enum EObjectFlags
 {
 	OF_MassDestruction	= 0x00000001,	// Object is queued for deletion
 	OF_Cleanup			= 0x00000002,	// Object is being deconstructed as a result of a queued deletion
-	OF_JustSpawned		= 0x00000004	// Actor was spawned this tic
+	OF_JustSpawned		= 0x00000004,	// Thinker was spawned this tic
+	OF_SerialSuccess	= 0x10000000	// For debugging Serialize() calls
 };
 
 class DObject
@@ -213,7 +201,11 @@ public:
 		return (type == StaticType());
 	}
 
-	virtual void Serialize (FArchive &arc) {}
+	virtual void Serialize (FArchive &arc);
+
+	// For catching Serialize functions in derived classes
+	// that don't call their base class.
+	void CheckIfSerialized () const;
 
 	virtual void Destroy ();
 
@@ -237,6 +229,13 @@ private:
 	static bool Inactive;
 	size_t Index;
 };
+
+template<class T>
+inline
+FArchive &operator<< (FArchive &arc, T* &object)
+{
+	return arc.SerializeObject ((DObject*&)object, RUNTIME_CLASS(T));
+}
 
 #include "farchive.h"
 

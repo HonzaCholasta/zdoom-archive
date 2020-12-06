@@ -19,9 +19,6 @@ void P_MinotaurSlam (AActor *source, AActor *target);
 
 // Class definitions --------------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (AMinotaur, AActor);
-REGISTER_ACTOR (AMinotaur, Raven);
-
 FState AMinotaur::States[] =
 {
 #define S_MNTR_LOOK 0
@@ -75,32 +72,38 @@ FState AMinotaur::States[] =
 	S_NORMAL (MNTR, 'T',   -1, A_BossDeath					, NULL)
 };
 
-void AMinotaur::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AMinotaur, Raven, -1, 0)
+	PROP_SpawnHealth (3000)
+	PROP_RadiusFixed (28)
+	PROP_HeightFixed (100)
+	PROP_Mass (800)
+	PROP_SpeedFixed (16)
+	PROP_Damage (7)
+	PROP_PainChance (25)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_DROPOFF)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PASSMOBJ|MF2_BOSS)
+	PROP_Flags3 (MF3_NORADIUSDMG|MF3_DONTMORPH|MF3_NOTARGET)
+
+	PROP_SpawnState (S_MNTR_LOOK)
+	PROP_SeeState (S_MNTR_WALK)
+	PROP_PainState (S_MNTR_PAIN)
+	PROP_MeleeState (S_MNTR_ATK1)
+	PROP_MissileState (S_MNTR_ATK2)
+	PROP_DeathState (S_MNTR_DIE)
+
+	PROP_SeeSound ("minotaur/sight")
+	PROP_AttackSound ("minotaur/attack1")
+	PROP_PainSound ("minotaur/pain")
+	PROP_DeathSound ("minotaur/death")
+	PROP_ActiveSound ("minotaur/active")
+END_DEFAULTS
+
+AT_GAME_SET (Minotaur)
 {
-	INHERIT_DEFS;
 	if (gameinfo.gametype == GAME_Heretic)
-		info->doomednum = 9;
-	info->spawnstate = &States[S_MNTR_LOOK];
-	info->spawnhealth = 3000;
-	info->seestate = &States[S_MNTR_WALK];
-	info->seesound = "minotaur/sight";
-	info->attacksound = "minotaur/attack1";
-	info->painstate = &States[S_MNTR_PAIN];
-	info->painchance = 25;
-	info->painsound = "minotaur/pain";
-	info->meleestate = &States[S_MNTR_ATK1];
-	info->missilestate = &States[S_MNTR_ATK2];
-	info->deathstate = &States[S_MNTR_DIE];
-	info->deathsound = "minotaur/death";
-	info->speed = 16;
-	info->radius = 28 * FRACUNIT;
-	info->height = 100 * FRACUNIT;
-	info->mass = 800;
-	info->damage = 7;
-	info->activesound = "minotaur/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_DROPOFF;
-	info->flags2 = MF2_FLOORCLIP|MF2_PASSMOBJ|MF2_BOSS;
-	info->flags3 = MF3_NORADIUSDMG|MF3_DONTMORPH|MF3_NOTARGET;
+	{
+		DoomEdMap.AddType (9, RUNTIME_CLASS(AMinotaur));
+	}
 }
 
 void AMinotaur::NoBlockingSet ()
@@ -108,7 +111,7 @@ void AMinotaur::NoBlockingSet ()
 	if (gameinfo.gametype == GAME_Heretic)
 	{
 		P_DropItem (this, "ArtiSuperHealth", 0, 51);
-		P_DropItem (this, "PhoenixRodWimpy", 10, 84);
+		P_DropItem (this, "PhoenixRodAmmo", 10, 84);
 	}
 }
 
@@ -125,11 +128,8 @@ int AMinotaur::DoSpecialDamage (AActor *target, int damage)
 
 class AMinotaurFX1 : public AActor
 {
-	DECLARE_ACTOR (AMinotaurFX1, AActor);
+	DECLARE_ACTOR (AMinotaurFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AMinotaurFX1, AActor);
-REGISTER_ACTOR (AMinotaurFX1, Raven);
 
 FState AMinotaurFX1::States[] =
 {
@@ -146,31 +146,32 @@ FState AMinotaurFX1::States[] =
 	S_BRIGHT (FX12, 'H',	5, NULL 						, NULL)
 };
 
-void AMinotaurFX1::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AMinotaurFX1, Raven, -1, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (20)
+	PROP_Damage (3)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_FIREDAMAGE)
+
+	PROP_SpawnState (S_MNTRFX1)
+	PROP_DeathState (S_MNTRFXI1)
+END_DEFAULTS
+
+AT_SPEED_SET (MinotaurFX1, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MNTRFX1];
-	info->deathstate = &States[S_MNTRFXI1];
-	info->speed = GameSpeed != SPEED_Fast ? 20 * FRACUNIT : 26 * FRACUNIT;
-	info->radius = 10 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 3;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_FIREDAMAGE;
+	SimpleSpeedSetter (AMinotaurFX1, 20*FRACUNIT, 26*FRACUNIT, speed);
 }
 
 class AMinotaurFX2 : public AMinotaurFX1
 {
-	DECLARE_ACTOR (AMinotaurFX2, AMinotaurFX1);
+	DECLARE_ACTOR (AMinotaurFX2, AMinotaurFX1)
 public:
-	void GetExplodeParms (int &damage, fixed_t &distance, bool &hurtSource)
+	void GetExplodeParms (int &damage, int &distance, bool &hurtSource)
 	{
 		damage = 24;
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AMinotaurFX2, AMinotaurFX1);
-REGISTER_ACTOR (AMinotaurFX2, Raven);
 
 FState AMinotaurFX2::States[] =
 {
@@ -185,31 +186,33 @@ FState AMinotaurFX2::States[] =
 	S_BRIGHT (FX13, 'M',	4, NULL 						, NULL)
 };
 
-void AMinotaurFX2::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AMinotaurFX2, Raven, -1, 0)
+	PROP_RadiusFixed (5)
+	PROP_HeightFixed (12)
+	PROP_SpeedFixed (14)
+	PROP_Damage (4)
+	PROP_Flags3 (MF3_FLOORHUGGER)
+
+	PROP_SpawnState (S_MNTRFX2)
+	PROP_DeathState (S_MNTRFXI2)
+
+	PROP_DeathSound ("minotaur/fx2hit")
+END_DEFAULTS
+
+AT_SPEED_SET (MinotaurFX2, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MNTRFX2];
-	info->deathstate = &States[S_MNTRFXI2];
-	info->deathsound = "minotaur/fx2hit";
-	info->speed = GameSpeed != SPEED_Fast ? 14 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 5 * FRACUNIT;
-	info->height = 12 * FRACUNIT;
-	info->damage = 4;
-	info->flags3 = MF3_FLOORHUGGER;
+	SimpleSpeedSetter (AMinotaurFX2, 14*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 class AMinotaurFX3 : public AMinotaurFX2
 {
-	DECLARE_ACTOR (AMinotaurFX3, AMinotaurFX2);
+	DECLARE_ACTOR (AMinotaurFX3, AMinotaurFX2)
 public:
-	void GetExplodeParms (int &damage, fixed_t &distance, bool &hurtSource)
+	void GetExplodeParms (int &damage, int &distance, bool &hurtSource)
 	{
 		damage = 128;
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AMinotaurFX3, AMinotaurFX2);
-REGISTER_ACTOR (AMinotaurFX3, Raven);
 
 FState AMinotaurFX3::States[] =
 {
@@ -225,16 +228,16 @@ FState AMinotaurFX3::States[] =
 	S_BRIGHT (FX13, 'H',	4, NULL 						, NULL)
 };
 
-void AMinotaurFX3::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MNTRFX3];
-	info->deathsound = "minotaur/fx3hit";
-	info->speed = 0;
-	info->radius = 8 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags3 = 0;
-}
+IMPLEMENT_ACTOR (AMinotaurFX3, Raven, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (16)
+	PROP_SpeedFixed (0)
+	PROP_Flags3 (0)
+
+	PROP_SpawnState (S_MNTRFX3)
+
+	PROP_DeathSound ("minotaur/fx3hit")
+END_DEFAULTS
 
 // Action functions for the minotaur ----------------------------------------
 
@@ -337,7 +340,7 @@ void A_MinotaurCharge (AActor *actor)
 	else
 	{
 		actor->flags &= ~MF_SKULLFLY;
-		actor->SetState (GetInfo (actor)->seestate);
+		actor->SetState (actor->SeeState);
 	}
 }
 
@@ -368,7 +371,7 @@ void A_MinotaurAtk2 (AActor *actor)
 	}
 	z = actor->z + 40*FRACUNIT;
 	mo = P_SpawnMissileZ (actor, z, actor->target, RUNTIME_CLASS(AMinotaurFX1));
-	if (mo)
+	if (mo != NULL)
 	{
 		S_Sound (mo, CHAN_WEAPON, "minotaur/attack2", 1, ATTN_NORM);
 		momz = mo->momz;

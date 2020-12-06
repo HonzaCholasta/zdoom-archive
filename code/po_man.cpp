@@ -69,10 +69,10 @@ static fixed_t PolyStartY;
 
 // CODE --------------------------------------------------------------------
 
-IMPLEMENT_SERIAL (DPolyAction, DThinker)
-IMPLEMENT_SERIAL (DRotatePoly, DPolyAction)
-IMPLEMENT_SERIAL (DMovePoly, DPolyAction)
-IMPLEMENT_SERIAL (DPolyDoor, DMovePoly)
+IMPLEMENT_CLASS (DPolyAction)
+IMPLEMENT_CLASS (DRotatePoly)
+IMPLEMENT_CLASS (DMovePoly)
+IMPLEMENT_CLASS (DPolyDoor)
 
 DPolyAction::DPolyAction ()
 {
@@ -93,11 +93,6 @@ DPolyAction::DPolyAction (int polyNum)
 
 DRotatePoly::DRotatePoly ()
 {
-}
-
-void DRotatePoly::Serialize (FArchive &arc)
-{
-	Super::Serialize (arc);
 }
 
 DRotatePoly::DRotatePoly (int polyNum)
@@ -187,7 +182,7 @@ void DRotatePoly::RunThink ()
 //==========================================================================
 
 
-BOOL EV_RotatePoly (line_t *line, int polyNum, int speed, int byteAngle,
+bool EV_RotatePoly (line_t *line, int polyNum, int speed, int byteAngle,
 					int direction, BOOL overRide)
 {
 	int mirror;
@@ -304,7 +299,7 @@ void DMovePoly::RunThink ()
 //
 //==========================================================================
 
-BOOL EV_MovePoly (line_t *line, int polyNum, int speed, angle_t angle,
+bool EV_MovePoly (line_t *line, int polyNum, int speed, angle_t angle,
 				  fixed_t dist, BOOL overRide)
 {
 	int mirror;
@@ -483,7 +478,7 @@ void DPolyDoor::RunThink ()
 //
 //==========================================================================
 
-BOOL EV_OpenPolyDoor (line_t *line, int polyNum, int speed, angle_t angle,
+bool EV_OpenPolyDoor (line_t *line, int polyNum, int speed, angle_t angle,
 					  int delay, int distance, podoortype_t type)
 {
 	int mirror;

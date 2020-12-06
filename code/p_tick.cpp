@@ -30,6 +30,7 @@
 #include "b_bot.h"
 
 #include "doomstat.h"
+#include "sbar.h"
 
 extern constate_e ConsoleState;
 extern gamestate_t wipegamestate;
@@ -58,12 +59,14 @@ void P_Ticker (void)
 	}
 
 	P_ThinkParticles ();	// [RH] make the particles think
+	StatusBar->Tick ();		// [RH] moved this here
 
 	for (i = 0; i<MAXPLAYERS; i++)
 		if (playeringame[i] &&
 			/*Added by MC: Freeze mode.*/!(bglobal.freeze && players[i].isbot))
 			P_PlayerThink (&players[i]);
 
+	level.Tick ();			// [RH] let the level tick
 	DThinker::RunThinkers ();
 
 	//if added by MC: Freeze mode.

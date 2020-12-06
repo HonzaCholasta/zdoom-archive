@@ -58,15 +58,6 @@ typedef enum
 } GameMission_t;
 
 
-// Identify language to use, software localization.
-typedef enum
-{
-  english,
-  french,
-  german,
-  unknown
-} Language_t;
-
 // If rangecheck is undefined, most parameter validation debugging code
 // will not be compiled
 #ifndef NORANGECHECKING
@@ -111,11 +102,14 @@ typedef enum
 
 typedef float skill_t;
 
-#define sk_baby 				0.0f
-#define sk_easy 				1.0f
-#define sk_medium				2.0f
-#define sk_hard 				3.0f
-#define sk_nightmare			4.0f
+enum ESkillLevels
+{
+	sk_baby,
+	sk_easy,
+	sk_medium,
+	sk_hard,
+	sk_nightmare
+};
 
 
 
@@ -168,11 +162,6 @@ typedef float skill_t;
 #define KEY_PGUP				0xc9	// DIK_PRIOR
 #define KEY_PGDN				0xd1	// DIK_NEXT
 
-// Joystick and mouse buttons are now sent
-// in ev_keyup and ev_keydown instead of
-// ev_mouse and ev_joystick. This makes
-// binding commands to them *much* simpler.
-
 #define KEY_MOUSE1				0x100
 #define KEY_MOUSE2				0x101
 #define KEY_MOUSE3				0x102
@@ -215,7 +204,7 @@ typedef float skill_t;
 
 #define NUM_KEYS				0x128
 
-// [RH] dmflags->value flags (based on Q2's)
+// [RH] dmflags bits (based on Q2's)
 #define	DF_NO_HEALTH		1		// Do not spawn health items (DM)
 #define	DF_NO_ITEMS			2		// Do not spawn powerups (DM)
 #define	DF_WEAPONS_STAY		4		// Leave weapons around after pickup (DM)
@@ -234,6 +223,29 @@ typedef float skill_t;
 #define DF_NO_JUMP			65536	// Don't allow jumping
 #define DF_NO_FREELOOK		131072	// Don't allow freelook
 #define DF_RESPAWN_SUPER	262144	// Respawn invulnerability and invisibility
+
+// [BC] More dmflags. w00p!
+//#define	DF2_YES_IMPALING		1		// Player gets implaed on MF2_IMPALE items
+#define	DF2_YES_WEAPONDROP		2		// Drop current weapon upon death
+//#define DF2_NO_RUNES			4		// Don't spawn runes
+//#define DF2_YES_IRETURN			8		// Instantly return skull when player carrying it dies
+//#define DF2_YES_RETURN			16		// Return dropped skulls after 30 seconds
+//#define DF2_YES_TEAMCOLORS		32		// Don't use player's base color in teamgames
+//#define DF2_NO_SWITCH			64		// Player is not allowed to switch teams
+//#define DF2_FORCE_RANDOM		128		// Player put on random team
+//#define DF2_YES_RUNEDROP		256		// Drop current rune upon death
+//#define DF2_YES_200MAX			512		// Don't all max. health/armor items to bring
+//										// health or armor over 200%
+//#define DF2_YES_DOUBLEAMMO		1024	// Doubles ammo like skill 1 and 5 do
+//#define DF2_NO_CLEARFRAGS		2048	// Don't clear frags after each level
+//#define DF2_FORCE_NORESPAWN		4096	// Player cannot respawn
+//#define DF2_YES_DEGENERATION	8192	// Quake-style degeneration
+//#define DF2_YES_LOSEFRAG		16384	// Lose a frag when killed. More incentive to try to
+//										// not get yerself killed
+#define	DF2_NO_FREEAIMBFG		32768	// Don't allow BFG to be aimed at the ground
+										// or ceiling. Prevents cheap BFG frags
+#define	DF2_BARRELS_RESPAWN		65536	// Barrels respawn (duh)
+#define	DF2_YES_INVUL			131072	// Player is temporarily invulnerable when respawned
 
 // phares 3/20/98:
 //
@@ -279,5 +291,11 @@ typedef float skill_t;
 #define HITDICE(a) ((1+(P_Random()&7))*a)
 
 #define BLINKTHRESHOLD (4*32)
+
+#ifndef __BIG_ENDIAN__
+#define MAKE_ID(a,b,c,d)	((a)|((b)<<8)|((c)<<16)|((d)<<24))
+#else
+#define MAKE_ID(a,b,c,d)	((d)|((c)<<8)|((b)<<16)|((a)<<24))
+#endif
 
 #endif	// __DOOMDEF_H__

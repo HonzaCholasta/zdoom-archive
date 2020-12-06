@@ -1,14 +1,14 @@
 #include "info.h"
 #include "a_pickups.h"
 #include "d_player.h"
-#include "hstrings.h"
+#include "gstrings.h"
 #include "p_local.h"
 
 // Green key ------------------------------------------------------------
 
 class AKeyGreen : public AKey
 {
-	DECLARE_ACTOR (AKeyGreen, AKey);
+	DECLARE_ACTOR (AKeyGreen, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -16,12 +16,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return TXT_GOTGREENKEY;
+		return GStrings(TXT_GOTGREENKEY);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AKeyGreen, AKey);
-REGISTER_ACTOR (AKeyGreen, Heretic);
 
 FState AKeyGreen::States[] =
 {
@@ -37,19 +34,16 @@ FState AKeyGreen::States[] =
 	S_BRIGHT (AKYY, 'J',	3, NULL 				, &States[0])
 };
 
-void AKeyGreen::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 73;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (AKeyGreen, Heretic, 73, 0)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Blue key -----------------------------------------------------------------
 
 class AKeyBlue : public AKey
 {
-	DECLARE_ACTOR (AKeyBlue, AKey);
+	DECLARE_ACTOR (AKeyBlue, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -57,12 +51,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return TXT_GOTBLUEKEY;
+		return GStrings(TXT_GOTBLUEKEY);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AKeyBlue, AKey);
-REGISTER_ACTOR (AKeyBlue, Heretic);
 
 FState AKeyBlue::States[] =
 {
@@ -78,19 +69,16 @@ FState AKeyBlue::States[] =
 	S_BRIGHT (BKYY, 'J',	3, NULL 				, &States[0])
 };
 
-void AKeyBlue::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 79;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (AKeyBlue, Heretic, 79, 0)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Yellow key ---------------------------------------------------------------
 
 class AKeyYellow : public AKey
 {
-	DECLARE_ACTOR (AKeyYellow, AKey);
+	DECLARE_ACTOR (AKeyYellow, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -98,12 +86,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return TXT_GOTYELLOWKEY;
+		return GStrings(TXT_GOTYELLOWKEY);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AKeyYellow, AKey);
-REGISTER_ACTOR (AKeyYellow, Heretic);
 
 FState AKeyYellow::States[] =
 {
@@ -118,13 +103,10 @@ FState AKeyYellow::States[] =
 	S_BRIGHT (CKYY, 'I',	3, NULL 				, &States[0])
 };
 
-void AKeyYellow::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 80;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (AKeyYellow, Heretic, 80, 0)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // --- Key gizmos -----------------------------------------------------------
 
@@ -132,13 +114,10 @@ void A_InitKeyGizmo (AActor *);
 
 class AKeyGizmo : public AActor
 {
-	DECLARE_ACTOR (AKeyGizmo, AActor);
+	DECLARE_ACTOR (AKeyGizmo, AActor)
 public:
 	virtual int GetFloatState () { return 0; }
 };
-
-IMPLEMENT_DEF_SERIAL (AKeyGizmo, AActor);
-REGISTER_ACTOR (AKeyGizmo, Heretic);
 
 FState AKeyGizmo::States[] =
 {
@@ -147,22 +126,18 @@ FState AKeyGizmo::States[] =
 	S_NORMAL (KGZ1, 'A',   -1, NULL 				, NULL)
 };
 
-void AKeyGizmo::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->radius = 16 * FRACUNIT;
-	info->height= 50 * FRACUNIT;
-	info->flags = MF_SOLID;
-}
+IMPLEMENT_ACTOR (AKeyGizmo, Heretic, -1, 0)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (50)
+	PROP_Flags (MF_SOLID)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 class AKeyGizmoFloat : public AActor
 {
-	DECLARE_ACTOR (AKeyGizmoFloat, AActor);
+	DECLARE_ACTOR (AKeyGizmoFloat, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AKeyGizmoFloat, AActor);
-REGISTER_ACTOR (AKeyGizmoFloat, Heretic);
 
 FState AKeyGizmoFloat::States[] =
 {
@@ -176,68 +151,49 @@ FState AKeyGizmoFloat::States[] =
 	S_BRIGHT (KGZY, 'A',   -1, NULL 				, NULL)
 };
 
-void AKeyGizmoFloat::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->radius = 16 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SOLID|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (AKeyGizmoFloat, Heretic, -1, 0)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SOLID|MF_NOGRAVITY)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Blue gizmo ---------------------------------------------------------------
 
 class AKeyGizmoBlue : public AKeyGizmo
 {
-	DECLARE_STATELESS_ACTOR (AKeyGizmoBlue, AKeyGizmo);
+	DECLARE_STATELESS_ACTOR (AKeyGizmoBlue, AKeyGizmo)
 public:
 	int GetFloatState () { return S_KGZ_BLUEFLOAT; }
 };
 
-IMPLEMENT_DEF_SERIAL (AKeyGizmoBlue, AKeyGizmo);
-REGISTER_ACTOR (AKeyGizmoBlue, Heretic);
-
-void AKeyGizmoBlue::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 94;
-}
+IMPLEMENT_STATELESS_ACTOR (AKeyGizmoBlue, Heretic, 94, 0)
+END_DEFAULTS
 
 // Green gizmo --------------------------------------------------------------
 
 class AKeyGizmoGreen : public AKeyGizmo
 {
-	DECLARE_STATELESS_ACTOR (AKeyGizmoGreen, AKeyGizmo);
+	DECLARE_STATELESS_ACTOR (AKeyGizmoGreen, AKeyGizmo)
 public:
 	int GetFloatState () { return S_KGZ_GREENFLOAT; }
 };
 
-IMPLEMENT_DEF_SERIAL (AKeyGizmoGreen, AKeyGizmo);
-REGISTER_ACTOR (AKeyGizmoGreen, Heretic);
-
-void AKeyGizmoGreen::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 95;
-}
+IMPLEMENT_STATELESS_ACTOR (AKeyGizmoGreen, Heretic, 95, 0)
+END_DEFAULTS
 
 // Yellow gizmo -------------------------------------------------------------
 
 class AKeyGizmoYellow : public AKeyGizmo
 {
-	DECLARE_STATELESS_ACTOR (AKeyGizmoYellow, AKeyGizmo);
+	DECLARE_STATELESS_ACTOR (AKeyGizmoYellow, AKeyGizmo)
 public:
 	int GetFloatState () { return S_KGZ_YELLOWFLOAT; }
 };
 
-IMPLEMENT_DEF_SERIAL (AKeyGizmoYellow, AKeyGizmo);
-REGISTER_ACTOR (AKeyGizmoYellow, Heretic);
-
-void AKeyGizmoYellow::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 96;
-}
+IMPLEMENT_STATELESS_ACTOR (AKeyGizmoYellow, Heretic, 96, 0)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //

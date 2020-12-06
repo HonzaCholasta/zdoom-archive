@@ -1,9 +1,11 @@
+#include "templates.h"
 #include "actor.h"
 #include "info.h"
 #include "m_random.h"
 #include "s_sound.h"
 #include "p_local.h"
 #include "p_enemy.h"
+#include "gstrings.h"
 
 void A_ImpExplode (AActor *);
 void A_ImpMeAttack (AActor *);
@@ -17,13 +19,12 @@ void A_ImpXDeath2 (AActor *);
 
 class AHereticImp : public AActor
 {
-	DECLARE_ACTOR (AHereticImp, AActor);
+	DECLARE_ACTOR (AHereticImp, AActor)
 public:
 	bool SuggestMissileAttack (fixed_t dist);
+	const char *GetObituary ();
+	const char *GetHitObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (AHereticImp, AActor);
-REGISTER_ACTOR (AHereticImp, Heretic);
 
 FState AHereticImp::States[] =
 {
@@ -83,43 +84,49 @@ FState AHereticImp::States[] =
 	S_NORMAL (IMPX, 'Z',   -1, NULL 					, NULL)
 };
 
-void AHereticImp::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AHereticImp, Heretic, 66, 0)
+	PROP_SpawnHealth (40)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (36)
+	PROP_Mass (50)
+	PROP_SpeedFixed (10)
+	PROP_PainChance (200)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY|MF_COUNTKILL)
+	PROP_Flags2 (MF2_SPAWNFLOAT|MF2_PASSMOBJ)
+	PROP_Flags3 (MF3_DONTOVERLAP)
+
+	PROP_SpawnState (S_IMP_LOOK)
+	PROP_SeeState (S_IMP_FLY)
+	PROP_PainState (S_IMP_PAIN)
+	PROP_MeleeState (S_IMP_MEATK)
+	PROP_MissileState (S_IMP_MSATK1)
+	PROP_CrashState (S_IMP_CRASH)
+	PROP_DeathState (S_IMP_DIE)
+	PROP_XDeathState (S_IMP_XDIE)
+
+	PROP_SeeSound ("imp/sight")
+	PROP_AttackSound ("imp/attack")
+	PROP_PainSound ("imp/pain")
+	PROP_DeathSound ("imp/death")
+	PROP_ActiveSound ("imp/active")
+END_DEFAULTS
+
+const char *AHereticImp::GetObituary ()
 {
-	INHERIT_DEFS;
-	info->doomednum = 66;
-	info->spawnstate = &States[S_IMP_LOOK];
-	info->spawnhealth = 40;
-	info->seestate = &States[S_IMP_FLY];
-	info->seesound = "imp/sight";
-	info->attacksound = "imp/attack";
-	info->painstate = &States[S_IMP_PAIN];
-	info->painchance = 200;
-	info->painsound = "imp/pain";
-	info->meleestate = &States[S_IMP_MEATK];
-	info->missilestate = &States[S_IMP_MSATK1];
-	info->crashstate = &States[S_IMP_CRASH];
-	info->deathstate = &States[S_IMP_DIE];
-	info->xdeathstate = &States[S_IMP_XDIE];
-	info->deathsound = "imp/death";
-	info->speed = 10;
-	info->radius = 16 * FRACUNIT;
-	info->height = 36 * FRACUNIT;
-	info->mass = 50;
-	info->activesound = "imp/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY|MF_COUNTKILL;
-	info->flags2 = MF2_SPAWNFLOAT|MF2_PASSMOBJ;
-	info->flags3 = MF3_DONTOVERLAP;
+	return GStrings(OB_HERETICIMP);
+}
+
+const char *AHereticImp::GetHitObituary ()
+{
+	return GStrings(OB_HERETICIMPHIT);
 }
 
 // Heretic imp leader -------------------------------------------------------
 
 class AHereticImpLeader : public AHereticImp
 {
-	DECLARE_ACTOR (AHereticImpLeader, AHereticImp);
+	DECLARE_ACTOR (AHereticImpLeader, AHereticImp)
 };
-
-IMPLEMENT_DEF_SERIAL (AHereticImpLeader, AHereticImp);
-REGISTER_ACTOR (AHereticImpLeader, Heretic);
 
 FState AHereticImpLeader::States[] =
 {
@@ -129,25 +136,21 @@ FState AHereticImpLeader::States[] =
 	S_NORMAL (IMPX, 'F',	6, A_ImpMsAttack2			, &AHereticImp::States[S_IMP_FLY]),
 };
 
-void AHereticImpLeader::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 5;
-	info->spawnhealth = 80;
-	info->attacksound = "imp/leaderattack";
-	info->meleestate = NULL;
-	info->missilestate = &States[S_IMP_MSATK2];
-}
+IMPLEMENT_ACTOR (AHereticImpLeader, Heretic, 5, 0)
+	PROP_SpawnHealth (80)
+	
+	PROP_MeleeState (~0)
+	PROP_MissileState (S_IMP_MSATK2)
+
+	PROP_AttackSound ("imp/leaderattack")
+END_DEFAULTS
 
 // Heretic imp chunk 1 ------------------------------------------------------
 
 class AHereticImpChunk1 : public AActor
 {
-	DECLARE_ACTOR (AHereticImpChunk1, AActor);
+	DECLARE_ACTOR (AHereticImpChunk1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AHereticImpChunk1, AActor);
-REGISTER_ACTOR (AHereticImpChunk1, Heretic);
 
 FState AHereticImpChunk1::States[] =
 {
@@ -156,23 +159,19 @@ FState AHereticImpChunk1::States[] =
 	S_NORMAL (IMPX, 'O',  700, NULL 					, NULL)
 };
 
-void AHereticImpChunk1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP;
-	info->mass = 5;
-}
+IMPLEMENT_ACTOR (AHereticImpChunk1, Heretic, -1, 0)
+	PROP_Mass (5)
+	PROP_Flags (MF_NOBLOCKMAP)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Heretic imp chunk 2 ------------------------------------------------------
 
 class AHereticImpChunk2 : public AActor
 {
-	DECLARE_ACTOR (AHereticImpChunk2, AActor);
+	DECLARE_ACTOR (AHereticImpChunk2, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AHereticImpChunk2, AActor);
-REGISTER_ACTOR (AHereticImpChunk2, Heretic);
 
 FState AHereticImpChunk2::States[] =
 {
@@ -181,23 +180,19 @@ FState AHereticImpChunk2::States[] =
 	S_NORMAL (IMPX, 'R',  700, NULL 					, NULL)
 };
 
-void AHereticImpChunk2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP;
-	info->mass = 5;
-}
+IMPLEMENT_ACTOR (AHereticImpChunk2, Heretic, -1, 0)
+	PROP_Mass (5)
+	PROP_Flags (MF_NOBLOCKMAP)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Heretic imp ball ---------------------------------------------------------
 
 class AHereticImpBall : public AActor
 {
-	DECLARE_ACTOR (AHereticImpBall, AActor);
+	DECLARE_ACTOR (AHereticImpBall, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AHereticImpBall, AActor);
-REGISTER_ACTOR (AHereticImpBall, Heretic);
 
 FState AHereticImpBall::States[] =
 {
@@ -213,22 +208,26 @@ FState AHereticImpBall::States[] =
 	S_BRIGHT (FX10, 'G',	5, NULL 					, NULL)
 };
 
-void AHereticImpBall::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AHereticImpBall, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (10)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_IMPFX)
+	PROP_DeathState (S_IMPFXI)
+END_DEFAULTS
+
+AT_SPEED_SET (HereticImpBall, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_IMPFX];
-	info->deathstate = &States[S_IMPFXI];
-	info->speed = GameSpeed != SPEED_Fast ? 10 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_WINDTHRUST|MF2_NOTELEPORT;
+	SimpleSpeedSetter (AHereticImpBall, 10*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 bool AHereticImp::SuggestMissileAttack (fixed_t dist)
 { // Imps fly attack from far away
-	return P_Random (pr_checkmissilerange) >= MIN (dist >> (FRACBITS + 1), 200);
+	return P_Random (pr_checkmissilerange) >= MIN<int> (dist >> (FRACBITS + 1), 200);
 }
 
 //----------------------------------------------------------------------------
@@ -268,10 +267,10 @@ void A_ImpMeAttack (AActor *self)
 	{
 		return;
 	}
-	S_Sound (self, CHAN_WEAPON, GetInfo (self)->attacksound, 1, ATTN_NORM);
+	S_SoundID (self, CHAN_WEAPON, self->AttackSound, 1, ATTN_NORM);
 	if (P_CheckMeleeRange (self))
 	{
-		P_DamageMobj (self->target, self, self, 5+(P_Random()&7));
+		P_DamageMobj (self->target, self, self, 5+(P_Random()&7), MOD_HIT);
 	}
 }
 
@@ -289,12 +288,12 @@ void A_ImpMsAttack (AActor *self)
 
 	if (!self->target || P_Random() > 64)
 	{
-		self->SetState (RUNTIME_TYPE(self)->ActorInfo->seestate);
+		self->SetState (self->SeeState);
 		return;
 	}
 	dest = self->target;
 	self->flags |= MF_SKULLFLY;
-	S_Sound (self, CHAN_WEAPON, GetInfo (self)->attacksound, 1, ATTN_NORM);
+	S_SoundID (self, CHAN_WEAPON, self->AttackSound, 1, ATTN_NORM);
 	A_FaceTarget (self);
 	an = self->angle >> ANGLETOFINESHIFT;
 	self->momx = FixedMul (12*FRACUNIT, finecosine[an]);
@@ -322,10 +321,10 @@ void A_ImpMsAttack2 (AActor *self)
 	{
 		return;
 	}
-	S_Sound (self, CHAN_WEAPON, GetInfo (self)->attacksound, 1, ATTN_NORM);
+	S_SoundID (self, CHAN_WEAPON, self->AttackSound, 1, ATTN_NORM);
 	if (P_CheckMeleeRange (self))
 	{
-		P_DamageMobj (self->target, self, self, 5+(P_Random()&7));
+		P_DamageMobj (self->target, self, self, 5+(P_Random()&7), MOD_HIT);
 		return;
 	}
 	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AHereticImpBall));

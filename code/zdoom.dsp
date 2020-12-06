@@ -43,7 +43,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /YX /FD /c
-# ADD CPP /nologo /Gr /MD /W3 /GX /O2 /I "f:/fmod/api" /I "../openptc/source" /I "win32" /I "." /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "USEASM" /FAs /YX /FD /c
+# ADD CPP /nologo /Gr /MD /W3 /GX /O2 /I "f:/fmod/api" /I "../openptc/source" /I "win32" /I "." /I "zlib-1.1.3" /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "USEASM" /YX /FD /c
 # SUBTRACT CPP /Fr
 # ADD BASE MTL /nologo /D "NDEBUG" /mktyplib203 /o "NUL" /win32
 # ADD MTL /nologo /D "NDEBUG" /mktyplib203 /o "NUL" /win32
@@ -54,7 +54,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /machine:I386
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib f:/fmod/api/fmodvc.lib wsock32.lib ../openptc/library/visual/ptc.lib winmm.lib /nologo /subsystem:windows /pdb:none /map /machine:I386 /nodefaultlib:"libc" /nodefaultlib:"libcmt" /out:"../zdoom.exe"
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib f:/fmod/api/fmodvc.lib wsock32.lib winmm.lib zlib-1.1.3/release/zlib.lib /nologo /subsystem:windows /pdb:none /map /machine:I386 /nodefaultlib:"libc" /nodefaultlib:"libcmt" /out:"../zdoom.exe"
 # SUBTRACT LINK32 /verbose /profile /debug
 
 !ELSEIF  "$(CFG)" == "zdoom - Win32 Debug"
@@ -71,7 +71,7 @@ LINK32=link.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /Zi /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /YX /FD /c
-# ADD CPP /nologo /MTd /W3 /Gm /GX /Zi /Od /I "f:/fmod/api" /I "../openptc/source" /I "win32" /I "." /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /FD /c
+# ADD CPP /nologo /MTd /W3 /Gm /GX /ZI /Od /I "f:/fmod/api" /I "../openptc/source" /I "win32" /I "." /I "zlib-1.1.3" /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /FD /c
 # SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE MTL /nologo /D "_DEBUG" /mktyplib203 /o "NUL" /win32
 # ADD MTL /nologo /D "_DEBUG" /mktyplib203 /o "NUL" /win32
@@ -82,7 +82,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib ddraw.lib winmm.lib wsock32.lib f:/fmod/api/fmodvc.lib ../openptc/library/visual/ptcdebug.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcmt" /out:"../doomdbg.exe"
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib ddraw.lib winmm.lib wsock32.lib f:/fmod/api/fmodvc.lib zlib-1.1.3/debug/zlib.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcmt" /out:"../doomdbg.exe"
 # SUBTRACT LINK32 /profile
 
 !ENDIF 
@@ -97,6 +97,14 @@ LINK32=link.exe
 # Begin Source File
 
 SOURCE=.\Am_map.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\autostart.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\autozend.cpp
 # End Source File
 # Begin Source File
 
@@ -140,11 +148,15 @@ SOURCE=.\c_dispatch.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\c_varinit.cpp
+SOURCE=.\cmdlib.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\cmdlib.cpp
+SOURCE=.\colormatcher.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\configfile.cpp
 # End Source File
 # Begin Source File
 
@@ -176,6 +188,10 @@ SOURCE=.\d_protocol.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\decallib.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\dobject.cpp
 # End Source File
 # Begin Source File
@@ -189,10 +205,6 @@ SOURCE=.\doomstat.cpp
 # Begin Source File
 
 SOURCE=.\dsectoreffect.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=.\dstrings.cpp
 # End Source File
 # Begin Source File
 
@@ -220,11 +232,23 @@ SOURCE=.\g_level.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\gameconfigfile.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\gi.cpp
 # End Source File
 # Begin Source File
 
 SOURCE=.\info.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\infodefaults.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\lumpconfigfile.cpp
 # End Source File
 # Begin Source File
 
@@ -261,10 +285,6 @@ SOURCE=.\m_options.cpp
 # Begin Source File
 
 SOURCE=.\m_random.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=.\minilzo.cpp
 # End Source File
 # Begin Source File
 
@@ -332,6 +352,10 @@ SOURCE=.\p_saveg.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\p_sectors.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\p_setup.cpp
 # End Source File
 # Begin Source File
@@ -365,6 +389,10 @@ SOURCE=.\p_things.cpp
 # Begin Source File
 
 SOURCE=.\p_tick.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\p_trace.cpp
 # End Source File
 # Begin Source File
 
@@ -420,6 +448,10 @@ SOURCE=.\s_advsound.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\s_playlist.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\s_sndseq.cpp
 # End Source File
 # Begin Source File
@@ -432,11 +464,19 @@ SOURCE=.\sc_man.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\skins.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\st_stuff.cpp
 # End Source File
 # Begin Source File
 
 SOURCE=.\stats.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\stringtable.cpp
 # End Source File
 # Begin Source File
 
@@ -457,6 +497,10 @@ SOURCE=.\v_font.cpp
 # Begin Source File
 
 SOURCE=.\v_palette.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\v_pfx.cpp
 # End Source File
 # Begin Source File
 
@@ -496,7 +540,15 @@ SOURCE=.\am_map.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\autosegs.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\B_BOT.H
+# End Source File
+# Begin Source File
+
+SOURCE=.\basicinlines.h
 # End Source File
 # Begin Source File
 
@@ -520,6 +572,14 @@ SOURCE=.\cmdlib.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\colormatcher.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\configfile.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\d_dehacked.h
 # End Source File
 # Begin Source File
@@ -528,7 +588,7 @@ SOURCE=.\d_event.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\d_french.h
+SOURCE=.\d_gui.h
 # End Source File
 # Begin Source File
 
@@ -564,6 +624,10 @@ SOURCE=.\d_ticcmd.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\decallib.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\dobject.h
 # End Source File
 # Begin Source File
@@ -585,10 +649,6 @@ SOURCE=.\doomtype.h
 # Begin Source File
 
 SOURCE=.\dsectoreffect.h
-# End Source File
-# Begin Source File
-
-SOURCE=.\dstrings.h
 # End Source File
 # Begin Source File
 
@@ -620,11 +680,19 @@ SOURCE=.\g_level.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\gameconfigfile.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\gccinlines.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\gi.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\hstrings.h
+SOURCE=.\gstrings.h
 # End Source File
 # Begin Source File
 
@@ -636,7 +704,15 @@ SOURCE=.\Info.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\lzoconf.h
+SOURCE=.\infomacros.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\lists.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\lumpconfigfile.h
 # End Source File
 # Begin Source File
 
@@ -676,7 +752,7 @@ SOURCE=.\m_swap.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\minilzo.h
+SOURCE=.\mscinlines.h
 # End Source File
 # Begin Source File
 
@@ -728,6 +804,14 @@ SOURCE=.\p_tick.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\p_trace.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\util\xlatcc\pcode.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\r_bsp.h
 # End Source File
 # Begin Source File
@@ -772,6 +856,10 @@ SOURCE=.\r_things.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\s_playlist.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\s_sndseq.h
 # End Source File
 # Begin Source File
@@ -784,11 +872,27 @@ SOURCE=.\sc_man.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\skins.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\st_stuff.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\statnums.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\stats.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\stringenums.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\stringtable.h
 # End Source File
 # Begin Source File
 
@@ -797,6 +901,10 @@ SOURCE=.\Tables.h
 # Begin Source File
 
 SOURCE=.\tarray.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\templates.h
 # End Source File
 # Begin Source File
 
@@ -809,6 +917,10 @@ SOURCE=.\v_font.h
 # Begin Source File
 
 SOURCE=.\v_palette.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\v_pfx.h
 # End Source File
 # Begin Source File
 
@@ -832,10 +944,6 @@ SOURCE=.\w_wad.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\wave.h
-# End Source File
-# Begin Source File
-
 SOURCE=.\wi_stuff.h
 # End Source File
 # Begin Source File
@@ -848,26 +956,26 @@ SOURCE=.\z_zone.h
 # PROP Default_Filter "nas; asm"
 # Begin Source File
 
-SOURCE=.\linear.nas
+SOURCE=.\blocks.nas
 
 !IF  "$(CFG)" == "zdoom - Win32 Release"
 
-# Begin Custom Build - Assembling...
+# Begin Custom Build - Assembling $(InputPath)...
 IntDir=.\Release
-InputPath=.\linear.nas
-InputName=linear
+InputPath=.\blocks.nas
+InputName=blocks
 
-"$(IntDir)\$(InputName).obj" : $(SOURCE) "$(INTDIR)" "$(OUTDIR)"
+"$(IntDir)/$(InputName).obj" : $(SOURCE) "$(INTDIR)" "$(OUTDIR)"
 	nasmw -o $(IntDir)\$(InputName).obj -f win32 $(InputPath)
 
 # End Custom Build
 
 !ELSEIF  "$(CFG)" == "zdoom - Win32 Debug"
 
-# Begin Custom Build - Assembling...
+# Begin Custom Build - Assembling $(InputPath)...
 IntDir=.\Debug
-InputPath=.\linear.nas
-InputName=linear
+InputPath=.\blocks.nas
+InputName=blocks
 
 "$(IntDir)/$(InputName).obj" : $(SOURCE) "$(INTDIR)" "$(OUTDIR)"
 	nasmw -o $(IntDir)\$(InputName).obj -f win32 $(InputPath)
@@ -883,7 +991,7 @@ SOURCE=.\misc.nas
 
 !IF  "$(CFG)" == "zdoom - Win32 Release"
 
-# Begin Custom Build - Assembling...
+# Begin Custom Build - Assembling $(InputPath)...
 IntDir=.\Release
 InputPath=.\misc.nas
 InputName=misc
@@ -895,7 +1003,7 @@ InputName=misc
 
 !ELSEIF  "$(CFG)" == "zdoom - Win32 Debug"
 
-# Begin Custom Build - Assembling...
+# Begin Custom Build - Assembling $(InputPath)...
 IntDir=.\Debug
 InputPath=.\misc.nas
 InputName=misc
@@ -914,7 +1022,7 @@ SOURCE=.\tmap.nas
 
 !IF  "$(CFG)" == "zdoom - Win32 Release"
 
-# Begin Custom Build - Assembling...
+# Begin Custom Build - Assembling $(InputPath)...
 IntDir=.\Release
 InputPath=.\tmap.nas
 InputName=tmap
@@ -926,10 +1034,41 @@ InputName=tmap
 
 !ELSEIF  "$(CFG)" == "zdoom - Win32 Debug"
 
-# Begin Custom Build - Assembling...
+# Begin Custom Build - Assembling $(InputPath)...
 IntDir=.\Debug
 InputPath=.\tmap.nas
 InputName=tmap
+
+"$(IntDir)\$(InputName).obj" : $(SOURCE) "$(INTDIR)" "$(OUTDIR)"
+	nasmw -o $(IntDir)\$(InputName).obj -f win32 $(InputPath)
+
+# End Custom Build
+
+!ENDIF 
+
+# End Source File
+# Begin Source File
+
+SOURCE=.\tmap2.nas
+
+!IF  "$(CFG)" == "zdoom - Win32 Release"
+
+# Begin Custom Build
+IntDir=.\Release
+InputPath=.\tmap2.nas
+InputName=tmap2
+
+"$(IntDir)\$(InputName).obj" : $(SOURCE) "$(INTDIR)" "$(OUTDIR)"
+	nasmw -o $(IntDir)\$(InputName).obj -f win32 $(InputPath)
+
+# End Custom Build
+
+!ELSEIF  "$(CFG)" == "zdoom - Win32 Debug"
+
+# Begin Custom Build - Assembling $(InputPath)...
+IntDir=.\Debug
+InputPath=.\tmap2.nas
+InputName=tmap2
 
 "$(IntDir)\$(InputName).obj" : $(SOURCE) "$(INTDIR)" "$(OUTDIR)"
 	nasmw -o $(IntDir)\$(InputName).obj -f win32 $(InputPath)
@@ -954,6 +1093,22 @@ SOURCE=.\win32\hardware.cpp
 # Begin Source File
 
 SOURCE=.\win32\hardware.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\win32\helperthread.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\win32\helperthread.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\win32\i_cd.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\win32\i_cd.h
 # End Source File
 # Begin Source File
 
@@ -1085,6 +1240,10 @@ SOURCE=.\g_shared\a_camera.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\g_shared\a_decals.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\g_shared\a_fountain.cpp
 # End Source File
 # Begin Source File
@@ -1109,11 +1268,19 @@ SOURCE=.\g_shared\a_secrettrigger.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\g_shared\a_sectoraction.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\g_shared\a_sharedglobal.h
 # End Source File
 # Begin Source File
 
 SOURCE=.\g_shared\a_sharedmisc.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_skies.cpp
 # End Source File
 # Begin Source File
 
@@ -1129,7 +1296,7 @@ SOURCE=.\g_shared\a_weapons.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\hudmessages.cpp
+SOURCE=.\g_shared\hudmessages.cpp
 # End Source File
 # Begin Source File
 
@@ -1241,7 +1408,7 @@ SOURCE=.\g_doom\a_spidermaster.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\doom_sbar.cpp
+SOURCE=.\g_doom\doom_sbar.cpp
 # End Source File
 # End Group
 # Begin Group "Raven Shared"
@@ -1358,10 +1525,6 @@ SOURCE=.\g_heretic\a_wizard.cpp
 # Begin Source File
 
 SOURCE=.\g_heretic\heretic_sbar.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=.\g_heretic\hstrings.h
 # End Source File
 # End Group
 # Begin Group "Hexen Game"

@@ -77,6 +77,7 @@ struct botinfo_t
 class DCajunMaster : public DObject
 {
 	DECLARE_CLASS (DCajunMaster, DObject)
+	HAS_OBJECT_POINTERS
 public:
 	void ClearPlayer (int playernum);
 
@@ -152,13 +153,13 @@ protected:
 //Externs
 extern DCajunMaster bglobal;
 
-EXTERN_CVAR (bot_flag_return_time)
-EXTERN_CVAR (bot_next_color)
-EXTERN_CVAR (bot_allow_duds)
-EXTERN_CVAR (bot_maxcorpses)
-EXTERN_CVAR (bot_observer)
-EXTERN_CVAR (bot_watersplash)
-EXTERN_CVAR (bot_chat)
+EXTERN_CVAR (Float, bot_flag_return_time)
+EXTERN_CVAR (Int, bot_next_color)
+EXTERN_CVAR (Bool, bot_allow_duds)
+EXTERN_CVAR (Int, bot_maxcorpses)
+EXTERN_CVAR (Bool, bot_observer)
+EXTERN_CVAR (Bool, bot_watersplash)
+EXTERN_CVAR (Bool, bot_chat)
 
 #endif	// __B_BOT_H__
 

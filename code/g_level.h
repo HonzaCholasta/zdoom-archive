@@ -6,8 +6,9 @@
 #include "m_fixed.h"
 #include "tarray.h"
 
-#define NUM_MAPVARS				32
-#define NUM_WORLDVARS			64
+#define NUM_MAPVARS				128
+#define NUM_WORLDVARS			256
+#define NUM_GLOBALVARS			64
 
 #define LEVEL_NOINTERMISSION	0x00000001
 #define	LEVEL_DOUBLESKY			0x00000004
@@ -23,7 +24,6 @@
 #define LEVEL_SPECACTIONSMASK	0x00000300
 
 #define LEVEL_MONSTERSTELEFRAG	0x00000400
-#define LEVEL_EVENLIGHTING		0x00000800
 #define LEVEL_SNDSEQTOTALCTRL	0x00001000
 #define LEVEL_FORCENOSKYSTRETCH	0x00002000
 
@@ -31,6 +31,8 @@
 #define LEVEL_JUMP_YES			0x00008000
 #define LEVEL_FREELOOK_NO		0x00010000
 #define LEVEL_FREELOOK_YES		0x00020000
+#define LEVEL_FALLDMG_NO		0x00040000
+#define LEVEL_FALLDMG_YES		0x00080000
 
 #define LEVEL_HEADSPECIAL		0x00100000		// Heretic episode 1/4
 #define LEVEL_MINOTAURSPECIAL	0x00200000		// Heretic episode 2/5
@@ -42,6 +44,7 @@
 #define LEVEL_VISITED			0x80000000		// Used for intermission map
 
 struct acsdefered_s;
+class FBehavior;
 
 struct level_info_s
 {
@@ -56,7 +59,8 @@ struct level_info_s
 	DWORD		flags;
 	char		*music;
 	char		*level_name;
-	FLZOMemFile	*snapshot;
+	int			musicorder;
+	FCompressedMemFile	*snapshot;
 	struct acsdefered_s *defered;
 };
 typedef struct level_info_s level_info_t;
@@ -69,11 +73,23 @@ struct level_pwad_info_s : public level_info_s
 	DWORD		fadeto;
 	char		fadetable[8];
 	DWORD		outsidefog;
+	int			cdtrack;
+	unsigned int cdid;
+	SBYTE		WallVertLight, WallHorizLight;
 };
 typedef struct level_pwad_info_s level_pwad_info_t;
 
+// [RH] These get zeroed every tic and are updated by thinkers.
+struct FSectorScrollValues
+{
+	fixed_t ScrollX, ScrollY;
+};
+
 struct level_locals_s
 {
+	void Tick ();
+	void AddScroller (DScroller *, int secnum);
+
 	int			time;
 	int			starttime;
 	int			partime;
@@ -81,6 +97,7 @@ struct level_locals_s
 	level_info_t *info;
 	int			cluster;
 	int			levelnum;
+	int			lumpnum;
 	char		level_name[64];			// the descriptive name (Outer Base, etc)
 	char		mapname[8];				// the server name (base1, etc)
 	char		nextmap[8];				// go here when fraglimit is hit
@@ -92,6 +109,9 @@ struct level_locals_s
 	DWORD		outsidefog;				// The fog for sectors with sky ceilings
 
 	char		*music;
+	int			musicorder;
+	int			cdtrack;
+	unsigned int cdid;
 	char		skypic1[8];
 	char		skypic2[8];
 
@@ -110,11 +130,13 @@ struct level_locals_s
 	float		gravity;
 	fixed_t		aircontrol;
 
-	// The following are all used for ACS scripting
-	byte		*behavior;
-	int			*scripts;
-	int			*strings;
+	FBehavior	*behavior;
 	SDWORD		vars[NUM_MAPVARS];
+
+	FSectorScrollValues	*Scrolls;		// NULL if no DScrollers in this level
+
+	SBYTE		WallVertLight;			// Light diffs for vert/horiz walls
+	SBYTE		WallHorizLight;
 };
 typedef struct level_locals_s level_locals_t;
 
@@ -146,7 +168,10 @@ struct cluster_info_s
 	char		*exittext;
 	char		*entertext;
 	char		*messagemusic;
+	int			musicorder;
 	int			flags;
+	int			cdtrack;
+	unsigned int cdid;
 };
 typedef struct cluster_info_s cluster_info_t;
 
@@ -157,7 +182,8 @@ extern level_locals_t level;
 extern level_info_t LevelInfos[];
 extern cluster_info_t ClusterInfos[];
 
-extern int WorldVars[NUM_WORLDVARS];
+extern int ACS_WorldVars[NUM_WORLDVARS];
+extern int ACS_GlobalVars[NUM_GLOBALVARS];
 
 extern BOOL savegamerestore;
 extern BOOL HexenHack;		// Semi-Hexen-compatibility mode
@@ -171,6 +197,7 @@ void G_DeferedInitNew (char *mapname);
 
 void G_ExitLevel (int position);
 void G_SecretExitLevel (int position);
+void G_SetForEndGame (char *nextmap);
 
 void G_DoLoadLevel (int position);
 

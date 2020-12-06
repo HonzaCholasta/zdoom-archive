@@ -54,7 +54,7 @@ void DCanvas::TextWrapper (EWrapperCode drawer, int normalcolor, int x, int y, c
 	cx = x;
 	cy = y;
 		
-	while (1)
+	for (;;)
 	{
 		c = *ch++;
 		if (!c)
@@ -97,7 +97,7 @@ void DCanvas::TextWrapper (EWrapperCode drawer, int normalcolor, int x, int y, c
 
 		if ((data = Font->GetChar (c, &w, &h, &xo, &yo)))
 		{
-			if (cx + w > width)
+			if (cx + w > Width)
 				break;
 
 			switch (drawer)
@@ -145,7 +145,7 @@ void DCanvas::TextSWrapper (EWrapperCode drawer, int normalcolor, int x, int y, 
 	cx = x;
 	cy = y;
 		
-	while (1)
+	for (;;)
 	{
 		c = *ch++;
 		if (!c)
@@ -190,7 +190,7 @@ void DCanvas::TextSWrapper (EWrapperCode drawer, int normalcolor, int x, int y, 
 		{
 			int sw = w * CleanXfac;
 
-			if (cx + sw > width)
+			if (cx + sw > Width)
 				break;
 
 			switch (drawer)

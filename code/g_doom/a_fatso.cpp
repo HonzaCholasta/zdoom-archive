@@ -4,7 +4,7 @@
 #include "s_sound.h"
 #include "p_local.h"
 #include "p_enemy.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_FatRaise (AActor *);
@@ -14,13 +14,10 @@ void A_FatAttack3 (AActor *);
 
 class AFatso : public AActor
 {
-	DECLARE_ACTOR (AFatso, AActor);
+	DECLARE_ACTOR (AFatso, AActor)
 public:
-	const char *GetObituary () { return OB_FATSO; }
+	const char *GetObituary () { return GStrings(OB_FATSO); }
 };
-
-IMPLEMENT_DEF_SERIAL (AFatso, AActor);
-REGISTER_ACTOR (AFatso, Doom);
 
 FState AFatso::States[] =
 {
@@ -81,57 +78,46 @@ FState AFatso::States[] =
 	S_NORMAL (FATT, 'K',	5, NULL 						, &States[S_FATT_RUN+0])
 };
 
-void AFatso::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 67;
-	info->spawnid = 112;
-	info->spawnstate = &States[S_FATT_STND];
-	info->spawnhealth = 600;
-	info->seestate = &States[S_FATT_RUN];
-	info->seesound = "fatso/sight";
-	info->painstate = &States[S_FATT_PAIN];
-	info->painchance = 80;
-	info->painsound = "fatso/pain";
-	info->missilestate = &States[S_FATT_ATK];
-	info->deathstate = &States[S_FATT_DIE];
-	info->deathsound = "fatso/death";
-	info->speed = 8;
-	info->radius = 48 * FRACUNIT;
-	info->height = 64 * FRACUNIT;
-	info->mass = 1000;
-	info->activesound = "fatso/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_FATT_RAISE];
-}
+IMPLEMENT_ACTOR (AFatso, Doom, 67, 112)
+	PROP_SpawnHealth (600)
+	PROP_RadiusFixed (48)
+	PROP_HeightFixed (64)
+	PROP_Mass (1000)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (80)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_FATT_STND)
+	PROP_SeeState (S_FATT_RUN)
+	PROP_PainState (S_FATT_PAIN)
+	PROP_MissileState (S_FATT_ATK)
+	PROP_DeathState (S_FATT_DIE)
+	PROP_RaiseState (S_FATT_RAISE)
+
+	PROP_SeeSound ("fatso/sight")
+	PROP_PainSound ("fatso/pain")
+	PROP_DeathSound ("fatso/death")
+	PROP_ActiveSound ("fatso/active")
+END_DEFAULTS
 
 class AStealthFatso : public AFatso
 {
-	DECLARE_STATELESS_ACTOR (AStealthFatso, AFatso);
+	DECLARE_STATELESS_ACTOR (AStealthFatso, AFatso)
 public:
-	const char *GetObituary () { return OB_STEALTHFATSO; }
+	const char *GetObituary () { return GStrings(OB_STEALTHFATSO); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthFatso, AFatso);
-REGISTER_ACTOR (AStealthFatso, Doom);
-
-void AStealthFatso::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9058;
-	info->spawnid = 123;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthFatso, Doom, 9058, 123)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 class AFatShot : public AActor
 {
-	DECLARE_ACTOR (AFatShot, AActor);
+	DECLARE_ACTOR (AFatShot, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AFatShot, AActor);
-REGISTER_ACTOR (AFatShot, Doom);
 
 FState AFatShot::States[] =
 {
@@ -145,21 +131,21 @@ FState AFatShot::States[] =
 	S_BRIGHT (MISL, 'D',	4, NULL 						, NULL)
 };
 
-void AFatShot::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_FATSHOT];
-	info->seesound = "fatso/attack";
-	info->deathstate = &States[S_FATSHOTX];
-	info->deathsound = "fatso/shotx";
-	info->speed = 20 * FRACUNIT;
-	info->radius = 6 * FRACUNIT;
-	info->height = 32 * FRACUNIT;
-	info->damage = 8;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-	info->translucency = TRANSLUC75;
-}
+IMPLEMENT_ACTOR (AFatShot, Doom, -1, 0)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (32)
+	PROP_SpeedFixed (20)
+	PROP_Damage (8)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_FATSHOT)
+	PROP_DeathState (S_FATSHOTX)
+
+	PROP_SeeSound ("fatso/attack")
+	PROP_DeathSound ("fatso/shotx")
+END_DEFAULTS
 
 //
 // Mancubus attack,
@@ -188,10 +174,13 @@ void A_FatAttack1 (AActor *self)
 	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
 
 	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
-	missile->angle += FATSPREAD;
-	an = missile->angle >> ANGLETOFINESHIFT;
-	missile->momx = FixedMul (GetInfo (missile)->speed, finecosine[an]);
-	missile->momy = FixedMul (GetInfo (missile)->speed, finesine[an]);
+	if (missile != NULL)
+	{
+		missile->angle += FATSPREAD;
+		an = missile->angle >> ANGLETOFINESHIFT;
+		missile->momx = FixedMul (missile->Speed, finecosine[an]);
+		missile->momy = FixedMul (missile->Speed, finesine[an]);
+	}
 }
 
 void A_FatAttack2 (AActor *self)
@@ -208,10 +197,13 @@ void A_FatAttack2 (AActor *self)
 	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
 
 	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
-	missile->angle -= FATSPREAD*2;
-	an = missile->angle >> ANGLETOFINESHIFT;
-	missile->momx = FixedMul (GetInfo (missile)->speed, finecosine[an]);
-	missile->momy = FixedMul (GetInfo (missile)->speed, finesine[an]);
+	if (missile != NULL)
+	{
+		missile->angle -= FATSPREAD*2;
+		an = missile->angle >> ANGLETOFINESHIFT;
+		missile->momx = FixedMul (missile->Speed, finecosine[an]);
+		missile->momy = FixedMul (missile->Speed, finesine[an]);
+	}
 }
 
 void A_FatAttack3 (AActor *self)
@@ -225,16 +217,22 @@ void A_FatAttack3 (AActor *self)
 	A_FaceTarget (self);
 	
 	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
-	missile->angle -= FATSPREAD/2;
-	an = missile->angle >> ANGLETOFINESHIFT;
-	missile->momx = FixedMul (GetInfo (missile)->speed, finecosine[an]);
-	missile->momy = FixedMul (GetInfo (missile)->speed, finesine[an]);
+	if (missile != NULL)
+	{
+		missile->angle -= FATSPREAD/2;
+		an = missile->angle >> ANGLETOFINESHIFT;
+		missile->momx = FixedMul (missile->Speed, finecosine[an]);
+		missile->momy = FixedMul (missile->Speed, finesine[an]);
+	}
 
 	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
-	missile->angle += FATSPREAD/2;
-	an = missile->angle >> ANGLETOFINESHIFT;
-	missile->momx = FixedMul (GetInfo (missile)->speed, finecosine[an]);
-	missile->momy = FixedMul (GetInfo (missile)->speed, finesine[an]);
+	if (missile != NULL)
+	{
+		missile->angle += FATSPREAD/2;
+		an = missile->angle >> ANGLETOFINESHIFT;
+		missile->momx = FixedMul (missile->Speed, finecosine[an]);
+		missile->momy = FixedMul (missile->Speed, finesine[an]);
+	}
 }
 
 //
@@ -244,7 +242,7 @@ void A_FatAttack3 (AActor *self)
 
 void A_Mushroom (AActor *actor)
 {
-	int i, j, n = GetInfo (actor)->damage;
+	int i, j, n = actor->damage;
 
 	A_Explode (actor);	// First make normal explosion
 
@@ -258,10 +256,13 @@ void A_Mushroom (AActor *actor)
 			target.y += j << FRACBITS;
 			target.z += P_AproxDistance(i,j) << (FRACBITS+2); // Aim up fairly high
 			mo = P_SpawnMissile (actor, &target, RUNTIME_CLASS(AFatShot)); // Launch fireball
-			mo->momx >>= 1;
-			mo->momy >>= 1;									  // Slow it down a bit
-			mo->momz >>= 1;
-			mo->flags &= ~MF_NOGRAVITY;   // Make debris fall under gravity
+			if (mo != NULL)
+			{
+				mo->momx >>= 1;
+				mo->momy >>= 1;				  // Slow it down a bit
+				mo->momz >>= 1;
+				mo->flags &= ~MF_NOGRAVITY;   // Make debris fall under gravity
+			}
 		}
 	}
 }

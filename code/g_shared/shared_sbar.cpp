@@ -1,3 +1,4 @@
+#include "templates.h"
 #include "sbar.h"
 #include "c_cvars.h"
 #include "v_video.h"
@@ -13,36 +14,36 @@
 #define XHAIRSHRINKSIZE		(FRACUNIT/18)
 #define XHAIRPICKUPSIZE		(FRACUNIT*2+XHAIRSHRINKSIZE)
 
-EXTERN_CVAR (am_showmonsters)
-EXTERN_CVAR (am_showsecrets)
-EXTERN_CVAR (am_showtime)
+EXTERN_CVAR (Bool, am_showmonsters)
+EXTERN_CVAR (Bool, am_showsecrets)
+EXTERN_CVAR (Bool, am_showtime)
+EXTERN_CVAR (Bool, noisedebug)
 
 FBaseStatusBar *StatusBar;
-CVAR (hud_scale, "0", CVAR_ARCHIVE);
+CVAR (Bool, hud_scale, false, CVAR_ARCHIVE);
 
 int ST_X, ST_Y;
-int SB_state = -1;
+int SB_state = 3;
 
 static FImageCollection CrosshairImage;
-static DWORD CrosshairColor;
 
 // [RH] Base blending values (for e.g. underwater)
 int BaseBlendR, BaseBlendG, BaseBlendB;
 float BaseBlendA;
 
-BEGIN_CUSTOM_CVAR (st_scale, "1", CVAR_ARCHIVE)		// Stretch status bar to full screen width?
+// Stretch status bar to full screen width?
+CUSTOM_CVAR (Bool, st_scale, true, CVAR_ARCHIVE)
 {
 	if (StatusBar)
 	{
-		StatusBar->SetScaled (var.value != 0.0);
+		StatusBar->SetScaled (*var);
 		setsizeneeded = true;
 	}
 }
-END_CUSTOM_CVAR (st_scale)
 
-BEGIN_CUSTOM_CVAR (crosshair, "0", CVAR_ARCHIVE)
+CUSTOM_CVAR (Int, crosshair, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
-	int num = (int)var.value;
+	int num = *var;
 	char name[16], size;
 	const char *namelist;
 	int lump;
@@ -56,7 +57,7 @@ BEGIN_CUSTOM_CVAR (crosshair, "0", CVAR_ARCHIVE)
 	{
 		num = -num;
 	}
-	size = (screen->width < 640) ? 'S' : 'B';
+	size = (SCREENWIDTH < 640) ? 'S' : 'B';
 	sprintf (name, "XHAIR%c%d", size, num);
 	if ((lump = W_CheckNumForName (name)) == -1)
 	{
@@ -69,26 +70,13 @@ BEGIN_CUSTOM_CVAR (crosshair, "0", CVAR_ARCHIVE)
 	namelist = name;
 	CrosshairImage.Init (&namelist, 1);
 }
-END_CUSTOM_CVAR (crosshair)
 
-BEGIN_CUSTOM_CVAR (crosshaircolor, "ff 00 00", CVAR_ARCHIVE)
-{
-	char *string;
+CVAR (Color, crosshaircolor, 0xff0000, CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
+CVAR (Bool, crosshairhealth, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
+CVAR (Bool, crosshairscale, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
+CVAR (Bool, crosshairgrow, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 
-	if ( (string = V_GetColorStringByName (crosshaircolor.string)) )
-	{
-		CrosshairColor = V_GetColorFromString (NULL, string);
-		delete[] string;
-	}
-	else
-	{
-		CrosshairColor = V_GetColorFromString (NULL, crosshaircolor.string);
-	}
-}
-END_CUSTOM_CVAR (crosshaircolor)
-
-CVAR (crosshairhealth, "1", CVAR_ARCHIVE);
-CVAR (scalecrosshair, "0", CVAR_ARCHIVE);
+CVAR (Bool, idmypos, false, 0);
 
 // [RH] Amount of red flash for up to 114 damage points. Calculated by hand
 //		using a logarithmic scale and my trusty HP48G.
@@ -118,10 +106,9 @@ FBaseStatusBar::FBaseStatusBar (int reltop)
 	RelTop = reltop;
 	ScaleCopy = NULL;
 	Messages = NULL;
-	PlayerName = NULL;
 	Displacement = 0;
 
-	SetScaled (st_scale.value != 0.f);
+	SetScaled (*st_scale);
 	AmmoImages.Init (AmmoPics, NUMAMMO);
 	ArtiImages.Init (ArtiPics, NUMARTIFACTS);
 	ArmorImages.Init (ArmorPics, NUMARMOR);
@@ -158,15 +145,15 @@ FBaseStatusBar::~FBaseStatusBar ()
 
 void FBaseStatusBar::SetScaled (bool scale)
 {
-	Scaled = RelTop != 0 && (screen->width != 320 && scale);
+	Scaled = RelTop != 0 && (SCREENWIDTH != 320 && scale);
 	if (!Scaled)
 	{
-		ST_X = (screen->width - 320) / 2;
-		ST_Y = screen->height - RelTop;
+		ST_X = (SCREENWIDTH - 320) / 2;
+		ST_Y = SCREENHEIGHT - RelTop;
 		::ST_Y = ST_Y;
 		if (RelTop > 0)
 		{
-			Displacement = ((ST_Y * 200 / screen->height) - (200 - RelTop))*FRACUNIT/RelTop;
+			Displacement = ((ST_Y * 200 / SCREENHEIGHT) - (200 - RelTop))*FRACUNIT/RelTop;
 		}
 		else
 		{
@@ -177,19 +164,19 @@ void FBaseStatusBar::SetScaled (bool scale)
 	{
 		ST_X = 0;
 		ST_Y = 200 - RelTop;
-		::ST_Y = (ST_Y * screen->height) / 200;
+		::ST_Y = SCREENHEIGHT - Scale (RelTop, SCREENHEIGHT, 200);
 		if (ScaleCopy == NULL)
 		{
-			ScaleCopy = new DCanvas (320, RelTop, 8);
+			ScaleCopy = new DSimpleCanvas (320, RelTop);
 		}
-		ScaleX = (screen->width << FRACBITS) / 320;
-		ScaleY = (screen->height << FRACBITS) / 200;
-		ScaleIX = (320 << FRACBITS) / screen->width;
-		ScaleIY = (200 << FRACBITS) / screen->height;
+		ScaleX = (SCREENWIDTH << FRACBITS) / 320;
+		ScaleY = (SCREENHEIGHT << FRACBITS) / 200;
+		ScaleIX = (320 << FRACBITS) / SCREENWIDTH;
+		ScaleIY = (200 << FRACBITS) / SCREENHEIGHT;
 		Displacement = 0;
 	}
 	::ST_X = ST_X;
-	SB_state = -1;
+	SB_state = screen->GetPageCount ();
 }
 
 //---------------------------------------------------------------------------
@@ -201,7 +188,7 @@ void FBaseStatusBar::SetScaled (bool scale)
 void FBaseStatusBar::AttachToPlayer (player_s *player)
 {
 	CPlayer = player;
-	SB_state = -1;
+	SB_state = screen->GetPageCount ();
 }
 
 //---------------------------------------------------------------------------
@@ -224,6 +211,10 @@ void FBaseStatusBar::Tick ()
 			*prev = next;
 			delete msg;
 		}
+		else
+		{
+			prev = &msg->Next;
+		}
 		msg = next;
 	}
 }
@@ -234,9 +225,17 @@ void FBaseStatusBar::Tick ()
 //
 //---------------------------------------------------------------------------
 
-void FBaseStatusBar::AttachMessage (FHUDMessage *msg)
+void FBaseStatusBar::AttachMessage (FHUDMessage *msg, DWORD id)
 {
+	FHUDMessage *old = NULL;
+
+	old = (id == 0) ? NULL : DetachMessage (id);
+	if (old != NULL)
+	{
+		delete old;
+	}
 	msg->Next = Messages;
+	msg->SBarID = id;
 	Messages = msg;
 }
 
@@ -253,7 +252,7 @@ FHUDMessage *FBaseStatusBar::DetachMessage (FHUDMessage *msg)
 
 	while (probe && probe != msg)
 	{
-		prev = &probe;
+		prev = &probe->Next;
 		probe = probe->Next;
 	}
 	if (probe != NULL)
@@ -262,6 +261,43 @@ FHUDMessage *FBaseStatusBar::DetachMessage (FHUDMessage *msg)
 		probe->Next = NULL;
 	}
 	return probe;
+}
+
+FHUDMessage *FBaseStatusBar::DetachMessage (DWORD id)
+{
+	FHUDMessage *probe = Messages;
+	FHUDMessage **prev = &Messages;
+
+	while (probe && probe->SBarID != id)
+	{
+		prev = &probe->Next;
+		probe = probe->Next;
+	}
+	if (probe != NULL)
+	{
+		*prev = probe->Next;
+		probe->Next = NULL;
+	}
+	return probe;
+}
+
+//---------------------------------------------------------------------------
+//
+// PROC DetachAllMessages
+//
+//---------------------------------------------------------------------------
+
+void FBaseStatusBar::DetachAllMessages ()
+{
+	FHUDMessage *probe = Messages;
+
+	Messages = NULL;
+	while (probe != NULL)
+	{
+		FHUDMessage *next = probe->Next;
+		delete probe;
+		probe = next;
+	}
 }
 
 //---------------------------------------------------------------------------
@@ -291,13 +327,8 @@ void FBaseStatusBar::ShowPlayerName ()
 	EColorRange color;
 
 	color = (CPlayer == &players[consoleplayer]) ? CR_GOLD : CR_GREEN;
-	if (PlayerName && DetachMessage (PlayerName))
-	{
-		delete PlayerName;
-	}
-	PlayerName = new FHUDMessageFadeOut (CPlayer->userinfo.netname,
-		-2.f, 1.f, color, 2.f, 0.35f);
-	AttachMessage (PlayerName);
+	AttachMessage (new FHUDMessageFadeOut (CPlayer->userinfo.netname,
+		1.5f, 1.f, color, 2.f, 0.35f), 'PNAM');
 }
 
 //---------------------------------------------------------------------------
@@ -324,19 +355,19 @@ void FBaseStatusBar::CopyToScreen (int x, int y, int w, int h) const
 	int ow = (((x + w) * ScaleX) >> FRACBITS) - nx;
 	int oh = (((y + h) * ScaleY) >> FRACBITS) - ny;
 
-	if (ny + ::ST_Y + oh > screen->height)
-		oh = screen->height - ny - ::ST_Y;
-	if (nx + ow > screen->width)
-		ow = screen->width - nx;
+	if (ny + ::ST_Y + oh > SCREENHEIGHT)
+		oh = SCREENHEIGHT - ny - ::ST_Y;
+	if (nx + ow > SCREENWIDTH)
+		ow = SCREENWIDTH - nx;
 
 	if ((oh | ow) <= 0)
 		return;
 
-	byte *from = ScaleCopy->buffer + (left >> FRACBITS);
+	byte *from = ScaleCopy->GetBuffer() + (left >> FRACBITS);
 	left &= FRACUNIT-1;
-	byte *to = screen->buffer + nx + screen->pitch * (ny + ::ST_Y);
-	int frompitch = ScaleCopy->pitch;
-	int toskip = screen->pitch - ow;
+	byte *to = screen->GetBuffer() + nx + screen->GetPitch() * (ny + ::ST_Y);
+	int frompitch = ScaleCopy->GetPitch();
+	int toskip = screen->GetPitch() - ow;
 
 	do
 	{
@@ -378,9 +409,9 @@ void FBaseStatusBar::DrawImage (const FImageCollection &coll, int img,
 		{
 			if (y < 0)
 			{
-				screen->ScaleMaskedBlock (x * screen->width / 320,
-					(y + ST_Y) * screen->height / 200, w, h,
-					(w * screen->width) / 320, (h * screen->height) / 200,
+				screen->ScaleMaskedBlock (x * screen->GetWidth() / 320,
+					(y + ST_Y) * screen->GetHeight() / 200, w, h,
+					(w * screen->GetWidth()) / 320, (h * screen->GetHeight()) / 200,
 					data, NULL);
 			}
 			else
@@ -422,13 +453,13 @@ void FBaseStatusBar::DrawPartialImage (const FImageCollection &coll, int img,
 		if (Scaled)
 		{
 			ScaleCopy->Lock ();
-			dest = ScaleCopy->buffer + x + y*ScaleCopy->pitch;
-			pitch = ScaleCopy->pitch;
+			dest = ScaleCopy->GetBuffer() + x + y*ScaleCopy->GetPitch();
+			pitch = ScaleCopy->GetPitch();
 		}
 		else
 		{
-			dest = screen->buffer + x+ST_X + (y+ST_Y)*screen->pitch;
-			pitch = screen->pitch;
+			dest = screen->GetBuffer() + x+ST_X + (y+ST_Y)*screen->GetPitch();
+			pitch = screen->GetPitch();
 		}
 
 		do
@@ -462,28 +493,28 @@ bool FBaseStatusBar::RepositionCoords (int &x, int &y, int xo, int yo,
 		xo = w / 2;
 		yo = h;
 	}
-	if (hud_scale.value)
+	if (*hud_scale)
 	{
 		x *= CleanXfac;
 		if (Centering)
-			x += screen->width / 2;
+			x += SCREENWIDTH / 2;
 		else if (x < 0)
-			x = screen->width + x;
+			x = SCREENWIDTH + x;
 		x -= xo * CleanXfac;
 		y *= CleanYfac;
 		if (y < 0)
-			y = screen->height + y;
+			y = SCREENHEIGHT + y;
 		y -= yo * CleanYfac;
 		return true;
 	}
 	else
 	{
 		if (Centering)
-			x += screen->width / 2;
+			x += SCREENWIDTH / 2;
 		else if (x < 0)
-			x = screen->width + x;
+			x = SCREENWIDTH + x;
 		if (y < 0)
-			y = screen->height + y;
+			y = SCREENHEIGHT + y;
 		x -= xo;
 		y -= yo;
 		return false;
@@ -618,7 +649,7 @@ void FBaseStatusBar::DrINumber (signed int val, int x, int y) const
 			return;
 		}
 		val = -val;
-		DrawImage (Images, imgINumbers+val, x+10, y);
+		DrawImage (Images, imgINumbers+val, x+18, y);
 		DrawImage (Images, imgNEGATIVE, x+9, y);
 		return;
 	}
@@ -770,7 +801,7 @@ void FBaseStatusBar::DrINumberOuter (signed int val, int x, int y) const
 			return;
 		}
 		val = -val;
-		DrawOuterImage (Images, imgINumbers+val, x+10, y);
+		DrawOuterImage (Images, imgINumbers+val, x+18, y);
 		DrawOuterImage (Images, imgNEGATIVE, x+9, y);
 		return;
 	}
@@ -905,23 +936,24 @@ void FBaseStatusBar::ShadeChain (int left, int right, int top, int height) const
 	if (Scaled)
 	{
 		ScaleCopy->Lock ();
-		pitch = ScaleCopy->pitch;
-		top_p = ScaleCopy->buffer;
+		pitch = ScaleCopy->GetPitch();
+		top_p = ScaleCopy->GetBuffer();
 	}
 	else
 	{
 		top += ST_Y;
 		left += ST_X;
 		right += ST_X;
-		pitch = screen->pitch;
-		top_p = screen->buffer;
+		pitch = screen->GetPitch();
+		top_p = screen->GetBuffer();
+		TransArea += height * 16;
 	}
 	top_p += top*pitch + left;
 	diff = right+15-left;
 
 	for (i = 0; i < 16; i++)
 	{
-		unsigned int *darkener = Col2RGB8[18 + i*2];
+		DWORD *darkener = Col2RGB8[18 + i*2];
 		int h = height;
 		byte *dest = top_p;
 		do
@@ -952,10 +984,10 @@ void FBaseStatusBar::ShadeChain (int left, int right, int top, int height) const
 
 void FBaseStatusBar::RefreshBackground () const
 {
-	if (screen->width > 320)
+	if (SCREENWIDTH > 320)
 	{
-		R_DrawBorder (0, ST_Y, ST_X, screen->height);
-		R_DrawBorder (screen->width - ST_X, ST_Y, screen->width, screen->height);
+		R_DrawBorder (0, ST_Y, ST_X, SCREENHEIGHT);
+		R_DrawBorder (SCREENWIDTH - ST_X, ST_Y, SCREENWIDTH, SCREENHEIGHT);
 	}
 }
 
@@ -996,20 +1028,23 @@ void FBaseStatusBar::DrawCrosshair ()
 		return;
 	}
 
-	if (scalecrosshair.value)
+	if (*crosshairscale)
 	{
-		size = screen->width * FRACUNIT / 320;
+		size = SCREENWIDTH * FRACUNIT / 320;
 	}
 	else
 	{
 		size = FRACUNIT;
 	}
 
-	size = FixedMul (size, CrosshairSize);
+	if (*crosshairgrow)
+	{
+		size = FixedMul (size, CrosshairSize);
+	}
 	w = (iw * size) >> FRACBITS;
 	h = (ih * size) >> FRACBITS;
 
-	if (crosshairhealth.value)
+	if (*crosshairhealth)
 	{
 		int health = CPlayer->health;
 
@@ -1040,14 +1075,13 @@ void FBaseStatusBar::DrawCrosshair ()
 	}
 	else
 	{
-		color = CrosshairColor;
+		color = *crosshaircolor;
 	}
 
 	if (color != prevcolor)
 	{
 		prevcolor = color;
-		palettecolor = BestColor (DefaultPalette->basecolors,
-			RPART(color), GPART(color), BPART(color), DefaultPalette->numcolors);
+		palettecolor = ColorMatcher.Pick (RPART(color), GPART(color), BPART(color));
 	}
 
 	screen->ScaleAlphaMaskedBlock (
@@ -1092,13 +1126,31 @@ void FBaseStatusBar::DrawMessages (int bottom) const
 void FBaseStatusBar::Draw (EHudState state)
 {
 	float blend[4];
+	char line[64+10];
 
 	blend[0] = blend[1] = blend[2] = blend[3] = 0;
 	BlendView (blend);
 
-	if (SB_state == -1 && state == HUD_StatusBar && !Scaled)
+	if (SB_state != 0 && state == HUD_StatusBar && !Scaled)
 	{
 		RefreshBackground ();
+	}
+
+	if (*idmypos)
+	{ // Draw current coordinates
+		int height = screen->Font->GetHeight();
+		int y = ::ST_Y - height;
+		char labels[3] = { 'X', 'Y', 'Z' };
+		fixed_t *value;
+		int i;
+
+		value = &CPlayer->mo->z;
+		for (i = 2, value = &CPlayer->mo->z; i >= 0; y -= height, --value, --i)
+		{
+			sprintf (line, "%c: %d", labels[i], *value >> FRACBITS);
+			screen->DrawText (CR_GREEN, SCREENWIDTH - 80, y, line);
+			BorderNeedRefresh = screen->GetPageCount();
+		}
 	}
 
 	if (viewactive)
@@ -1107,7 +1159,6 @@ void FBaseStatusBar::Draw (EHudState state)
 	}
 	else if (automapactive)
 	{
-		char line[64+10];
 		int y, i, time = level.time / TICRATE, height;
 		EColorRange highlight = (gameinfo.gametype == GAME_Doom) ?
 			CR_UNTRANSLATED : CR_YELLOW;
@@ -1115,15 +1166,15 @@ void FBaseStatusBar::Draw (EHudState state)
 		height = screen->Font->GetHeight () * CleanYfac;
 
 		// Draw timer
-		if (am_showtime.value)
+		if (*am_showtime)
 		{
 			sprintf (line, "%02d:%02d:%02d", time/3600, (time%3600)/60, time%60);	// Time
-			screen->DrawTextClean (CR_GREY, screen->width - 80*CleanXfac, 8, line);
+			screen->DrawTextClean (CR_GREY, SCREENWIDTH - 80*CleanXfac, 8, line);
 		}
 
 		// Draw map name
 		y = ::ST_Y - height;
-		if ((gameinfo.gametype == GAME_Heretic && screen->width > 320 && !Scaled)
+		if ((gameinfo.gametype == GAME_Heretic && SCREENWIDTH > 320 && !Scaled)
 			|| (gameinfo.gametype == GAME_Hexen))
 		{
 			y -= 8;
@@ -1143,12 +1194,12 @@ void FBaseStatusBar::Draw (EHudState state)
 		line[i++] = CR_GREY + 'A';
 		strcpy (&line[i], level.level_name);
 		screen->DrawTextClean (highlight,
-			(screen->width - screen->StringWidth (line)*CleanXfac)/2, y, line);
+			(SCREENWIDTH - screen->StringWidth (line)*CleanXfac)/2, y, line);
 
-		if (!deathmatch.value)
+		if (!*deathmatch)
 		{
 			// Draw monster count
-			if (am_showmonsters.value)
+			if (*am_showmonsters)
 			{
 				sprintf (line, "MONSTERS:"
 							   TEXTCOLOR_GREY " %d/%d",
@@ -1157,7 +1208,7 @@ void FBaseStatusBar::Draw (EHudState state)
 			}
 
 			// Draw secret count
-			if (am_showsecrets.value)
+			if (*am_showsecrets)
 			{
 				sprintf (line, "SECRETS:"
 							   TEXTCOLOR_GREY " %d/%d",
@@ -1167,7 +1218,7 @@ void FBaseStatusBar::Draw (EHudState state)
 		}
 	}
 
-	if (noisedebug.value)
+	if (*noisedebug)
 	{
 		S_NoiseDebug ();
 	}
@@ -1185,7 +1236,7 @@ void FBaseStatusBar::Draw (EHudState state)
 	}
 	else
 	{
-		DrawMessages (screen->height);
+		DrawMessages (SCREENHEIGHT);
 	}
 
 	DrawConsistancy ();
@@ -1282,8 +1333,16 @@ void FBaseStatusBar::DrawConsistancy () const
 	if (buff_p != NULL)
 	{
 		screen->DrawTextClean (CR_GREEN, 
-			(screen->width - screen->StringWidth (conbuff)*CleanXfac) / 2,
+			(screen->GetWidth() - screen->StringWidth (conbuff)*CleanXfac) / 2,
 			0, conbuff);
-		BorderTopRefresh = true;
+		BorderTopRefresh = screen->GetPageCount ();
 	}
+}
+
+void FBaseStatusBar::FlashArtifact (int arti)
+{
+}
+
+void FBaseStatusBar::SetFace (void *)
+{
 }

@@ -34,6 +34,7 @@ static fixed_t estimated_dist;
 
 static int PTR_Reachable (intercept_t *in)
 {
+	fixed_t hitx, hity;
 	fixed_t frac;
 	line_t *line;
 	AActor *thing;
@@ -42,6 +43,9 @@ static int PTR_Reachable (intercept_t *in)
 
 	frac = in->frac - FixedDiv (4*FRACUNIT, MAX_TRAVERSE_DIST);
 	dist = FixedMul (frac, MAX_TRAVERSE_DIST);
+
+	hitx = trace.x + FixedMul (looker->momx, frac);
+	hity = trace.y + FixedMul (looker->momy, frac);
 
 	if (in->isaline)
 	{
@@ -54,16 +58,16 @@ static int PTR_Reachable (intercept_t *in)
 		else
 		{
 			//Determine if going to use backsector/frontsector.
-			if (line->backsector == last_s)
-				s = line->frontsector;
-			else s = line->backsector;
+			s = (line->backsector == last_s) ? line->frontsector : line->backsector;
+			fixed_t ceilingheight = s->ceilingplane.ZatPoint (hitx, hity);
+			fixed_t floorheight = s->floorplane.ZatPoint (hitx, hity);
 
-			if (s->floorheight <= (last_z+MAXMOVEHEIGHT)
-				&& ((s->ceilingheight == s->floorheight && line->special)
-					|| (s->ceilingheight - s->floorheight) >= looker->height) //Does it fit?
-				&& (!bglobal.IsDangerous(s))) //Any Nukage/lava?
+			if (!bglobal.IsDangerous (s) &&		//Any nukage/lava?
+				(floorheight <= (last_z+MAXMOVEHEIGHT)
+				&& ((ceilingheight == floorheight && line->special)
+					|| (ceilingheight - floorheight) >= looker->height))) //Does it fit?
 			{
-				last_z = s->floorheight;
+				last_z = floorheight;
 				last_s = s;
 				return true;
 			}
@@ -83,7 +87,7 @@ static int PTR_Reachable (intercept_t *in)
 	thing = in->d.thing;
 	if (thing == looker) //Can't reach self in this case.
 		return true;
-	if (thing == rtarget && (rtarget->subsector->sector->floorheight <= (last_z+MAXMOVEHEIGHT)))
+	if (thing == rtarget && (rtarget->subsector->sector->floorplane.ZatPoint (rtarget->x, rtarget->y) <= (last_z+MAXMOVEHEIGHT)))
 	{
 		reachable = true;
 		return false;
@@ -100,7 +104,8 @@ bool DCajunMaster::Reachable (AActor *actor, AActor *target)
 	if (actor == target)
 		return false;
 
-	if ((target->subsector->sector->ceilingheight - target->subsector->sector->floorheight)
+	if ((target->subsector->sector->ceilingplane.ZatPoint (target->x, target->y) -
+		 target->subsector->sector->floorplane.ZatPoint (target->x, target->y))
 		< actor->height) //Where target is, looker can't be.
 		return false;
 
@@ -109,7 +114,7 @@ bool DCajunMaster::Reachable (AActor *actor, AActor *target)
 
 	looker = actor;
 	rtarget = target;
-	last_z = actor->subsector->sector->floorheight;
+	last_z = actor->subsector->sector->floorplane.ZatPoint (actor->x, actor->y);
 	last_s = actor->subsector->sector;
 	reachable = true;
 	estimated_dist = P_AproxDistance (actor->x - target->x, actor->y - target->y);
@@ -199,7 +204,7 @@ void DCajunMaster::Dofire (AActor *actor, ticcmd_t *cmd)
 	case wp_plasma: //Plasma (prediction aiming)
 		//Here goes the prediction.
 		dist = P_AproxDistance (actor->x - enemy->x, actor->y - enemy->y);
-		m = (dist/FRACUNIT) / TypeInfo::FindType ("PlasmaBall")->ActorInfo->speed;
+		m = (dist/FRACUNIT) / GetDefaultByName ("PlasmaBall")->Speed;
 		SetBodyAt (enemy->x + FixedMul (enemy->momx, (m*2*FRACUNIT)),
 				   enemy->y + FixedMul (enemy->momy, (m*2*FRACUNIT)), ONFLOORZ, 1);
 		actor->player->angle = R_PointToAngle2 (actor->x, actor->y, body1->x, body1->y);
@@ -305,8 +310,8 @@ AActor *DCajunMaster::Choose_Mate (AActor *bot)
 	}
 
 	target = NULL;
-	closest_dist = MAXINT;
-	if (bot_observer.value)
+	closest_dist = FIXED_MAX;
+	if (*bot_observer)
 		observer = players[consoleplayer].mo;
 	else
 		observer = NULL;
@@ -319,10 +324,10 @@ AActor *DCajunMaster::Choose_Mate (AActor *bot)
 		if (playeringame[count]
 			&& client->mo
 			&& bot != client->mo
-			&& (bot->IsTeammate (client->mo) || !deathmatch.value)
+			&& (bot->IsTeammate (client->mo) || !*deathmatch)
 			&& client->mo->health > 0
 			&& client->mo != observer
-			&& ((bot->health/2) <= client->mo->health || !deathmatch.value)
+			&& ((bot->health/2) <= client->mo->health || !*deathmatch)
 			&& !p_leader[count]) //taken?
 		{
 
@@ -369,7 +374,7 @@ AActor *DCajunMaster::Find_enemy (AActor *bot)
 	AActor *observer;
 
 	//Allow monster killing. keep monster enemy.
-	if (!deathmatch.value)
+	if (!*deathmatch)
 		return NULL;
 
 	//Note: It's hard to ambush a bot who is not alone
@@ -380,8 +385,8 @@ AActor *DCajunMaster::Find_enemy (AActor *bot)
 	bot->player->allround = false;
 
 	target = NULL;
-	closest_dist = MAXINT;
-	if (bot_observer.value)
+	closest_dist = FIXED_MAX;
+	if (*bot_observer)
 		observer = players[consoleplayer].mo;
 	else
 		observer = NULL;
@@ -422,18 +427,13 @@ AActor *DCajunMaster::Find_enemy (AActor *bot)
 
 class ACajunBodyNode : public AActor
 {
-	DECLARE_STATELESS_ACTOR (ACajunBodyNode, AActor);
+	DECLARE_STATELESS_ACTOR (ACajunBodyNode, AActor)
 };
 
-IMPLEMENT_DEF_SERIAL (ACajunBodyNode, AActor);
-REGISTER_ACTOR (ACajunBodyNode, Any);
-
-void ACajunBodyNode::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->flags = MF_NOSECTOR | MF_NOGRAVITY;
-	info->flags2 = MF2_DONTDRAW;
-}
+IMPLEMENT_STATELESS_ACTOR (ACajunBodyNode, Any, -1, 0)
+	PROP_Flags (MF_NOSECTOR | MF_NOGRAVITY)
+	PROP_RenderFlags (RF_INVISIBLE)
+END_DEFAULTS
 
 //Creates a temporary mobj (invisible) at the given location.
 void DCajunMaster::SetBodyAt (fixed_t x, fixed_t y, fixed_t z, int hostnum)
@@ -464,20 +464,16 @@ void DCajunMaster::SetBodyAt (fixed_t x, fixed_t y, fixed_t z, int hostnum)
 
 class ACajunTrace : public AActor
 {
-	DECLARE_STATELESS_ACTOR (ACajunTrace, AActor);
+	DECLARE_STATELESS_ACTOR (ACajunTrace, AActor)
 };
 
-IMPLEMENT_DEF_SERIAL (ACajunTrace, AActor);
-REGISTER_ACTOR (ACajunTrace, Any);
-
-void ACajunTrace::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->speed = 12 * FRACUNIT;
-	info->radius = 6 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_DROPOFF|MF_MISSILE|MF_NOGRAVITY;
-}
+IMPLEMENT_STATELESS_ACTOR (ACajunTrace, Any, -1, 0)
+	PROP_SpeedFixed (12)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (8)
+	PROP_Flags (MF_NOBLOCKMAP|MF_DROPOFF|MF_MISSILE|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+END_DEFAULTS
 
 //Emulates missile travel. Returns distance travelled.
 fixed_t DCajunMaster::FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd)
@@ -487,7 +483,7 @@ fixed_t DCajunMaster::FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd)
 	th->target = source;		// where it came from
 
 	vec3_t velocity;
-	float speed = (float)GetInfo (th)->speed;
+	float speed = (float)th->Speed;
 
 	velocity[0] = FIXED2FLOAT(dest->x - source->x);
 	velocity[1] = FIXED2FLOAT(dest->y - source->y);
@@ -501,7 +497,7 @@ fixed_t DCajunMaster::FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd)
 
 	while (dist < SAFE_SELF_MISDIST)
 	{
-		dist += GetInfo (th)->speed;
+		dist += th->Speed;
 		th->SetOrigin (th->x + th->momx, th->y + th->momy, th->z + th->momz);
 		if (!CleanAhead (th, th->x, th->y, cmd))
 			break;
@@ -527,7 +523,7 @@ angle_t DCajunMaster::FireRox (AActor *bot, AActor *enemy, ticcmd_t *cmd)
 	if (dist < SAFE_SELF_MISDIST)
 		return 0;
 	//Predict.
-	m = (((dist+1)/FRACUNIT) / RUNTIME_CLASS(ARocket)->ActorInfo->speed);
+	m = (((dist+1)/FRACUNIT) / GetDefault<ARocket>()->Speed);
 
 	SetBodyAt (enemy->x + FixedMul (enemy->momx, (m+2*FRACUNIT)),
 			   enemy->y + FixedMul(enemy->momy, (m+2*FRACUNIT)), ONFLOORZ, 1);

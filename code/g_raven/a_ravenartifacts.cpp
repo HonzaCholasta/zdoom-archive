@@ -1,22 +1,20 @@
 #include "info.h"
 #include "a_pickups.h"
 #include "a_artifacts.h"
-#include "hstrings.h"
+#include "gstrings.h"
 #include "p_local.h"
-//#include "p_enemy.h"
 #include "s_sound.h"
 
 // Health -------------------------------------------------------------------
 
-BASIC_ARTI (Health, arti_health, TXT_ARTIHEALTH)
+BASIC_ARTI (Health, arti_health, GStrings(TXT_ARTIHEALTH))
+	AT_GAME_SET_FRIEND (ArtiHealth)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
 		return P_GiveBody (player, 25);
 	}
 };
-
-ARTI_SETUP (Health, Raven);
 
 FState AArtiHealth::States[] =
 {
@@ -25,48 +23,51 @@ FState AArtiHealth::States[] =
 	S_NORMAL (PTN2, 'C',	4, NULL, &States[0])
 };
 
-void AArtiHealth::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiHealth, Raven, 82, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (ArtiHealth)
 {
-	INHERIT_DEFS;
-	info->doomednum = 82;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	ArtiDispatch[arti_health] = ActivateArti;
+	ArtiDispatch[arti_health] = AArtiHealth::ActivateArti;
 	ArtiPics[arti_health] = "ARTIPTN2";
 }
 
 // Super health -------------------------------------------------------------
 
-BASIC_ARTI (SuperHealth, arti_superhealth, TXT_ARTISUPERHEALTH)
+BASIC_ARTI (SuperHealth, arti_superhealth, GStrings(TXT_ARTISUPERHEALTH))
+	AT_GAME_SET_FRIEND (ArtiSuperHealth)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
-		return P_GiveBody (player, GetInfo (player->mo)->spawnhealth);
+		return P_GiveBody (player, player->mo->GetDefault()->health);
 	}
 };
-
-ARTI_SETUP (SuperHealth, Raven);
 
 FState AArtiSuperHealth::States[] =
 {
 	S_NORMAL (SPHL, 'A',  350, NULL, &States[0])
 };
 
-void AArtiSuperHealth::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiSuperHealth, Raven, 32, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (ArtiSuperHealth)
 {
-	INHERIT_DEFS;
-	info->doomednum = 32;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	ArtiDispatch[arti_superhealth] = ActivateArti;
+	ArtiDispatch[arti_superhealth] = AArtiSuperHealth::ActivateArti;
 	ArtiPics[arti_superhealth] = "ARTISPHL";
 }
 
 // Flight -------------------------------------------------------------------
 
-BASIC_ARTI (Fly, arti_fly, TXT_ARTIFLY)
+BASIC_ARTI (Fly, arti_fly, GStrings(TXT_ARTIFLY))
+	AT_GAME_SET_FRIEND (ArtiFly)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
@@ -82,8 +83,6 @@ private:
 	}
 };
 
-ARTI_SETUP (Fly, Raven);
-
 FState AArtiFly::States[] =
 {
 	S_NORMAL (SOAR, 'A',	5, NULL, &States[1]),
@@ -92,28 +91,28 @@ FState AArtiFly::States[] =
 	S_NORMAL (SOAR, 'B',	5, NULL, &States[0])
 };
 
-void AArtiFly::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiFly, Raven, 83, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (ArtiFly)
 {
-	INHERIT_DEFS;
-	info->doomednum = 83;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	ArtiDispatch[arti_fly] = ActivateArti;
+	ArtiDispatch[arti_fly] = AArtiFly::ActivateArti;
 	ArtiPics[arti_fly] = "ARTISOAR";
 }
 
 // Invulnerability ----------------------------------------------------------
 
-BASIC_ARTI (Invulnerability, arti_invulnerability, TXT_ARTIINVULNERABILITY)
+BASIC_ARTI (Invulnerability, arti_invulnerability, GStrings(TXT_ARTIINVULNERABILITY))
+	AT_GAME_SET_FRIEND (ArtiInvul)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
 		return P_GivePower (player, pw_invulnerability);
 	}
 };
-
-ARTI_SETUP (Invulnerability, Raven);
 
 FState AArtiInvulnerability::States[] =
 {
@@ -123,28 +122,28 @@ FState AArtiInvulnerability::States[] =
 	S_NORMAL (INVU, 'D',	3, NULL, &States[0])
 };
 
-void AArtiInvulnerability::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiInvulnerability, Raven, 84, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (ArtiInvul)
 {
-	INHERIT_DEFS;
-	info->doomednum = 84;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	ArtiDispatch[arti_invulnerability] = ActivateArti;
+	ArtiDispatch[arti_invulnerability] = AArtiInvulnerability::ActivateArti;
 	ArtiPics[arti_invulnerability] = "ARTIINVU";
 }
 
 // Torch --------------------------------------------------------------------
 
-BASIC_ARTI (Torch, arti_torch, TXT_ARTITORCH)
+BASIC_ARTI (Torch, arti_torch, GStrings(TXT_ARTITORCH))
+	AT_GAME_SET_FRIEND (ArtiTorch)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
 		return P_GivePower (player, pw_infrared);
 	}
 };
-
-ARTI_SETUP (Torch, Raven);
 
 FState AArtiTorch::States[] =
 {
@@ -153,13 +152,14 @@ FState AArtiTorch::States[] =
 	S_BRIGHT (TRCH, 'C',	3, NULL, &States[0])
 };
 
-void AArtiTorch::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiTorch, Raven, 33, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (ArtiTorch)
 {
-	INHERIT_DEFS;
-	info->doomednum = 33;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	ArtiDispatch[arti_torch] = ActivateArti;
+	ArtiDispatch[arti_torch] = AArtiTorch::ActivateArti;
 	ArtiPics[arti_torch] = "ARTITRCH";
 }

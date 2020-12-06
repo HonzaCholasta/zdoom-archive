@@ -32,11 +32,13 @@
 #include "w_wad.h"
 
 
+extern bool Sound3D;
+
 // Init at program start...
 void I_InitSound();
 
 // ... shut down and relase at program termination.
-void STACK_ARGS I_ShutdownSound (void);
+void STACK_ARGS I_ShutdownSound ();
 
 void I_SetSfxVolume (int volume);
 
@@ -48,42 +50,51 @@ void I_SetSfxVolume (int volume);
 void I_SetChannels (int);
 
 // load a sound from disk
-void I_LoadSound (struct sfxinfo_struct *sfx);
+void I_LoadSound (sfxinfo_t *sfx);
 
 // Starts a sound in a particular sound channel.
-int
+long
 I_StartSound
-( struct sfxinfo_struct *sfx,
+( sfxinfo_t		*sfx,
   int			vol,
   int			sep,
   int			pitch,
   int			channel,
   BOOL			looping );
 
+long
+I_StartSound3D
+( sfxinfo_t		*sfx,
+  float			vol,
+  int			pitch,
+  int			channel,
+  BOOL			looping,
+  float			pos[3],
+  float			vel[3] );
+
+void I_UpdateListener (float pos[3], float vel[3],
+					   float forward[3], float up[3]);
 
 // Stops a sound channel.
-void I_StopSound(int handle);
+void I_StopSound (int handle);
 
 // Called by S_*() functions
 //	to see if a channel is still playing.
 // Returns 0 if no longer playing, 1 if playing.
-int I_SoundIsPlaying(int handle);
+int I_SoundIsPlaying (int handle);
 
 // Updates the volume, separation,
 //	and pitch of a sound channel.
-void
-I_UpdateSoundParams
-( int			handle,
-  int			vol,
-  int			sep,
-  int			pitch );
+void I_UpdateSoundParams (int handle, int vol, int sep, int pitch);
+void I_UpdateSoundParams3D (int handle, float pos[3], float vel[3]);
+
 
 struct FileHandle
 {
 	FileHandle (int hndl, int start, int size)
-		: base (start),
-		  len (size),
+		: len (size),
 		  pos (0),
+		  base (start),
 		  bNeedClose (true)
 	{
 		handle = dup (hndl);
@@ -93,7 +104,7 @@ struct FileHandle
 		: pos (0),
 		  bNeedClose (false)
 	{
-		handle = lumpinfo[lump].handle;
+		handle = W_FileHandleFromWad (lumpinfo[lump].wadnum);
 		base = lumpinfo[lump].position;
 		len = lumpinfo[lump].size;
 	}

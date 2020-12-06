@@ -28,8 +28,7 @@
 #include "m_cheat.h"
 #include "d_player.h"
 #include "doomstat.h"
-#include "dstrings.h"
-#include "hstrings.h"
+#include "gstrings.h"
 #include "p_inter.h"
 #include "d_items.h"
 #include "p_local.h"
@@ -37,8 +36,8 @@
 #include "gi.h"
 #include "p_enemy.h"
 #include "sbar.h"
-
-extern void A_PainDie(AActor *);
+#include "c_dispatch.h"
+#include "v_video.h"
 
 // [RH] Actually handle the cheat. The cheat code in st_stuff.c now just
 // writes some bytes to the network data stream, and the network code
@@ -46,7 +45,7 @@ extern void A_PainDie(AActor *);
 
 void cht_DoCheat (player_t *player, int cheat)
 {
-	char *msg = "";
+	const char *msg = "";
 	char msgbuild[32];
 	int i;
 
@@ -63,18 +62,18 @@ void cht_DoCheat (player_t *player, int cheat)
 	case CHT_GOD:
 		player->cheats ^= CF_GODMODE;
 		if (player->cheats & CF_GODMODE)
-			msg = STSTR_DQDON;
+			msg = GStrings(STSTR_DQDON);
 		else
-			msg = STSTR_DQDOFF;
-		SB_state = -1;
+			msg = GStrings(STSTR_DQDOFF);
+		SB_state = screen->GetPageCount ();
 		break;
 
 	case CHT_NOCLIP:
 		player->cheats ^= CF_NOCLIP;
 		if (player->cheats & CF_NOCLIP)
-			msg = STSTR_NCON;
+			msg = GStrings(STSTR_NCON);
 		else
-			msg = STSTR_NCOFF;
+			msg = GStrings(STSTR_NCOFF);
 		break;
 
 	case CHT_FLY:
@@ -107,6 +106,14 @@ void cht_DoCheat (player_t *player, int cheat)
 			msg = "notarget OFF";
 		break;
 
+	case CHT_ANUBIS:
+		player->cheats ^= CF_FRIGHTENING;
+		if (player->cheats & CF_FRIGHTENING)
+			msg = "\"Quake with fear!\"";
+		else
+			msg = "No more ogre armor";
+		break;
+
 	case CHT_CHASECAM:
 		player->cheats ^= CF_CHASECAM;
 		if (player->cheats & CF_CHASECAM)
@@ -118,7 +125,7 @@ void cht_DoCheat (player_t *player, int cheat)
 	case CHT_CHAINSAW:
 		player->weaponowned[wp_chainsaw] = true;
 		player->powers[pw_invulnerability] = true;
-		msg = STSTR_CHOPPERS;
+		msg = GStrings(STSTR_CHOPPERS);
 		break;
 
 	case CHT_POWER:
@@ -132,7 +139,7 @@ void cht_DoCheat (player_t *player, int cheat)
 		cht_Give (player, "keys");
 		player->armorpoints[0] = deh.KFAArmor;
 		player->armortype = deh.KFAAC;
-		msg = STSTR_KFAADDED;
+		msg = GStrings(STSTR_KFAADDED);
 		break;
 
 	case CHT_IDFA:
@@ -141,7 +148,7 @@ void cht_DoCheat (player_t *player, int cheat)
 		cht_Give (player, "ammo");
 		player->armorpoints[0] = deh.FAArmor;
 		player->armortype = deh.FAAC;
-		msg = STSTR_FAADDED;
+		msg = GStrings(STSTR_FAADDED);
 		break;
 
 	case CHT_BEHOLDV:
@@ -159,7 +166,7 @@ void cht_DoCheat (player_t *player, int cheat)
 		else
 			player->powers[i] = 0;
 
-		msg = STSTR_BEHOLDX;
+		msg = GStrings(STSTR_BEHOLDX);
 		break;
 
 	case CHT_MASSACRE:
@@ -173,13 +180,13 @@ void cht_DoCheat (player_t *player, int cheat)
 		break;
 
 	case CHT_HEALTH:
-		player->health = player->mo->health = GetInfo (player->mo)->spawnhealth;
-		msg = TXT_CHEATHEALTH;
+		player->health = player->mo->health = player->mo->GetDefault()->health;
+		msg = GStrings(TXT_CHEATHEALTH);
 		break;
 
 	case CHT_KEYS:
 		cht_Give (player, "keys");
-		msg = TXT_CHEATKEYS;
+		msg = GStrings(TXT_CHEATKEYS);
 		break;
 
 	case CHT_TAKEWEAPS:
@@ -193,12 +200,12 @@ void cht_DoCheat (player_t *player, int cheat)
 		}
 		player->weaponowned[wp_staff] = true;
 		player->pendingweapon = wp_staff;
-		msg = TXT_CHEATIDKFA;
+		msg = GStrings(TXT_CHEATIDKFA);
 		break;
 
 	case CHT_NOWUDIE:
 		cht_Suicide (player);
-		msg = TXT_CHEATIDDQD;
+		msg = GStrings(TXT_CHEATIDDQD);
 		break;
 
 	case CHT_ALLARTI:
@@ -210,7 +217,7 @@ void cht_DoCheat (player_t *player, int cheat)
 				P_GiveArtifact (player, (artitype_t)i);
 			}
 		}
-		msg = TXT_CHEATARTIFACTS3;
+		msg = GStrings(TXT_CHEATARTIFACTS3);
 		break;
 
 	case CHT_PUZZLE:
@@ -218,14 +225,19 @@ void cht_DoCheat (player_t *player, int cheat)
 		{
 			P_GiveArtifact (player, (artitype_t)i);
 		}
-		msg = TXT_CHEATARTIFACTS3;
+		msg = GStrings(TXT_CHEATARTIFACTS3);
+		break;
+
+	case CHT_MDK:
+		P_LineAttack (player->mo, player->mo->angle, MISSILERANGE,
+			P_AimLineAttack (player->mo, player->mo->angle, MISSILERANGE), 10000);
 		break;
 	}
 
 	if (player == &players[consoleplayer])
-		Printf (PRINT_HIGH, "%s\n", msg);
+		Printf ("%s\n", msg);
 	else
-		Printf (PRINT_HIGH, "%s is a cheater: %s\n", player->userinfo.netname, msg);
+		Printf ("%s is a cheater: %s\n", player->userinfo.netname, msg);
 }
 
 void cht_Give (player_t *player, char *name)
@@ -235,7 +247,7 @@ void cht_Give (player_t *player, char *name)
 	gitem_t *it;
 
 	if (player != &players[consoleplayer])
-		Printf (PRINT_HIGH, "%s is a cheater: give %s\n", player->userinfo.netname, name);
+		Printf ("%s is a cheater: give %s\n", player->userinfo.netname, name);
 
 	if (stricmp (name, "all") == 0)
 		giveall = true;
@@ -318,7 +330,7 @@ void cht_Give (player_t *player, char *name)
 		it = FindItemByClassname (name);
 		if (!it) {
 			if (player == &players[consoleplayer])
-				Printf (PRINT_HIGH, "Unknown item\n");
+				Printf ("Unknown item\n");
 			return;
 		}
 	}
@@ -349,4 +361,15 @@ void cht_Suicide (player_t *plyr)
 	while (plyr->health > 0)
 		P_DamageMobj (plyr->mo, plyr->mo, plyr->mo, 10000, MOD_SUICIDE);
 	plyr->mo->flags &= ~MF_SHOOTABLE;
+}
+
+BOOL CheckCheatmode ();
+
+CCMD (mdk)
+{
+	if (CheckCheatmode ())
+		return;
+
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_MDK);
 }

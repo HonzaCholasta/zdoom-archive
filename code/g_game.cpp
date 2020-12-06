@@ -26,9 +26,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stddef.h>
+#include <time.h>
 
+#include "templates.h"
 #include "version.h"
-#include "minilzo.h"
 #include "m_alloc.h"
 #include "doomdef.h" 
 #include "doomstat.h"
@@ -43,6 +44,7 @@
 #include "i_system.h"
 #include "p_setup.h"
 #include "p_saveg.h"
+#include "p_effect.h"
 #include "p_tick.h"
 #include "d_main.h"
 #include "wi_stuff.h"
@@ -57,7 +59,7 @@
 #include "w_wad.h"
 #include "p_local.h" 
 #include "s_sound.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "r_data.h"
 #include "r_sky.h"
 #include "r_draw.h"
@@ -65,60 +67,63 @@
 #include "g_level.h"
 #include "b_bot.h"			//Added by MC:
 #include "sbar.h"
+#include "m_swap.h"
 
+#include <zlib.h>
 
-#define SAVESTRINGSIZE	24
+const int SAVEPICWIDTH = 216;
+const int SAVEPICHEIGHT = 135;
 
-BOOL	G_CheckDemoStatus (void); 
-void	G_ReadDemoTiccmd (ticcmd_t *cmd, int player); 
-void	G_WriteDemoTiccmd (ticcmd_t *cmd, int player, int buf); 
-void	G_PlayerReborn (int player); 
- 
-void	G_DoReborn (int playernum, bool freshbot); 
- 
-void	G_DoNewGame (void); 
-void	G_DoLoadGame (void); 
-void	G_DoPlayDemo (void); 
-void	G_DoCompleted (void); 
-void	G_DoVictory (void); 
-void	G_DoWorldDone (void); 
-void	G_DoSaveGame (void); 
- 
-cvar_t gameskill ("skill", "2", CVAR_SERVERINFO | CVAR_LATCH);
-CVAR (deathmatch, "0", CVAR_SERVERINFO | CVAR_LATCH);
-CVAR (teamplay, "0", CVAR_SERVERINFO);
-CVAR (chasedemo, "0", 0);
- 
-gameaction_t	gameaction; 
-gamestate_t 	gamestate = GS_STARTUP; 
+BOOL	G_CheckDemoStatus (void);
+void	G_ReadDemoTiccmd (ticcmd_t *cmd, int player);
+void	G_WriteDemoTiccmd (ticcmd_t *cmd, int player, int buf);
+void	G_PlayerReborn (int player);
+
+void	G_DoReborn (int playernum, bool freshbot);
+
+void	G_DoNewGame (void);
+void	G_DoLoadGame (void);
+void	G_DoPlayDemo (void);
+void	G_DoCompleted (void);
+void	G_DoVictory (void);
+void	G_DoWorldDone (void);
+void	G_DoSaveGame (void);
+
+FIntCVar gameskill ("skill", 2, CVAR_SERVERINFO|CVAR_LATCH);
+CVAR (Int, deathmatch, 0, CVAR_SERVERINFO|CVAR_LATCH);
+CVAR (Bool, teamplay, false, CVAR_SERVERINFO);
+CVAR (Bool, chasedemo, false, 0);
+
+gameaction_t	gameaction;
+gamestate_t 	gamestate = GS_STARTUP;
 BOOL 			respawnmonsters;
- 
+
 int 			paused;
 bool 			sendpause;				// send a pause event next tic 
 bool			sendsave;				// send a save event next tic 
 bool			sendturn180;			// [RH] send a 180 degree turn next tic
 bool 			usergame;				// ok to save / end game
 bool			sendcenterview;			// send a center view event next tic
- 
+
 BOOL			timingdemo; 			// if true, exit with report on completion 
 BOOL 			nodrawers;				// for comparative timing purposes 
 BOOL 			noblit; 				// for comparative timing purposes 
- 
-bool	 		viewactive; 
- 
+
+bool	 		viewactive;
+
 BOOL 			netgame;				// only true if packets are broadcast 
 BOOL			multiplayer;
 player_t		players[MAXPLAYERS];
 bool			playeringame[MAXPLAYERS];
- 
+
 int 			consoleplayer;			// player taking events and displaying 
 int 			displayplayer;			// view being displayed 
-int 			gametic; 
- 
-char			demoname[256]; 
-BOOL 			demorecording; 
-BOOL 			demoplayback; 
-BOOL 			netdemo; 
+int 			gametic;
+
+char			demoname[256];
+BOOL 			demorecording;
+BOOL 			demoplayback;
+BOOL 			netdemo;
 BOOL			demonew;				// [RH] Only used around G_InitNew for demos
 int				demover;
 byte*			demobuffer;
@@ -151,14 +156,14 @@ int				lookspeed[2] = {450, 512};
 
 #define SLOWTURNTICS	6 
 
-CVAR (cl_run,		"0",	CVAR_ARCHIVE)		// Always run?
-CVAR (invertmouse,	"0",	CVAR_ARCHIVE)		// Invert mouse look down/up?
-CVAR (freelook,		"0",	CVAR_ARCHIVE)		// Always mlook?
-CVAR (lookstrafe,	"0",	CVAR_ARCHIVE)		// Always strafe with mouse?
-CVAR (m_pitch,		"1.0",	CVAR_ARCHIVE)		// Mouse speeds
-CVAR (m_yaw,		"1.0",	CVAR_ARCHIVE)
-CVAR (m_forward,	"1.0",	CVAR_ARCHIVE)
-CVAR (m_side,		"2.0",	CVAR_ARCHIVE)
+CVAR (Bool,		cl_run,			false,	CVAR_ARCHIVE)		// Always run?
+CVAR (Bool,		invertmouse,	false,	CVAR_ARCHIVE)		// Invert mouse look down/up?
+CVAR (Bool,		freelook,		false,	CVAR_ARCHIVE)		// Always mlook?
+CVAR (Bool,		lookstrafe,		false,	CVAR_ARCHIVE)		// Always strafe with mouse?
+CVAR (Float,	m_pitch,		1.f,	CVAR_ARCHIVE)		// Mouse speeds
+CVAR (Float,	m_yaw,			1.f,	CVAR_ARCHIVE)
+CVAR (Float,	m_forward,		1.f,	CVAR_ARCHIVE)
+CVAR (Float,	m_side,			2.f,	CVAR_ARCHIVE)
  
 int 			turnheld;								// for accelerative turning 
  
@@ -173,8 +178,8 @@ int 			mousey;
 int 			joyxmove;
 int 			joyymove;
  
-int 			savegameslot; 
-char			savedescription[32]; 
+char			*savegamefile;
+char			savedescription[SAVESTRINGSIZE];
 
 // [RH] Name of screenshot file to generate (usually NULL)
 char			*shotfile;
@@ -182,7 +187,6 @@ char			*shotfile;
 AActor* 		bodyque[BODYQUESIZE]; 
 int 			bodyqueslot; 
 
-extern BOOL setsizeneeded;
 void R_ExecuteSetViewSize (void);
 
 char savename[256];
@@ -196,120 +200,104 @@ artitype_t SendItemUse;
 artitype_t LocalSelectedItem;
 
 // [RH] Allow turbo setting anytime during game
-BEGIN_CUSTOM_CVAR (turbo, "100", 0)
+CUSTOM_CVAR (Float, turbo, 100.f, 0)
 {
-	float scale = var.value * 0.01;
-
-	if (scale < 0.10)
+	if (*var < 10.f)
 	{
-		var.Set (10);
+		var = 10.f;
 	}
-	else if (scale > 2.56)
+	else if (*var > 256.f)
 	{
-		var.Set (256);
+		var = 256.f;
 	}
 	else
 	{
+		float scale = *var * 0.01f;
+
 		forwardmove[0] = (int)(normforwardmove[0]*scale);
 		forwardmove[1] = (int)(normforwardmove[1]*scale);
 		sidemove[0] = (int)(normsidemove[0]*scale);
 		sidemove[1] = (int)(normsidemove[1]*scale);
 	}
 }
-END_CUSTOM_CVAR (turbo)
 
-BEGIN_COMMAND (slot)
+CCMD (slot)
 {
 	if (argc > 1)
 	{
 		SendWeaponSlot = atoi (argv[1]);
 	}
 }
-END_COMMAND (slot)
 
-BEGIN_COMMAND (weapon)
+CCMD (weapon)
 {
 	if (argc > 1)
 	{
 		SendWeaponChoice = atoi (argv[1]);
 	}
 }
-END_COMMAND (weapon)
 
-BEGIN_COMMAND (centerview)
+CCMD (centerview)
 {
 	sendcenterview = true;
 }
-END_COMMAND (centerview)
 
-BEGIN_COMMAND (land)
+CCMD (land)
 {
 	SendLand = true;
 }
-END_COMMAND (land)
 
-BEGIN_COMMAND (pause)
+CCMD (pause)
 {
 	sendpause = true;
 }
-END_COMMAND (pause)
 
-static int turntick;
-
-BEGIN_COMMAND (turn180)
+CCMD (turn180)
 {
 	sendturn180 = true;
 }
-END_COMMAND (turn180)
 
-BEGIN_COMMAND (weapnext)
+CCMD (weapnext)
 {
 	Net_WriteByte (DEM_WEAPNEXT);
 }
-END_COMMAND (weapnext)
 
-BEGIN_COMMAND (weapprev)
+CCMD (weapprev)
 {
 	Net_WriteByte (DEM_WEAPPREV);
 }
-END_COMMAND (weapprev)
 
-BEGIN_COMMAND (invnext)
+CCMD (invnext)
 {
 	LocalSelectedItem = P_NextInventory (m_Instigator->player, LocalSelectedItem);
 	SendItemSelect = (argc == 1) ? 2 : 1;
 }
-END_COMMAND (invnext)
 
-BEGIN_COMMAND (invprev)
+CCMD (invprev)
 {
 	LocalSelectedItem = P_PrevInventory (m_Instigator->player, LocalSelectedItem);
 	SendItemSelect = (argc == 1) ? 2 : 1;
 }
-END_COMMAND (invprev)
 
-BEGIN_COMMAND (invuse)
+CCMD (invuse)
 {
 	SendItemUse = LocalSelectedItem;
 }
-END_COMMAND (invuse)
 
-BEGIN_COMMAND (invuseall)
+CCMD (invuseall)
 {
 	SendItemUse = (artitype_t)-1;
 }
-END_COMMAND (invuseall)
 
-BEGIN_COMMAND (use)
+CCMD (use)
 {
 	if (argc > 1)
 	{
 		SendItemUse = P_FindNamedInventory (argv[1]);
 	}
 }
-END_COMMAND (use)
 
-BEGIN_COMMAND (select)
+CCMD (select)
 {
 	if (argc > 1)
 	{
@@ -317,7 +305,6 @@ BEGIN_COMMAND (select)
 	}
 	SendItemSelect = 1;
 }
-END_COMMAND (select)
 
 //
 // G_BuildTiccmd
@@ -344,7 +331,7 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 
 	strafe = Actions[ACTION_STRAFE];
 	speed = Actions[ACTION_SPEED];
-	if (cl_run.value)
+	if (*cl_run)
 		speed ^= 1;
 
 	forward = side = look = fly = 0;
@@ -419,7 +406,7 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 		cmd->ucmd.buttons |= BT_JUMP;
 
 	// [RH] Scale joystick moves to full range of allowed speeds
-	if (strafe || lookstrafe.value)
+	if (strafe || *lookstrafe)
 		side += (MAXPLMOVE * joyxmove) / 256;
 	else 
 		cmd->ucmd.yaw -= (angleturn[1] * joyxmove) / 256; 
@@ -427,7 +414,7 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 	// [RH] Scale joystick moves over full range
 	if (Actions[ACTION_MLOOK])
 	{
-		if (invertmouse.value)
+		if (*invertmouse)
 			look -= (joyymove * 32767) / 256;
 		else
 			look += (joyymove * 32767) / 256;
@@ -437,19 +424,19 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 		forward += (MAXPLMOVE * joyymove) / 256;
 	}
 
-	if ((Actions[ACTION_MLOOK]) || freelook.value)
+	if ((Actions[ACTION_MLOOK]) || *freelook)
 	{
 		int val;
 
-		val = (int)((float)(mousey * 16) * m_pitch.value) / ticdup;
-		if (invertmouse.value)
+		val = (int)((float)(mousey * 16) * *m_pitch) / ticdup;
+		if (*invertmouse)
 			look -= val;
 		else
 			look += val;
 	}
 	else
 	{
-		forward += (int)((float)mousey * m_forward.value);
+		forward += (int)((float)mousey * *m_forward);
 	}
 
 	if (sendcenterview)
@@ -471,10 +458,10 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 		fly = -32768;
 	}
 
-	if (strafe || lookstrafe.value)
-		side += (int)((float)mousex * m_side.value);
+	if (strafe || *lookstrafe)
+		side += (int)((float)mousex * *m_side);
 	else
-		cmd->ucmd.yaw -= (int)((float)(mousex*0x8) * m_yaw.value) / ticdup;
+		cmd->ucmd.yaw -= (int)((float)(mousex*0x8) * *m_yaw) / ticdup;
 
 	mousex = mousey = 0;
 
@@ -507,7 +494,10 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 	{
 		sendsave = false;
 		Net_WriteByte (DEM_SAVEGAME);
-		Net_WriteByte (savegameslot);
+		Net_WriteString (savegamefile);
+		Net_WriteString (savedescription);
+		delete[] savegamefile;
+		savegamefile = NULL;
 	}
 	if (SendWeaponSlot != 255)
 	{
@@ -558,14 +548,14 @@ static void ChangeSpy (void)
 	}
 }
 
-CVAR (bot_allowspy, "0", 0)
+CVAR (Bool, bot_allowspy, false, 0)
 
-BEGIN_COMMAND (spynext)
+CCMD (spynext)
 {
 	// allow spy mode changes even during the demo
-	if (gamestate == GS_LEVEL && (demoplayback || !netgame || !deathmatch.value))
+	if (gamestate == GS_LEVEL && (demoplayback || !netgame || !*deathmatch))
 	{
-		if (deathmatch.value && bglobal.botnum && !bot_allowspy.value)
+		if (*deathmatch && bglobal.botnum && !*bot_allowspy)
 			return;
 		do
 		{
@@ -577,14 +567,13 @@ BEGIN_COMMAND (spynext)
 		ChangeSpy ();
 	}
 }
-END_COMMAND (spynext)
 
-BEGIN_COMMAND (spyprev)
+CCMD (spyprev)
 {
 	// allow spy mode changes even during the demo
-	if (gamestate == GS_LEVEL && (demoplayback || !netgame || !deathmatch.value))
+	if (gamestate == GS_LEVEL && (demoplayback || !netgame || !*deathmatch))
 	{
-		if (deathmatch.value && bglobal.botnum && !bot_allowspy.value)
+		if (*deathmatch && bglobal.botnum && !*bot_allowspy)
 			return;
 		do 
 		{ 
@@ -596,7 +585,6 @@ BEGIN_COMMAND (spyprev)
 		ChangeSpy ();
 	}
 }
-END_COMMAND (spyprev)
 
 
 //
@@ -612,7 +600,7 @@ BOOL G_Responder (event_t *ev)
 	{
 		char *cmd = C_GetBinding (ev->data1);
 
-		if (ev->type == ev_keydown)
+		if (ev->type == EV_KeyDown)
 		{
 
 			if (!cmd || (
@@ -659,24 +647,24 @@ BOOL G_Responder (event_t *ev)
 
 	switch (ev->type)
 	{
-	case ev_keydown:
+	case EV_KeyDown:
 		if (C_DoKey (ev))
 			return true;
 		break;
 
-	case ev_keyup:
+	case EV_KeyUp:
 		C_DoKey (ev);
 		break;
 
 	// [RH] mouse buttons are sent as key up/down events
-	case ev_mouse: 
-		mousex = (int)(ev->data2 * mouse_sensitivity.value);
-		mousey = (int)(ev->data3 * mouse_sensitivity.value);
+	case EV_Mouse: 
+		mousex = (int)(ev->x * *mouse_sensitivity);
+		mousey = (int)(ev->y * *mouse_sensitivity);
 		break;
 
-	case ev_joystick:
-		joyxmove = ev->data2;
-		joyymove = ev->data3;
+	case EV_Joystick:
+		joyxmove = ev->x;
+		joyymove = ev->y;
 		break;
 	}
 
@@ -686,9 +674,9 @@ BOOL G_Responder (event_t *ev)
 	if (gamestate == GS_LEVEL && viewactive)
 		return AM_Responder (ev);
 
-	return (ev->type == ev_keydown ||
-			ev->type == ev_mouse ||
-			ev->type == ev_joystick);
+	return (ev->type == EV_KeyDown ||
+			ev->type == EV_Mouse ||
+			ev->type == EV_Joystick);
 }
 
 
@@ -706,8 +694,13 @@ void G_Ticker ()
 
 	// do player reborns if needed
 	for (i = 0; i < MAXPLAYERS; i++)
-		if (playeringame[i] && players[i].playerstate == PST_REBORN) 
+	{
+		if (playeringame[i] &&
+			(players[i].playerstate == PST_REBORN || players[i].playerstate == PST_ENTER))
+		{
 			G_DoReborn (i, false);
+		}
+	}
 
 	// do things to change the game state
 	oldgamestate = gamestate;
@@ -723,6 +716,7 @@ void G_Ticker ()
 		case ga_loadlevel:
 			G_DoLoadLevel (-1);
 			break;
+		case ga_newgame2:	// Silence GCC (see above)
 		case ga_newgame:
 			G_DoNewGame ();
 			break;
@@ -798,7 +792,7 @@ void G_Ticker ()
 			if (cmd->ucmd.forwardmove > TURBOTHRESHOLD
 				&& !(gametic&31) && ((gametic>>5)&3) == i )
 			{
-				Printf (PRINT_HIGH, "%s is turbo!\n", players[i].userinfo.netname);
+				Printf ("%s is turbo!\n", players[i].userinfo.netname);
 			}
 
 			if (netgame && !players[i].isbot && !netdemo && !(gametic%ticdup))
@@ -820,7 +814,6 @@ void G_Ticker ()
 	{
 	case GS_LEVEL:
 		P_Ticker ();
-		StatusBar->Tick ();
 		AM_Ticker ();
 		break;
 
@@ -834,6 +827,9 @@ void G_Ticker ()
 
 	case GS_DEMOSCREEN:
 		D_PageTicker ();
+		break;
+
+	default:
 		break;
 	}
 }
@@ -859,11 +855,13 @@ void G_PlayerFinishLevel (int player, EFinishLevelType mode)
 	// Strip all current powers
 	flightPower = p->powers[pw_flight];
 	memset (p->powers, 0, sizeof (p->powers));
-	if (!deathmatch.value && mode == FINISH_SameHub)
+	if (!*deathmatch && mode == FINISH_SameHub)
 	{ // Keep flight if moving to another level in same hub
 		p->powers[pw_flight] = flightPower;
 	}
 	p->mo->flags &= ~MF_SHADOW; 		// cancel invisibility
+	p->mo->RenderStyle = STYLE_Normal;
+	p->mo->alpha = FRACUNIT;
 	p->extralight = 0;					// cancel gun flashes
 	p->fixedcolormap = 0;				// cancel ir goggles
 	p->damagecount = 0; 				// no palette changes
@@ -952,6 +950,14 @@ void G_PlayerReborn (int player)
         bglobal.CleanBotstuff (p);
     else
 		p->isbot = false;
+
+	// [BC] Handle temporary invulnerability when respawned
+	if ((*dmflags2 & DF2_YES_INVUL) &&
+		(*deathmatch || *alwaysapplydmflags))
+	{
+		p->powers[pw_invulnerability] = 2*TICRATE;
+		actor->effects |= FX_RESPAWNINVUL;	// [RH] special effect
+	}
 }
 
 //
@@ -973,7 +979,7 @@ BOOL G_CheckSpot (int playernum, mapthing2_t *mthing)
 	y = mthing->y << FRACBITS;
 	z = mthing->z << FRACBITS;
 
-	z += R_PointInSubsector (x, y)->sector->floorheight;
+	z += R_PointInSubsector (x, y)->sector->floorplane.ZatPoint (x, y);
 
 	if (!players[playernum].mo)
 	{ // first spawn of level, before corpses
@@ -1013,7 +1019,7 @@ BOOL G_CheckSpot (int playernum, mapthing2_t *mthing)
 // [RH] Returns the distance of the closest player to the given mapthing2_t.
 static fixed_t PlayersRangeFromSpot (mapthing2_t *spot)
 {
-	fixed_t closest = MAXINT;
+	fixed_t closest = INT_MAX;
 	fixed_t distance;
 	int i;
 
@@ -1084,7 +1090,7 @@ void G_DeathMatchSpawnPlayer (int playernum)
 	// At level start, none of the players have mobjs attached to them,
 	// so we always use the random deathmatch spawn. During the game,
 	// though, we use whatever dmflags specifies.
-	if (dmflags & DF_SPAWN_FARTHEST && players[playernum].mo)
+	if (*dmflags & DF_SPAWN_FARTHEST && players[playernum].mo)
 		spot = SelectFarthestDeathmatchSpot (selections);
 	else
 		spot = SelectRandomDeathmatchSpot (playernum, selections);
@@ -1147,7 +1153,7 @@ void G_DoReborn (int playernum, bool freshbot)
 		}
 
 		// spawn at random spot if in death match
-		if (deathmatch.value)
+		if (*deathmatch)
 		{
 			G_DeathMatchSpawnPlayer (playernum);
 			return;
@@ -1229,6 +1235,49 @@ void G_LoadGame (char* name)
 	gameaction = ga_loadgame;
 }
 
+// Return false if not all the needed wads have been loaded.
+static bool G_CheckSaveGameWads (FILE *file)
+{
+	char wadbuff[_MAX_PATH];
+	int i, c;
+	bool printRequires = false;
+
+	for (;;)
+	{
+		i = 0;
+		do
+		{
+			c = fgetc (file);
+			wadbuff[i++] = c;
+		} while (c != 0 && c != EOF);
+
+		if (c == EOF)
+		{
+			Printf ("Savegame is too short\n");
+			return false;
+		}
+
+		if (i == 1)
+		{ // The end of the wad list is an empty string.
+			if (printRequires)
+			{
+				Printf ("\n");
+				return false;
+			}
+			return true;
+		}
+
+		if (!W_CheckIfWadLoaded (wadbuff))
+		{
+			if (!printRequires)
+			{
+				printRequires = true;
+				Printf ("This savegame needs these wads:\n");
+			}
+			Printf ("%s, ", wadbuff);
+		}
+	}
+}
 
 void G_DoLoadGame (void)
 {
@@ -1240,23 +1289,49 @@ void G_DoLoadGame (void)
 	FILE *stdfile = fopen (savename, "rb");
 	if (stdfile == NULL)
 	{
-		Printf (PRINT_HIGH, "Could not read savegame '%s'\n", savename);
+		Printf ("Could not read savegame '%s'\n", savename);
 		return;
 	}
 
-	fseek (stdfile, SAVESTRINGSIZE, SEEK_SET);	// skip the description field
 	fread (text, 16, 1, stdfile);
 	if (strncmp (text, SAVESIG, 16))
 	{
-		Printf (PRINT_HIGH, "Savegame is from a different version\n");
+		Printf ("Savegame is from a different version\n");
+		fclose (stdfile);
 		return;
 	}
+	fseek (stdfile, SAVESTRINGSIZE, SEEK_CUR);	// skip the title field
 	fread (text, 8, 1, stdfile);
 	text[8] = 0;
 
+	if (!G_CheckSaveGameWads (stdfile))
+	{
+		fclose (stdfile);
+		return;
+	}
+
+	// Skip the comment and pic
+	WORD t1, t2;
+
+	fread (&t1, 2, 1, stdfile);
+	fseek (stdfile, SHORT(t1), SEEK_CUR);
+	fread (&t1, 2, 1, stdfile);
+	fread (&t2, 2, 1, stdfile);
+	if (t1 != 0 && t2 != 0)
+	{
+		WORD t3;
+		fread (&t3, 4, 1, stdfile);
+		t3 = LONG(t3);
+		if (t3 == 0)
+		{
+			t3 = SHORT(t1) * SHORT(t2);
+		}
+		fseek (stdfile, t3, SEEK_CUR);
+	}
+
 	bglobal.RemoveAllBots (true);
 
-	FLZOFile savefile (stdfile, FFile::EReading);
+	FCompressedFile savefile (stdfile, FFile::EReading);
 
 	if (!savefile.IsOpen ())
 		I_Error ("Savegame '%s' is corrupt\n", savename);
@@ -1285,7 +1360,10 @@ void G_DoLoadGame (void)
 	arc << level.time;
 
 	for (i = 0; i < NUM_WORLDVARS; i++)
-		arc << WorldVars[i];
+		arc << ACS_WorldVars[i];
+
+	for (i = 0; i < NUM_GLOBALVARS; i++)
+		arc << ACS_GlobalVars[i];
 
 	arc << text[9];
 
@@ -1308,9 +1386,9 @@ void G_DoLoadGame (void)
 // Called by the menu task.
 // Description is a 24 byte text string
 //
-void G_SaveGame (int slot, char *description)
+void G_SaveGame (const char *filename, const char *description)
 {
-	savegameslot = slot;
+	savegamefile = copystring (filename);
 	strcpy (savedescription, description);
 	sendsave = true;
 }
@@ -1319,41 +1397,162 @@ void G_BuildSaveName (char *name, int slot)
 {
 #ifndef UNIX
 	if (Args.CheckParm ("-cdrom"))
-		sprintf(name, "c:\\zdoomdat\\%s%d.zds", SAVEGAMENAME, slot);
+		sprintf(name, "c:\\zdoomdat\\%s%d.zds", GStrings(SAVEGAMENAME), slot);
 	else
-		sprintf (name, "%s%d.zds", SAVEGAMENAME, slot);
+		sprintf (name, "%s%d.zds", GStrings(SAVEGAMENAME), slot);
 #else
-	sprintf (name, "%s%d.zds", SAVEGAMENAME, slot);
+	sprintf (name, "%s%d.zds", GStrings(SAVEGAMENAME), slot);
 	char *path = GetUserFile (name);
 	strcpy (name, path);
 	delete[] path;
 #endif
 }
 
-void G_DoSaveGame (void)
+static void PutSaveWads (FILE *file)
 {
-	char name[256];
-	char *description;
+	const char *name;
+
+	// Name of IWAD
+	name = W_GetWadName (1);
+	fwrite (name, 1, strlen (name) + 1, file);
+
+	// Name of wad the map resides in
+	if (lumpinfo[level.lumpnum].wadnum != 1)
+	{
+		name = W_GetWadName (lumpinfo[level.lumpnum].wadnum);
+		fwrite (name, 1, strlen (name) + 1, file);
+	}
+
+	fputc (0, file);
+}
+
+static void PutSaveComment (FILE *file)
+{
+	char comment[256];
+	time_t utcTime;
+	struct tm *now;
+	char *readableTime;
+	WORD len;
+	int levelTime;
+
+	// Get the current date and time
+	time (&utcTime);
+	now = localtime (&utcTime);
+	readableTime = asctime (now);
+
+	strncpy (comment, readableTime, 10);
+	strncpy (comment+10, readableTime+19, 5);
+	strncpy (comment+15, readableTime+10, 9);
+	comment[24] = '\n';
+	comment[25] = '\n';
+
+	// Append level name
+	strcpy (comment+26, level.level_name);
+	len = strlen (comment);
+	comment[len] = '\n';
+
+	// Append elapsed time
+	levelTime = level.time / TICRATE;
+	sprintf (comment+len+1, "time: %02d:%02d:%02d",
+		levelTime/3600, (levelTime%3600)/60, levelTime%60);
+	len += 16;
+	comment[len-1] = 0;
+
+	// Write out the comment
+	len = SHORT(len);
+	fwrite (&len, 2, 1, file);
+	len = SHORT(len);
+	fwrite (comment, 1, len, file);
+}
+
+static void PutSavePic (FILE *file, int width, int height)
+{
+	const uLong picArea = width * height;
+
+	if (picArea == 0)
+	{
+		DWORD zero = 0;
+		fwrite (&zero, 4, 1, file);
+	}
+	else
+	{
+		DCanvas *pic = new DSimpleCanvas (width, height);
+
+		// Take a snapshot of the player's view
+		pic->Lock ();
+		R_RenderViewToCanvas (&players[consoleplayer], pic, 0, 0, width, height);
+
+		// Compress the pic and save it to disk
+		uLong outlen;
+		Byte *compressed;
+		int r;
+
+		outlen = picArea + picArea/1000 + 12;
+		do
+		{
+			compressed = new Bytef[outlen];
+			r = compress (compressed, &outlen, pic->GetBuffer(), picArea);
+			if (r == Z_BUF_ERROR)
+			{
+				delete[] compressed;
+				outlen += 1024;
+			}
+		} while (r == Z_BUF_ERROR);
+
+		WORD temp;
+		DWORD dtemp;
+
+		temp = SHORT(width);
+		fwrite (&temp, 2, 1, file);
+		temp = SHORT(height);
+		fwrite (&temp, 2, 1, file);
+
+		if (r != Z_OK || outlen >= picArea)
+		{ // Save uncompressable data as-is
+			dtemp = 0;
+			fwrite (&dtemp, 4, 1, file);
+			fwrite (pic->GetBuffer(), 1, picArea, file);
+		}
+		else
+		{ // Save compressable data in compressed form
+			dtemp = LONG(outlen);
+			fwrite (&dtemp, 4, 1, file);
+			fwrite (compressed, 1, outlen, file);
+		}
+
+		pic->Unlock ();
+		delete[] compressed;
+		delete pic;
+	}
+}
+
+void G_DoSaveGame ()
+{
 	int i;
+
+	if (demoplayback)
+		return;
 
 	G_SnapshotLevel ();
 
-	G_BuildSaveName (name, savegameslot);
-	description = savedescription;
-
-	FILE *stdfile = fopen (name, "wb");
+	FILE *stdfile = fopen (savegamefile, "wb");
 
 	if (stdfile == NULL)
 	{
-		Printf (PRINT_HIGH, "Could not create savegame '%s'\n", name);
+		Printf ("Could not create savegame '%s'\n", savegamefile);
+		delete[] savegamefile;
+		savegamefile = NULL;
 		return;
 	}
 
-	fwrite (description, SAVESTRINGSIZE, 1, stdfile);
 	fwrite (SAVESIG, 16, 1, stdfile);
+	fwrite (savedescription, SAVESTRINGSIZE, 1, stdfile);
 	fwrite (level.mapname, 8, 1, stdfile);
+	PutSaveWads (stdfile);
+	PutSaveComment (stdfile);
+	PutSavePic (stdfile, SAVEPICWIDTH, SAVEPICHEIGHT);
 
-	FLZOFile savefile (stdfile, FFile::EWriting, true);
+	FCompressedFile savefile (stdfile, FFile::EWriting, true);
 	FArchive arc (savefile);
 
 	{
@@ -1370,18 +1569,25 @@ void G_DoSaveGame (void)
 
 	arc << level.time;
 	for (i = 0; i < NUM_WORLDVARS; i++)
-		arc << WorldVars[i];
+		arc << ACS_WorldVars[i];
+
+	for (i = 0; i < NUM_GLOBALVARS; i++)
+		arc << ACS_GlobalVars[i];
 
 	BYTE consist = 0x1d;			// consistancy marker
 	arc << consist;
 
+	M_NotifyNewSave (savegamefile, savedescription);
 	gameaction = ga_nothing;
 	savedescription[0] = 0;
 
-	Printf (PRINT_HIGH, "%s\n", GGSAVED);
+	Printf ("%s\n", GStrings(GGSAVED));
 	arc.Close ();
 
-	strcpy (BackupSaveName, name);
+	strcpy (BackupSaveName, savegamefile);
+
+	delete[] savegamefile;
+	savegamefile = NULL;
 }
 
 
@@ -1434,11 +1640,10 @@ void G_ReadDemoTiccmd (ticcmd_t *cmd, int player)
 
 BOOL stoprecording;
 
-BEGIN_COMMAND (stop)
+CCMD (stop)
 {
 	stoprecording = true;
 }
-END_COMMAND (stop)
 
 extern byte *lenspot;
 
@@ -1560,16 +1765,15 @@ void G_DeferedPlayDemo (char *name)
 	gameaction = ga_playdemo;
 }
 
-BEGIN_COMMAND (playdemo)
+CCMD (playdemo)
 {
 	if (argc > 1) {
 		G_DeferedPlayDemo (argv[1]);
 		singledemo = true;
 	}
 }
-END_COMMAND (playdemo)
 
-BEGIN_COMMAND (timedemo)
+CCMD (timedemo)
 {
 	if (argc > 1)
 	{
@@ -1577,7 +1781,6 @@ BEGIN_COMMAND (timedemo)
 		singledemo = true;
 	}
 }
-END_COMMAND (timedemo)
 
 // [RH] Process all the information in a FORM ZDEM
 //		until a BODY chunk is entered.
@@ -1602,7 +1805,7 @@ BOOL G_ProcessIFFDemo (char *mapname)
 
 	id = ReadLong (&demo_p);
 	if (id != ZDEM_ID) {
-		Printf (PRINT_HIGH, "Not a ZDoom demo file!\n");
+		Printf ("Not a ZDoom demo file!\n");
 		return true;
 	}
 
@@ -1613,7 +1816,7 @@ BOOL G_ProcessIFFDemo (char *mapname)
 		len = ReadLong (&demo_p);
 		nextchunk = demo_p + len + (len & 1);
 		if (nextchunk > zdemformend) {
-			Printf (PRINT_HIGH, "Demo is mangled!\n");
+			Printf ("Demo is mangled!\n");
 			return true;
 		}
 
@@ -1623,7 +1826,7 @@ BOOL G_ProcessIFFDemo (char *mapname)
 
 				demover = ReadWord (&demo_p);	// ZDoom version demo was created with
 				if (ReadWord (&demo_p) > GAMEVER) {		// Minimum ZDoom version
-					Printf (PRINT_HIGH, "Demo requires a newer version of ZDoom!\n");
+					Printf ("Demo requires a newer version of ZDoom!\n");
 					return true;
 				}
 				memcpy (mapname, demo_p, 8);	// Read map name
@@ -1657,13 +1860,13 @@ BOOL G_ProcessIFFDemo (char *mapname)
 	}
 
 	if (!numPlayers) {
-		Printf (PRINT_HIGH, "Demo has no players!\n");
+		Printf ("Demo has no players!\n");
 		return true;
 	}
 
 	if (!bodyHit) {
 		zdembodyend = NULL;
-		Printf (PRINT_HIGH, "Demo has no BODY chunk!\n");
+		Printf ("Demo has no BODY chunk!\n");
 		return true;
 	}
 
@@ -1682,30 +1885,43 @@ void G_DoPlayDemo (void)
 
 	// [RH] Allow for demos not loaded as lumps
 	demolump = W_CheckNumForName (defdemoname);
-	if (demolump >= 0) {
+	if (demolump >= 0)
+	{
 		demobuffer = demo_p = (byte *)W_CacheLumpNum (demolump, PU_STATIC);
-	} else {
+	}
+	else
+	{
 		FixPathSeperator (defdemoname);
 		DefaultExtension (defdemoname, ".lmp");
 		M_ReadFile (defdemoname, &demobuffer);
 		demo_p = demobuffer;
 	}
 
-	Printf (PRINT_HIGH, "Playing demo %s\n", defdemoname);
+	Printf ("Playing demo %s\n", defdemoname);
 
 	C_BackupCVars ();		// [RH] Save cvars that might be affected by demo
 
-	if (ReadLong (&demo_p) != FORM_ID) {
+	if (ReadLong (&demo_p) != FORM_ID)
+	{
+		const char *eek = "Cannot play non-ZDoom demos.\n(They would go out of sync badly.)\n";
+
 		if (singledemo)
-			I_Error ("Doom v1.9 demos are no longer supported.");
-		else {
-			Printf (PRINT_HIGH, "Doom v1.9 demos are no longer supported.\n");
+		{
+			I_Error (eek);
+		}
+		else
+		{
+			Printf_Bold (eek);
 			gameaction = ga_nothing;
 		}
-	} else if (G_ProcessIFFDemo (mapname)) {
+	}
+	else if (G_ProcessIFFDemo (mapname))
+	{
 		gameaction = ga_nothing;
 		demoplayback = false;
-	} else {
+	}
+	else
+	{
 		// don't spend a lot of time in loadlevel 
 		precache = false;
 		demonew = true;
@@ -1744,9 +1960,9 @@ void G_TimeDemo (char* name)
 ===================
 */
 
-EXTERN_CVAR (name)
-EXTERN_CVAR (autoaim)
-EXTERN_CVAR (color)
+EXTERN_CVAR (String, name)
+EXTERN_CVAR (Float, autoaim)
+EXTERN_CVAR (Color, color)
 
 BOOL G_CheckDemoStatus (void)
 {
@@ -1789,7 +2005,7 @@ BOOL G_CheckDemoStatus (void)
 				I_FatalError ("timed %i gametics in %i realtics (%.1f fps)", gametic,
 							  endtime, (float)gametic/(float)endtime*(float)TICRATE);
 			else
-				Printf (PRINT_HIGH, "Demo ended.\n");
+				Printf ("Demo ended.\n");
 			gameaction = ga_fullconsole;
 			timingdemo = false;
 			return false;
@@ -1813,7 +2029,7 @@ BOOL G_CheckDemoStatus (void)
 		free (demobuffer); 
 		demorecording = false;
 		stoprecording = false;
-		Printf (PRINT_HIGH, "Demo %s recorded\n", demoname); 
+		Printf ("Demo %s recorded\n", demoname); 
 	}
 
 	return false; 

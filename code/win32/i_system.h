@@ -23,10 +23,20 @@
 #ifndef __I_SYSTEM__
 #define __I_SYSTEM__
 
-#include <io.h>
-
+#include "d_main.h"
 #include "d_ticcmd.h"
 #include "d_event.h"
+
+// Index values into the LanguageIDs array
+enum
+{
+	LANGIDX_UserPreferred,
+	LANGIDX_UserDefault,
+	LANGIDX_SysPreferred,
+	LANGIDX_SysDefault
+};
+extern DWORD LanguageIDs[4];
+extern void SetLanguageIDs ();
 
 // [RH] Detects the OS the game is running under.
 void I_DetectOS (void);
@@ -35,6 +45,7 @@ typedef enum {
 	os_unknown,
 	os_Win95,
 	os_WinNT,
+	os_Win2k,
 	os_Win32s
 } os_t;
 
@@ -121,6 +132,8 @@ void I_PrintStr (int x, const char *str, int count, BOOL scroll);
 // Set the title string of the startup window
 void I_SetTitleString (const char *title);
 
+// Pick from multiple IWADs to use
+int I_PickIWad (WadStuff *wads, int numwads);
 
 // In i_input.c. Used to release control of the
 // mouse to the user when the game is paused in
@@ -139,19 +152,32 @@ void I_FinishClockCalibration ();
 
 // Directory searching routines
 
-typedef struct _finddata_t findstate_t;
+// Mirror WIN32_FIND_DATAA in winbase.h
+#ifndef MAX_PATH
+#define MAX_PATH 260
+#endif
+
+struct findstate_t
+{
+	DWORD Attribs;
+	DWORD Times[3*2];
+	DWORD Size[2];
+	DWORD Reserved[2];
+	char Name[MAX_PATH];
+	char AltName[14];
+};
 
 long I_FindFirst (char *filespec, findstate_t *fileinfo);
 int I_FindNext (long handle, findstate_t *fileinfo);
 int I_FindClose (long handle);
 
-#define I_FindName(a)	((a)->name)
-#define I_FindAttr(a)	((a)->attrib)
+#define I_FindName(a)	((a)->Name)
+#define I_FindAttr(a)	((a)->Attribs)
 
-#define FA_RDONLY	_A_RDONLY
-#define FA_HIDDEN	_A_HIDDEN
-#define FA_SYSTEM	_A_SYSTEM
-#define FA_DIREC	_A_SUBDIR
-#define FA_ARCH		_A_ARCH
+#define FA_RDONLY	0x00000001
+#define FA_HIDDEN	0x00000002
+#define FA_SYSTEM	0x00000004
+#define FA_DIREC	0x00000010
+#define FA_ARCH		0x00000020
 
 #endif

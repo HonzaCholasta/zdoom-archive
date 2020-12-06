@@ -1,7 +1,7 @@
 #include "info.h"
 #include "a_pickups.h"
 #include "a_artifacts.h"
-#include "hstrings.h"
+#include "gstrings.h"
 #include "p_local.h"
 #include "gi.h"
 #include "p_enemy.h"
@@ -56,7 +56,7 @@ bool P_MorphPlayer (player_t *p)
 	morphed->special1 = p->readyweapon;
 	morphed->special2 = actor->flags & ~MF_JUSTHIT;
 	morphed->player = p;
-	if (actor->flags2 & MF2_DONTDRAW)
+	if (actor->renderflags & RF_INVISIBLE)
 	{
 		morphed->special2 |= MF_JUSTHIT;
 	}
@@ -76,7 +76,7 @@ bool P_MorphPlayer (player_t *p)
 	actor->player = NULL;
 	actor->flags &= ~(MF_SOLID|MF_SHOOTABLE);
 	actor->flags |= MF_UNMORPHED;
-	actor->flags2 |= MF2_DONTDRAW;
+	actor->renderflags |= RF_INVISIBLE;
 	p->morphTics = MORPHTICS;
 	p->health = morphed->health;
 	p->mo = static_cast<APlayerPawn *>(morphed);
@@ -130,12 +130,12 @@ bool P_UndoPlayerMorph (player_t *player, bool force)
 	mo->momz = pmo->momz;
 	if (!(pmo->special2 & MF_JUSTHIT))
 	{
-		mo->flags2 &= ~MF2_DONTDRAW;
+		mo->renderflags &= ~RF_INVISIBLE;
 	}
 
 	player->morphTics = 0;
 	player->powers[pw_weaponlevel2] = 0;
-	player->health = mo->health = GetInfo (mo)->spawnhealth;
+	player->health = mo->health = mo->GetDefault()->health;
 	player->mo = mo;
 	if (player->camera == pmo)
 	{
@@ -182,7 +182,7 @@ bool P_MorphMonster (AActor *actor)
 	morphed->special2 = actor->flags & ~MF_JUSTHIT;
 	morphed->special = actor->special;
 	memcpy (morphed->args, actor->args, sizeof(actor->args));
-	if (actor->flags2 & MF2_DONTDRAW)
+	if (actor->renderflags & RF_INVISIBLE)
 	{
 		morphed->special2 |= MF_JUSTHIT;
 	}
@@ -197,7 +197,7 @@ bool P_MorphMonster (AActor *actor)
 	actor->tid = 0;
 	actor->flags &= ~(MF_SOLID|MF_SHOOTABLE);
 	actor->flags |= MF_UNMORPHED;
-	actor->flags2 |= MF2_DONTDRAW;
+	actor->renderflags |= RF_INVISIBLE;
 	Spawn<ATeleportFog> (actor->x, actor->y, actor->z + TELEFOGHEIGHT);
 	return true;
 }
@@ -236,8 +236,8 @@ bool P_UpdateMorphedMonster (AActor *beast, int tics)
 	actor->target = beast->target;
 	actor->flags = beast->special2 & ~MF_JUSTHIT;
 	if (!(beast->special2 & MF_JUSTHIT))
-		actor->flags2 &= ~MF2_DONTDRAW;
-	actor->health = GetInfo (actor)->spawnhealth;
+		actor->renderflags &= ~RF_INVISIBLE;
+	actor->health = actor->GetDefault()->health;
 	actor->momx = beast->momx;
 	actor->momy = beast->momy;
 	actor->momz = beast->momz;
@@ -255,13 +255,10 @@ bool P_UpdateMorphedMonster (AActor *beast, int tics)
 
 class AEggFX : public AActor
 {
-	DECLARE_ACTOR (AEggFX, AActor);
+	DECLARE_ACTOR (AEggFX, AActor)
 public:
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (AEggFX, AActor);
-REGISTER_ACTOR (AEggFX, Raven);
 
 FState AEggFX::States[] =
 {
@@ -285,18 +282,22 @@ FState AEggFX::States[] =
 	S_BRIGHT (FHFX, 'L',	3, NULL, NULL)
 };
 
-void AEggFX::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AEggFX, Raven, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (18)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_EGGFX)
+END_DEFAULTS
+
+AT_GAME_SET (EggFX)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_EGGFX];
-	info->speed = 18 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
-	info->deathstate = (gameinfo.gametype == GAME_Heretic) ?
-		&States[S_EGGFXI1] : &States[S_EGGFXI2];
+	AEggFX *def = GetDefault<AEggFX> ();
+
+	def->DeathState = &AEggFX::States[gameinfo.gametype == GAME_Heretic ? S_EGGFXI1 : S_EGGFXI2];
 }
 
 int AEggFX::DoSpecialDamage (AActor *target, int damage)
@@ -312,7 +313,8 @@ int AEggFX::DoSpecialDamage (AActor *target, int damage)
 	return -1;
 }
 
-BASIC_ARTI (Egg, arti_egg, TXT_ARTIEGG)
+BASIC_ARTI (Egg, arti_egg, GStrings(TXT_ARTIEGG))
+	AT_GAME_SET_FRIEND (Egg)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
@@ -325,8 +327,6 @@ private:
 		return true;
 	}
 };
-
-ARTI_SETUP (Egg, Raven);
 
 FState AArtiEgg::States[] =
 {
@@ -347,15 +347,14 @@ FState AArtiEgg::States[] =
 	S_NORMAL (PORK, 'H',	5, NULL, &States[S_ARTI_EGGP+0])
 };
 
-void AArtiEgg::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiEgg, Raven, 30, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+END_DEFAULTS
+
+AT_GAME_SET (Egg)
 {
-	INHERIT_DEFS;
-	info->doomednum = 30;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	info->spawnstate = (gameinfo.gametype == GAME_Heretic) ?
-		&States[S_ARTI_EGGC] : &States[S_ARTI_EGGP];
-	ArtiDispatch[arti_egg] = ActivateArti;
+	ArtiDispatch[arti_egg] = AArtiEgg::ActivateArti;
 	ArtiPics[arti_egg] = "ARTIEGGC";
 }
 

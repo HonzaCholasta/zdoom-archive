@@ -35,7 +35,6 @@
 #include "r_sky.h"
 #include "gi.h"
 
-extern int dmflags;
 extern int *texturewidthmask;
 
 //
@@ -54,11 +53,10 @@ fixed_t		sky1pos=0,		sky1speed=0;
 fixed_t		sky2pos=0,		sky2speed=0;
 
 // [RH] Stretch sky texture if not taller than 128 pixels?
-BEGIN_CUSTOM_CVAR (r_stretchsky, "1", CVAR_ARCHIVE)
+CUSTOM_CVAR (Bool, r_stretchsky, true, CVAR_ARCHIVE)
 {
 	R_InitSkyMap ();
 }
-END_CUSTOM_CVAR (r_stretchsky)
 
 char SKYFLATNAME[8] = "F_SKY1";
 
@@ -82,7 +80,7 @@ void R_InitSkyMap ()
 
 	if (textureheight[sky1texture] != textureheight[sky2texture])
 	{
-		Printf (PRINT_HIGH, "\x81+Both sky textures must be the same height.\x81-\n");
+		Printf ("\x81+Both sky textures must be the same height.\x81-\n");
 		sky2texture = sky1texture;
 	}
 
@@ -96,8 +94,8 @@ void R_InitSkyMap ()
 	if (fskyheight <= (128 << FRACBITS))
 	{
 		skytexturemid = 200/2*FRACUNIT;
-		skystretch = (r_stretchsky.value
-					  && !(dmflags & DF_NO_FREELOOK)
+		skystretch = (*r_stretchsky
+					  && !(*dmflags & DF_NO_FREELOOK)
 					  && !(level.flags & LEVEL_FORCENOSKYSTRETCH)) ? 1 : 0;
 	}
 	else
@@ -113,8 +111,8 @@ void R_InitSkyMap ()
 		skyscale = ((((freelookviewheight<<detailxshift) * viewwidth) / (viewwidth<<detailxshift)) << FRACBITS) /
 					(200);
 
-		skyiscale = FixedMul (skyiscale, FixedDiv (clipangle, ANGLE_45));
-		skyscale = FixedMul (skyscale, FixedDiv (ANGLE_45, clipangle));
+		skyiscale = Scale (skyiscale, FieldOfView, 2048);
+		skyscale = Scale (skyscale, 2048, FieldOfView);
 	}
 
 	// The sky map is 256*128*4 maps.

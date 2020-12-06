@@ -7,7 +7,26 @@
 #include "a_hereticglobal.h"
 #include "sbar.h"
 
-IMPLEMENT_DEF_SERIAL (AHealth, APickup);
+IMPLEMENT_ABSTRACT_ACTOR (AHealth)
+
+void AHealth::PlayPickupSound (AActor *toucher)
+{
+	S_Sound (toucher, CHAN_ITEM, "misc/health_pkup", 1, ATTN_NORM);
+}
+
+IMPLEMENT_ABSTRACT_ACTOR (AArmor)
+
+void AArmor::PlayPickupSound (AActor *toucher)
+{
+	S_Sound (toucher, CHAN_ITEM, "misc/armor_pkup", 1, ATTN_NORM);
+}
+
+IMPLEMENT_ABSTRACT_ACTOR (AAmmo)
+
+void AAmmo::PlayPickupSound (AActor *toucher)
+{
+	S_Sound (toucher, CHAN_ITEM, "misc/ammo_pkup", 1, ATTN_NORM);
+}
 
 const char *AmmoPics[NUMAMMO];
 const char *ArmorPics[NUMARMOR];
@@ -54,8 +73,6 @@ bool P_GiveBody (player_t *player, int num)
 
 bool P_GiveArmor (player_t *player, armortype_t armortype, int amount)
 {
-	int hits;
-
 	if (player->armorpoints[0] >= amount)
 	{
 		return false;
@@ -73,9 +90,6 @@ bool P_GiveArmor (player_t *player, armortype_t armortype, int amount)
 
 void P_GiveKey (player_t *player, keytype_t key)
 {
-	extern int playerkeys;
-	extern vertex_t KeyPoints[];
-	
 	if (player->keys[key])
 	{
 		return;
@@ -94,8 +108,8 @@ void P_GiveKey (player_t *player, keytype_t key)
 
 void A_RestoreSpecialThing1 (AActor *thing)
 {
-	thing->flags2 &= ~MF2_DONTDRAW;
-	if (static_cast<APickup *>(thing)->DoRespawn ())
+	thing->renderflags &= ~RF_INVISIBLE;
+	if (static_cast<AInventory *>(thing)->DoRespawn ())
 	{
 		S_Sound (thing, CHAN_VOICE, "misc/spawn", 1, ATTN_IDLE);
 	}
@@ -110,7 +124,7 @@ void A_RestoreSpecialThing1 (AActor *thing)
 void A_RestoreSpecialThing2 (AActor *thing)
 {
 	thing->flags |= MF_SPECIAL;
-	thing->SetState (GetInfo (thing)->spawnstate);
+	thing->SetState (thing->SpawnState);
 }
 
 /***************************************************************************/
@@ -119,11 +133,8 @@ void A_RestoreSpecialThing2 (AActor *thing)
 
 class AItemFog : public AActor
 {
-	DECLARE_ACTOR (AItemFog, AActor);
+	DECLARE_ACTOR (AItemFog, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AItemFog, AActor);
-REGISTER_ACTOR (AItemFog, Doom);
 
 FState AItemFog::States[] =
 {
@@ -136,12 +147,10 @@ FState AItemFog::States[] =
 	S_BRIGHT (IFOG, 'E',	6, NULL 						, NULL)
 };
 
-void AItemFog::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (AItemFog, Doom, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 //---------------------------------------------------------------------------
 //
@@ -151,24 +160,21 @@ void AItemFog::SetDefaults (FActorInfo *info)
 
 void A_RestoreSpecialDoomThing (AActor *self)
 {
-	self->flags2 &= ~MF2_DONTDRAW;
+	self->renderflags &= ~RF_INVISIBLE;
 	self->flags |= MF_SPECIAL;
-	if (static_cast<APickup *>(self)->DoRespawn ())
+	if (static_cast<AInventory *>(self)->DoRespawn ())
 	{
-		self->SetState (GetInfo (self)->spawnstate);
+		self->SetState (self->SpawnState);
 		S_Sound (self, CHAN_VOICE, "misc/spawn", 1, ATTN_IDLE);
 		Spawn<AItemFog> (self->x, self->y, self->z);
 	}
 }
 
 /***************************************************************************/
-/* APickup implementation												   */
+/* AInventory implementation												   */
 /***************************************************************************/
 
-IMPLEMENT_DEF_SERIAL (APickup, AActor);
-REGISTER_ACTOR (APickup, Any);
-
-FState APickup::States[] =
+FState AInventory::States[] =
 {
 #define S_HIDEDOOMISH 0
 	S_NORMAL (TNT1, 'A', 1050, NULL							, &States[S_HIDEDOOMISH+1]),
@@ -188,18 +194,16 @@ FState APickup::States[] =
 	S_NORMAL (ACLO, 'D',    4, A_RestoreSpecialThing2       , NULL)
 };
 
-int APickup::StaticLastMessageTic;
-const char *APickup::StaticLastMessage;
+int AInventory::StaticLastMessageTic;
+const char *AInventory::StaticLastMessage;
 
-void APickup::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-}
+IMPLEMENT_ACTOR (AInventory, Any, -1, 0)
+END_DEFAULTS
 
-bool APickup::ShouldRespawn ()
+bool AInventory::ShouldRespawn ()
 {
-	return (deathmatch.value || alwaysapplydmflags.value) && 
-		   (dmflags & DF_ITEMS_RESPAWN);
+	return (*deathmatch || *alwaysapplydmflags) && 
+		   (*dmflags & DF_ITEMS_RESPAWN);
 }
 
 //----------------------------------------------------------------------------
@@ -208,17 +212,17 @@ bool APickup::ShouldRespawn ()
 //
 //----------------------------------------------------------------------------
 
-void APickup::Hide ()
+void AInventory::Hide ()
 {
 	flags &= ~MF_SPECIAL;
-	flags2 |= MF2_DONTDRAW;
+	renderflags |= RF_INVISIBLE;
 	if (gameinfo.gametype == GAME_Doom)
 		SetState (&States[S_HIDEDOOMISH]);
 	else
 		SetState (&States[S_HIDESPECIAL]);
 }
 
-void APickup::Touch (AActor *toucher)
+void AInventory::Touch (AActor *toucher)
 {
 	if (!TryPickup (toucher))
 		return;
@@ -292,17 +296,17 @@ void APickup::Touch (AActor *toucher)
 		PlayPickupSound (toucher);
 }
 
-const char *APickup::PickupMessage ()
+const char *AInventory::PickupMessage ()
 {
 	return "You got a pickup";
 }
 
-void APickup::PlayPickupSound (AActor *toucher)
+void AInventory::PlayPickupSound (AActor *toucher)
 {
 	S_Sound (toucher, CHAN_ITEM, "misc/i_pkup", 1, ATTN_NORM);
 }
 
-bool APickup::ShouldStay ()
+bool AInventory::ShouldStay ()
 {
 	return false;
 }
@@ -320,16 +324,13 @@ bool APickup::ShouldStay ()
 void A_RestoreArtifact (AActor *arti)
 {
 	arti->flags |= MF_SPECIAL;
-	arti->SetState (GetInfo (arti)->spawnstate);
+	arti->SetState (arti->SpawnState);
 	S_Sound (arti, CHAN_VOICE, "misc/spawn", 1, ATTN_IDLE);
 }
 
 void A_HideThing (AActor *);
 void A_UnHideThing (AActor *);
 void A_RestoreArtifact (AActor *);
-
-IMPLEMENT_DEF_SERIAL (AArtifact, APickup)
-REGISTER_ACTOR (AArtifact, Any)
 
 FState AArtifact::States[] =
 {
@@ -415,15 +416,14 @@ FState AArtifact::States[] =
 	S_NORMAL (ACLO, 'A',    3, NULL                         , NULL)
 };
 
-void AArtifact::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-}
+IMPLEMENT_ACTOR (AArtifact, Any, -1, 0)
+END_DEFAULTS
 
 void AArtifact::PlayPickupSound (AActor *toucher)
 {
 	S_Sound (toucher, CHAN_ITEM, "misc/p_pkup", 1,
-		toucher == NULL ? ATTN_SURROUND : ATTN_NORM);
+		toucher == NULL || toucher == players[consoleplayer].camera
+		? ATTN_SURROUND : ATTN_NORM);
 }
 
 //---------------------------------------------------------------------------
@@ -446,13 +446,12 @@ void AArtifact::SetDormant ()
 	{ // Don't respawn
 		SetState (&States[S_DEADARTI]);
 	}
-	S_Sound (this, CHAN_VOICE, "misc/p_pkup", 1, ATTN_IDLE);
 }
 
 void AArtifact::SetHiddenState ()
 {
 	if (gameinfo.gametype == GAME_Doom)
-		SetState (&APickup::States[S_HIDEDOOMISH]);
+		SetState (&AInventory::States[S_HIDEDOOMISH]);
 	else
 		SetState (&States[S_DORMANTARTI1]);
 }
@@ -496,7 +495,7 @@ bool AInvisibility::ShouldRespawn ()
 }
 #endif
 
-IMPLEMENT_DEF_SERIAL (AKey, APickup);
+IMPLEMENT_ABSTRACT_ACTOR (AKey)
 
 bool AKey::TryPickup (AActor *toucher)
 {
@@ -517,4 +516,19 @@ bool AKey::ShouldStay ()
 void AKey::PlayPickupSound (AActor *toucher)
 {
 	S_Sound (toucher, CHAN_ITEM, "misc/k_pkup", 1, ATTN_NORM);
+}
+
+bool AInventory::DoRespawn ()
+{
+	return true;
+}
+
+bool AInventory::TryPickup (AActor *toucher)
+{
+	return false;
+}
+
+keytype_t AKey::GetKeyType ()
+{
+	return it_bluecard;
 }

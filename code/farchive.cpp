@@ -1,13 +1,12 @@
 #include <stddef.h>
 #include <string.h>
+#include <zlib.h>
 
 #include "doomtype.h"
 #include "farchive.h"
 #include "m_alloc.h"
 #include "m_swap.h"
-#include "minilzo.h"
 #include "cmdlib.h"
-#include "dstrings.h"
 #include "i_system.h"
 #include "c_cvars.h"
 #include "d_player.h"
@@ -32,10 +31,11 @@
 #define SWAP_DOUBLE(x)		{ QWORD qw = *(QWORD *)&x; SWAP_QWORD(qw); x = *(double *)&qw; }
 #endif
 
-// Output buffer size for LZO compression, extra space in case uncompressable
-#define OUT_LEN(a)		((a) + (a) / 64 + 16 + 3)
+// Output buffer size for compression; need some extra space.
+// I assume the description in zlib.h is accurate.
+#define OUT_LEN(a)		((a) + (a) / 1000 + 12)
 
-void FLZOFile::BeEmpty ()
+void FCompressedFile::BeEmpty ()
 {
 	m_Pos = 0;
 	m_BufferSize = 0;
@@ -46,20 +46,21 @@ void FLZOFile::BeEmpty ()
 }
 
 static const char LZOSig[4] = { 'F', 'L', 'Z', 'O' };
+static const char ZSig[4] = { 'F', 'L', 'Z', 'L' };
 
-FLZOFile::FLZOFile ()
+FCompressedFile::FCompressedFile ()
 {
 	BeEmpty ();
 }
 
-FLZOFile::FLZOFile (const char *name, EOpenMode mode, bool dontCompress)
+FCompressedFile::FCompressedFile (const char *name, EOpenMode mode, bool dontCompress)
 {
 	BeEmpty ();
 	Open (name, mode);
 	m_NoCompress = dontCompress;
 }
 
-FLZOFile::FLZOFile (FILE *file, EOpenMode mode, bool dontCompress)
+FCompressedFile::FCompressedFile (FILE *file, EOpenMode mode, bool dontCompress)
 {
 	BeEmpty ();
 	m_Mode = mode;
@@ -68,12 +69,12 @@ FLZOFile::FLZOFile (FILE *file, EOpenMode mode, bool dontCompress)
 	PostOpen ();
 }
 
-FLZOFile::~FLZOFile ()
+FCompressedFile::~FCompressedFile ()
 {
 	Close ();
 }
 
-bool FLZOFile::Open (const char *name, EOpenMode mode)
+bool FCompressedFile::Open (const char *name, EOpenMode mode)
 {
 	Close ();
 	if (name == NULL)
@@ -84,16 +85,20 @@ bool FLZOFile::Open (const char *name, EOpenMode mode)
 	return !!m_File;
 }
 
-void FLZOFile::PostOpen ()
+void FCompressedFile::PostOpen ()
 {
 	if (m_File && m_Mode == EReading)
 	{
 		char sig[4];
 		fread (sig, 4, 1, m_File);
-		if (sig[0] != LZOSig[0] || sig[1] != LZOSig[1] || sig[2] != LZOSig[2] || sig[3] != LZOSig[3])
+		if (sig[0] != ZSig[0] || sig[1] != ZSig[1] || sig[2] != ZSig[2] || sig[3] != ZSig[3])
 		{
 			fclose (m_File);
 			m_File = NULL;
+			if (sig[0] == LZOSig[0] && sig[1] == LZOSig[1] && sig[2] == LZOSig[2] && sig[3] == LZOSig[3])
+			{
+				Printf ("Compressed files from older ZDooms are not supported.\n");
+			}
 		}
 		else
 		{
@@ -113,14 +118,14 @@ void FLZOFile::PostOpen ()
 	}
 }
 
-void FLZOFile::Close ()
+void FCompressedFile::Close ()
 {
 	if (m_File)
 	{
 		if (m_Mode == EWriting)
 		{
 			Implode ();
-			fwrite (LZOSig, 4, 1, m_File);
+			fwrite (ZSig, 4, 1, m_File);
 			fwrite (m_Buffer, m_BufferSize + 8, 1, m_File);
 		}
 		fclose (m_File);
@@ -131,21 +136,21 @@ void FLZOFile::Close ()
 	BeEmpty ();
 }
 
-void FLZOFile::Flush ()
+void FCompressedFile::Flush ()
 {
 }
 
-FFile::EOpenMode FLZOFile::Mode () const
+FFile::EOpenMode FCompressedFile::Mode () const
 {
 	return m_Mode;
 }
 
-bool FLZOFile::IsOpen () const
+bool FCompressedFile::IsOpen () const
 {
 	return !!m_File;
 }
 
-FFile &FLZOFile::Write (const void *mem, unsigned int len)
+FFile &FCompressedFile::Write (const void *mem, unsigned int len)
 {
 	if (m_Mode == EWriting)
 	{
@@ -168,18 +173,18 @@ FFile &FLZOFile::Write (const void *mem, unsigned int len)
 	}
 	else
 	{
-		I_Error ("Tried to write to reading LZO file\n");
+		I_Error ("Tried to write to reading cfile");
 	}
 	return *this;
 }
 
-FFile &FLZOFile::Read (void *mem, unsigned int len)
+FFile &FCompressedFile::Read (void *mem, unsigned int len)
 {
 	if (m_Mode == EReading)
 	{
 		if (m_Pos + len > m_BufferSize)
 		{
-			I_Error ("Attempt to read past end of LZO file\n");
+			I_Error ("Attempt to read past end of cfilen");
 		}
 		if (len == 1)
 			*(BYTE *)mem = m_Buffer[m_Pos];
@@ -189,17 +194,17 @@ FFile &FLZOFile::Read (void *mem, unsigned int len)
 	}
 	else
 	{
-		I_Error ("Tried to read from writing LZO file\n");
+		I_Error ("Tried to read from writing cfile");
 	}
 	return *this;
 }
 
-unsigned int FLZOFile::Tell () const
+unsigned int FCompressedFile::Tell () const
 {
 	return m_Pos;
 }
 
-FFile &FLZOFile::Seek (int pos, ESeekPos ofs)
+FFile &FCompressedFile::Seek (int pos, ESeekPos ofs)
 {
 	if (ofs == ESeekRelative)
 		pos += m_Pos;
@@ -216,33 +221,39 @@ FFile &FLZOFile::Seek (int pos, ESeekPos ofs)
 	return *this;
 }
 
-CVAR (nofilecompression, "0", CVAR_ARCHIVE)
+CVAR (Bool, nofilecompression, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
-void FLZOFile::Implode ()
+void FCompressedFile::Implode ()
 {
-	unsigned int outlen;
-	unsigned int len = m_BufferSize;
-	lzo_byte *compressed = NULL;
-	lzo_byte *wrkmem;
+	uLong outlen;
+	uLong len = m_BufferSize;
+	Byte *compressed = NULL;
 	byte *oldbuf = m_Buffer;
 	int r;
 
-	if (!nofilecompression.value && !m_NoCompress)
+	if (!*nofilecompression && !m_NoCompress)
 	{
-		compressed = new lzo_byte[OUT_LEN(len)];
-		wrkmem = new lzo_byte[LZO1X_1_MEM_COMPRESS];
-		r = lzo1x_1_compress (m_Buffer, len, compressed, &outlen, wrkmem);
-		delete[] wrkmem;
+		outlen = OUT_LEN(len);
+		do
+		{
+			compressed = new Bytef[outlen];
+			r = compress (compressed, &outlen, m_Buffer, len);
+			if (r == Z_BUF_ERROR)
+			{
+				delete[] compressed;
+				outlen += 1024;
+			}
+		} while (r == Z_BUF_ERROR);
 
 		// If the data could not be compressed, store it as-is.
-		if (r != LZO_E_OK || outlen > len)
+		if (r != Z_OK || outlen >= len)
 		{
-			DPrintf ("LZOFile could not be imploded\n");
+			DPrintf ("cfile could not be deflated\n");
 			outlen = 0;
 		}
 		else
 		{
-			DPrintf ("LZOFile shrunk from %u to %u bytes\n", len, outlen);
+			DPrintf ("cfile shrank from %u to %u bytes\n", len, outlen);
 		}
 	}
 	else
@@ -255,8 +266,8 @@ void FLZOFile::Implode ()
 	m_Pos = 0;
 
 	DWORD *lens = (DWORD *)(m_Buffer);
-	lens[0] = BELONG(outlen);
-	lens[1] = BELONG(len);
+	lens[0] = BELONG((unsigned int)outlen);
+	lens[1] = BELONG((unsigned int)len);
 
 	if (outlen == 0)
 		memcpy (m_Buffer + 8, oldbuf, len);
@@ -267,9 +278,9 @@ void FLZOFile::Implode ()
 	free (oldbuf);
 }
 
-void FLZOFile::Explode ()
+void FCompressedFile::Explode ()
 {
-	unsigned int expandsize, cprlen;
+	uLong expandsize, cprlen;
 	unsigned char *expand;
 
 	if (m_Buffer)
@@ -281,13 +292,15 @@ void FLZOFile::Explode ()
 		expand = (unsigned char *)Malloc (expandsize);
 		if (cprlen)
 		{
-			unsigned int r, newlen;
+			int r;
+			uLong newlen;
 
-			r = lzo1x_decompress (m_Buffer + 8, cprlen, expand, &newlen, NULL);
-			if (r != LZO_E_OK || newlen != expandsize)
+			newlen = expandsize;
+			r = uncompress (expand, &newlen, m_Buffer + 8, cprlen);
+			if (r != Z_OK || newlen != expandsize)
 			{
 				free (expand);
-				I_Error ("Could not decompress LZO file");
+				I_Error ("Could not decompress cfile");
 			}
 		}
 		else
@@ -301,28 +314,28 @@ void FLZOFile::Explode ()
 	}
 }
 
-FLZOMemFile::FLZOMemFile ()
+FCompressedMemFile::FCompressedMemFile ()
 {
 	m_SourceFromMem = false;
 	m_ImplodedBuffer = NULL;
 }
 
 /*
-FLZOMemFile::FLZOMemFile (const char *name, EOpenMode mode)
-	: FLZOFile (name, mode)
+FCompressedMemFile::FCompressedMemFile (const char *name, EOpenMode mode)
+	: FCompressedFile (name, mode)
 {
 	m_SourceFromMem = false;
 	m_ImplodedBuffer = NULL;
 }
 */
 
-bool FLZOMemFile::Open (const char *name, EOpenMode mode)
+bool FCompressedMemFile::Open (const char *name, EOpenMode mode)
 {
 	if (mode == EWriting)
 	{
 		if (name)
 		{
-			I_Error ("FLZOMemFile cannot write to disk");
+			I_Error ("FCompressedMemFile cannot write to disk");
 		}
 		else
 		{
@@ -331,7 +344,7 @@ bool FLZOMemFile::Open (const char *name, EOpenMode mode)
 	}
 	else
 	{
-		bool res = FLZOFile::Open (name, EReading);
+		bool res = FCompressedFile::Open (name, EReading);
 		if (res)
 		{
 			fclose (m_File);
@@ -342,7 +355,7 @@ bool FLZOMemFile::Open (const char *name, EOpenMode mode)
 	return false;
 }
 
-bool FLZOMemFile::Open (void *memblock)
+bool FCompressedMemFile::Open (void *memblock)
 {
 	Close ();
 	m_Mode = EReading;
@@ -353,7 +366,7 @@ bool FLZOMemFile::Open (void *memblock)
 	return !!m_Buffer;
 }
 
-bool FLZOMemFile::Open ()
+bool FCompressedMemFile::Open ()
 {
 	Close ();
 	m_Mode = EWriting;
@@ -364,7 +377,7 @@ bool FLZOMemFile::Open ()
 	return true;
 }
 
-bool FLZOMemFile::Reopen ()
+bool FCompressedMemFile::Reopen ()
 {
 	if (m_Buffer == NULL && m_ImplodedBuffer)
 	{
@@ -378,7 +391,7 @@ bool FLZOMemFile::Reopen ()
 	return false;
 }
 
-void FLZOMemFile::Close ()
+void FCompressedMemFile::Close ()
 {
 	if (m_Mode == EWriting)
 	{
@@ -388,17 +401,15 @@ void FLZOMemFile::Close ()
 	}
 }
 
-void FLZOMemFile::Serialize (FArchive &arc)
+void FCompressedMemFile::Serialize (FArchive &arc)
 {
 	if (arc.IsStoring ())
 	{
 		if (m_ImplodedBuffer == NULL)
 		{
-			I_Error ("FLZOMemFile must be imploded before storing\n");
-			// Q: How do we get here without closing FLZOMemFile first?
-			Close ();
+			I_Error ("FCompressedMemFile must be deflated before storing");
 		}
-		arc.Write (LZOSig, 4);
+		arc.Write (ZSig, 4);
 
 		DWORD sizes[2];
 		sizes[0] = ((DWORD *)m_ImplodedBuffer)[0];
@@ -417,8 +428,8 @@ void FLZOMemFile::Serialize (FArchive &arc)
 
 		arc.Read (sig, 4);
 
-		if (sig[0] != LZOSig[0] || sig[1] != LZOSig[1] || sig[2] != LZOSig[2] || sig[3] != LZOSig[3])
-			I_Error ("Expected to extract an LZO-compressed file\n");
+		if (sig[0] != ZSig[0] || sig[1] != ZSig[1] || sig[2] != ZSig[2] || sig[3] != ZSig[3])
+			I_Error ("Expected to extract a compressed file");
 
 		arc << sizes[0] << sizes[1];
 		DWORD len = sizes[0] == 0 ? sizes[1] : sizes[0];
@@ -435,7 +446,7 @@ void FLZOMemFile::Serialize (FArchive &arc)
 	}
 }
 
-bool FLZOMemFile::IsOpen () const
+bool FCompressedMemFile::IsOpen () const
 {
 	return !!m_Buffer;
 }
@@ -502,6 +513,7 @@ void FArchive::Close ()
 	{
 		m_File->Close ();
 		m_File = NULL;
+		DPrintf ("Processed %d objects\n", m_ObjectCount);
 	}
 }
 
@@ -697,6 +709,14 @@ FArchive &FArchive::SerializePointer (void *ptrbase, BYTE **ptr, DWORD elemSize)
 	return *this;
 }
 
+FArchive &FArchive::SerializeObject (DObject *&object, TypeInfo *type)
+{
+	if (IsStoring ())
+		return WriteObject (object);
+	else
+		return ReadObject (object, type);
+}
+
 #define NEW_OBJ				((BYTE)1)
 #define NEW_CLS_OBJ			((BYTE)2)
 #define OLD_OBJ				((BYTE)3)
@@ -725,7 +745,7 @@ FArchive &FArchive::WriteObject (DObject *obj)
 			id[0] = NULL_OBJ;
 			Write (id, 1);
 		}
-		else if (m_TypeMap[type->TypeIndex].toArchive == ~0)
+		else if (m_TypeMap[type->TypeIndex].toArchive == TypeMap::NO_INDEX)
 		{
 			// No instances of this class have been written out yet.
 			// Write out the class, then write out the object. If this
@@ -747,6 +767,7 @@ FArchive &FArchive::WriteObject (DObject *obj)
 			WriteClass (type);
 			MapObject (obj);
 			obj->Serialize (*this);
+			obj->CheckIfSerialized ();
 		}
 		else
 		{
@@ -757,7 +778,7 @@ FArchive &FArchive::WriteObject (DObject *obj)
 			// controlled actor, remember that.
 			DWORD index = FindObjectIndex (obj);
 
-			if (index == ~0)
+			if (index == TypeMap::NO_INDEX)
 			{
 				if (obj->IsKindOf (RUNTIME_CLASS (AActor)) &&
 					(player = static_cast<AActor *>(obj)->player) &&
@@ -775,6 +796,7 @@ FArchive &FArchive::WriteObject (DObject *obj)
 				WriteCount (m_TypeMap[type->TypeIndex].toArchive);
 				MapObject (obj);
 				obj->Serialize (*this);
+				obj->CheckIfSerialized ();
 			}
 			else
 			{
@@ -824,6 +846,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 			// stored in the archive.
 			DObject *tempobj = type->CreateNew ();
 			tempobj->Serialize (*this);
+			tempobj->CheckIfSerialized ();
 			tempobj->Destroy ();
 			break;
 		}
@@ -833,6 +856,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 		obj = type->CreateNew ();
 		MapObject (obj);
 		obj->Serialize (*this);
+		obj->CheckIfSerialized ();
 		break;
 
 	case NEW_PLYR_OBJ:
@@ -845,6 +869,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 
 			DObject *tempobj = type->CreateNew ();
 			tempobj->Serialize (*this);
+			tempobj->CheckIfSerialized ();
 			tempobj->Destroy ();
 			break;
 		}
@@ -854,6 +879,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 		obj = type->CreateNew ();
 		MapObject (obj);
 		obj->Serialize (*this);
+		obj->CheckIfSerialized ();
 		break;
 
 	default:
@@ -869,7 +895,7 @@ DWORD FArchive::WriteClass (const TypeInfo *info)
 		I_Error ("Too many unique classes have been written.\nOnly %u were registered\n",
 			TypeInfo::m_NumTypes);
 	}
-	if (m_TypeMap[info->TypeIndex].toArchive != ~0)
+	if (m_TypeMap[info->TypeIndex].toArchive != TypeMap::NO_INDEX)
 	{
 		I_Error ("Attempt to write '%s' twice.\n", info->Name);
 	}
@@ -970,7 +996,7 @@ DWORD FArchive::HashObject (const DObject *obj) const
 DWORD FArchive::FindObjectIndex (const DObject *obj) const
 {
 	size_t index = m_ObjectHash[HashObject (obj)];
-	while (index != ~0 && m_ObjectMap[index].object != obj)
+	while (index != TypeMap::NO_INDEX && m_ObjectMap[index].object != obj)
 	{
 		index = m_ObjectMap[index].hashNext;
 	}
@@ -988,7 +1014,7 @@ void FArchive::UserWriteClass (const TypeInfo *type)
 	}
 	else
 	{
-		if (m_TypeMap[type->TypeIndex].toArchive == ~0)
+		if (m_TypeMap[type->TypeIndex].toArchive == TypeMap::NO_INDEX)
 		{
 			id = 1;
 			Write (&id, 1);

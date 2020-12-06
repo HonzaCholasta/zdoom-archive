@@ -6,6 +6,7 @@
 #include "p_enemy.h"
 #include "a_action.h"
 #include "a_sharedglobal.h"
+#include "gstrings.h"
 
 void A_KnightAttack (AActor *);
 void A_DripBlood (AActor *);
@@ -15,13 +16,12 @@ void A_AxeSound (AActor *);
 
 class AKnight : public AActor
 {
-	DECLARE_ACTOR (AKnight, AActor);
+	DECLARE_ACTOR (AKnight, AActor)
 public:
 	void NoBlockingSet ();
+	const char *GetObituary ();
+	const char *GetHitObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (AKnight, AActor);
-REGISTER_ACTOR (AKnight, Heretic);
 
 FState AKnight::States[] =
 {
@@ -57,64 +57,65 @@ FState AKnight::States[] =
 	S_NORMAL (KNIG, 'O',   -1, NULL 					, NULL)
 };
 
-void AKnight::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 64;
-	info->spawnstate = &States[S_KNIGHT_STND];
-	info->spawnhealth = 200;
-	info->seestate = &States[S_KNIGHT_WALK];
-	info->seesound = "knight/sight";
-	info->attacksound = "knight/attack";
-	info->painstate = &States[S_KNIGHT_PAIN];
-	info->painchance = 100;
-	info->painsound = "knight/pain";
-	info->meleestate = &States[S_KNIGHT_ATK];
-	info->missilestate = &States[S_KNIGHT_ATK];
-	info->deathstate = &States[S_KNIGHT_DIE];
-	info->deathsound = "knight/death";
-	info->speed = 12;
-	info->radius = 24 * FRACUNIT;
-	info->height = 78 * FRACUNIT;
-	info->mass = 150;
-	info->activesound = "knight/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_FLOORCLIP|MF2_PASSMOBJ;
-}
+IMPLEMENT_ACTOR (AKnight, Heretic, 64, 0)
+	PROP_SpawnHealth (200)
+	PROP_RadiusFixed (24)
+	PROP_HeightFixed (78)
+	PROP_Mass (150)
+	PROP_SpeedFixed (12)
+	PROP_PainChance (100)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PASSMOBJ)
+
+	PROP_SpawnState (S_KNIGHT_STND)
+	PROP_SeeState (S_KNIGHT_WALK)
+	PROP_PainState (S_KNIGHT_PAIN)
+	PROP_MeleeState (S_KNIGHT_ATK)
+	PROP_MissileState (S_KNIGHT_ATK)
+	PROP_DeathState (S_KNIGHT_DIE)
+
+	PROP_SeeSound ("knight/sight")
+	PROP_AttackSound ("knight/attack")
+	PROP_PainSound ("knight/pain")
+	PROP_DeathSound ("knight/death")
+	PROP_ActiveSound ("knight/active")
+END_DEFAULTS
 
 void AKnight::NoBlockingSet ()
 {
-	P_DropItem (this, "CrossbowWimpy", 5, 84);
+	P_DropItem (this, "CrossbowAmmo", 5, 84);
+}
+
+const char *AKnight::GetObituary ()
+{
+	return GStrings(OB_BONEKNIGHT);
+}
+
+const char *AKnight::GetHitObituary ()
+{
+	return GStrings(OB_BONEKNIGHTHIT);
 }
 
 // Knight ghost -------------------------------------------------------------
 
 class AKnightGhost : public AKnight
 {
-	DECLARE_STATELESS_ACTOR (AKnightGhost, AKnight);
+	DECLARE_STATELESS_ACTOR (AKnightGhost, AKnight)
 };
 
-IMPLEMENT_DEF_SERIAL (AKnightGhost, AKnight);
-REGISTER_ACTOR (AKnightGhost, Heretic);
-
-void AKnightGhost::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 65;
-	info->flags |= MF_SHADOW;
-	info->flags3 = MF3_GHOST;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_STATELESS_ACTOR (AKnightGhost, Heretic, 65, 0)
+	PROP_FlagsSet (MF_SHADOW)
+	PROP_Flags3 (MF3_GHOST)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+END_DEFAULTS
 
 // Knight axe ---------------------------------------------------------------
 
 class AKnightAxe : public AActor
 {
-	DECLARE_ACTOR (AKnightAxe, AActor);
+	DECLARE_ACTOR (AKnightAxe, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AKnightAxe, AActor);
-REGISTER_ACTOR (AKnightAxe, Heretic);
 
 FState AKnightAxe::States[] =
 {
@@ -129,29 +130,31 @@ FState AKnightAxe::States[] =
 	S_BRIGHT (SPAX, 'F',	6, NULL 					, NULL)
 };
 
-void AKnightAxe::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AKnightAxe, Heretic, -1, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (9)
+	PROP_Damage (2)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_NOTELEPORT|MF2_THRUGHOST)
+
+	PROP_SpawnState (S_SPINAXE)
+	PROP_DeathState (S_SPINAXEX)
+
+	PROP_DeathSound ("knight/hit")
+END_DEFAULTS
+
+AT_SPEED_SET (KnightAxe, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SPINAXE];
-	info->deathstate = &States[S_SPINAXEX];
-	info->deathsound = "knight/hit";
-	info->speed = GameSpeed != SPEED_Fast ? 9 * FRACUNIT : 18 * FRACUNIT;
-	info->radius = 10 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 2;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_WINDTHRUST|MF2_NOTELEPORT|MF2_THRUGHOST;
+	SimpleSpeedSetter (AKnightAxe, 9*FRACUNIT, 18*FRACUNIT, speed);
 }
 
 // Red axe ------------------------------------------------------------------
 
 class ARedAxe : public AKnightAxe
 {
-	DECLARE_ACTOR (ARedAxe, AKnightAxe);
+	DECLARE_ACTOR (ARedAxe, AKnightAxe)
 };
-
-IMPLEMENT_DEF_SERIAL (ARedAxe, AKnightAxe);
-REGISTER_ACTOR (ARedAxe, Heretic);
 
 FState ARedAxe::States[] =
 {
@@ -165,13 +168,17 @@ FState ARedAxe::States[] =
 	S_BRIGHT (RAXE, 'E',	6, NULL 					, NULL)
 };
 
-void ARedAxe::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ARedAxe, Heretic, -1, 0)
+	PROP_Damage (7)
+	PROP_Flags2Clear (MF2_WINDTHRUST)
+
+	PROP_SpawnState (S_REDAXE)
+	PROP_DeathState (S_REDAXEX)
+END_DEFAULTS
+
+AT_SPEED_SET (RedAxe, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_REDAXE];
-	info->deathstate = &States[S_REDAXEX];
-	info->damage = 7;
-	info->flags2 &= ~MF2_WINDTHRUST;
+	SimpleSpeedSetter (ARedAxe, 9*FRACUNIT, 18*FRACUNIT, speed);
 }
 
 //----------------------------------------------------------------------------
@@ -207,12 +214,12 @@ void A_KnightAttack (AActor *actor)
 	}
 	if (P_CheckMeleeRange (actor))
 	{
-		P_DamageMobj (actor->target, actor, actor, HITDICE(3));
+		P_DamageMobj (actor->target, actor, actor, HITDICE(3), MOD_HIT);
 		S_Sound (actor, CHAN_BODY, "knight/melee", 1, ATTN_NORM);
 		return;
 	}
 	// Throw axe
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->AttackSound, 1, ATTN_NORM);
 	if (actor->flags & MF_SHADOW || P_Random () < 40)
 	{ // Red axe
 		P_SpawnMissileZ (actor, actor->z + 36*FRACUNIT, actor->target, RUNTIME_CLASS(ARedAxe));

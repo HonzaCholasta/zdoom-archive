@@ -4,9 +4,9 @@
 #include "c_dispatch.h"
 #include "c_bind.h"
 #include "g_level.h"
-#include "dstrings.h"
 #include "hu_stuff.h"
 #include "gi.h"
+#include "configfile.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -189,7 +189,7 @@ static const char *KeyName (int key)
 	return name;
 }
 
-BEGIN_COMMAND (unbindall)
+CCMD (unbindall)
 {
 	int i;
 
@@ -207,9 +207,8 @@ BEGIN_COMMAND (unbindall)
 			DoubleBindings[i] = NULL;
 		}
 }
-END_COMMAND (unbindall)
 
-BEGIN_COMMAND (unbind)
+CCMD (unbind)
 {
 	int i;
 
@@ -225,41 +224,39 @@ BEGIN_COMMAND (unbind)
 		}
 		else
 		{
-			Printf (PRINT_HIGH, "Unknown key \"%s\"\n", argv[1]);
+			Printf ("Unknown key \"%s\"\n", argv[1]);
 			return;
 		}
 
 	}
 }
-END_COMMAND (undbind)
 
-BEGIN_COMMAND (bind)
+CCMD (bind)
 {
 	int i;
 
 	if (argc > 1) {
 		i = GetKeyFromName (argv[1]);
 		if (!i) {
-			Printf (PRINT_HIGH, "Unknown key \"%s\"\n", argv[1]);
+			Printf ("Unknown key \"%s\"\n", argv[1]);
 			return;
 		}
 		if (argc == 2) {
-			Printf (PRINT_HIGH, "\"%s\" = \"%s\"\n", argv[1], (Bindings[i] ? Bindings[i] : ""));
+			Printf ("\"%s\" = \"%s\"\n", argv[1], (Bindings[i] ? Bindings[i] : ""));
 		} else {
 			ReplaceString (&Bindings[i], argv[2]);
 		}
 	} else {
-		Printf (PRINT_HIGH, "Current key bindings:\n");
+		Printf ("Current key bindings:\n");
 		
 		for (i = 0; i < NUM_KEYS; i++) {
 			if (Bindings[i])
-				Printf (PRINT_HIGH, "%s \"%s\"\n", KeyName (i), Bindings[i]);
+				Printf ("%s \"%s\"\n", KeyName (i), Bindings[i]);
 		}
 	}
 }
-END_COMMAND (bind)
 
-BEGIN_COMMAND (undoublebind)
+CCMD (undoublebind)
 {
 	int i;
 
@@ -275,15 +272,14 @@ BEGIN_COMMAND (undoublebind)
 		}
 		else
 		{
-			Printf (PRINT_HIGH, "Unknown key \"%s\"\n", argv[1]);
+			Printf ("Unknown key \"%s\"\n", argv[1]);
 			return;
 		}
 
 	}
 }
-END_COMMAND (undoublebind)
 
-BEGIN_COMMAND (doublebind)
+CCMD (doublebind)
 {
 	int i;
 
@@ -292,12 +288,12 @@ BEGIN_COMMAND (doublebind)
 		i = GetKeyFromName (argv[1]);
 		if (!i)
 		{
-			Printf (PRINT_HIGH, "Unknown key \"%s\"\n", argv[1]);
+			Printf ("Unknown key \"%s\"\n", argv[1]);
 			return;
 		}
 		if (argc == 2)
 		{
-			Printf (PRINT_HIGH, "\"%s\" = \"%s\"\n", argv[1], (DoubleBindings[i] ? DoubleBindings[i] : ""));
+			Printf ("\"%s\" = \"%s\"\n", argv[1], (DoubleBindings[i] ? DoubleBindings[i] : ""));
 		}
 		else
 		{
@@ -306,30 +302,26 @@ BEGIN_COMMAND (doublebind)
 	}
 	else
 	{
-		Printf (PRINT_HIGH, "Current key doublebindings:\n");
+		Printf ("Current key doublebindings:\n");
 		
 		for (i = 0; i < NUM_KEYS; i++)
 		{
 			if (DoubleBindings[i])
-				Printf (PRINT_HIGH, "%s \"%s\"\n", KeyName (i), DoubleBindings[i]);
+				Printf ("%s \"%s\"\n", KeyName (i), DoubleBindings[i]);
 		}
 	}
 }
-END_COMMAND (doublebind)
 
 static void SetBinds (const FBinding *array)
 {
-	char bindbuff[64];
-
 	while (array->Key)
 	{
-		sprintf (bindbuff, "bind %s \"%s\"", array->Key, array->Bind);
-		AddCommandString (bindbuff);
+		C_DoBind (array->Key, array->Bind, false);
 		array++;
 	}
 }
 
-BEGIN_COMMAND (binddefaults)
+CCMD(binddefaults)
 {
 	SetBinds (DefBindings);
 
@@ -343,7 +335,6 @@ BEGIN_COMMAND (binddefaults)
 		SetBinds (DefHexenBindings);
 	}
 }
-END_COMMAND (binddefaults)
 
 BOOL C_DoKey (event_t *ev)
 {
@@ -351,27 +342,35 @@ BOOL C_DoKey (event_t *ev)
 	int dclickspot;
 	byte dclickmask;
 
-	if (ev->type != ev_keydown && ev->type != ev_keyup)
+	if (ev->type != EV_KeyDown && ev->type != EV_KeyUp)
 		return false;
 
 	dclickspot = ev->data1 >> 3;
 	dclickmask = 1 << (ev->data1 & 7);
 
-	if (DClickTime[ev->data1] > level.time && ev->type == ev_keydown) {
+	if (DClickTime[ev->data1] > level.time && ev->type == EV_KeyDown)
+	{
 		// Key pressed for a double click
 		binding = DoubleBindings[ev->data1];
 		DClicked[dclickspot] |= dclickmask;
-	} else {
-		if (ev->type == ev_keydown) {
+	}
+	else
+	{
+		if (ev->type == EV_KeyDown)
+		{
 			// Key pressed for a normal press
 			binding = Bindings[ev->data1];
 			DClickTime[ev->data1] = level.time + 20;
-		} else if (DClicked[dclickspot] & dclickmask) {
+		}
+		else if (DClicked[dclickspot] & dclickmask)
+		{
 			// Key released from a double click
 			binding = DoubleBindings[ev->data1];
 			DClicked[dclickspot] &= ~dclickmask;
 			DClickTime[ev->data1] = 0;
-		} else {
+		}
+		else
+		{
 			// Key released from a normal press
 			binding = Bindings[ev->data1];
 		}
@@ -380,17 +379,25 @@ BOOL C_DoKey (event_t *ev)
 	if (!binding)
 		binding = Bindings[ev->data1];
 
-	if (binding && (chatmodeon == 0 || ev->data1 < 256)) {
-		if (ev->type == ev_keydown) {
-			AddCommandString (binding);
-		} else {
+	if (binding && (chatmodeon == 0 || ev->data1 < 256))
+	{
+		if (ev->type == EV_KeyDown)
+		{
+			char copy[1024];
+			// Copy the command in case the binding rebinds the key
+			strcpy (copy, binding);
+			AddCommandString (copy);
+		}
+		else
+		{
 			char *achar;
 		
 			achar = strchr (binding, '+');
 			if (!achar)
 				return false;
 
-			if ((achar == binding) || (*(achar - 1) <= ' ')) {
+			if ((achar == binding) || (*(achar - 1) <= ' '))
+			{
 				*achar = '-';
 				AddCommandString (binding);
 				*achar = '+';
@@ -401,17 +408,55 @@ BOOL C_DoKey (event_t *ev)
 	return false;
 }
 
-void C_ArchiveBindings (FILE *f)
+void C_ArchiveBindings (FConfigFile *f, bool dodouble)
 {
+	char **bindings;
+	const char *name;
 	int i;
 
-	fprintf (f, "unbindall\n");
+	bindings = dodouble ? DoubleBindings : Bindings;
+
 	for (i = 0; i < NUM_KEYS; i++)
-		if (Bindings[i])
-			fprintf (f, "bind \"%s\" \"%s\"\n", KeyName (i), Bindings[i]);
-	for (i = 0; i < NUM_KEYS; i++)
-		if (DoubleBindings[i])
-			fprintf (f, "doublebind \"%s\" \"%s\"\n", KeyName (i), DoubleBindings[i]);
+	{
+		if (bindings[i])
+		{
+			name = KeyName (i);
+			if (name[1] == 0)	// Make sure given name is config-safe
+			{
+				if (name[0] == '[')
+					name = "LeftBracket";
+				else if (name[0] == ']')
+					name = "RightBracket";
+				else if (name[0] == '=')
+					name = "Equals";
+			}
+			f->SetValueForKey (name, bindings[i]);
+		}
+	}
+}
+
+void C_DoBind (const char *key, const char *bind, bool dodouble)
+{
+	int keynum = GetKeyFromName (key);
+	if (keynum == 0)
+	{
+		if (stricmp (key, "LeftBracket") == 0)
+		{
+			keynum = GetKeyFromName ("[");
+		}
+		else if (stricmp (key, "RightBracket") == 0)
+		{
+			keynum = GetKeyFromName ("]");
+		}
+		else if (stricmp (key, "Equals") == 0)
+		{
+			keynum = GetKeyFromName ("=");
+		}
+	}
+	if (keynum != 0)
+	{
+		ReplaceString ((dodouble ? DoubleBindings : Bindings) + keynum, bind);
+	}
 }
 
 int C_GetKeysForCommand (char *cmd, int *first, int *second)
@@ -465,7 +510,7 @@ void C_UnbindACommand (char *str)
 	}
 }
 
-void C_ChangeBinding (char *str, int newone)
+void C_ChangeBinding (const char *str, int newone)
 {
 	if (Bindings[newone])
 		delete[] Bindings[newone];

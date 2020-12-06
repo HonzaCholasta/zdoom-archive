@@ -8,6 +8,7 @@
 #include "m_random.h"
 #include "d_player.h"
 #include "st_stuff.h"
+#include "v_video.h"
 
 extern byte *translationtables;
 
@@ -36,7 +37,7 @@ public:
 			"SMALLIN7",	"SMALLIN8",	"SMALLIN9"
 		};
 
-		if (deathmatch.value)
+		if (*deathmatch)
 		{
 			hereticLumpNames[5] = "STATBAR";
 		}
@@ -123,11 +124,11 @@ public:
 		if (state == HUD_Fullscreen)
 		{
 			DrawFullScreenStuff ();
-			SB_state = -1;
+			SB_state = screen->GetPageCount ();
 		}
 		else if (state == HUD_StatusBar)
 		{
-			if (SB_state == -1)
+			if (SB_state > 0)
 			{
 				DrawImage (Images, imgBARBACK, 0, 0);
 				if (CPlayer->cheats&CF_GODMODE)
@@ -140,9 +141,14 @@ public:
 			DrawCommonBar ();
 			if (CPlayer->inventorytics == 0)
 			{
+				if (SB_state < 0)
+				{
+					SB_state = screen->GetPageCount ();
+				}
 				if (SB_state != 0)
 				{
 					// Main interface
+					SB_state--;
 					DrawImage (Images, imgSTATBAR, 34, 2);
 					oldarti = 0;
 					oldammo = -1;
@@ -151,18 +157,22 @@ public:
 					oldfrags = -9999; //can't use -1, 'cuz of negative frags
 					oldlife = -1;
 					oldkeys = -1;
+					oldhealth = -1;
 				}
 				DrawMainBar ();
-				SB_state = 0;
 			}
 			else
 			{
-				if (SB_state != 1)
+				if (SB_state > -1)
 				{
+					SB_state = -screen->GetPageCount () - 1;
+				}
+				if (SB_state < -1)
+				{
+					SB_state++;
 					DrawImage (Images, imgINVBAR, 34, 2);
 				}
 				DrawInventoryBar ();
-				SB_state = 1;
 			}
 		}
 
@@ -202,11 +212,11 @@ public:
 						hitCenterFrame = true;
 					}
 				}
-				BorderTopRefresh = true;
+				BorderTopRefresh = screen->GetPageCount ();
 			}
 			else
 			{
-				BorderTopRefresh = true;
+				BorderTopRefresh = screen->GetPageCount ();
 			}
 		}
 
@@ -218,11 +228,11 @@ public:
 				frame = (level.time/3)&15;
 				DrawOuterPatch ((patch_t *)W_CacheLumpNum (
 					spinbooklump+frame, PU_CACHE), -20, 17);
-				BorderTopRefresh = true;
+				BorderTopRefresh = screen->GetPageCount ();
 			}
 			else
 			{
-				BorderTopRefresh = true;
+				BorderTopRefresh = screen->GetPageCount ();
 			}
 		}
 
@@ -250,6 +260,11 @@ private:
 		if (oldhealth != HealthMarker)
 		{
 			oldhealth = HealthMarker;
+			HealthRefresh = screen->GetPageCount ();
+		}
+		if (HealthRefresh)
+		{
+			HealthRefresh--;
 			healthPos = HealthMarker;
 			if (healthPos < 0)
 			{
@@ -294,29 +309,38 @@ private:
 		else if (oldarti != CPlayer->readyArtifact
 			|| oldartiCount != CPlayer->inventory[oldarti])
 		{
-			DrawImage (Images, imgBLACKSQ, 180, 3);
-			if (CPlayer->inventory[CPlayer->readyArtifact] > 0)
-			{
-				DrawImage (ArtiImages, CPlayer->readyArtifact, 179, 2);
-				if (CPlayer->inventory[CPlayer->readyArtifact] != 1)
-				{
-					DrSmallNumber (CPlayer->inventory[CPlayer->readyArtifact],
-						197, 24);
-				}
-			}
 			oldarti = CPlayer->readyArtifact;
 			oldartiCount = CPlayer->inventory[oldarti];
+			ArtiRefresh = screen->GetPageCount ();
+		}
+		if (ArtiRefresh)
+		{
+			ArtiRefresh--;
+			DrawImage (Images, imgBLACKSQ, 180, 3);
+			if (CPlayer->inventory[oldarti] > 0)
+			{
+				DrawImage (ArtiImages, oldarti, 179, 2);
+				if (oldartiCount != 1)
+				{
+					DrSmallNumber (oldartiCount, 197, 24);
+				}
+			}
 		}
 
 		// Frags
-		if (deathmatch.value)
+		if (*deathmatch)
 		{
 			temp = CPlayer->fragcount;
 			if (temp != oldfrags)
 			{
+				oldfrags = temp;
+				FragHealthRefresh = screen->GetPageCount ();
+			}
+			if (FragHealthRefresh)
+			{
+				FragHealthRefresh--;
 				DrawImage (Images, imgARMCLEAR, 57, 13);
 				DrINumber (temp, 61, 12);
-				oldfrags = temp;
 			}
 		}
 		else
@@ -333,6 +357,11 @@ private:
 			if (oldlife != temp)
 			{
 				oldlife = temp;
+				FragHealthRefresh = screen->GetPageCount ();
+			}
+			if (FragHealthRefresh)
+			{
+				FragHealthRefresh--;
 				DrawImage (Images, imgARMCLEAR, 57, 13);
 				DrINumber (temp, 61, 12);
 			}
@@ -350,6 +379,12 @@ private:
 
 		if (oldkeys != playerkeys)
 		{
+			oldkeys = playerkeys;
+			KeysRefresh = screen->GetPageCount ();
+		}
+		if (KeysRefresh)
+		{
+			KeysRefresh--;
 			if (CPlayer->keys[key_yellow])
 			{
 				DrawImage (Images, imgYKEYICON, 153, 6);
@@ -362,7 +397,6 @@ private:
 			{
 				DrawImage (Images, imgBKEYICON, 153, 22);
 			}
-			oldkeys = playerkeys;
 		}
 		// Ammo
 		ammo = wpnlev1info[CPlayer->readyweapon]->ammo;
@@ -376,22 +410,32 @@ private:
 		}
 		if (oldammo != temp || oldweapon != CPlayer->readyweapon)
 		{
-			DrawImage (Images, imgBLACKSQ, 108, 3);
-			if (temp >= 0)
-			{
-				DrINumber (temp, 109, 4);
-				DrawImage (AmmoImages, ammo, 111, 14);
-			}
 			oldammo = temp;
 			oldweapon = CPlayer->readyweapon;
+			AmmoRefresh = screen->GetPageCount ();
+		}
+		if (AmmoRefresh)
+		{
+			AmmoRefresh--;
+			DrawImage (Images, imgBLACKSQ, 108, 3);
+			if (oldammo >= 0)
+			{
+				DrINumber (oldammo, 109, 4);
+				DrawImage (AmmoImages, ammo, 111, 14);
+			}
 		}
 
 		// Armor
 		if (oldarmor != CPlayer->armorpoints[0])
 		{
+			oldarmor = CPlayer->armorpoints[0];
+			ArmorRefresh = screen->GetPageCount ();
+		}
+		if (ArmorRefresh)
+		{
+			ArmorRefresh--;
 			DrawImage (Images, imgARMCLEAR, 224, 13);
 			DrINumber (CPlayer->armorpoints[0], 228, 12);
-			oldarmor = CPlayer->armorpoints[0];
 		}
 	}
 
@@ -459,7 +503,7 @@ private:
 		{
 			DrBNumberOuter (0, 5, -20);
 		}
-		if (deathmatch.value)
+		if (*deathmatch)
 		{
 			DrINumberOuter (CPlayer->fragcount, 45, -16);
 		}
@@ -680,6 +724,13 @@ private:
 	int HealthMarker;
 	int ChainWiggle;
 	int ArtifactFlash;
+
+	char HealthRefresh;
+	char ArtiRefresh;
+	char FragHealthRefresh;
+	char KeysRefresh;
+	char AmmoRefresh;
+	char ArmorRefresh;
 };
 
 FBaseStatusBar *CreateHereticStatusBar ()

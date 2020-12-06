@@ -5,6 +5,7 @@
 #include "p_enemy.h"
 #include "s_sound.h"
 #include "a_doomglobal.h"
+#include "statnums.h"
 
 void A_Fire (AActor *);		// from m_archvile.cpp
 
@@ -17,8 +18,31 @@ void A_BrainSpit (AActor *);
 void A_SpawnFly (AActor *);
 void A_SpawnSound (AActor *);
 
-IMPLEMENT_DEF_SERIAL (ABossBrain, AActor);
-REGISTER_ACTOR (ABossBrain, Doom);
+
+class ABossTarget : public AActor
+{
+	DECLARE_STATELESS_ACTOR (ABossTarget, AActor)
+public:
+	void BeginPlay ();
+};
+
+class DBrainState : public DThinker
+{
+	DECLARE_CLASS (DBrainState, DThinker)
+public:
+	DBrainState ()
+		: DThinker (STAT_BOSSTARGET),
+		  Targets (STAT_BOSSTARGET),
+		  SerialTarget (NULL),
+		  Easy (false)
+	{}
+	void Serialize (FArchive &arc);
+	ABossTarget *GetTarget ();
+protected:
+	TThinkerIterator<ABossTarget> Targets;
+	ABossTarget *SerialTarget;
+	bool Easy;
+};
 
 FState ABossBrain::States[] =
 {
@@ -40,29 +64,35 @@ FState ABossBrain::States[] =
 	S_NORMAL (BBRN, 'A',   -1, A_BrainDie		, NULL)
 };
 
-void ABossBrain::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 88;
-	info->spawnstate = &States[S_BRAIN];
-	info->spawnhealth = 250;
-	info->painstate = &States[S_BRAIN_PAIN];
-	info->painchance = 255;
-	info->painsound = "brain/pain";
-	info->deathstate = &States[S_BRAIN_DIE];
-	info->deathsound = "brain/death";
-	//info->height = 86 * FRACUNIT;		// don't do this; it messes up some non-id levels
-	info->mass = 10000000;
-	info->flags = MF_SOLID|MF_SHOOTABLE;
-}
+IMPLEMENT_ACTOR (ABossBrain, Doom, 88, 0)
+	PROP_SpawnHealth (250)
+	//PROP_HeightFixed (86)		// don't do this; it messes up some non-id levels
+	PROP_MassLong (10000000)
+	PROP_PainChance (255)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE)
+
+	PROP_SpawnState (S_BRAIN)
+	PROP_PainState (S_BRAIN_PAIN)
+	PROP_DeathState (S_BRAIN_DIE)
+
+	PROP_PainSound ("brain/pain")
+	PROP_DeathSound ("brain/death")
+END_DEFAULTS
 
 class ABossEye : public AActor
 {
-	DECLARE_ACTOR (ABossEye, AActor);
+	DECLARE_ACTOR (ABossEye, AActor)
+	HAS_OBJECT_POINTERS
+public:
+	void Serialize (FArchive &arc);
+	void BeginPlay ();
+
+	DBrainState *SharedState;
 };
 
-IMPLEMENT_DEF_SERIAL (ABossEye, AActor);
-REGISTER_ACTOR (ABossEye, Doom);
+IMPLEMENT_POINTY_CLASS (ABossEye)
+ DECLARE_POINTER (SharedState)
+END_POINTERS
 
 FState ABossEye::States[] =
 {
@@ -74,41 +104,47 @@ FState ABossEye::States[] =
 	S_NORMAL (SSWV, 'A',  150, A_BrainSpit					, &States[S_BRAINEYESEE+1])
 };
 
-void ABossEye::SetDefaults (FActorInfo *info)
+BEGIN_DEFAULTS (ABossEye, Doom, 89, 0)
+	PROP_HeightFixed (32)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR)
+
+	PROP_SpawnState (S_BRAINEYE)
+	PROP_SeeState (S_BRAINEYESEE)
+END_DEFAULTS
+
+void ABossEye::Serialize (FArchive &arc)
 {
-	INHERIT_DEFS;
-	info->doomednum = 89;
-	info->spawnstate = &States[S_BRAINEYE];
-	info->seestate = &States[S_BRAINEYESEE];
-	info->radius = 20 * FRACUNIT;
-	info->height = 32 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP | MF_NOSECTOR;
+	Super::Serialize (arc);
+	arc << SharedState;
 }
 
-class ABossTarget : public AActor
+void ABossEye::BeginPlay ()
 {
-	DECLARE_STATELESS_ACTOR (ABossTarget, AActor);
-};
+	Super::BeginPlay ();
 
-IMPLEMENT_DEF_SERIAL (ABossTarget, AActor);
-REGISTER_ACTOR (ABossTarget, Doom);
+	TThinkerIterator<DBrainState> iterator;
+	SharedState = iterator.Next ();
+	if (SharedState == NULL)
+	{
+		SharedState = new DBrainState;
+	}
+}
 
-void ABossTarget::SetDefaults (FActorInfo *info)
+IMPLEMENT_STATELESS_ACTOR (ABossTarget, Doom, 87, 0)
+	PROP_HeightFixed (32)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR)
+END_DEFAULTS
+
+void ABossTarget::BeginPlay ()
 {
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 87;
-	info->radius = 20 * FRACUNIT;
-	info->height = 32 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP | MF_NOSECTOR;
+	Super::BeginPlay ();
+	ChangeStatNum (STAT_BOSSTARGET);
 }
 
 class ASpawnShot : public AActor
 {
-	DECLARE_ACTOR (ASpawnShot, AActor);
+	DECLARE_ACTOR (ASpawnShot, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASpawnShot, AActor);
-REGISTER_ACTOR (ASpawnShot, Doom);
 
 FState ASpawnShot::States[] =
 {
@@ -118,26 +154,24 @@ FState ASpawnShot::States[] =
 	S_BRIGHT (BOSF, 'D',	3, A_SpawnFly					, &States[0])
 };
 
-void ASpawnShot::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->seesound = "brain/spit";
-	info->deathsound = "brain/spawn";
-	info->speed = 10 * FRACUNIT;
-	info->radius = 6 * FRACUNIT;
-	info->height = 32 * FRACUNIT;
-	info->damage = 3;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_NOCLIP;
-}
+IMPLEMENT_ACTOR (ASpawnShot, Doom, -1, 0)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (32)
+	PROP_SpeedFixed (10)
+	PROP_Damage (3)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_NOCLIP)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (0)
+
+	PROP_SeeSound ("brain/spit")
+	PROP_DeathSound ("brain/spawn")
+END_DEFAULTS
 
 class ASpawnFire : public AActor
 {
-	DECLARE_ACTOR (ASpawnFire, AActor);
+	DECLARE_ACTOR (ASpawnFire, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASpawnFire, AActor);
-REGISTER_ACTOR (ASpawnFire, Doom);
 
 FState ASpawnFire::States[] =
 {
@@ -151,40 +185,13 @@ FState ASpawnFire::States[] =
 	S_BRIGHT (FIRE, 'H',	4, A_Fire						, NULL)
 };
 
-void ASpawnFire::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 78 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = TRANSLUC66;
-}
+IMPLEMENT_ACTOR (ASpawnFire, Doom, -1, 0)
+	PROP_HeightFixed (78)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Add)
 
-static TArray<AActor *> BrainTargets (32);
-struct brain_s brain;   // killough 3/26/98: global state of boss brain
-
-// killough 3/26/98: initialize icon landings at level startup,
-// rather than at boss wakeup, to prevent savegame-related crashes
-
-void P_SpawnBrainTargets (void)	// killough 3/26/98: renamed old function
-{
-	AActor *other;
-	TThinkerIterator<AActor> iterator;
-
-	// find all the target spots
-	BrainTargets.Clear ();
-	brain.targeton = 0;
-	brain.easy = 0;				// killough 3/26/98: always init easy to 0
-
-	while ( (other = iterator.Next ()) )
-	{
-		if (other->IsKindOf (RUNTIME_CLASS(ABossTarget)))
-		{
-			BrainTargets.Push (other);
-		}
-	}
-}
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 void A_BrainAwake (AActor *self)
 {
@@ -232,7 +239,7 @@ void A_BrainExplode (AActor *self)
 void A_BrainDie (AActor *self)
 {
 	// [RH] If noexit, then don't end the level.
-	if ((deathmatch.value || alwaysapplydmflags.value) && (dmflags & DF_NO_EXIT))
+	if ((*deathmatch || *alwaysapplydmflags) && (*dmflags & DF_NO_EXIT))
 		return;
 
 	G_ExitLevel (0);
@@ -241,28 +248,34 @@ void A_BrainDie (AActor *self)
 void A_BrainSpit (AActor *self)
 {
 	AActor *targ;
-	AActor *newmobj;
-	
-	// [RH] Do nothing if there are no brain targets.
-	if (BrainTargets.Size() == 0)
-		return;
+	AActor *spit;
 
-	brain.easy ^= 1;		// killough 3/26/98: use brain struct
-	if (gameskill.value <= sk_easy && (!brain.easy))
-		return;
-				
 	// shoot a cube at current target
-	targ = BrainTargets[brain.targeton++];	// killough 3/26/98:
-	brain.targeton %= BrainTargets.Size();	// Use brain struct for targets
+	targ = static_cast<ABossEye *> (self)->SharedState->GetTarget ();
 
-	// spawn brain missile
-	newmobj = P_SpawnMissile (self, targ, RUNTIME_CLASS(ASpawnShot));
+	if (targ != NULL)
+	{
+		// spawn brain missile
+		spit = P_SpawnMissile (self, targ, RUNTIME_CLASS(ASpawnShot));
 
-	newmobj->target = targ;
-	newmobj->reactiontime =
-		((targ->y - self->y)/newmobj->momy) / newmobj->state->tics;
+		if (spit != NULL)
+		{
+			spit->target = targ;
+			// [RH] Do this correctly for any trajectory. Doom would divide by 0
+			// if the target had the same y coordinate as the spitter.
+			if (spit->momy != 0)
+			{
+				spit->reactiontime = (targ->y - self->y) / spit->momy;
+			}
+			else
+			{
+				spit->reactiontime = (targ->x - self->x) / spit->momx;
+			}
+			spit->reactiontime /= spit->state->GetTics();
+		}
 
-	S_Sound (self, CHAN_WEAPON, "brain/spit", 1, ATTN_SURROUND);
+		S_Sound (self, CHAN_WEAPON, "brain/spit", 1, ATTN_SURROUND);
+	}
 }
 
 void A_SpawnFly (AActor *self)
@@ -301,7 +314,7 @@ void A_SpawnFly (AActor *self)
 
 	newmobj = Spawn (type, targ->x, targ->y, targ->z);
 	if (P_LookForPlayers (newmobj, true))
-		newmobj->SetState (RUNTIME_TYPE(newmobj)->ActorInfo->seestate);
+		newmobj->SetState (newmobj->SeeState);
 		
 	// telefrag anything in this spot
 	P_TeleportMove (newmobj, newmobj->x, newmobj->y, newmobj->z, true);
@@ -315,4 +328,46 @@ void A_SpawnSound (AActor *self)
 {
 	S_Sound (self, CHAN_BODY, "brain/cube", 1, ATTN_IDLE);
 	A_SpawnFly (self);
+}
+
+// Each brain on the level shares a single global state
+IMPLEMENT_CLASS (DBrainState)
+
+ABossTarget *DBrainState::GetTarget ()
+{
+	Easy = !Easy;
+
+	if (*gameskill <= sk_easy && !Easy)
+		return NULL;
+
+	ABossTarget *target;
+
+	if (SerialTarget)
+	{
+		do
+		{
+			target = Targets.Next ();
+		} while (target != NULL && target != SerialTarget);
+		SerialTarget = NULL;
+	}
+	else
+	{
+		target = Targets.Next ();
+	}
+	return (target == NULL) ? Targets.Next () : target;
+}
+
+void DBrainState::Serialize (FArchive &arc)
+{
+	Super::Serialize (arc);
+	arc << Easy;
+	if (arc.IsStoring ())
+	{
+		ABossTarget *target = Targets.Next ();
+		arc << target;
+	}
+	else
+	{
+		arc << SerialTarget;
+	}
 }

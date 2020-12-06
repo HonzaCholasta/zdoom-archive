@@ -20,13 +20,14 @@
 #include "s_sound.h"
 #include "doomstat.h"
 #include "st_stuff.h"
-#include "dstrings.h"
 #include "c_console.h"
 #include "c_dispatch.h"
 #include "c_cvars.h"
 #include "v_text.h"
 #include "v_video.h"
 #include "gi.h"
+#include "d_gui.h"
+#include "i_input.h"
 
 #define QUEUESIZE		128
 #define MESSAGESIZE		128
@@ -34,12 +35,12 @@
 #define HU_INPUTX		0
 #define HU_INPUTY		(0 + (screen->Font->GetHeight () + 1))
 
-EXTERN_CVAR (con_scaletext)
+EXTERN_CVAR (Bool, con_scaletext)
 
 // Public data
 
-void CT_Init (void);
-void CT_Drawer (void);
+void CT_Init ();
+void CT_Drawer ();
 BOOL CT_Responder (event_t *ev);
 void HU_DrawScores (player_t *plyr);
 
@@ -47,28 +48,26 @@ int chatmodeon;
 
 // Private data
 
-static void CT_ClearChatMessage (void);
+static void CT_ClearChatMessage ();
 static void CT_AddChar (char c);
-static void CT_BackSpace (void);
+static void CT_BackSpace ();
 static void ShoveChatStr (const char *str, int who);
 
 static int len;
 static byte ChatQueue[QUEUESIZE];
 
-BOOL altdown;
+CVAR (String, chatmacro1, "I'm ready to kick butt!", CVAR_ARCHIVE)
+CVAR (String, chatmacro2, "I'm OK.", CVAR_ARCHIVE)
+CVAR (String, chatmacro3, "I'm not looking too good!", CVAR_ARCHIVE)
+CVAR (String, chatmacro4, "Help!", CVAR_ARCHIVE)
+CVAR (String, chatmacro5, "You suck!", CVAR_ARCHIVE)
+CVAR (String, chatmacro6, "Next time, scumbag...", CVAR_ARCHIVE)
+CVAR (String, chatmacro7, "Come here!", CVAR_ARCHIVE)
+CVAR (String, chatmacro8, "I'll take care of it.", CVAR_ARCHIVE)
+CVAR (String, chatmacro9, "Yes", CVAR_ARCHIVE)
+CVAR (String, chatmacro0, "No", CVAR_ARCHIVE)
 
-CVAR (chatmacro0, HUSTR_CHATMACRO0, CVAR_ARCHIVE)
-CVAR (chatmacro1, HUSTR_CHATMACRO1, CVAR_ARCHIVE)
-CVAR (chatmacro2, HUSTR_CHATMACRO2, CVAR_ARCHIVE)
-CVAR (chatmacro3, HUSTR_CHATMACRO3, CVAR_ARCHIVE)
-CVAR (chatmacro4, HUSTR_CHATMACRO4, CVAR_ARCHIVE)
-CVAR (chatmacro5, HUSTR_CHATMACRO5, CVAR_ARCHIVE)
-CVAR (chatmacro6, HUSTR_CHATMACRO6, CVAR_ARCHIVE)
-CVAR (chatmacro7, HUSTR_CHATMACRO7, CVAR_ARCHIVE)
-CVAR (chatmacro8, HUSTR_CHATMACRO8, CVAR_ARCHIVE)
-CVAR (chatmacro9, HUSTR_CHATMACRO9, CVAR_ARCHIVE)
-
-cvar_t *chat_macros[10] =
+FStringCVar *chat_macros[10] =
 {
 	&chatmacro0,
 	&chatmacro1,
@@ -89,7 +88,7 @@ cvar_t *chat_macros[10] =
 // 	Initialize chat mode data
 //===========================================================================
 
-void CT_Init (void)
+void CT_Init ()
 {
 	len = 0; // initialize the queue index
 	chatmodeon = 0;
@@ -102,7 +101,7 @@ void CT_Init (void)
 //
 //===========================================================================
 
-void CT_Stop (void)
+void CT_Stop ()
 {
 	chatmodeon = 0;
 }
@@ -115,55 +114,53 @@ void CT_Stop (void)
 
 BOOL CT_Responder (event_t *ev)
 {
-	unsigned char c;
-
-	if (ev->data1 == KEY_RALT || ev->data1 == KEY_LALT)
+	if (chatmodeon && ev->type == EV_GUI_Event && 
+		(ev->subtype == EV_GUI_KeyDown || ev->subtype == EV_GUI_KeyRepeat))
 	{
-		altdown = (ev->type == ev_keydown);
-		return false;
-	}
-	else if (ev->data1 == KEY_LSHIFT || ev->data1 == KEY_RSHIFT)
-	{
-		return false;
-	}
-	else if (gamestate != GS_LEVEL || ev->type != ev_keydown)
-	{
-		return false;
-	}
-
-	if (chatmodeon)
-	{
-		c = ev->data3;	// [RH] Use localized keymap
-
 		// send a macro
-		if (altdown)
+		if ((ev->data3 & GKM_ALT) && (ev->data1 >= '0' && ev->data1 <= '9'))
 		{
-			if (ev->data2 >= '0' && ev->data2 <= '9')
-			{
-				ShoveChatStr (chat_macros[ev->data2 - '0']->string, chatmodeon - 1);
-				CT_Stop ();
-				return true;
-			}
+			ShoveChatStr (**chat_macros[ev->data1 - '0'], chatmodeon - 1);
+			CT_Stop ();
+			return true;
 		}
-		if (ev->data1 == KEY_ENTER)
+		if (ev->data1 == '\r')
 		{
 			ShoveChatStr ((char *)ChatQueue, chatmodeon - 1);
 			CT_Stop ();
 			return true;
 		}
-		else if (ev->data1 == KEY_ESCAPE)
+		else if (ev->data1 == GK_ESCAPE)
 		{
 			CT_Stop ();
 			return true;
 		}
-		else if (ev->data1 == KEY_BACKSPACE)
+		else if (ev->data1 == '\b')
 		{
 			CT_BackSpace ();
 			return true;
 		}
+		else if (ev->data1 == 'C' && (ev->data3 & GKM_CTRL))
+		{
+			I_PutInClipboard ((char *)ChatQueue);
+		}
+		else if (ev->data1 == 'V' && (ev->data3 & GKM_CTRL))
+		{
+			char *clip = I_GetFromClipboard ();
+			if (clip != NULL)
+			{
+				char *clip_p = clip;
+				strtok (clip, "\n\r\b");
+				while (*clip_p)
+				{
+					CT_AddChar (*clip_p++);
+				}
+				delete[] clip;
+			}
+		}
 		else
 		{
-			CT_AddChar (c);
+			CT_AddChar (ev->data2);
 			return true;
 		}
 	}
@@ -184,7 +181,7 @@ void CT_Drawer (void)
 		static const char *prompt = "Say: ";
 		int i, x, scalex, y, promptwidth;
 
-		if (con_scaletext.value)
+		if (*con_scaletext)
 		{
 			scalex = CleanXfac;
 			y = (!viewactive ? -30 : -10) * CleanYfac;
@@ -195,14 +192,14 @@ void CT_Drawer (void)
 			y = (!viewactive ? -30 : -10);
 		}
 
-		y += (screen->height == realviewheight && viewactive) ? screen->height : ST_Y;
+		y += (SCREENHEIGHT == realviewheight && viewactive) ? SCREENHEIGHT : ST_Y;
 
 		promptwidth = screen->StringWidth (prompt) * scalex;
 		x = screen->Font->GetCharWidth ('_') * scalex * 2 + promptwidth;
 
 		// figure out if the text is wider than the screen->
 		// if so, only draw the right-most portion of it.
-		for (i = len - 1; i >= 0 && x < screen->width; i--)
+		for (i = len - 1; i >= 0 && x < SCREENWIDTH; i--)
 		{
 			x += screen->Font->GetCharWidth (ChatQueue[i] & 0x7f) * scalex;
 		}
@@ -219,7 +216,7 @@ void CT_Drawer (void)
 		// draw the prompt, text, and cursor
 		ChatQueue[len] = gameinfo.gametype == GAME_Doom ? '_' : '[';
 		ChatQueue[len+1] = '\0';
-		if (con_scaletext.value)
+		if (*con_scaletext)
 		{
 			screen->DrawTextClean (CR_GREEN, 0, y, prompt);
 			screen->DrawTextClean (CR_GREY, promptwidth, y, ChatQueue + i);
@@ -231,10 +228,10 @@ void CT_Drawer (void)
 		}
 		ChatQueue[len] = '\0';
 
-		BorderTopRefresh = true;
+		BorderTopRefresh = screen->GetPageCount ();
 	}
 
-	if (deathmatch.value &&
+	if (*deathmatch &&
 		((Actions[ACTION_SHOWSCORES]) ||
 		 players[consoleplayer].camera->health <= 0))
 	{
@@ -264,7 +261,7 @@ static void CT_AddChar (char c)
 // 	Backs up a space, when the user hits (obviously) backspace
 //===========================================================================
 
-static void CT_BackSpace (void)
+static void CT_BackSpace ()
 {
 	if (len)
 	{
@@ -279,7 +276,7 @@ static void CT_BackSpace (void)
 // 	Clears out the data for the chat message.
 //===========================================================================
 
-static void CT_ClearChatMessage (void)
+static void CT_ClearChatMessage ()
 {
 	ChatQueue[0] = 0;
 	len = 0;
@@ -292,7 +289,7 @@ static void ShoveChatStr (const char *str, int who)
 	Net_WriteString (str);
 }
 
-BEGIN_COMMAND (messagemode)
+CCMD (messagemode)
 {
 	if (!menuactive)
 	{
@@ -301,9 +298,8 @@ BEGIN_COMMAND (messagemode)
 		CT_ClearChatMessage ();
 	}
 }
-END_COMMAND (messagemode)
 
-BEGIN_COMMAND (say)
+CCMD (say)
 {
 	if (argc > 1)
 	{
@@ -312,9 +308,8 @@ BEGIN_COMMAND (say)
 		delete[] chat;
 	}
 }
-END_COMMAND (say)
 
-BEGIN_COMMAND (messagemode2)
+CCMD (messagemode2)
 {
 	if (!menuactive)
 	{
@@ -323,9 +318,8 @@ BEGIN_COMMAND (messagemode2)
 		CT_ClearChatMessage ();
 	}
 }
-END_COMMAND (messagemode2)
 
-BEGIN_COMMAND (say_team)
+CCMD (say_team)
 {
 	if (argc > 1)
 	{
@@ -334,14 +328,13 @@ BEGIN_COMMAND (say_team)
 		delete[] chat;
 	}
 }
-END_COMMAND (say_team)
 
 static int STACK_ARGS compare (const void *arg1, const void *arg2)
 {
 	return (*(player_t **)arg2)->fragcount - (*(player_t **)arg1)->fragcount;
 }
 
-EXTERN_CVAR (timelimit)
+EXTERN_CVAR (Float, timelimit)
 
 void HU_DrawScores (player_t *player)
 {
@@ -368,22 +361,24 @@ void HU_DrawScores (player_t *player)
 		if (playeringame[i])
 		{
 			int width = screen->StringWidth (players[i].userinfo.netname);
-			if (teamplay.value)
-				width += screen->StringWidth (players[i].userinfo.team) + 24;
+			if (*teamplay)
+				width += screen->StringWidth (
+					players[i].userinfo.team == TEAM_None ? "None"
+					: TeamNames[players[i].userinfo.team]) + 24;
 			if (width > maxwidth)
 				maxwidth = width;
 		}
 	}
 
-	x = (screen->width >> 1) - (((maxwidth + 32 + 32 + 16) * CleanXfac) >> 1);
+	x = (SCREENWIDTH >> 1) - (((maxwidth + 32 + 32 + 16) * CleanXfac) >> 1);
 	margin = x + 40 * CleanXfac;
 
 	y = (ST_Y >> 1) - (MAXPLAYERS * 6);
 	if (y < 48) y = 48;
 
-	if (deathmatch.value && timelimit.value && gamestate == GS_LEVEL)
+	if (*deathmatch && *timelimit && gamestate == GS_LEVEL)
 	{
-		int timeleft = (int)(timelimit.value * TICRATE * 60) - level.time;
+		int timeleft = (int)(*timelimit * TICRATE * 60) - level.time;
 		int hours, minutes, seconds;
 
 		if (timeleft < 0)
@@ -400,7 +395,7 @@ void HU_DrawScores (player_t *player)
 		else
 			sprintf (str, "Level ends in %02d:%02d", minutes, seconds);
 		
-		screen->DrawTextClean (CR_GREY, screen->width/2 - screen->StringWidth (str)/2*CleanXfac,
+		screen->DrawTextClean (CR_GREY, SCREENWIDTH/2 - screen->StringWidth (str)/2*CleanXfac,
 			y - 12 * CleanYfac, str);
 	}
 
@@ -411,10 +406,7 @@ void HU_DrawScores (player_t *player)
 
 		if (playeringame[sortedplayers[i] - players])
 		{
-			if (screen->is8bit)
-				color = BestColor (DefaultPalette->basecolors,
-								   RPART(color), GPART(color), BPART(color),
-								   DefaultPalette->numcolors);
+			color = ColorMatcher.Pick (RPART(color), GPART(color), BPART(color));
 
 			screen->Clear (x, y, x + 24 * CleanXfac, y + height, color);
 
@@ -422,9 +414,9 @@ void HU_DrawScores (player_t *player)
 			screen->DrawTextClean (sortedplayers[i] == player ? CR_GREEN : CR_BRICK,
 							 margin, y, str);
 
-			if (teamplay.value && sortedplayers[i]->userinfo.team[0])
+			if (*teamplay && sortedplayers[i]->userinfo.team != TEAM_None)
 				sprintf (str, "%s (%s)", sortedplayers[i]->userinfo.netname,
-						 sortedplayers[i]->userinfo.team);
+						 TeamNames[sortedplayers[i]->userinfo.team]);
 			else
 				strcpy (str, sortedplayers[i]->userinfo.netname);
 
@@ -442,5 +434,5 @@ void HU_DrawScores (player_t *player)
 			y += height + CleanYfac;
 		}
 	}
-	BorderNeedRefresh = true;
+	BorderNeedRefresh = screen->GetPageCount ();
 }

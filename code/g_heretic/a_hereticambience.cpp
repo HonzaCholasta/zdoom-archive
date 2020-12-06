@@ -159,11 +159,13 @@ static long *BaseAmbientSfx[] =
 
 class AScriptedAmbientMaster : public AActor
 {
-	DECLARE_STATELESS_ACTOR (AScriptedAmbientMaster, AActor);
+	DECLARE_STATELESS_ACTOR (AScriptedAmbientMaster, AActor)
 public:
 	void BeginPlay ();
 	void RunThink ();
 	void AddAmbient (int sfx);
+
+	void Serialize (FArchive &arc);
 protected:
 	long *AmbientSfx;
 	long *AmbSfxPtr;
@@ -174,8 +176,9 @@ private:
 	byte LocateSfx (long *ptr);
 };
 
-IMPLEMENT_SERIAL (AScriptedAmbientMaster, AActor);
-REGISTER_ACTOR (AScriptedAmbientMaster, Heretic);
+IMPLEMENT_STATELESS_ACTOR (AScriptedAmbientMaster, Heretic, -1, 0)
+	PROP_Flags (MF_NOSECTOR|MF_NOBLOCKMAP)
+END_DEFAULTS
 
 void AScriptedAmbientMaster::Serialize (FArchive &arc)
 {
@@ -228,15 +231,9 @@ void AScriptedAmbientMaster::Serialize (FArchive &arc)
 	}
 }
 
-void AScriptedAmbientMaster::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->flags = MF_NOSECTOR|MF_NOBLOCKMAP;
-}
-
 byte AScriptedAmbientMaster::LocateSfx (long *ptr)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < NUMSNDSEQ; i++)
 	{
@@ -257,7 +254,7 @@ void AScriptedAmbientMaster::BeginPlay ()
 
 void AScriptedAmbientMaster::AddAmbient (int sfx)
 {
-	if (sfx < 0 || sfx >= NUMSNDSEQ)
+	if ((unsigned)sfx >= NUMSNDSEQ)
 		return;
 
 	long *ptr = BaseAmbientSfx[sfx];
@@ -332,7 +329,7 @@ void AScriptedAmbientMaster::RunThink ()
 			break;
 
 		default:
-			DPrintf ("P_AmbientSound: Unknown afxcmd %d", cmd);
+			DPrintf ("P_AmbientSound: Unknown afxcmd %ld", cmd);
 			break;
 		}
 	} while (done == false);
@@ -344,24 +341,19 @@ void AScriptedAmbientMaster::RunThink ()
 
 class AScriptedAmbient : public AActor
 {
-	DECLARE_STATELESS_ACTOR (AScriptedAmbient, AActor);
+	DECLARE_STATELESS_ACTOR (AScriptedAmbient, AActor)
 public:
 	void PostBeginPlay ();
 };
 
-IMPLEMENT_DEF_SERIAL (AScriptedAmbient, AActor);
-REGISTER_ACTOR (AScriptedAmbient, Heretic);
-
-void AScriptedAmbient::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->flags = MF_NOSECTOR|MF_NOBLOCKMAP;
-}
+IMPLEMENT_STATELESS_ACTOR (AScriptedAmbient, Heretic, -1, 0)
+	PROP_Flags (MF_NOSECTOR|MF_NOBLOCKMAP)
+END_DEFAULTS
 
 void AScriptedAmbient::PostBeginPlay ()
 {
-	FActorInfo *info = GetInfo (this);
-	if (info && info->doomednum >= 1200 && info->doomednum - 1200 < NUMSNDSEQ)
+	const size_t ambientNum = health - 1200;
+	if (ambientNum < NUMSNDSEQ)
 	{
 		AScriptedAmbientMaster *master;
 		TThinkerIterator<AScriptedAmbientMaster> locater;
@@ -369,19 +361,17 @@ void AScriptedAmbient::PostBeginPlay ()
 		master = locater.Next ();
 		if (master == NULL)
 			master = Spawn<AScriptedAmbientMaster> (0, 0, 0);
-		master->AddAmbient (info->doomednum - 1200);
+		master->AddAmbient (ambientNum);
 	}
 	Destroy ();
 }
 
 #define ADD_AMBIENT(x) \
 	class AScriptedAmbient##x : public AScriptedAmbient { \
-		DECLARE_STATELESS_ACTOR (AScriptedAmbient##x, AScriptedAmbient); };\
-	IMPLEMENT_DEF_SERIAL (AScriptedAmbient##x, AScriptedAmbient); \
-	REGISTER_ACTOR (AScriptedAmbient##x, Heretic); \
-	void AScriptedAmbient##x::SetDefaults (FActorInfo *info) { \
-		INHERIT_DEFS_STATELESS; \
-		info->doomednum = 1199 + x; }
+		DECLARE_STATELESS_ACTOR (AScriptedAmbient##x, AScriptedAmbient) };\
+	IMPLEMENT_STATELESS_ACTOR (AScriptedAmbient##x, Heretic, 1199+x, 0) \
+		PROP_SpawnHealth (1199+x) \
+	END_DEFAULTS
 
 ADD_AMBIENT (1);
 ADD_AMBIENT (2);

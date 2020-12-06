@@ -3,45 +3,61 @@
 
 /********** Decorations ***********/
 
-#define _DECCOMMON(cls,ednum,rad,hi,ns) \
-	class cls : public AActor { DECLARE_STATELESS_ACTOR (cls, AActor); static FState States[ns]; }; \
-	IMPLEMENT_DEF_SERIAL (cls, AActor); \
-	REGISTER_ACTOR (cls, Doom); \
-	void cls::SetDefaults (FActorInfo *info) { \
-		INHERIT_DEFS; \
-		info->doomednum = ednum; \
-		info->spawnstate = &States[0]; \
-		info->radius = rad * FRACUNIT; \
-		info->height = hi * FRACUNIT;
+#define _DECCOMMON(cls,ednum,rad,hi,ns,id) \
+	class cls : public AActor { DECLARE_STATELESS_ACTOR (cls, AActor) static FState States[ns]; }; \
+	IMPLEMENT_ACTOR (cls, Doom, ednum, id) \
+		PROP_SpawnState(0) \
+		PROP_RadiusFixed(rad) \
+		PROP_HeightFixed(hi)
 
 #define _DECSTARTSTATES(cls,ns) \
 	FState cls::States[ns] =
 
+#define DECID(cls,ednum,id,rad,hi,ns) \
+	_DECCOMMON(cls,ednum,rad,hi,ns,id) \
+	PROP_Flags (MF_SOLID) \
+	END_DEFAULTS \
+	_DECSTARTSTATES(cls,ns)
+
 #define DEC(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SOLID; } _DECSTARTSTATES(cls,ns)
+	DECID(cls,ednum,0,rad,hi,ns)
 
 #define DECNSOLID(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns,0) \
+	END_DEFAULTS \
+	_DECSTARTSTATES(cls,ns)
 
 #define DECHANG(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns,0) \
+	PROP_Flags (MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY) \
+	END_DEFAULTS \
+	_DECSTARTSTATES(cls,ns)
 
 #define DECHANGNS(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SPAWNCEILING|MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns,0) \
+	PROP_Flags (MF_SPAWNCEILING|MF_NOGRAVITY) \
+	END_DEFAULTS \
+	_DECSTARTSTATES(cls,ns)
 
 #define DECNBLOCK(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_NOBLOCKMAP; } _DECSTARTSTATES(cls,ns)
+	_DECCOMMAN(cls,ednum,rad,hi,ns,0) \
+	PROP_Flags (MF_NOBLOCKMAP) \
+	END_DEFAULTS \
+	_DECSTARTSTATES(cls,ns)
+
+#define DECNBLOCKID(cls,ednum,id,rad,hi,ns) \
+	_DECCOMMON(cls,ednum,rad,hi,ns,id) \
+	PROP_Flags (MF_NOBLOCKMAP) \
+	END_DEFAULTS \
+	_DECSTARTSTATES(cls,ns)
 
 #define SUBCLASS_NS(cls,super,ednum,rad,hi) \
-	class cls : public super { DECLARE_STATELESS_ACTOR (cls, super); }; \
-	IMPLEMENT_DEF_SERIAL (cls, super); \
-	REGISTER_ACTOR (cls, Doom); \
-	void cls::SetDefaults (FActorInfo *info) { \
-		INHERIT_DEFS_STATELESS; \
-		info->doomednum= ednum; \
-		info->radius = rad * FRACUNIT; \
-		info->height = rad * FRACUNIT; \
-		info->flags &= ~MF_SOLID; }
+	class cls : public super { DECLARE_STATELESS_ACTOR (cls, super) }; \
+	IMPLEMENT_STATELESS_ACTOR (cls, Doom, ednum, 0) \
+	PROP_RadiusFixed (rad) \
+	PROP_HeightFixed (hi) \
+	PROP_FlagsClear (MF_SOLID) \
+	END_DEFAULTS
 
 // Tech lamp ---------------------------------------------------------------
 
@@ -285,7 +301,7 @@ DEC (AHeadOnAStick, 27, 16, 56, 1)
 
 // Heads (plural!) on a stick ----------------------------------------------
 
-DECNSOLID (AHeadsOnAStick, 28, 16, 64, 1)
+DEC (AHeadsOnAStick, 28, 16, 64, 1)
 {
 	S_NORMAL (POL2, 'A', -1, NULL, NULL)
 };
@@ -322,7 +338,7 @@ DEC (ABigTree, 54, 32, 108, 1)
 
 // Burning barrel ----------------------------------------------------------
 
-DEC (ABurningBarrel, 70, 16, 32, 3)
+DECID (ABurningBarrel, 70, 149, 16, 32, 3)
 {
 	S_BRIGHT (FCAN, 'A',  4, NULL, &States[1]),
 	S_BRIGHT (FCAN, 'B',  4, NULL, &States[2]),
@@ -373,21 +389,21 @@ DECHANG (AHangTNoBrain, 78, 16, 64, 1)
 
 // Colon gibs --------------------------------------------------------------
 
-DECNBLOCK (AColonGibs, 79, 20, 4, 1)
+DECNBLOCKID (AColonGibs, 79, 147, 20, 4, 1)
 {
 	S_NORMAL (POB1, 'A', -1, NULL, NULL)
 };
 
 // Small pool o' blood -----------------------------------------------------
 
-DECNBLOCK (ASmallBloodPool, 80, 20, 1, 1)
+DECNBLOCKID (ASmallBloodPool, 80, 148, 20, 1, 1)
 {
 	S_NORMAL (POB2, 'A', -1, NULL, NULL)
 };
 
 // brain stem lying on the ground ------------------------------------------
 
-DECNBLOCK (ABrainStem, 81, 20, 4, 1)
+DECNBLOCKID (ABrainStem, 81, 150, 20, 4, 1)
 {
 	S_NORMAL (BRS1, 'A', -1, NULL, NULL)
 };

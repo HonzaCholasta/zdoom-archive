@@ -29,7 +29,7 @@ void DCajunMaster::Think (AActor *actor, ticcmd_t *cmd)
 
 	if (actor->health > 0) //Still alive
 	{
-		if (teamplay.value || !deathmatch.value)
+		if (*teamplay || !*deathmatch)
 			actor->player->mate = Choose_Mate (actor);
 
 		angle_t oldyaw = actor->angle;
@@ -285,20 +285,21 @@ void DCajunMaster::WhatToGet (AActor *actor, AActor *item)
 		return;
 	else if ((typeis (AMegasphere) || typeis (ASoulsphere) || typeis (AHealthBonus)) && actor->health >= deh.MaxSoulsphere)
 		return;
-	else if (((typeis (ASuperShotgun) || typeis (AShotgun) || typeis (AShell) || typeis (AShellBox)) && b->ammo[am_shell] == b->maxammo[am_shell]) || (deathmatch.value != 2 && ((typeis (AShotgun) && b->weaponowned[wp_shotgun]) || (typeis (ASuperShotgun) && b->weaponowned[wp_supershotgun]))))
+	else if (((typeis (ASuperShotgun) || typeis (AShotgun) || typeis (AShell) || typeis (AShellBox)) && b->ammo[am_shell] == b->maxammo[am_shell]) || (*deathmatch != 2 && ((typeis (AShotgun) && b->weaponowned[wp_shotgun]) || (typeis (ASuperShotgun) && b->weaponowned[wp_supershotgun]))))
 		return;
-	else if (((typeis (AChaingun) || typeis (AClip) || typeis (AClipBox)) && b->ammo[am_clip] == b->maxammo[am_clip]) || (deathmatch.value != 2 && (typeis (AChaingun) && b->weaponowned[wp_chaingun])))
+	else if (((typeis (AChaingun) || typeis (AClip) || typeis (AClipBox)) && b->ammo[am_clip] == b->maxammo[am_clip]) || (*deathmatch != 2 && (typeis (AChaingun) && b->weaponowned[wp_chaingun])))
 		return;
-	else if (((typeis (APlasmaRifle) || typeis (ABigFreakingGun) || typeis (ACell) || typeis (ACellPack)) && b->ammo[am_cell] == b->maxammo[am_cell]) || (deathmatch.value != 2 && ((typeis (ABigFreakingGun) && b->weaponowned[wp_bfg]) || (typeis (APlasmaRifle) && b->weaponowned[wp_plasma]))))
+	else if (((typeis (APlasmaRifle) || typeis (ABigFreakingGun) || typeis (ACell) || typeis (ACellPack)) && b->ammo[am_cell] == b->maxammo[am_cell]) || (*deathmatch != 2 && ((typeis (ABigFreakingGun) && b->weaponowned[wp_bfg]) || (typeis (APlasmaRifle) && b->weaponowned[wp_plasma]))))
 		return;
-	else if (((typeis (ARocketLauncher) || typeis (ARocketAmmo) || typeis (ARocketBox)) && b->ammo[am_misl] == b->maxammo[am_misl]) || (deathmatch.value != 2 && (typeis (ARocketLauncher) && b->weaponowned[wp_missile])))
+	else if (((typeis (ARocketLauncher) || typeis (ARocketAmmo) || typeis (ARocketBox)) && b->ammo[am_misl] == b->maxammo[am_misl]) || (*deathmatch != 2 && (typeis (ARocketLauncher) && b->weaponowned[wp_missile])))
 		return;
 	else if (typeis (AChainsaw) && b->weaponowned[wp_chainsaw])
 		return;
-	if (!Reachable(actor, item))
-		return;
 
-	if(!b->dest || !(b->dest && b->dest->flags & MF_SPECIAL) || (b->dest && !Reachable (actor, b->dest)))
+	if ((b->dest == NULL ||
+		!(b->dest->flags & MF_SPECIAL) ||
+		!Reachable (actor, b->dest)) &&
+		Reachable (actor, item))
 	{
 		b->prev = b->dest;
 		b->dest = item;

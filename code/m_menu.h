@@ -72,6 +72,11 @@ void M_PopMenuStack (void);
 // [RH] Called whenever the display mode changes
 void M_RefreshModesList ();
 
+void M_ActivateMenuInput ();
+void M_DeactivateMenuInput ();
+
+void M_NotifyNewSave (const char *file, const char *title);
+
 //
 // MENU TYPEDEFS
 //
@@ -93,7 +98,7 @@ typedef struct menuitem_s {
 	itemtype		  type;
 	char			 *label;
 	union {
-		cvar_t			 *cvar;
+		FBaseCVar		 *cvar;
 		int				  selmode;
 		int				  flagmask;
 	} a;
@@ -114,11 +119,10 @@ typedef struct menuitem_s {
 	union {
 		struct value_s	 *values;
 		char			 *command;
-		void			(*cfunc)(cvar_t *cvar, float newval);
+		void			(*cfunc)(FBaseCVar *cvar, float newval);
 		void			(*mfunc)(void);
 		void			(*lfunc)(int);
 		int				  highlight;
-		int				 *flagint;
 	} e;
 } menuitem_t;
 

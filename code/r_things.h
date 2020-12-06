@@ -65,20 +65,21 @@ void R_ProjectParticle (particle_t *);
 
 extern int MaxVisSprites;
 
-extern vissprite_t		*vissprites;
+extern vissprite_t		*vissprites, *firstvissprite;
 extern vissprite_t* 	vissprite_p;
 extern vissprite_t		vsprsortedhead;
 
 // Constant arrays used for psprite clipping
 //	and initializing clipping.
-extern short			*negonearray;
-extern short			*screenheightarray;
+extern short			negonearray[MAXWIDTH];
+extern short			screenheightarray[MAXWIDTH];
 
 // vars for R_DrawMaskedColumn
 extern short*			mfloorclip;
 extern short*			mceilingclip;
 extern fixed_t			spryscale;
 extern fixed_t			sprtopscreen;
+extern bool				sprflipvert;
 
 extern fixed_t			pspritexscale;
 extern fixed_t			pspriteyscale;

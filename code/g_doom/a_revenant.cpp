@@ -1,10 +1,11 @@
+#include "templates.h"
 #include "actor.h"
 #include "info.h"
 #include "m_random.h"
 #include "s_sound.h"
 #include "p_local.h"
 #include "p_enemy.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_SkelMissile (AActor *);
@@ -14,15 +15,12 @@ void A_SkelFist (AActor *);
 
 class ARevenant : public AActor
 {
-	DECLARE_ACTOR (ARevenant, AActor);
+	DECLARE_ACTOR (ARevenant, AActor)
 public:
 	bool SuggestMissileAttack (fixed_t dist);
-	const char *GetObituary () { return OB_UNDEAD; }
-	const char *GetHitObituary () { return OB_UNDEADHIT; }
+	const char *GetObituary () { return GStrings(OB_UNDEAD); }
+	const char *GetHitObituary () { return GStrings(OB_UNDEADHIT); }
 };
-
-IMPLEMENT_DEF_SERIAL (ARevenant, AActor);
-REGISTER_ACTOR (ARevenant, Doom);
 
 FState ARevenant::States[] =
 {
@@ -77,66 +75,55 @@ FState ARevenant::States[] =
 	S_NORMAL (SKEL, 'L',	5, NULL 						, &States[S_SKEL_RUN+0])
 };
 
-void ARevenant::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 66;
-	info->spawnid = 20;
-	info->spawnstate = &States[S_SKEL_STND];
-	info->spawnhealth = 300;
-	info->seestate = &States[S_SKEL_RUN];
-	info->seesound = "skeleton/sight";
-	info->painstate = &States[S_SKEL_PAIN];
-	info->painchance = 100;
-	info->painsound = "skeleton/pain";
-	info->meleestate = &States[S_SKEL_FIST];
-	info->missilestate = &States[S_SKEL_MISS];
-	info->deathstate = &States[S_SKEL_DIE];
-	info->deathsound = "skeleton/death";
-	info->speed = 10;
-	info->radius = 20 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 500;
-	info->activesound = "skeleton/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_SKEL_RAISE];
-}
+IMPLEMENT_ACTOR (ARevenant, Doom, 66, 20)
+	PROP_SpawnHealth (300)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (56)
+	PROP_Mass (500)
+	PROP_SpeedFixed (10)
+	PROP_PainChance (100)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_SKEL_STND)
+	PROP_SeeState (S_SKEL_RUN)
+	PROP_PainState (S_SKEL_PAIN)
+	PROP_MeleeState (S_SKEL_FIST)
+	PROP_MissileState (S_SKEL_MISS)
+	PROP_DeathState (S_SKEL_DIE)
+	PROP_RaiseState (S_SKEL_RAISE)
+
+	PROP_SeeSound ("skeleton/sight")
+	PROP_PainSound ("skeleton/pain")
+	PROP_DeathSound ("skeleton/death")
+	PROP_ActiveSound ("skeleton/active")
+END_DEFAULTS
 
 bool ARevenant::SuggestMissileAttack (fixed_t dist)
 {
 	if (dist < 196*FRACUNIT)
 		return false;		// close for fist attack
-	return P_Random (pr_checkmissilerange) >= MIN (dist >> (FRACBITS + 1), 200);
+	return P_Random (pr_checkmissilerange) >= MIN<int> (dist >> (FRACBITS + 1), 200);
 }
 
 class AStealthRevenant : public ARevenant
 {
-	DECLARE_STATELESS_ACTOR (AStealthRevenant, ARevenant);
+	DECLARE_STATELESS_ACTOR (AStealthRevenant, ARevenant)
 public:
-	const char *GetObituary () { return OB_STEALTHUNDEAD; }
-	const char *GetHitObituary () { return OB_STEALTHUNDEAD; }
+	const char *GetObituary () { return GStrings(OB_STEALTHUNDEAD); }
+	const char *GetHitObituary () { return GStrings(OB_STEALTHUNDEAD); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthRevenant, ARevenant);
-REGISTER_ACTOR (AStealthRevenant, Doom);
-
-void AStealthRevenant::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9059;
-	info->spawnid = 124;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthRevenant, Doom, 9059, 124)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 class ARevenantTracer : public AActor
 {
-	DECLARE_ACTOR (ARevenantTracer, AActor);
+	DECLARE_ACTOR (ARevenantTracer, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ARevenantTracer, AActor);
-REGISTER_ACTOR (ARevenantTracer, Doom);
 
 FState ARevenantTracer::States[] =
 {
@@ -150,30 +137,26 @@ FState ARevenantTracer::States[] =
 	S_BRIGHT (FBXP, 'C',	4, NULL 						, NULL)
 };
 
-void ARevenantTracer::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnid = 53;
-	info->spawnstate = &States[S_TRACER];
-	info->seesound = "skeleton/attack";
-	info->deathstate = &States[S_TRACEEXP];
-	info->deathsound = "skeleton/tracex";
-	info->speed = 10 * FRACUNIT;
-	info->radius = 11 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 10;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-	info->translucency = TRANSLUC75;
-}
+IMPLEMENT_ACTOR (ARevenantTracer, Doom, -1, 53)
+	PROP_RadiusFixed (11)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (10)
+	PROP_Damage (10)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_TRACER)
+	PROP_DeathState (S_TRACEEXP)
+
+	PROP_SeeSound ("skeleton/attack")
+	PROP_DeathSound ("skeleton/tracex")
+END_DEFAULTS
 
 class ARevenantTracerSmoke : public AActor
 {
-	DECLARE_ACTOR (ARevenantTracerSmoke, AActor);
+	DECLARE_ACTOR (ARevenantTracerSmoke, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ARevenantTracerSmoke, AActor);
-REGISTER_ACTOR (ARevenantTracerSmoke, Doom);
 
 FState ARevenantTracerSmoke::States[] =
 {
@@ -184,13 +167,13 @@ FState ARevenantTracerSmoke::States[] =
 	S_NORMAL (PUFF, 'D',	4, NULL 						, NULL)
 };
 
-void ARevenantTracerSmoke::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = TRANSLUC50;
-}
+IMPLEMENT_ACTOR (ARevenantTracerSmoke, Doom, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (TRANSLUC50)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 //
 // A_SkelMissile
@@ -203,13 +186,15 @@ void A_SkelMissile (AActor *self)
 		return;
 				
 	A_FaceTarget (self);
-	self->z += 16*FRACUNIT;		// so missile spawns higher
-	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(ARevenantTracer));
-	self->z -= 16*FRACUNIT;		// back to normal
+	missile = P_SpawnMissileZ (self, self->z + 48*FRACUNIT,
+		self->target, RUNTIME_CLASS(ARevenantTracer));
 
-	missile->x += missile->momx;
-	missile->y += missile->momy;
-	missile->tracer = self->target;
+	if (missile != NULL)
+	{
+		missile->x += missile->momx;
+		missile->y += missile->momy;
+		missile->tracer = self->target;
+	}
 }
 
 #define TRACEANGLE (0xc000000)
@@ -274,14 +259,14 @@ void A_Tracer (AActor *self)
 	}
 		
 	exact = self->angle>>ANGLETOFINESHIFT;
-	self->momx = FixedMul (GetInfo (self)->speed, finecosine[exact]);
-	self->momy = FixedMul (GetInfo (self)->speed, finesine[exact]);
+	self->momx = FixedMul (self->Speed, finecosine[exact]);
+	self->momy = FixedMul (self->Speed, finesine[exact]);
 	
 	// change slope
 	dist = P_AproxDistance (dest->x - self->x,
 							dest->y - self->y);
 	
-	dist = dist / GetInfo (self)->speed;
+	dist = dist / self->Speed;
 
 	if (dist < 1)
 		dist = 1;

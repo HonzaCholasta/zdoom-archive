@@ -35,7 +35,7 @@
 // CEILINGS
 //
 
-IMPLEMENT_SERIAL (DCeiling, DMovingCeiling)
+IMPLEMENT_CLASS (DCeiling)
 
 DCeiling::DCeiling ()
 {
@@ -187,16 +187,17 @@ DCeiling::DCeiling (sector_t *sec, fixed_t speed1, fixed_t speed2, int silent)
 // Move a ceiling up/down and all around!
 //
 // [RH] Added tag, speed, speed2, height, crush, silent, change params
-BOOL EV_DoCeiling (DCeiling::ECeiling type, line_t *line,
+bool EV_DoCeiling (DCeiling::ECeiling type, line_t *line,
 				   int tag, fixed_t speed, fixed_t speed2, fixed_t height,
 				   int crush, int silent, int change)
 {
 	int 		secnum;
-	BOOL 		rtn;
+	bool 		rtn;
 	sector_t*	sec;
 	DCeiling*	ceiling;
-	BOOL		manual = false;
+	bool		manual = false;
 	fixed_t		targheight;
+	vertex_t*	spot;
 		
 	rtn = false;
 
@@ -233,118 +234,138 @@ manual_ceiling:
 		// new door thinker
 		rtn = 1;
 		ceiling = new DCeiling (sec, speed, speed2, silent);
-		
+		spot = sec->lines[0]->v1;
+
 		switch (type)
 		{
 		case DCeiling::ceilCrushAndRaise:
 		case DCeiling::ceilCrushRaiseAndStay:
-			ceiling->m_TopHeight = sec->ceilingheight;
+			ceiling->m_TopHeight = sec->ceilingplane.d;
 		case DCeiling::ceilLowerAndCrush:
 			ceiling->m_Crush = crush;
-			targheight = ceiling->m_BottomHeight = sec->floorheight + 8*FRACUNIT;
+			targheight = 8*FRACUNIT + sec->FindHighestFloorPoint (&spot);
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			break;
 
 		case DCeiling::ceilRaiseToHighest:
-			targheight = ceiling->m_TopHeight = P_FindHighestCeilingSurrounding (sec);
+			targheight = sec->FindHighestCeilingSurrounding (&spot);
+			ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = 1;
 			break;
 
 		case DCeiling::ceilLowerByValue:
-			targheight = ceiling->m_BottomHeight = sec->ceilingheight - height;
+			targheight = sec->ceilingplane.ZatPoint (spot) - height;
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			break;
 
 		case DCeiling::ceilRaiseByValue:
-			targheight = ceiling->m_TopHeight = sec->ceilingheight + height;
+			targheight = sec->ceilingplane.ZatPoint (spot) + height;
+			ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = 1;
 			break;
 
 		case DCeiling::ceilMoveToValue:
 			{
-			  int diff = height - sec->ceilingheight;
+				int diff = height - sec->ceilingplane.ZatPoint (spot);
 
-			  if (diff < 0) {
-				  targheight = ceiling->m_BottomHeight = height;
-				  ceiling->m_Direction = -1;
-			  } else {
-				  targheight = ceiling->m_TopHeight = height;
-				  ceiling->m_Direction = 1;
-			  }
+				targheight = height;
+				if (diff < 0)
+				{
+					ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, height);
+					ceiling->m_Direction = -1;
+				}
+				else
+				{
+					ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, height);
+					ceiling->m_Direction = 1;
+				}
 			}
 			break;
 
 		case DCeiling::ceilLowerToHighestFloor:
-			targheight = ceiling->m_BottomHeight = P_FindHighestFloorSurrounding (sec);
+			targheight = sec->FindHighestFloorSurrounding (&spot);
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			break;
 
 		case DCeiling::ceilRaiseToHighestFloor:
-			targheight = ceiling->m_TopHeight = P_FindHighestFloorSurrounding (sec);
+			targheight = sec->FindHighestFloorSurrounding (&spot);
+			ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = 1;
 			break;
 
 		case DCeiling::ceilLowerInstant:
-			targheight = ceiling->m_BottomHeight = sec->ceilingheight - height;
+			targheight = sec->ceilingplane.ZatPoint (spot) - height;
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			ceiling->m_Speed = height;
 			break;
 
 		case DCeiling::ceilRaiseInstant:
-			targheight = ceiling->m_TopHeight = sec->ceilingheight + height;
+			targheight = sec->ceilingplane.ZatPoint (spot) + height;
+			ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = 1;
 			ceiling->m_Speed = height;
 			break;
 
 		case DCeiling::ceilLowerToNearest:
-			targheight = ceiling->m_BottomHeight =
-				P_FindNextLowestCeiling (sec, sec->ceilingheight);
+			targheight = sec->FindNextLowestCeiling (&spot);
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = 1;
 			break;
 
 		case DCeiling::ceilRaiseToNearest:
-			targheight = ceiling->m_TopHeight =
-				P_FindNextHighestCeiling (sec, sec->ceilingheight);
+			targheight = sec->FindNextHighestCeiling (&spot);
+			ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = 1;
 			break;
 
 		case DCeiling::ceilLowerToLowest:
-			targheight = ceiling->m_BottomHeight = P_FindLowestCeilingSurrounding (sec);
+			targheight = sec->FindLowestCeilingSurrounding (&spot);
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			break;
 
 		case DCeiling::ceilRaiseToLowest:
-			targheight = ceiling->m_TopHeight = P_FindLowestCeilingSurrounding (sec);
+			targheight = sec->FindLowestCeilingSurrounding (&spot);
+			ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			break;
 
 		case DCeiling::ceilLowerToFloor:
-			targheight = ceiling->m_BottomHeight = sec->floorheight;
+			targheight = sec->FindHighestFloorPoint (&spot);
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			break;
 
-		case DCeiling::ceilRaiseToFloor:
-			targheight = ceiling->m_TopHeight = sec->floorheight;
+		case DCeiling::ceilRaiseToFloor:	// [RH] What's this for?
+			targheight = sec->FindHighestFloorPoint (&spot);
+			ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = 1;
 			break;
 
 		case DCeiling::ceilLowerToHighest:
-			targheight = ceiling->m_BottomHeight = P_FindHighestCeilingSurrounding (sec);
+			targheight = sec->FindHighestCeilingSurrounding (&spot);
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			break;
 
 		case DCeiling::ceilLowerByTexture:
-			targheight = ceiling->m_BottomHeight =
-				sec->ceilingheight - P_FindShortestUpperAround (secnum);
+			targheight = sec->ceilingplane.ZatPoint (spot) - sec->FindShortestUpperAround ();
+			ceiling->m_BottomHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = -1;
 			break;
 
 		case DCeiling::ceilRaiseByTexture:
-			targheight = ceiling->m_TopHeight =
-				sec->ceilingheight + P_FindShortestUpperAround (secnum);
+			targheight = sec->ceilingplane.ZatPoint (spot) + sec->FindShortestUpperAround ();
+			ceiling->m_TopHeight = sec->ceilingplane.PointToDist (spot, targheight);
 			ceiling->m_Direction = 1;
 			break;
-		  
+
+		default:
+			break;	// Silence GCC
 		}
 				
 		ceiling->m_Tag = tag;
@@ -355,19 +376,19 @@ manual_ceiling:
 		{
 			if (change & 4)	// if a numeric model change
 			{
-				sector_t *sec;
+				sector_t *modelsec;
 
 				//jff 5/23/98 find model with floor at target height if target
 				//is a floor type
-				sec = (type == DCeiling::ceilRaiseToHighest ||
+				modelsec = (/*type == DCeiling::ceilRaiseToHighest ||*/
 					   type == DCeiling::ceilRaiseToFloor ||
-					   type == DCeiling::ceilLowerToHighest ||
+					   /*type == DCeiling::ceilLowerToHighest ||*/
 					   type == DCeiling::ceilLowerToFloor) ?
-					P_FindModelFloorSector (targheight, secnum) :
-					P_FindModelCeilingSector (targheight, secnum);
-				if (sec)
+					sec->FindModelFloorSector (targheight) :
+					sec->FindModelCeilingSector (targheight);
+				if (modelsec != NULL)
 				{
-					ceiling->m_Texture = sec->ceilingpic;
+					ceiling->m_Texture = modelsec->ceilingpic;
 					switch (change & 3)
 					{
 						case 1:		// type is zeroed
@@ -386,7 +407,6 @@ manual_ceiling:
 			}
 			else if (line)	// else if a trigger model change
 			{
-
 				ceiling->m_Texture = line->frontsector->ceilingpic;
 				switch (change & 3)
 				{
@@ -416,7 +436,7 @@ manual_ceiling:
 
 //
 // Restart a ceiling that's in-stasis
-// [RH] Passed a tag instead of a line and rewritten to use list
+// [RH] Passed a tag instead of a line and rewritten to use a list
 //
 void P_ActivateInStasisCeiling (int tag)
 {
@@ -436,11 +456,11 @@ void P_ActivateInStasisCeiling (int tag)
 //
 // EV_CeilingCrushStop
 // Stop a ceiling from crushing!
-// [RH] Passed a tag instead of a line and rewritten to use list
+// [RH] Passed a tag instead of a line and rewritten to use a list
 //
-BOOL EV_CeilingCrushStop (int tag)
+bool EV_CeilingCrushStop (int tag)
 {
-	BOOL rtn = false;
+	bool rtn = false;
 	DCeiling *scan;
 	TThinkerIterator<DCeiling> iterator;
 

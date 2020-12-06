@@ -1,3 +1,4 @@
+#include "templates.h"
 #include "actor.h"
 #include "info.h"
 #include "m_random.h"
@@ -6,13 +7,10 @@
 #include "p_enemy.h"
 #include "a_doomglobal.h"
 #include "gi.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_SkullAttack (AActor *);
-
-IMPLEMENT_DEF_SERIAL (ALostSoul, AActor);
-REGISTER_ACTOR (ALostSoul, Doom);
 
 FState ALostSoul::States[] =
 {
@@ -43,39 +41,38 @@ FState ALostSoul::States[] =
 	S_NORMAL (SKUL, 'K',	6, NULL 						, NULL)
 };
 
-void ALostSoul::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 3006;
-	info->spawnid = 110;
-	info->spawnstate = &States[S_SKULL_STND];
-	info->spawnhealth = 100;
-	info->seestate = &States[S_SKULL_RUN];
-	info->attacksound = "skull/melee";
-	info->painstate = &States[S_SKULL_PAIN];
-	info->painchance = 256;
-	info->painsound = "skull/pain";
-	info->missilestate = &States[S_SKULL_ATK];
-	info->deathstate = &States[S_SKULL_DIE];
-	info->deathsound = "skull/death";
-	info->speed = 8;
-	info->radius = 16 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 50;
-	info->damage = 3;
-	info->activesound = "skull/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY;
-	info->flags2 = MF2_MCROSS|MF2_PUSHWALL|MF2_PASSMOBJ;
-}
+IMPLEMENT_ACTOR (ALostSoul, Doom, 3006, 110)
+	PROP_SpawnHealth (100)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (56)
+	PROP_Mass (50)
+	PROP_SpeedFixed (8)
+	PROP_Damage (3)
+	PROP_MaxPainChance
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_MCROSS|MF2_PUSHWALL|MF2_PASSMOBJ)
+	PROP_RenderStyle (STYLE_SoulTrans)
+
+	PROP_SpawnState (S_SKULL_STND)
+	PROP_SeeState (S_SKULL_RUN)
+	PROP_PainState (S_SKULL_PAIN)
+	PROP_MissileState (S_SKULL_ATK)
+	PROP_DeathState (S_SKULL_DIE)
+
+	PROP_AttackSound ("skull/melee")
+	PROP_PainSound ("skull/pain")
+	PROP_DeathSound ("skull/death")
+	PROP_ActiveSound ("skull/active")
+END_DEFAULTS
 
 const char *ALostSoul::GetObituary ()
 {
-	return OB_SKULL;
+	return GStrings(OB_SKULL);
 }
 
 bool ALostSoul::SuggestMissileAttack (fixed_t dist)
 {
-	return P_Random (pr_checkmissilerange) >= MIN (dist >> (FRACBITS + 1), 200);
+	return P_Random (pr_checkmissilerange) >= MIN<int> (dist >> (FRACBITS + 1), 200);
 }
 
 void ALostSoul::Die (AActor *source, AActor *inflictor)
@@ -102,7 +99,7 @@ void A_SkullAttack (AActor *self)
 	dest = self->target;		
 	self->flags |= MF_SKULLFLY;
 
-	S_Sound (self, CHAN_VOICE, GetInfo (self)->attacksound, 1, ATTN_NORM);
+	S_SoundID (self, CHAN_VOICE, self->AttackSound, 1, ATTN_NORM);
 	A_FaceTarget (self);
 	an = self->angle >> ANGLETOFINESHIFT;
 	self->momx = FixedMul (SKULLSPEED, finecosine[an]);
@@ -125,63 +122,34 @@ void A_SkullAttack (AActor *self)
 
 class ADeadLostSoul : public ALostSoul
 {
-	DECLARE_STATELESS_ACTOR (ADeadLostSoul, ALostSoul);
+	DECLARE_STATELESS_ACTOR (ADeadLostSoul, ALostSoul)
 };
 
-IMPLEMENT_DEF_SERIAL (ADeadLostSoul, ALostSoul);
-REGISTER_ACTOR (ADeadLostSoul, Doom);
-
-void ADeadLostSoul::SetDefaults (FActorInfo *info)
-{
-	AActor::SetDefaults (info);
-	info->OwnedStates = NULL;
-	info->NumOwnedStates = 0;
-	info->doomednum = 23;
-	info->spawnstate = &States[S_SKULL_DIE+5];
-}
+IMPLEMENT_STATELESS_ACTOR (ADeadLostSoul, Doom, 23, 0)
+	PROP_SKIP_SUPER
+	PROP_SpawnState (S_SKULL_DIE+5)
+END_DEFAULTS
 
 //==========================================================================
 //
-// TransSoulsCallabck
+// CVAR transsouls
 //
-// [RH] This function is called whenever the lost soul translucency level
-// changes. It searches through the entire world for any lost souls and sets
-// their translucency levels as appropriate. New skulls are also set to
-// spawn with the desired translucency.
+// How translucent things drawn with STYLE_SoulTrans are. Normally, only
+// Lost Souls have this render style, but a dehacked patch could give other
+// things this style. Values less than 0.25 will automatically be set to
+// 0.25 to ensure some degree of visibility. Likewise, values above 1.0 will
+// be set to 1.0, because anything higher doesn't make sense.
 //
 //==========================================================================
 
-BEGIN_CUSTOM_CVAR (transsouls, "0.75", CVAR_ARCHIVE)
+CUSTOM_CVAR (Float, transsouls, 0.75f, CVAR_ARCHIVE)
 {
-	if (var.value < 0.25)
+	if (*var < 0.25f)
 	{
-		var.Set (0.25);
+		var = 0.25f;
 	}
-	else if (var.value > 1)
+	else if (*var > 1.f)
 	{
-		var.Set (1);
-	}
-	else
-	{
-		if (gameinfo.gametype != GAME_Doom)
-			return;
-
-		FActorInfo *info = RUNTIME_CLASS(ALostSoul)->ActorInfo;
-		if (info)
-		{
-			fixed_t newlucent = (fixed_t)(FRACUNIT * var.value);
-
-			info->translucency = newlucent;
-
-			// Find all the lost souls in the world and change them, too.
-			AActor *actor;
-			TThinkerIterator<ALostSoul> iterator;
-
-			while ( (actor = iterator.Next ()) )
-			{
-				actor->translucency = newlucent;
-			}
-		}
+		var = 1.f;
 	}
 }
-END_CUSTOM_CVAR (transsouls)

@@ -45,9 +45,8 @@
 //
 enum EGameSpeed
 {
-	SPEED_NoneYet,
 	SPEED_Normal,
-	SPEED_Fast
+	SPEED_Fast,
 };
 extern EGameSpeed GameSpeed;
 
@@ -65,13 +64,6 @@ extern	BOOL			devparm;		// DEBUG: launched with -devparm
 extern GameMode_t		gamemode;
 extern GameMission_t	gamemission;
 
-// Set if homebrew PWAD stuff has been added.
-extern	BOOL			modifiedgame;
-
-// -------------------------------------------
-// Language.
-extern	Language_t		language;
-
 // -------------------------------------------
 // Selected skill type, map etc.
 //
@@ -81,7 +73,7 @@ extern	char			startmap[8];		// [RH] Actual map name now
 extern	BOOL 			autostart;
 
 // Selected by user. 
-EXTERN_CVAR (gameskill)
+EXTERN_CVAR (Int, gameskill);
 
 // Nightmare mode flag, single player.
 extern	BOOL 			respawnmonsters;
@@ -93,16 +85,16 @@ extern	BOOL			netgame;
 extern	BOOL			multiplayer;
 
 // Flag: true only if started as net deathmatch.
-EXTERN_CVAR (deathmatch)
+EXTERN_CVAR (Int, deathmatch)
 
 // [RH] Pretend as deathmatch for purposes of dmflags
-EXTERN_CVAR (alwaysapplydmflags)
+EXTERN_CVAR (Bool, alwaysapplydmflags)
 
 // [RH] Teamplay mode
-EXTERN_CVAR (teamplay)
+EXTERN_CVAR (Bool, teamplay)
 
 // [RH] Friendly fire amount
-EXTERN_CVAR (friendlyfire)
+EXTERN_CVAR (Float, teamdamage)
 		
 // -------------------------
 // Internal parameters for sound rendering.
@@ -115,8 +107,8 @@ EXTERN_CVAR (friendlyfire)
 //	Sound FX volume has default, 0 - 15
 //	Music volume has default, 0 - 15
 // These are multiplied by 8.
-EXTERN_CVAR (snd_sfxvolume)				// maximum volume for sound
-EXTERN_CVAR (snd_musicvolume)			// maximum volume for music
+EXTERN_CVAR (Int, snd_sfxvolume)		// maximum volume for sound
+EXTERN_CVAR (Int, snd_musicvolume)		// maximum volume for music
 
 
 // -------------------------
@@ -137,7 +129,7 @@ extern	int 			viewwindowx;
 extern	int 			viewwindowy;
 extern	"C" int 		viewheight;
 extern	"C" int 		viewwidth;
-
+extern	"C"	int			halfviewwidth;		// [RH] Half view width, for plane drawing
 extern	"C" int			realviewwidth;		// [RH] Physical width of view window
 extern	"C" int			realviewheight;		// [RH] Physical height of view window
 extern	"C" int			detailxshift;		// [RH] X shift for horizontal detail level
@@ -231,14 +223,14 @@ extern	BOOL	 		precache;
 // wipegamestate can be set to -1
 //	to force a wipe on the next draw
 extern gamestate_t wipegamestate;
-extern BOOL setsizeneeded;
+extern bool setsizeneeded;
 extern BOOL setmodeneeded;
 
-extern BOOL BorderNeedRefresh;
-extern BOOL BorderTopRefresh;
+extern int BorderNeedRefresh;
+extern int BorderTopRefresh;
 
 
-EXTERN_CVAR (mouse_sensitivity)
+EXTERN_CVAR (Float, mouse_sensitivity)
 //?
 // debug flag to cancel adaptiveness
 extern	BOOL	 		singletics; 	
@@ -273,13 +265,15 @@ extern	int 			ticdup;
 
 
 // ---- [RH] ----
-EXTERN_CVAR (developer)
+EXTERN_CVAR (Bool, developer)
 
 extern int Net_Arbitrator;
 
 // Use MMX routines? (Only if USEASM is defined)
 extern	BOOL			UseMMX;
 
+// Have conditional move instructions? (x86 only)
+extern "C" BOOL			HaveCMOV;
 
 #ifdef USEASM
 extern "C" void EndMMX (void);
@@ -292,8 +286,8 @@ extern "C" void EndMMX (void);
 
 #endif
 
-EXTERN_CVAR (var_friction)
-EXTERN_CVAR (var_pushers)
+EXTERN_CVAR (Bool, var_friction)
+EXTERN_CVAR (Bool, var_pushers)
 
 
 // [RH] Miscellaneous info for DeHackEd support
@@ -314,11 +308,13 @@ struct DehInfo
 	int KFAArmor;
 	int KFAAC;
 	int Infight;
+	char PlayerSprite[5];
 };
-extern struct DehInfo deh;
+extern DehInfo deh;
 
 // [RH] Deathmatch flags
 
-extern int dmflags;
+EXTERN_CVAR (Int, dmflags);
+EXTERN_CVAR (Int, dmflags2);	// [BC]
 
 #endif

@@ -1,14 +1,14 @@
 #include "info.h"
 #include "a_pickups.h"
 #include "d_player.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "p_local.h"
 
 // Blue key card ------------------------------------------------------------
 
 class ABlueCard : public AKey
 {
-	DECLARE_ACTOR (ABlueCard, AKey);
+	DECLARE_ACTOR (ABlueCard, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -16,12 +16,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTBLUECARD;
+		return GStrings(GOTBLUECARD);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ABlueCard, AKey);
-REGISTER_ACTOR (ABlueCard, Doom);
 
 FState ABlueCard::States[] =
 {
@@ -29,22 +26,19 @@ FState ABlueCard::States[] =
 	S_BRIGHT (BKEY, 'B',   10, NULL 				, &States[0])
 };
 
-void ABlueCard::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 5;
-	info->spawnid = 85;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (ABlueCard, Doom, 5, 85)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Yellow key card ----------------------------------------------------------
 
 class AYellowCard : public AKey
 {
-	DECLARE_ACTOR (AYellowCard, AKey);
+	DECLARE_ACTOR (AYellowCard, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -52,12 +46,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTYELWCARD;
+		return GStrings(GOTYELWCARD);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AYellowCard, AKey);
-REGISTER_ACTOR (AYellowCard, Doom);
 
 FState AYellowCard::States[] =
 {
@@ -65,22 +56,19 @@ FState AYellowCard::States[] =
 	S_BRIGHT (YKEY, 'B',   10, NULL 				, &States[0])
 };
 
-void AYellowCard::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 6;
-	info->spawnid = 87;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (AYellowCard, Doom, 6, 87)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Red key card -------------------------------------------------------------
 
 class ARedCard : public AKey
 {
-	DECLARE_ACTOR (ARedCard, AKey);
+	DECLARE_ACTOR (ARedCard, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -88,12 +76,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTREDCARD;
+		return GStrings(GOTREDCARD);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ARedCard, AKey);
-REGISTER_ACTOR (ARedCard, Doom);
 
 FState ARedCard::States[] =
 {
@@ -101,22 +86,19 @@ FState ARedCard::States[] =
 	S_BRIGHT (RKEY, 'B',   10, NULL 				, &States[0])
 };
 
-void ARedCard::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 13;
-	info->spawnid = 86;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (ARedCard, Doom, 13, 86)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Blue skull key -----------------------------------------------------------
 
 class ABlueSkull : public AKey
 {
-	DECLARE_ACTOR (ABlueSkull, AKey);
+	DECLARE_ACTOR (ABlueSkull, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -124,12 +106,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTBLUESKUL;
+		return GStrings(GOTBLUESKUL);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ABlueSkull, AKey);
-REGISTER_ACTOR (ABlueSkull, Doom);
 
 FState ABlueSkull::States[] =
 {
@@ -137,22 +116,19 @@ FState ABlueSkull::States[] =
 	S_BRIGHT (BSKU, 'B',   10, NULL 				, &States[0])
 };
 
-void ABlueSkull::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 40;
-	info->spawnid = 90;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (ABlueSkull, Doom, 40, 90)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Yellow skull key ---------------------------------------------------------
 
 class AYellowSkull : public AKey
 {
-	DECLARE_ACTOR (AYellowSkull, AKey);
+	DECLARE_ACTOR (AYellowSkull, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -160,12 +136,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTYELWSKUL;
+		return GStrings(GOTYELWSKUL);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AYellowSkull, AKey);
-REGISTER_ACTOR (AYellowSkull, Doom);
 
 FState AYellowSkull::States[] =
 {
@@ -173,22 +146,19 @@ FState AYellowSkull::States[] =
 	S_BRIGHT (YSKU, 'B',   10, NULL 				, &States[0])
 };
 
-void AYellowSkull::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 39;
-	info->spawnid = 88;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (AYellowSkull, Doom, 39, 88)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Red skull key ------------------------------------------------------------
 
 class ARedSkull : public AKey
 {
-	DECLARE_ACTOR (ARedSkull, AKey);
+	DECLARE_ACTOR (ARedSkull, AKey)
 protected:
 	virtual keytype_t GetKeyType ()
 	{
@@ -196,12 +166,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTREDSKULL;
+		return GStrings(GOTREDSKUL);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ARedSkull, AKey);
-REGISTER_ACTOR (ARedSkull, Doom);
 
 FState ARedSkull::States[] =
 {
@@ -209,13 +176,10 @@ FState ARedSkull::States[] =
 	S_BRIGHT (RSKU, 'B',   10, NULL 				, &States[0])
 };
 
-void ARedSkull::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 38;
-	info->spawnid = 89;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_NOTDMATCH;
-}
+IMPLEMENT_ACTOR (ARedSkull, Doom, 38, 89)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL|MF_NOTDMATCH)
+
+	PROP_SpawnState (0)
+END_DEFAULTS

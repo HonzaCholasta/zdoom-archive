@@ -129,18 +129,18 @@ void DCajunMaster::Main (int buf)
 	}
 
 	//Check if player should go observer. Or un observe
-	if (bot_observer.value && !observer)
+	if (*bot_observer && !observer)
 	{
-		Printf (PRINT_HIGH, "%s is now observer\n", players[consoleplayer].userinfo.netname);
+		Printf ("%s is now observer\n", players[consoleplayer].userinfo.netname);
 		observer = true;
 		players[consoleplayer].mo->UnlinkFromWorld ();
 		players[consoleplayer].mo->flags = MF_DROPOFF|MF_NOBLOCKMAP|MF_NOCLIP|MF_SHADOW|MF_NOTDMATCH|MF_NOGRAVITY;
 		players[consoleplayer].mo->flags2 |= MF2_FLY;
 		players[consoleplayer].mo->LinkToWorld ();
 	}
-	else if (!bot_observer.value && observer) //Go back
+	else if (!*bot_observer && observer) //Go back
 	{
-		Printf (PRINT_HIGH, "%s returned to the fray\n", players[consoleplayer].userinfo.netname);
+		Printf ("%s returned to the fray\n", players[consoleplayer].userinfo.netname);
 		observer = false;
 		players[consoleplayer].mo->UnlinkFromWorld ();
 		players[consoleplayer].mo->flags = MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_PICKUP|MF_NOTDMATCH;
@@ -182,13 +182,13 @@ void DCajunMaster::Init ()
 		}
 	}
 
-	if (ctf && teamplay.value==0)
-		teamplay.Set (1); //Need teamplay for ctf. (which is not done yet)
+	if (ctf && *teamplay == false)
+		teamplay = true; //Need teamplay for ctf. (which is not done yet)
 
 	t_join = (wanted_botnum + 1) * SPAWN_DELAY; //The + is to let player get away before the bots come in.
 
 	//Determine Combat distance for each weapon.
-	if (deathmatch.value)
+	if (*deathmatch)
 	{
 		combatdst[wp_fist]         = 1       ;
 		combatdst[wp_pistol]       = 25000000;
@@ -284,7 +284,7 @@ bool DCajunMaster::SpawnBot (const char *name, int color)
 
 	if (i == MAXPLAYERS)
 	{
-		Printf (PRINT_HIGH, "The maximum of %d players/bots has been reached\n", MAXPLAYERS);
+		Printf ("The maximum of %d players/bots has been reached\n", MAXPLAYERS);
 		return false;
 	}
 
@@ -302,12 +302,12 @@ bool DCajunMaster::SpawnBot (const char *name, int color)
 
 		if (thebot == NULL)
 		{
-   		 	Printf (PRINT_HIGH, "couldn't find %s in %s\n", name, BOTFILENAME);
+   		 	Printf ("couldn't find %s in %s\n", name, BOTFILENAME);
 			return false;
 		}
 		else if (thebot->inuse)
 		{
-   		 	Printf (PRINT_HIGH, "%s is already in the thick\n", name);
+   		 	Printf ("%s is already in the thick\n", name);
 			return false;
 		}
 	}
@@ -326,7 +326,7 @@ bool DCajunMaster::SpawnBot (const char *name, int color)
 	}
 	else
 	{
-		Printf (PRINT_HIGH, "Couldn't spawn bot; no bot left in %s\n", BOTFILENAME);
+		Printf ("Couldn't spawn bot; no bot left in %s\n", BOTFILENAME);
 		return false;
 	}
 
@@ -334,11 +334,11 @@ bool DCajunMaster::SpawnBot (const char *name, int color)
 	Net_WriteByte (playernumber);
 	{
 		//Set color.
-		if (color == NOCOLOR && bot_next_color.value < NOCOLOR && bot_next_color.value >= 0)
+		if (color == NOCOLOR && *bot_next_color < NOCOLOR && *bot_next_color >= 0)
 		{
 			char concat[256];
 			strcpy (concat, thebot->info);
-			strcat (concat, colors[(int)bot_next_color.value]);
+			strcat (concat, colors[*bot_next_color]);
 			Net_WriteString (concat);
 		}
 		else
@@ -377,16 +377,23 @@ bool DCajunMaster::SpawnBot (const char *name, int color)
 
 void DCajunMaster::DoAddBot (int bnum, char *info)
 {
-	multiplayer = true; //Prevents cheating and so on, emulates real netgame (almost).
-	SB_state = -1;
-	players[bnum].isbot = true;
-	playeringame[bnum] = true;
-	players[bnum].mo = NULL;
 	D_ReadUserInfoStrings (bnum, (byte **)&info, false);
-	players[bnum].playerstate = PST_REBORN;
-	botingame[bnum] = true;
-    Printf (PRINT_HIGH, "%s joined the game\n", players[bnum].userinfo.netname);
-    G_DoReborn (bnum, true);
+	if (!*deathmatch && playerstarts[bnum].type == 0)
+	{
+		Printf ("%s tried to join, but there was no player %d start\n",
+			players[bnum].userinfo.netname, bnum+1);
+	}
+	else
+	{
+		multiplayer = true; //Prevents cheating and so on; emulates real netgame (almost).
+		players[bnum].isbot = true;
+		playeringame[bnum] = true;
+		players[bnum].mo = NULL;
+		players[bnum].playerstate = PST_ENTER;
+		botingame[bnum] = true;
+		Printf ("%s joined the game\n", players[bnum].userinfo.netname);
+		G_DoReborn (bnum, true);
+	}
 	waitingforspawn[bnum] = false;
 }
 
@@ -500,7 +507,6 @@ void DCajunMaster::ForgetBots ()
 bool DCajunMaster::LoadBots ()
 {
 	bglobal.ForgetBots ();
-
 #ifndef UNIX
 	if (!FileExists ("zcajun/" BOTFILENAME))
 	{
@@ -524,6 +530,9 @@ bool DCajunMaster::LoadBots ()
 	else
 	{
 		SC_OpenFile (tmp);
+	}
+	if (tmp)
+	{
 		delete[] tmp;
 	}
 #endif
@@ -540,7 +549,7 @@ bool DCajunMaster::LoadBots ()
 
 		newinfo->info = copystring ("\\autoaim\\0");
 
-		while (1)
+		for (;;)
 		{
 			SC_MustGetString ();
 			if (SC_Compare ("}"))
@@ -588,15 +597,14 @@ bool DCajunMaster::LoadBots ()
 	}
 	SC_Close ();
 
-	Printf (PRINT_HIGH, "%d bots read from %s\n", bglobal.loaded_bots, BOTFILENAME);
+	Printf ("%d bots read from %s\n", bglobal.loaded_bots, BOTFILENAME);
 
 	return true;
 }
 
-BEGIN_STAT (bots)
+ADD_STAT (bots, out)
 {
 	sprintf (out, "think = %04.1f ms  support = %04.1f ms",
 		(double)BotThinkCycles * 1000 * SecondsPerCycle,
 		(double)BotSupportCycles * 1000 * SecondsPerCycle);
 }
-END_STAT (bots)

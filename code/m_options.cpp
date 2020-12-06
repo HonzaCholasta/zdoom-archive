@@ -9,15 +9,17 @@
 */
 
 #include "m_alloc.h"
+#include "templates.h"
 
 #include "doomdef.h"
-#include "dstrings.h"
+#include "gstrings.h"
 
 #include "c_console.h"
 #include "c_dispatch.h"
 #include "c_bind.h"
 
 #include "d_main.h"
+#include "d_gui.h"
 
 #include "i_system.h"
 #include "i_video.h"
@@ -28,7 +30,7 @@
 #include "gi.h"
 
 #include "r_local.h"
-
+#include "gameconfigfile.h"
 
 #include "hu_stuff.h"
 
@@ -49,24 +51,24 @@
 //
 // defaulted values
 //
-CVAR (mouse_sensitivity, "1.0", CVAR_ARCHIVE)
+CVAR (Float, mouse_sensitivity, 1.f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
 // Show messages has default, 0 = off, 1 = on
-CVAR (show_messages, "1", CVAR_ARCHIVE)
+CVAR (Bool, show_messages, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
 extern bool	OptionsActive;
 
 extern int	skullAnimCounter;
 
-EXTERN_CVAR (cl_run)
-EXTERN_CVAR (invertmouse)
-EXTERN_CVAR (lookspring)
-EXTERN_CVAR (lookstrafe)
-EXTERN_CVAR (crosshair)
-EXTERN_CVAR (freelook)
+EXTERN_CVAR (Bool, cl_run)
+EXTERN_CVAR (Bool, invertmouse)
+EXTERN_CVAR (Bool, lookspring)
+EXTERN_CVAR (Bool, lookstrafe)
+EXTERN_CVAR (Int, crosshair)
+EXTERN_CVAR (Bool, freelook)
 
 void M_ChangeMessages ();
-void M_SizeDisplay (float diff);
+void M_SizeDisplay (int diff);
 
 int  M_StringHeight (char *string);
 void M_ClearMenus ();
@@ -96,7 +98,7 @@ value_t OnOff[2] = {
 
 menu_t  *CurrentMenu;
 int		CurrentItem;
-static bool		WaitingForKey;
+int		WaitingForKey;
 static char	   *OldMessage;
 static itemtype OldType;
 
@@ -113,7 +115,7 @@ static void GoToConsole (void);
 void Reset2Defaults (void);
 void Reset2Saved (void);
 
-EXTERN_CVAR (snd_midivolume)
+EXTERN_CVAR (Float, snd_midivolume)
 
 static void SetVidMode (void);
 
@@ -155,7 +157,8 @@ menu_t OptionMenu = {
  *
  *=======================================*/
 
-static menuitem_t ControlsItems[] = {
+static menuitem_t ControlsItems[] =
+{
 	{ redtext,"ENTER to change, BACKSPACE to clear", {NULL}, {0.0}, {0.0}, {0.0}, {NULL} },
 	{ redtext,	" ",					{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
 	{ whitetext,"Controls",				{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
@@ -198,7 +201,8 @@ static menuitem_t ControlsItems[] = {
 	{ control,	"Chasecam",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"chase"} },
 	{ control,	"Add a bot",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"addbot"} },
 	{ control,	"Coop spy",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"spynext"} },
-	{ control,	"Screeshot",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"screenshot"} }
+	{ control,	"Screenshot",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"screenshot"} },
+	{ control,  "Open console",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"toggleconsole"} }
 };
 
 menu_t ControlsMenu = {
@@ -218,20 +222,21 @@ menu_t ControlsMenu = {
  *=======================================*/
 static void StartMessagesMenu (void);
 
-EXTERN_CVAR (am_rotate)
-EXTERN_CVAR (am_overlay)
-EXTERN_CVAR (st_scale)
-EXTERN_CVAR (am_usecustomcolors)
-EXTERN_CVAR (r_detail)
-EXTERN_CVAR (r_stretchsky)
-EXTERN_CVAR (r_columnmethod)
-EXTERN_CVAR (r_drawfuzz)
-EXTERN_CVAR (cl_rockettrails)
-EXTERN_CVAR (cl_pufftype)
-EXTERN_CVAR (cl_bloodtype)
-EXTERN_CVAR (wipetype)
-EXTERN_CVAR (vid_palettehack)
-EXTERN_CVAR (screenblocks)
+EXTERN_CVAR (Bool, am_rotate)
+EXTERN_CVAR (Bool, am_overlay)
+EXTERN_CVAR (Bool, st_scale)
+EXTERN_CVAR (Bool, am_usecustomcolors)
+EXTERN_CVAR (Int,  r_detail)
+EXTERN_CVAR (Bool, r_stretchsky)
+EXTERN_CVAR (Int,  r_columnmethod)
+EXTERN_CVAR (Bool, r_drawfuzz)
+EXTERN_CVAR (Int,  cl_rockettrails)
+EXTERN_CVAR (Int,  cl_pufftype)
+EXTERN_CVAR (Int,  cl_bloodtype)
+EXTERN_CVAR (Int,  wipetype)
+EXTERN_CVAR (Bool, vid_palettehack)
+EXTERN_CVAR (Bool, vid_attachedsurfaces)
+EXTERN_CVAR (Int,  screenblocks)
 
 static value_t Crosshairs[] =
 {
@@ -289,6 +294,7 @@ static menuitem_t VideoItems[] = {
 	{ discrete, "Screen wipe style",	{&wipetype},			{4.0}, {0.0},	{0.0}, {Wipes} },
 #ifdef _WIN32
 	{ discrete, "DirectDraw palette hack", {&vid_palettehack},	{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Use attached surfaces", {&vid_attachedsurfaces},{2.0}, {0.0},	{0.0}, {OnOff} },
 #endif
 	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
 	{ discrete, "Use fuzz effect",		{&r_drawfuzz},			{2.0}, {0.0},	{0.0}, {YesNo} },
@@ -306,7 +312,7 @@ menu_t VideoMenu = {
 	"DISPLAY OPTIONS",
 	0,
 #ifdef _WIN32
-	20,
+	21,
 #else
 	19,
 #endif
@@ -319,15 +325,15 @@ menu_t VideoMenu = {
  * Messages Menu
  *
  *=======================================*/
-EXTERN_CVAR (con_scaletext)
-EXTERN_CVAR (con_centernotify)
-EXTERN_CVAR (msg0color)
-EXTERN_CVAR (msg1color)
-EXTERN_CVAR (msg2color)
-EXTERN_CVAR (msg3color)
-EXTERN_CVAR (msg4color)
-EXTERN_CVAR (msgmidcolor)
-EXTERN_CVAR (msglevel)
+EXTERN_CVAR (Bool, con_scaletext)
+EXTERN_CVAR (Bool, con_centernotify)
+EXTERN_CVAR (Int,  msg0color)
+EXTERN_CVAR (Int,  msg1color)
+EXTERN_CVAR (Int,  msg2color)
+EXTERN_CVAR (Int,  msg3color)
+EXTERN_CVAR (Int,  msg4color)
+EXTERN_CVAR (Int,  msgmidcolor)
+EXTERN_CVAR (Int,  msglevel)
 
 static value_t TextColors[] =
 {
@@ -392,13 +398,13 @@ static void BuildModesList (int hiwidth, int hiheight, int hi_id);
 static BOOL GetSelectedSize (int line, int *width, int *height);
 static void SetModesMenu (int w, int h, int bits);
 
-EXTERN_CVAR (vid_defwidth)
-EXTERN_CVAR (vid_defheight)
-EXTERN_CVAR (vid_defbits)
+EXTERN_CVAR (Int, vid_defwidth)
+EXTERN_CVAR (Int, vid_defheight)
+EXTERN_CVAR (Int, vid_defbits)
 
-static cvar_t DummyDepthCvar (NULL, NULL, 0);
+static FIntCVar DummyDepthCvar (NULL, 0, 0);
 
-EXTERN_CVAR (fullscreen)
+EXTERN_CVAR (Bool, fullscreen)
 
 static value_t Depths[22];
 
@@ -450,27 +456,27 @@ menu_t ModesMenu = {
  *
  *=======================================*/
 
-static cvar_t *flagsvar;
+static FIntCVar *flagsvar;
 
 static menuitem_t DMFlagsItems[] = {
-	{ bitflag,	"Falling damage",		{(cvar_t *)DF_YES_FALLING},			{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Weapons stay (DM)",	{(cvar_t *)DF_WEAPONS_STAY},		{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Allow powerups (DM)",	{(cvar_t *)DF_NO_ITEMS},			{1}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Allow health (DM)",	{(cvar_t *)DF_NO_HEALTH},			{1}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Allow armor (DM)",		{(cvar_t *)DF_NO_ARMOR},			{1}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Spawn farthest (DM)",	{(cvar_t *)DF_SPAWN_FARTHEST},		{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Same map (DM)",		{(cvar_t *)DF_SAME_LEVEL},			{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Force respawn (DM)",	{(cvar_t *)DF_FORCE_RESPAWN},		{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Allow exit (DM)",		{(cvar_t *)DF_NO_EXIT},				{1}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Infinite ammo",		{(cvar_t *)DF_INFINITE_AMMO},		{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"No monsters",			{(cvar_t *)DF_NO_MONSTERS},			{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Monsters respawn",		{(cvar_t *)DF_MONSTERS_RESPAWN},	{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Items respawn",		{(cvar_t *)DF_ITEMS_RESPAWN},		{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Fast monsters",		{(cvar_t *)DF_FAST_MONSTERS},		{0}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Allow jump",			{(cvar_t *)DF_NO_JUMP},				{1}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Allow freelook",		{(cvar_t *)DF_NO_FREELOOK},			{1}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Falling damage",		{(FBaseCVar *)DF_YES_FALLING},		{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Weapons stay (DM)",	{(FBaseCVar *)DF_WEAPONS_STAY},		{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Allow powerups (DM)",	{(FBaseCVar *)DF_NO_ITEMS},			{1}, {0}, {0}, {NULL} },
+	{ bitflag,	"Allow health (DM)",	{(FBaseCVar *)DF_NO_HEALTH},		{1}, {0}, {0}, {NULL} },
+	{ bitflag,	"Allow armor (DM)",		{(FBaseCVar *)DF_NO_ARMOR},			{1}, {0}, {0}, {NULL} },
+	{ bitflag,	"Spawn farthest (DM)",	{(FBaseCVar *)DF_SPAWN_FARTHEST},	{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Same map (DM)",		{(FBaseCVar *)DF_SAME_LEVEL},		{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Force respawn (DM)",	{(FBaseCVar *)DF_FORCE_RESPAWN},	{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Allow exit (DM)",		{(FBaseCVar *)DF_NO_EXIT},			{1}, {0}, {0}, {NULL} },
+	{ bitflag,	"Infinite ammo",		{(FBaseCVar *)DF_INFINITE_AMMO},	{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"No monsters",			{(FBaseCVar *)DF_NO_MONSTERS},		{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Monsters respawn",		{(FBaseCVar *)DF_MONSTERS_RESPAWN},	{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Items respawn",		{(FBaseCVar *)DF_ITEMS_RESPAWN},	{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Fast monsters",		{(FBaseCVar *)DF_FAST_MONSTERS},	{0}, {0}, {0}, {NULL} },
+	{ bitflag,	"Allow jump",			{(FBaseCVar *)DF_NO_JUMP},			{1}, {0}, {0}, {NULL} },
+	{ bitflag,	"Allow freelook",		{(FBaseCVar *)DF_NO_FREELOOK},		{1}, {0}, {0}, {NULL} },
 	{ redtext,	" ",					{NULL},								{0.0}, {0.0},	{0.0}, {NULL} },
-	{ slider,	"Friendly fire scale",	{&friendlyfire},					{0.0}, {1.0},	{0.05},{NULL} },
+	{ slider,	"Team damage scalar",	{&teamdamage},						{0.0}, {1.0},	{0.05},{NULL} },
 	{ discrete, "Teamplay",				{&teamplay},						{2.0}, {0.0},	{0.0}, {OnOff} }
 };
 
@@ -563,45 +569,42 @@ void M_OptInit (void)
 //
 //		Toggle messages on/off
 //
-void M_ChangeMessages (void)
+void M_ChangeMessages ()
 {
-	if (show_messages.value)
+	if (*show_messages)
 	{
-		Printf (128, "%s\n", MSGOFF);
-		show_messages.Set (0.0f);
+		Printf (128, "%s\n", GStrings(MSGOFF));
+		show_messages = false;
 	}
 	else
 	{
-		Printf (128, "%s\n", MSGON);
-		show_messages.Set (1.0f);
+		Printf (128, "%s\n", GStrings(MSGON));
+		show_messages = true;
 	}
 }
 
-BEGIN_COMMAND (togglemessages)
+CCMD (togglemessages)
 {
 	M_ChangeMessages ();
 }
-END_COMMAND (togglemessages)
 
-	void M_SizeDisplay (float diff)
+void M_SizeDisplay (int diff)
 {
 	// changing screenblocks automatically resizes the display
-	screenblocks.Set (screenblocks.value + diff);
+	screenblocks = *screenblocks + diff;
 }
 
-BEGIN_COMMAND (sizedown)
+CCMD (sizedown)
 {
-	M_SizeDisplay (-1.0);
+	M_SizeDisplay (-1);
 	S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 }
-END_COMMAND (sizedown)
 
-	BEGIN_COMMAND (sizeup)
+CCMD (sizeup)
 {
-	M_SizeDisplay(1.0);
+	M_SizeDisplay (1);
 	S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 }
-END_COMMAND (sizeup)
 
 void M_BuildKeyList (menuitem_t *item, int numitems)
 {
@@ -628,9 +631,6 @@ void M_SwitchMenu (menu_t *menu)
 	CanScrollDown = false;
 	CurrentMenu = menu;
 	CurrentItem = menu->lastOn;
-
-	if (menu == &ControlsMenu)
-		I_ResumeMouse ();
 
 	if (!menu->indent)
 	{
@@ -691,6 +691,7 @@ void M_OptDrawer ()
 	EColorRange color;
 	int y, width, i, x, ytop;
 	menuitem_t *item;
+	UCVarValue value;
 
 	i = W_CheckNumForName (CurrentMenu->title);
 	if (gameinfo.gametype == GAME_Doom && i >= 0)
@@ -764,8 +765,9 @@ void M_OptDrawer ()
 			{
 				int v, vals;
 
+				value = item->a.cvar->GetGenericRep (CVAR_Float);
 				vals = (int)item->b.min;
-				v = M_FindCurVal (item->a.cvar->value, item->e.values, vals);
+				v = M_FindCurVal (value.Float, item->e.values, vals);
 
 				if (v == vals)
 				{
@@ -788,7 +790,8 @@ void M_OptDrawer ()
 				break;
 
 			case slider:
-				M_DrawSlider (CurrentMenu->indent + 14, y, item->b.min, item->c.max, item->a.cvar->value);
+				value = item->a.cvar->GetGenericRep (CVAR_Float);
+				M_DrawSlider (CurrentMenu->indent + 14, y, item->b.min, item->c.max, value.Float);
 				break;
 
 			case control:
@@ -798,7 +801,7 @@ void M_OptDrawer ()
 				C_NameKeys (description, item->b.key1, item->c.key2);
 				screen->SetFont (ConFont);
 				screen->DrawTextCleanMove (CR_WHITE,
-					CurrentMenu->indent + 14, y, description);
+					CurrentMenu->indent + 14, y-1, description);
 				screen->SetFont (SmallFont);
 			}
 			break;
@@ -813,10 +816,17 @@ void M_OptDrawer ()
 				else
 					value = YesNo;
 
-				if (*item->e.flagint & item->a.flagmask)
-					str = value[1].name;
+				if (flagsvar)
+				{
+					if (**flagsvar & item->a.flagmask)
+						str = value[1].name;
+					else
+						str = value[0].name;
+				}
 				else
-					str = value[0].name;
+				{
+					str = "???";
+				}
 
 				screen->DrawTextCleanMove (ValueColor,
 					CurrentMenu->indent + 14, y, str);
@@ -830,7 +840,7 @@ void M_OptDrawer ()
 			if (i == CurrentItem && (skullAnimCounter < 6 || WaitingForKey))
 			{
 				screen->SetFont (ConFont);
-				screen->DrawTextCleanMove (CR_RED, CurrentMenu->indent + 3, y, "\xd");
+				screen->DrawTextCleanMove (CR_RED, CurrentMenu->indent + 3, y-1, "\xd");
 				screen->SetFont (SmallFont);
 			}
 		}
@@ -891,7 +901,7 @@ void M_OptDrawer ()
 	{
 		char flagsblah[64];
 
-		sprintf (flagsblah, "%s = %s", flagsvar->name, flagsvar->string);
+		sprintf (flagsblah, "%s = %d", flagsvar->GetName (), **flagsvar);
 		screen->DrawTextCleanMove (ValueColor,
 			160 - (screen->StringWidth (flagsblah) >> 1), 190, flagsblah);
 	}
@@ -900,38 +910,48 @@ void M_OptDrawer ()
 void M_OptResponder (event_t *ev)
 {
 	menuitem_t *item;
-	int ch = ev->data1;
-	
+	int ch = tolower (ev->data1);
+	UCVarValue value;
+
 	item = CurrentMenu->items + CurrentItem;
 
-	if (WaitingForKey)
+	if (WaitingForKey && ev->type == EV_KeyDown)
 	{
-		if (ch != KEY_ESCAPE)
+		if (ev->data1 != KEY_ESCAPE)
 		{
-			C_ChangeBinding (item->e.command, ch);
+			C_ChangeBinding (item->e.command, ev->data1);
 			M_BuildKeyList (CurrentMenu->items, CurrentMenu->numitems);
 		}
-		WaitingForKey = false;
+		I_PauseMouse ();
+		WaitingForKey = 0;
 		CurrentMenu->items[0].label = OldMessage;
 		CurrentMenu->items[0].type = OldType;
 		return;
 	}
 
+	if (ev->subtype == EV_GUI_KeyRepeat)
+	{
+		if (ch != GK_LEFT && ch != GK_RIGHT && ch != GK_UP && ch != GK_DOWN)
+		{
+			return;
+		}
+	}
+	else if (ev->subtype != EV_GUI_KeyDown)
+	{
+		return;
+	}
+	
 	if (item->type == bitflag && flagsvar &&
-		(ch == KEY_LEFTARROW || ch == KEY_RIGHTARROW || ch == KEY_ENTER)
+		(ch == GK_LEFT || ch == GK_RIGHT || ch == '\r')
 		&& !demoplayback)
 	{
-		int newflags = *item->e.flagint ^ item->a.flagmask;
-		char val[16];
-
-		sprintf (val, "%d", newflags);
-		flagsvar->Set (val);
+		*flagsvar = **flagsvar ^ item->a.flagmask;
 		return;
 	}
 
 	switch (ch)
 	{
-	case KEY_DOWNARROW:
+	case GK_DOWN:
 		{
 			int modecol;
 
@@ -970,7 +990,7 @@ void M_OptResponder (event_t *ev)
 		}
 		break;
 
-	case KEY_UPARROW:
+	case GK_UP:
 		{
 			int modecol;
 
@@ -1009,20 +1029,64 @@ void M_OptResponder (event_t *ev)
 		}
 		break;
 
-	case KEY_LEFTARROW:
+	case GK_PGUP:
+		if (CanScrollUp)
+		{
+			CurrentMenu->scrollpos -= VisBottom - CurrentMenu->scrollpos - CurrentMenu->scrolltop;
+			if (CurrentMenu->scrollpos < 0)
+			{
+				CurrentMenu->scrollpos = 0;
+			}
+			CurrentItem = CurrentMenu->scrolltop + CurrentMenu->scrollpos + 1;
+			while (CurrentMenu->items[CurrentItem].type == redtext ||
+				   CurrentMenu->items[CurrentItem].type == whitetext ||
+				   (CurrentMenu->items[CurrentItem].type == screenres &&
+					!CurrentMenu->items[CurrentItem].b.res1))
+			{
+				++CurrentItem;
+			}
+			S_Sound (CHAN_VOICE, "menu/cursor", 1, ATTN_NONE);
+		}
+		break;
+
+	case GK_PGDN:
+		if (CanScrollDown)
+		{
+			int pagesize = VisBottom - CurrentMenu->scrollpos - CurrentMenu->scrolltop;
+			CurrentMenu->scrollpos += pagesize;
+			if (CurrentMenu->scrollpos + CurrentMenu->scrolltop + pagesize > CurrentMenu->numitems)
+			{
+				CurrentMenu->scrollpos = CurrentMenu->numitems - CurrentMenu->scrolltop - pagesize;
+			}
+			CurrentItem = CurrentMenu->scrolltop + CurrentMenu->scrollpos + 1;
+			while (CurrentMenu->items[CurrentItem].type == redtext ||
+				   CurrentMenu->items[CurrentItem].type == whitetext ||
+				   (CurrentMenu->items[CurrentItem].type == screenres &&
+					!CurrentMenu->items[CurrentItem].b.res1))
+			{
+				++CurrentItem;
+			}
+			S_Sound (CHAN_VOICE, "menu/cursor", 1, ATTN_NONE);
+		}
+		break;
+
+	case GK_LEFT:
 		switch (item->type)
 		{
 			case slider:
 				{
-					float newval = item->a.cvar->value - item->d.step;
+					UCVarValue newval;
 
-					if (newval < item->b.min)
-						newval = item->b.min;
+					value = item->a.cvar->GetGenericRep (CVAR_Float);
+					newval.Float = value.Float - item->d.step;
+
+					if (newval.Float < item->b.min)
+						newval.Float = item->b.min;
 
 					if (item->e.cfunc)
-						item->e.cfunc (item->a.cvar, newval);
+						item->e.cfunc (item->a.cvar, newval.Float);
 					else
-						item->a.cvar->Set (newval);
+						item->a.cvar->SetGenericRep (newval, CVAR_Float);
 				}
 				S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 				break;
@@ -1034,15 +1098,17 @@ void M_OptResponder (event_t *ev)
 					int numvals;
 
 					numvals = (int)item->b.min;
-					cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
+					value = item->a.cvar->GetGenericRep (CVAR_Float);
+					cur = M_FindCurVal (value.Float, item->e.values, numvals);
 					if (--cur < 0)
 						cur = numvals - 1;
 
-					item->a.cvar->Set (item->e.values[cur].value);
+					value.Float = item->e.values[cur].value;
+					item->a.cvar->SetGenericRep (value, CVAR_Float);
 
 					// Hack hack. Rebuild list of resolutions
 					if (item->e.values == Depths)
-						BuildModesList (screen->width, screen->height, DisplayBits);
+						BuildModesList (SCREENWIDTH, SCREENHEIGHT, DisplayBits);
 				}
 				S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 				break;
@@ -1076,20 +1142,23 @@ void M_OptResponder (event_t *ev)
 		}
 		break;
 
-	case KEY_RIGHTARROW:
+	case GK_RIGHT:
 		switch (item->type)
 		{
 			case slider:
 				{
-					float newval = item->a.cvar->value + item->d.step;
+					UCVarValue newval;
 
-					if (newval > item->c.max)
-						newval = item->c.max;
+					value = item->a.cvar->GetGenericRep (CVAR_Float);
+					newval.Float = value.Float + item->d.step;
+
+					if (newval.Float > item->c.max)
+						newval.Float = item->c.max;
 
 					if (item->e.cfunc)
-						item->e.cfunc (item->a.cvar, newval);
+						item->e.cfunc (item->a.cvar, newval.Float);
 					else
-						item->a.cvar->Set (newval);
+						item->a.cvar->SetGenericRep (newval, CVAR_Float);
 				}
 				S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 				break;
@@ -1101,15 +1170,17 @@ void M_OptResponder (event_t *ev)
 					int numvals;
 
 					numvals = (int)item->b.min;
-					cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
+					value = item->a.cvar->GetGenericRep (CVAR_Float);
+					cur = M_FindCurVal (value.Float, item->e.values, numvals);
 					if (++cur >= numvals)
 						cur = 0;
 
-					item->a.cvar->Set (item->e.values[cur].value);
+					value.Float = item->e.values[cur].value;
+					item->a.cvar->SetGenericRep (value, CVAR_Float);
 
 					// Hack hack. Rebuild list of resolutions
 					if (item->e.values == Depths)
-						BuildModesList (screen->width, screen->height, DisplayBits);
+						BuildModesList (SCREENWIDTH, SCREENHEIGHT, DisplayBits);
 				}
 				S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 				break;
@@ -1146,7 +1217,7 @@ void M_OptResponder (event_t *ev)
 		}
 		break;
 
-	case KEY_BACKSPACE:
+	case '\b':
 		if (item->type == control)
 		{
 			C_UnbindACommand (item->e.command);
@@ -1154,15 +1225,15 @@ void M_OptResponder (event_t *ev)
 		}
 		break;
 
-	case KEY_ENTER:
+	case '\r':
 		if (CurrentMenu == &ModesMenu)
 		{
 			if (!(item->type == screenres && GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
 			{
-				NewWidth = screen->width;
-				NewHeight = screen->height;
+				NewWidth = SCREENWIDTH;
+				NewHeight = SCREENHEIGHT;
 			}
-			NewBits = BitTranslate[(int)DummyDepthCvar.value];
+			NewBits = BitTranslate[*DummyDepthCvar];
 			setmodeneeded = true;
 			S_Sound (CHAN_VOICE, "menu/choose", 1, ATTN_NONE);
 			SetModesMenu (NewWidth, NewHeight, NewBits);
@@ -1179,21 +1250,24 @@ void M_OptResponder (event_t *ev)
 			int numvals;
 
 			numvals = (int)item->b.min;
-			cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
+			value = item->a.cvar->GetGenericRep (CVAR_Float);
+			cur = M_FindCurVal (value.Float, item->e.values, numvals);
 			if (++cur >= numvals)
 				cur = 0;
 
-			item->a.cvar->Set (item->e.values[cur].value);
+			value.Float = item->e.values[cur].value;
+			item->a.cvar->SetGenericRep (value, CVAR_Float);
 
 			// Hack hack. Rebuild list of resolutions
 			if (item->e.values == Depths)
-				BuildModesList (screen->width, screen->height, DisplayBits);
+				BuildModesList (SCREENWIDTH, SCREENHEIGHT, DisplayBits);
 
 			S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 		}
 		else if (item->type == control)
 		{
-			WaitingForKey = true;
+			I_ResumeMouse ();
+			WaitingForKey = 1;
 			OldMessage = CurrentMenu->items[0].label;
 			OldType = CurrentMenu->items[0].type;
 			CurrentMenu->items[0].label = "Press new key for control, ESC to cancel";
@@ -1210,13 +1284,13 @@ void M_OptResponder (event_t *ev)
 		}
 		break;
 
-	case KEY_ESCAPE:
+	case GK_ESCAPE:
 		CurrentMenu->lastOn = CurrentItem;
 		M_PopMenuStack ();
 		break;
 
 	default:
-		if (ev->data2 == 't')
+		if (ch == 't')
 		{
 			// Test selected resolution
 			if (CurrentMenu == &ModesMenu)
@@ -1224,26 +1298,26 @@ void M_OptResponder (event_t *ev)
 				if (!(item->type == screenres &&
 					GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
 				{
-					NewWidth = screen->width;
-					NewHeight = screen->height;
+					NewWidth = SCREENWIDTH;
+					NewHeight = SCREENHEIGHT;
 				}
-				OldWidth = screen->width;
-				OldHeight = screen->height;
+				OldWidth = SCREENWIDTH;
+				OldHeight = SCREENHEIGHT;
 				OldBits = DisplayBits;
-				NewBits = BitTranslate[(int)DummyDepthCvar.value];
+				NewBits = BitTranslate[*DummyDepthCvar];
 				setmodeneeded = true;
 				testingmode = I_GetTime() + 5 * TICRATE;
 				S_Sound (CHAN_VOICE, "menu/choose", 1, ATTN_NONE);
 				SetModesMenu (NewWidth, NewHeight, NewBits);
 			}
 		}
-		else if (ev->data2 == 'd' && CurrentMenu == &ModesMenu)
+		else if (ch == 'd' && CurrentMenu == &ModesMenu)
 		{
 			// Make current resolution the default
-			vid_defwidth.Set ((float)screen->width);
-			vid_defheight.Set ((float)screen->height);
-			vid_defbits.Set ((float)DisplayBits);
-			SetModesMenu (screen->width, screen->height, DisplayBits);
+			vid_defwidth = SCREENWIDTH;
+			vid_defheight = SCREENHEIGHT;
+			vid_defbits = DisplayBits;
+			SetModesMenu (SCREENWIDTH, SCREENHEIGHT, DisplayBits);
 		}
 		break;
 	}
@@ -1257,7 +1331,7 @@ static void GoToConsole (void)
 
 static void UpdateStuff (void)
 {
-	M_SizeDisplay (0.0);
+	M_SizeDisplay (0);
 }
 
 void Reset2Defaults (void)
@@ -1269,14 +1343,8 @@ void Reset2Defaults (void)
 
 void Reset2Saved (void)
 {
-	char *execcommand;
-	char *configfile = GetConfigPath ();
-
-	execcommand = new char[strlen (configfile) + 8];
-	sprintf (execcommand, "exec \"%s\"", configfile);
-	delete[] configfile;
-	AddCommandString (execcommand);
-	delete[] execcommand;
+	GameConfig->DoGlobalSetup ();
+	GameConfig->DoGameSetup (GameNames[gameinfo.gametype]);
 	UpdateStuff();
 }
 
@@ -1291,42 +1359,39 @@ static void CustomizeControls (void)
 	M_SwitchMenu (&ControlsMenu);
 }
 
-BEGIN_COMMAND (menu_keys)
+CCMD (menu_keys)
 {
 	M_StartControlPanel (true);
 	OptionsActive = true;
 	CustomizeControls ();
 }
-END_COMMAND (menu_keys)
 
-EXTERN_CVAR (dmflagsvar)
+EXTERN_CVAR (Int, dmflags)
 
 static void GameplayOptions (void)
 {
 	M_SwitchMenu (&DMFlagsMenu);
-	flagsvar = &dmflagsvar;
+	flagsvar = &dmflags;
 }
 
-BEGIN_COMMAND (menu_gameplay)
+CCMD (menu_gameplay)
 {
 	M_StartControlPanel (true);
 	OptionsActive = true;
 	GameplayOptions ();
 }
-END_COMMAND (menu_gameplay)
 
 static void VideoOptions (void)
 {
 	M_SwitchMenu (&VideoMenu);
 }
 
-BEGIN_COMMAND (menu_display)
+CCMD (menu_display)
 {
 	M_StartControlPanel (true);
 	OptionsActive = true;
 	M_SwitchMenu (&VideoMenu);
 }
-END_COMMAND (menu_display)
 
 static void BuildModesList (int hiwidth, int hiheight, int hi_bits)
 {
@@ -1334,7 +1399,7 @@ static void BuildModesList (int hiwidth, int hiheight, int hi_bits)
 	int	 i, c;
 	int	 width, height, showbits;
 
-	showbits = BitTranslate[(int)DummyDepthCvar.value];
+	showbits = BitTranslate[*DummyDepthCvar];
 
 	I_StartModeIterator (showbits);
 
@@ -1377,7 +1442,7 @@ static void BuildModesList (int hiwidth, int hiheight, int hi_bits)
 
 void M_RefreshModesList ()
 {
-	BuildModesList (screen->width, screen->height, DisplayBits);
+	BuildModesList (SCREENWIDTH, SCREENHEIGHT, DisplayBits);
 }
 
 static BOOL GetSelectedSize (int line, int *width, int *height)
@@ -1390,7 +1455,7 @@ static BOOL GetSelectedSize (int line, int *width, int *height)
 	}
 	else
 	{
-		I_StartModeIterator (BitTranslate[(int)DummyDepthCvar.value]);
+		I_StartModeIterator (BitTranslate[*DummyDepthCvar]);
 
 		stopat = (line - VM_RESSTART) * 3 + ModesItems[line].a.selmode + 1;
 
@@ -1419,7 +1484,7 @@ static void SetModesMenu (int w, int h, int bits)
 {
 	char strtemp[64];
 
-	DummyDepthCvar.Set ((float)FindBits (bits));
+	DummyDepthCvar = FindBits (bits);
 
 	if (!testingmode)
 	{
@@ -1432,9 +1497,9 @@ static void SetModesMenu (int w, int h, int bits)
 		ReplaceString (&ModesItems[VM_MAKEDEFLINE].label, strtemp);
 
 		sprintf (strtemp, "Current default is %dx%dx%d",
-				 (int)vid_defwidth.value,
-				 (int)vid_defheight.value,
-				 (int)vid_defbits.value);
+				 *vid_defwidth,
+				 *vid_defheight,
+				 *vid_defbits);
 		ReplaceString (&ModesItems[VM_CURDEFLINE].label, strtemp);
 	}
 	else
@@ -1461,7 +1526,7 @@ void M_RestoreMode (void)
 
 static void SetVidMode (void)
 {
-	SetModesMenu (screen->width, screen->height, DisplayBits);
+	SetModesMenu (SCREENWIDTH, SCREENHEIGHT, DisplayBits);
 	if (ModesMenu.items[ModesMenu.lastOn].type == screenres)
 	{
 		if (ModesMenu.items[ModesMenu.lastOn].a.selmode == -1)
@@ -1472,10 +1537,9 @@ static void SetVidMode (void)
 	M_SwitchMenu (&ModesMenu);
 }
 
-BEGIN_COMMAND (menu_video)
+CCMD (menu_video)
 {
 	M_StartControlPanel (true);
 	OptionsActive = true;
 	SetVidMode ();
 }
-END_COMMAND (menu_video)

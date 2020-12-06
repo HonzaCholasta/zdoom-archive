@@ -2,12 +2,6 @@
 #include <windows.h>
 
 #include "hardware.h"
-#undef MINCHAR
-#undef MAXCHAR
-#undef MINSHORT
-#undef MAXSHORT
-#undef MINLONG
-#undef MAXLONG
 #include "win32iface.h"
 #include "i_video.h"
 #include "i_system.h"
@@ -19,28 +13,29 @@ extern constate_e ConsoleState;
 
 static bool MouseShouldBeGrabbed ();
 
-CVAR (vid_fps, "0", 0)
-CVAR (ticker, "0", 0)
-EXTERN_CVAR (fullscreen)
-EXTERN_CVAR (vid_winscale)
+EXTERN_CVAR (Bool, ticker)
+EXTERN_CVAR (Bool, fullscreen)
+EXTERN_CVAR (Float, vid_winscale)
 
-static IVideo *Video;
+IVideo *Video;
 static IKeyboard *Keyboard;
 static IMouse *Mouse;
 static IJoystick *Joystick;
 
 void STACK_ARGS I_ShutdownHardware ()
 {
+	if (screen)
+		delete screen, screen = NULL;
 	if (Video)
 		delete Video, Video = NULL;
 }
 
 void I_InitHardware ()
 {
-	char num[4];
-	num[0] = '1' - !Args.CheckParm ("-devparm");
-	num[1] = 0;
-	ticker.SetDefault (num);
+	UCVarValue val;
+
+	val.Bool = !!Args.CheckParm ("-devparm");
+	ticker.SetGenericRepDefault (val, CVAR_Bool);
 
 	Video = new Win32Video (0);
 	if (Video == NULL)
@@ -48,88 +43,19 @@ void I_InitHardware ()
 
 	atterm (I_ShutdownHardware);
 
-	Video->SetWindowedScale (vid_winscale.value);
+	Video->SetWindowedScale (*vid_winscale);
 }
 
 /** Remaining code is common to Win32 and Linux **/
 
 // VIDEO WRAPPERS ---------------------------------------------------------
 
-void I_BeginUpdate ()
-{
-	screen->Lock ();
-}
-
-void I_FinishUpdateNoBlit ()
-{
-	screen->Unlock ();
-}
-
-void I_FinishUpdate ()
-{
-	// Draws frame time and cumulative fps
-	if (vid_fps.value)
-	{
-		static DWORD lastms = 0, lastsec = 0;
-		static int framecount = 0, lastcount = 0;
-		char fpsbuff[40];
-		int chars;
-
-		QWORD ms = I_MSTime ();
-		QWORD howlong = ms - lastms;
-		if (howlong > 0)
-		{
-			chars = sprintf (fpsbuff, "%I64d ms (%d fps)",
-							 howlong, lastcount);
-			screen->Clear (0, screen->height - 8, chars * 8, screen->height, 0);
-			screen->SetFont (ConFont);
-			screen->DrawText (CR_WHITE, 0, screen->height - 8, (char *)&fpsbuff[0]);
-			screen->SetFont (SmallFont);
-			if (lastsec < ms / 1000)
-			{
-				lastcount = framecount / (ms/1000 - lastsec);
-				lastsec = ms / 1000;
-				framecount = 0;
-			}
-			framecount++;
-		}
-		lastms = ms;
-	}
-
-    // draws little dots on the bottom of the screen
-    if (ticker.value)
-    {
-		static int lasttic = 0;
-		int i = I_GetTime();
-		int tics = i - lasttic;
-		lasttic = i;
-		if (tics > 20) tics = 20;
-		
-		for (i=0 ; i<tics*2 ; i+=2)
-			screen->buffer[(screen->height-1)*screen->pitch + i] = 0xff;
-		for ( ; i<20*2 ; i+=2)
-			screen->buffer[(screen->height-1)*screen->pitch + i] = 0x0;
-    }
-
-	Video->UpdateScreen (screen);
-}
-
-void I_ReadScreen (byte *block)
-{
-	Video->ReadScreen (block);
-}
-
-void I_SetPalette (DWORD *pal)
-{
-	Video->SetPalette (pal);
-}
-
 EDisplayType I_DisplayType ()
 {
 	return Video->GetDisplayType ();
 }
 
-void I_SetMode (int &width, int &height, int &bits)
+DFrameBuffer *I_SetMode (int &width, int &height, DFrameBuffer *old)
 {
 	bool fs = false;
 	switch (Video->GetDisplayType ())
@@ -141,25 +67,28 @@ void I_SetMode (int &width, int &height, int &bits)
 		fs = true;
 		break;
 	case DISPLAY_Both:
-		fs = fullscreen.value ? true : false;
+		fs = *fullscreen;
 		break;
 	}
-	bool res = Video->SetMode (width, height, bits, fs);
+	DFrameBuffer *res = Video->CreateFrameBuffer (width, height, fs, old);
 
-	if (!res)
+	if (res == NULL)
 	{
-		I_ClosestResolution (&width, &height, bits);
-		if (!Video->SetMode (width, height, bits, fs))
-			I_FatalError ("Mode %dx%dx%d is unavailable\n",
-						  width, height, bits);
+		I_ClosestResolution (&width, &height, 8);
+		res = Video->CreateFrameBuffer (width, height, fs, old);
+		if (res == NULL)
+		{
+			I_FatalError ("Mode %dx%d is unavailable\n", width, height);
+		}
 	}
+	return res;
 }
 
 bool I_CheckResolution (int width, int height, int bits)
 {
 	int twidth, theight;
 
-	Video->FullscreenChanged (fullscreen.value ? true : false);
+	Video->FullscreenChanged (*fullscreen);
 	Video->StartModeIterator (bits);
 	while (Video->NextMode (&twidth, &theight))
 	{
@@ -176,7 +105,7 @@ void I_ClosestResolution (int *width, int *height, int bits)
 	int iteration;
 	DWORD closest = 4294967295u;
 
-	Video->FullscreenChanged (fullscreen.value ? true : false);
+	Video->FullscreenChanged (*fullscreen ? true : false);
 	for (iteration = 0; iteration < 2; iteration++)
 	{
 		Video->StartModeIterator (bits);
@@ -217,168 +146,41 @@ bool I_NextMode (int *width, int *height)
 	return Video->NextMode (width, height);
 }
 
-bool I_AllocateScreen (DCanvas *canvas, int width, int height, int bits)
+DCanvas *I_NewStaticCanvas (int width, int height)
 {
-	if (!Video->AllocateSurface (canvas, width, height, bits))
-	{
-		I_FatalError ("Failed to allocate a %dx%dx%d surface",
-					  width, height, bits);
-	}
-	return true;
-}
-
-void I_FreeScreen (DCanvas *canvas)
-{
-	Video->ReleaseSurface (canvas);
-}
-
-void I_LockScreen (DCanvas *canvas)
-{
-	Video->LockSurface (canvas);
-}
-
-void I_UnlockScreen (DCanvas *canvas)
-{
-	Video->UnlockSurface (canvas);
-}
-
-void I_Blit (DCanvas *src, int srcx, int srcy, int srcwidth, int srcheight,
-			 DCanvas *dest, int destx, int desty, int destwidth, int destheight)
-{
-    if (!src->m_Private || !dest->m_Private)
-		return;
-
-    if (!src->m_LockCount)
-		src->Lock ();
-    if (!dest->m_LockCount)
-		dest->Lock ();
-
-	if (!Video->CanBlit() ||
-		!Video->Blit (src, srcx, srcy, srcwidth, srcheight,
-					  dest, destx, desty, destwidth, destheight))
-	{
-		fixed_t fracxstep, fracystep;
-		fixed_t fracx, fracy;
-		int x, y;
-
-		fracy = srcy << FRACBITS;
-		fracystep = (srcheight << FRACBITS) / destheight;
-		fracxstep = (srcwidth << FRACBITS) / destwidth;
-
-		if (src->is8bit == dest->is8bit)
-		{
-			// INDEX8 -> INDEX8 or ARGB8888 -> ARGB8888
-
-			byte *destline, *srcline;
-
-			if (!dest->is8bit)
-			{
-				destwidth <<= 2;
-				srcwidth <<= 2;
-				srcx <<= 2;
-				destx <<= 2;
-			}
-
-			if (fracxstep == FRACUNIT)
-			{
-				for (y = desty; y < desty + destheight; y++, fracy += fracystep)
-				{
-					memcpy (dest->buffer + y * dest->pitch + destx,
-							src->buffer + (fracy >> FRACBITS) * src->pitch + srcx,
-							destwidth);
-				}
-			}
-			else
-			{
-				for (y = desty; y < desty + destheight; y++, fracy += fracystep)
-				{
-					srcline = src->buffer + (fracy >> FRACBITS) * src->pitch + srcx;
-					destline = dest->buffer + y * dest->pitch + destx;
-					for (x = fracx = 0; x < destwidth; x++, fracx += fracxstep)
-					{
-						destline[x] = srcline[fracx >> FRACBITS];
-					}
-				}
-			}
-		}
-		else if (!src->is8bit && dest->is8bit)
-		{
-			// ARGB8888 -> INDEX8
-			I_FatalError ("Can't I_Blit() an ARGB8888 source to\nan INDEX8 destination");
-		}
-		else
-		{
-			// INDEX8 -> ARGB8888 (Palette set in V_Palette)
-			DWORD *destline;
-			byte *srcline;
-
-			if (fracxstep == FRACUNIT)
-			{
-				// No X-scaling
-				for (y = desty; y < desty + destheight; y++, fracy += fracystep)
-				{
-					srcline = src->buffer + (fracy >> FRACBITS) * src->pitch + srcx;
-					destline = (DWORD *)(dest->buffer + y * dest->pitch) + destx;
-					for (x = 0; x < destwidth; x++)
-					{
-						destline[x] = V_Palette[srcline[x]];
-					}
-				}
-			}
-			else
-			{
-				// With X-scaling
-				for (y = desty; y < desty + destheight; y++, fracy += fracystep)
-				{
-					srcline = src->buffer + (fracy >> FRACBITS) * src->pitch + srcx;
-					destline = (DWORD *)(dest->buffer + y * dest->pitch) + destx;
-					for (x = fracx = 0; x < destwidth; x++, fracx += fracxstep)
-					{
-						destline[x] = V_Palette[srcline[fracx >> FRACBITS]];
-					}
-				}
-			}
-		}
-	}
-
-    if (!src->m_LockCount)
-		I_UnlockScreen (src);
-    if (!dest->m_LockCount)
-		I_UnlockScreen (dest);
+	return new DSimpleCanvas (width, height);
 }
 
 extern int NewWidth, NewHeight, NewBits, DisplayBits;
 
-BEGIN_CUSTOM_CVAR (fullscreen, "1", CVAR_ARCHIVE)
+CUSTOM_CVAR (Bool, fullscreen, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
-	if (Video->FullscreenChanged (var.value ? true : false))
+	if (Video->FullscreenChanged (*var))
 	{
-		NewWidth = screen->width;
-		NewHeight = screen->height;
+		NewWidth = screen->GetWidth();
+		NewHeight = screen->GetHeight();
 		NewBits = DisplayBits;
 		setmodeneeded = true;
 	}
 }
-END_CUSTOM_CVAR (fullscreen)
 
-BEGIN_CUSTOM_CVAR (vid_winscale, "1.0", CVAR_ARCHIVE)
+CUSTOM_CVAR (Float, vid_winscale, 1.f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
-	if (var.value < 1.f)
+	if (*var < 1.f)
 	{
-		var.Set (1.f);
+		var = 1.f;
 	}
 	else if (Video)
 	{
-		Video->SetWindowedScale (var.value);
-		NewWidth = screen->width;
-		NewHeight = screen->height;
+		Video->SetWindowedScale (*var);
+		NewWidth = screen->GetWidth();
+		NewHeight = screen->GetHeight();
 		NewBits = DisplayBits;
 		setmodeneeded = true;
 	}
 }
-END_CUSTOM_CVAR (vid_winscale)
 
-BEGIN_COMMAND (vid_listmodes)
+CCMD (vid_listmodes)
 {
 	int width, height, bits;
 
@@ -389,13 +191,11 @@ BEGIN_COMMAND (vid_listmodes)
 			if (width == DisplayWidth && height == DisplayHeight && bits == DisplayBits)
 				Printf_Bold ("%4d x%5d x%3d\n", width, height, bits);
 			else
-				Printf (PRINT_HIGH, "%4d x%5d x%3d\n", width, height, bits);
+				Printf ("%4d x%5d x%3d\n", width, height, bits);
 	}
 }
-END_COMMAND (vid_listmodes)
 
-BEGIN_COMMAND (vid_currentmode)
+CCMD (vid_currentmode)
 {
-	Printf (PRINT_HIGH, "%dx%dx%d\n", DisplayWidth, DisplayHeight, DisplayBits);
+	Printf ("%dx%dx%d\n", DisplayWidth, DisplayHeight, DisplayBits);
 }
-END_COMMAND (vid_currentmode)

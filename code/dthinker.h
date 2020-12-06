@@ -26,6 +26,7 @@
 
 #include <stdlib.h>
 #include "dobject.h"
+#include "lists.h"
 
 class AActor;
 class player_s;
@@ -43,73 +44,66 @@ typedef union
 	actionf_p2	acp2;
 } actionf_t;
 
-// Historically, "think_t" is yet another
-// function pointer to a routine to handle an actor
-typedef actionf_t  think_t;
-
 class FThinkerIterator;
 
+enum { MAX_STATNUM = 127 };
+
 // Doubly linked list of thinkers
-class DThinker : public DObject
+class DThinker : public DObject, protected Node
 {
-	DECLARE_SERIAL (DThinker, DObject)
+	DECLARE_CLASS (DThinker, DObject)
 
 public:
-	DThinker ();
+	DThinker (int statnum = MAX_STATNUM) throw();
 	void Destroy ();
 	virtual ~DThinker ();
-	virtual void RunThink () {}
+	virtual void RunThink ();
+	virtual void PostBeginPlay ();	// Called just before the first tick
 
 	void *operator new (size_t size);
 	void operator delete (void *block);
 
-	// Both the head and tail of the thinker list.
-	static DThinker *FirstThinker;
-	static DThinker *LastThinker;
+	void ChangeStatNum (int statnum);
+
 	static void RunThinkers ();
+	static void RunThinkers (int statnum);
 	static void DestroyAllThinkers ();
 	static void DestroyMostThinkers ();
 	static void SerializeAll (FArchive &arc, bool keepPlayers);
 
 private:
-	DThinker *m_Next, *m_Prev;
+	static void DestroyThinkersInList (Node *first);
+	static void DestroyMostThinkersInList (List &list, int stat);
+	static int TickThinkers (List *list, List *dest);	// Returns: # of thinkers ticked
+
+
+	static List Thinkers[MAX_STATNUM+1];		// Current thinkers
+	static List FreshThinkers[MAX_STATNUM+1];	// Newly created thinkers
+	static bool bSerialOverride;
 
 	friend class FThinkerIterator;
+	friend class DObject;
 };
 
 class FThinkerIterator
 {
 private:
 	TypeInfo *m_ParentType;
-	DThinker *m_CurrThinker;
+	Node *m_CurrThinker;
+	BYTE m_Stat;
+	bool m_SearchStats;
+	bool m_SearchingFresh;
 
 public:
-	FThinkerIterator (TypeInfo *type)
-	{
-		m_ParentType = type;
-		m_CurrThinker = DThinker::FirstThinker;
-	}
-	DThinker *Next ()
-	{
-		while (m_CurrThinker)
-		{
-			if (m_CurrThinker->IsKindOf (m_ParentType))
-			{
-				DThinker *res = m_CurrThinker;
-				m_CurrThinker = m_CurrThinker->m_Next;
-				return res;
-			}
-			m_CurrThinker = m_CurrThinker->m_Next;
-		}
-		m_CurrThinker = DThinker::FirstThinker;
-		return NULL;
-	}
+	FThinkerIterator (TypeInfo *type, int statnum=MAX_STATNUM+1);
+	DThinker *Next ();
+	void Reinit ();
 };
 
 template <class T> class TThinkerIterator : public FThinkerIterator
 {
 public:
-	TThinkerIterator () : FThinkerIterator (RUNTIME_CLASS(T))
+	TThinkerIterator (int statnum=MAX_STATNUM+1) : FThinkerIterator (RUNTIME_CLASS(T), statnum)
 	{
 	}
 	T *Next ()

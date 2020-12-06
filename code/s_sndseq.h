@@ -14,13 +14,13 @@ typedef enum {
 	SEQ_NOTRANS
 } seqtype_t;
 
-struct sector_s;
+struct sector_t;
 
 void S_ParseSndSeq (void);
 void SN_StartSequence (AActor *mobj, int sequence, seqtype_t type);
 void SN_StartSequence (AActor *mobj, const char *name);
-void SN_StartSequence (struct sector_s *sector, int sequence, seqtype_t type);
-void SN_StartSequence (struct sector_s *sector, const char *name);
+void SN_StartSequence (sector_t *sector, int sequence, seqtype_t type);
+void SN_StartSequence (sector_t *sector, const char *name);
 void SN_StartSequence (fixed_t spot[3], int sequence, seqtype_t type);
 void SN_StartSequence (fixed_t spot[3], const char *name);
 void SN_StopSequence (AActor *mobj);
@@ -34,9 +34,10 @@ void SN_ChangeNodeData (int nodeNum, int seqOffset, int delayTics,
 
 class DSeqNode : public DObject
 {
-	DECLARE_SERIAL (DSeqNode, DObject)
+	DECLARE_CLASS (DSeqNode, DObject)
 public:
 	virtual ~DSeqNode ();
+	void Serialize (FArchive &arc);
 	virtual void MakeSound () {}
 	virtual void MakeLoopedSound () {}
 	virtual void *Source () { return NULL; }
@@ -79,8 +80,8 @@ typedef struct
 
 void SN_StartSequence (AActor *mobj, int sequence, seqtype_t type);
 void SN_StartSequence (AActor *mobj, const char *name);
-void SN_StartSequence (struct sector_s *sector, int sequence, seqtype_t type);
-void SN_StartSequence (struct sector_s *sector, const char *name);
+void SN_StartSequence (sector_t *sector, int sequence, seqtype_t type);
+void SN_StartSequence (sector_t *sector, const char *name);
 void SN_StartSequence (polyobj_t *poly, int sequence, seqtype_t type);
 void SN_StartSequence (polyobj_t *poly, const char *name);
 void SN_StopSequence (AActor *mobj);

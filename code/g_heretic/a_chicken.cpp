@@ -11,6 +11,7 @@
 #include "p_enemy.h"
 #include "d_event.h"
 #include "ravenshared.h"
+#include "gstrings.h"
 
 void A_BeakReady (player_t *, pspdef_t *);
 void A_BeakRaise (player_t *, pspdef_t *);
@@ -27,19 +28,14 @@ void A_ChicAttack (AActor *);
 
 class ABeakPuff : public AStaffPuff
 {
-	DECLARE_STATELESS_ACTOR (ABeakPuff, AStaffPuff);
+	DECLARE_STATELESS_ACTOR (ABeakPuff, AStaffPuff)
 public:
 	void BeginPlay ();
 };
 
-IMPLEMENT_DEF_SERIAL (ABeakPuff, AStaffPuff);
-REGISTER_ACTOR (ABeakPuff, Heretic);
-
-void ABeakPuff::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->attacksound = "chicken/attack";
-}
+IMPLEMENT_STATELESS_ACTOR (ABeakPuff, Heretic, -1, 0)
+	PROP_AttackSound ("chicken/attack")
+END_DEFAULTS
 
 void ABeakPuff::BeginPlay ()
 {
@@ -51,13 +47,11 @@ void ABeakPuff::BeginPlay ()
 
 class ABeak : public AWeapon
 {
-	DECLARE_ACTOR (ABeak, AWeapon);
+	DECLARE_ACTOR (ABeak, AWeapon)
+	AT_GAME_SET_FRIEND (Beak)
 private:
 	static FWeaponInfo WeaponInfo1, WeaponInfo2;
 };
-
-IMPLEMENT_DEF_SERIAL (ABeak, AWeapon);
-REGISTER_ACTOR (ABeak, Heretic);
 
 FState ABeak::States[] =
 {
@@ -115,24 +109,23 @@ FWeaponInfo ABeak::WeaponInfo2 =
 	NULL
 };
 
-void ABeak::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABeak, Heretic, -1, 0)
+END_DEFAULTS
+
+AT_GAME_SET (Beak)
 {
-	INHERIT_DEFS;
-	wpnlev1info[wp_beak] = &WeaponInfo1;
-	wpnlev2info[wp_beak] = &WeaponInfo2;
+	wpnlev1info[wp_beak] = &ABeak::WeaponInfo1;
+	wpnlev2info[wp_beak] = &ABeak::WeaponInfo2;
 }
 
 // Chicken player -----------------------------------------------------------
 
 class AChickenPlayer : public APlayerPawn
 {
-	DECLARE_ACTOR (AChickenPlayer, APlayerPawn);
+	DECLARE_ACTOR (AChickenPlayer, APlayerPawn)
 public:
 	fixed_t GetJumpZ () { return FRACUNIT; }
 };
-
-IMPLEMENT_DEF_SERIAL (AChickenPlayer, APlayerPawn);
-REGISTER_ACTOR (AChickenPlayer, Heretic);
 
 FState AChickenPlayer::States[] =
 {
@@ -163,35 +156,33 @@ FState AChickenPlayer::States[] =
 	S_NORMAL (CHKN, 'L',   -1, NULL 					, NULL)
 };
 
-void AChickenPlayer::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_CHICPLAY];
-	info->spawnhealth = 30;
-	info->seestate = &States[S_CHICPLAY_RUN];
-	info->painstate = &States[S_CHICPLAY_PAIN];
-	info->painchance = 255;
-	info->painsound = "chicken/pain";
-	info->missilestate = &States[S_CHICPLAY_ATK];
-	info->deathstate = &States[S_CHICPLAY_DIE];
-	info->deathsound = "chicken/death";
-	info->radius = 16 * FRACUNIT;
-	info->height = 24 * FRACUNIT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_NOTDMATCH;
-	info->flags2 = MF2_WINDTHRUST|MF2_SLIDE|MF2_PASSMOBJ|MF2_FLOORCLIP|MF2_LOGRAV|MF2_TELESTOMP;
-}
+IMPLEMENT_ACTOR (AChickenPlayer, Heretic, -1, 0)
+	PROP_SpawnHealth (30)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (24)
+	PROP_PainChance (255)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_NOTDMATCH)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_SLIDE|MF2_PASSMOBJ|MF2_FLOORCLIP|MF2_LOGRAV|MF2_TELESTOMP)
+
+	PROP_SpawnState (S_CHICPLAY)
+	PROP_SeeState (S_CHICPLAY_RUN)
+	PROP_PainState (S_CHICPLAY_PAIN)
+	PROP_MissileState (S_CHICPLAY_ATK)
+	PROP_DeathState (S_CHICPLAY_DIE)
+
+	PROP_PainSound ("chicken/pain")
+	PROP_DeathSound ("chicken/death")
+END_DEFAULTS
 
 // Chicken (non-player) -----------------------------------------------------
 
 class AChicken : public AActor
 {
-	DECLARE_ACTOR (AChicken, AActor);
+	DECLARE_ACTOR (AChicken, AActor)
 public:
 	void Destroy ();
+	const char *GetObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (AChicken, AActor);
-REGISTER_ACTOR (AChicken, Heretic);
 
 FState AChicken::States[] =
 {
@@ -222,29 +213,29 @@ FState AChicken::States[] =
 	S_NORMAL (CHKN, 'L',   -1, NULL 					, NULL)
 };
 
-void AChicken::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_CHICKEN_LOOK];
-	info->spawnhealth = 10;
-	info->seestate = &States[S_CHICKEN_WALK];
-	info->seesound = "chicken/pain";
-	info->attacksound = "chicken/attack";
-	info->painstate = &States[S_CHICKEN_PAIN];
-	info->painchance = 200;
-	info->painsound = "chicken/pain";
-	info->meleestate = &States[S_CHICKEN_ATK];
-	info->deathstate = &States[S_CHICKEN_DIE];
-	info->deathsound = "chicken/death";
-	info->speed = 4;
-	info->radius = 9 * FRACUNIT;
-	info->height = 22 * FRACUNIT;
-	info->mass = 40;
-	info->activesound = "chicken/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_WINDTHRUST|MF2_FLOORCLIP|MF2_PASSMOBJ;
-	info->flags3 = MF3_DONTMORPH;
-}
+IMPLEMENT_ACTOR (AChicken, Heretic, -1, 0)
+	PROP_SpawnHealth (10)
+	PROP_RadiusFixed (9)
+	PROP_HeightFixed (22)
+	PROP_Mass (40)
+	PROP_SpeedFixed (4)
+	PROP_PainChance (200)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_FLOORCLIP|MF2_PASSMOBJ)
+	PROP_Flags3 (MF3_DONTMORPH)
+
+	PROP_SpawnState (S_CHICKEN_LOOK)
+	PROP_SeeState (S_CHICKEN_WALK)
+	PROP_PainState (S_CHICKEN_PAIN)
+	PROP_MeleeState (S_CHICKEN_ATK)
+	PROP_DeathState (S_CHICKEN_DIE)
+
+	PROP_SeeSound ("chicken/pain")
+	PROP_AttackSound ("chicken/attack")
+	PROP_PainSound ("chicken/pain")
+	PROP_DeathSound ("chicken/death")
+	PROP_ActiveSound ("chicken/active")
+END_DEFAULTS
 
 void AChicken::Destroy ()
 {
@@ -255,15 +246,17 @@ void AChicken::Destroy ()
 	Super::Destroy ();
 }
 
+const char *AChicken::GetObituary ()
+{
+	return GStrings(OB_CHICKEN);
+}
+
 // Feather ------------------------------------------------------------------
 
 class AFeather : public AActor
 {
-	DECLARE_ACTOR (AFeather, AActor);
+	DECLARE_ACTOR (AFeather, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AFeather, AActor);
-REGISTER_ACTOR (AFeather, Heretic);
 
 FState AFeather::States[] =
 {
@@ -281,17 +274,16 @@ FState AFeather::States[] =
 	S_NORMAL (CHKN, 'N',	6, NULL 					, NULL)
 };
 
-void AFeather::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_FEATHER];
-	info->deathstate = &States[S_FEATHERX];
-	info->radius = 2 * FRACUNIT;
-	info->height = 4 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF;
-	info->flags2 = MF2_NOTELEPORT|MF2_LOGRAV|MF2_CANNOTPUSH|MF2_WINDTHRUST;
-	info->flags3 = MF3_DONTSPLASH;
-}
+IMPLEMENT_ACTOR (AFeather, Heretic, -1, 0)
+	PROP_RadiusFixed (2)
+	PROP_HeightFixed (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_LOGRAV|MF2_CANNOTPUSH|MF2_WINDTHRUST)
+	PROP_Flags3 (MF3_DONTSPLASH)
+
+	PROP_SpawnState (S_FEATHER)
+	PROP_DeathState (S_FEATHERX)
+END_DEFAULTS
 
 //----------------------------------------------------------------------------
 //
@@ -311,7 +303,7 @@ void A_ChicAttack (AActor *actor)
 	}
 	if (P_CheckMeleeRange(actor))
 	{
-		P_DamageMobj (actor->target, actor, actor, 1+(P_Random()&1));
+		P_DamageMobj (actor->target, actor, actor, 1+(P_Random()&1), MOD_HIT);
 	}
 }
 
@@ -357,7 +349,7 @@ void A_ChicPain (AActor *actor)
 	{
 		return;
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->painsound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->PainSound, 1, ATTN_NORM);
 }
 
 //----------------------------------------------------------------------------
@@ -412,7 +404,7 @@ void A_BeakReady (player_t *player, pspdef_t *psp)
 {
 	if (player->cmd.ucmd.buttons & BT_ATTACK)
 	{ // Chicken beak attack
-		player->mo->SetState (GetInfo (player->mo)->missilestate);
+		player->mo->SetState (player->mo->MissileState);
 		if (player->powers[pw_weaponlevel2])
 		{
 			P_SetPsprite (player, ps_weapon, wpnlev2info[wp_beak]->atkstate);
@@ -425,9 +417,9 @@ void A_BeakReady (player_t *player, pspdef_t *psp)
 	}
 	else
 	{
-		if (player->mo->state == GetInfo (player->mo)->missilestate)
+		if (player->mo->state == player->mo->MissileState)
 		{ // Take out of attack state
-			player->mo->SetState (GetInfo (player->mo)->spawnstate);
+			player->mo->SetState (player->mo->SpawnState);
 		}
 	}
 }
@@ -453,6 +445,7 @@ void A_BeakRaise (player_t *player, pspdef_t *psp)
 
 void P_PlayPeck (AActor *chicken)
 {
+	S_Sound (chicken, CHAN_VOICE, "chicken/peck", 1, ATTN_NORM);
 	switch (P_Random () % 3)
 	{
 	case 0:

@@ -4,32 +4,25 @@
 
 class AParticleFountain : public AActor
 {
-	DECLARE_STATELESS_ACTOR (AParticleFountain, AActor);
+	DECLARE_STATELESS_ACTOR (AParticleFountain, AActor)
 public:
 	void PostBeginPlay ();
 	void Activate (AActor *activator);
 	void Deactivate (AActor *activator);
 };
 
-IMPLEMENT_DEF_SERIAL (AParticleFountain, AActor);
-
-void AParticleFountain::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->flags2 = MF2_DONTDRAW;
-	info->height = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AParticleFountain, Any, -1, 0)
+	PROP_HeightFixed (0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderFlags (RF_INVISIBLE)
+END_DEFAULTS
 
 #define FOUNTAIN(color,ednum) \
 	class A##color##ParticleFountain : public AParticleFountain { \
-		DECLARE_STATELESS_ACTOR (A##color##ParticleFountain, AParticleFountain); }; \
-	IMPLEMENT_DEF_SERIAL (A##color##ParticleFountain, AParticleFountain); \
-	REGISTER_ACTOR (A##color##ParticleFountain, Any); \
-	void A##color##ParticleFountain::SetDefaults (FActorInfo *info) { \
-		INHERIT_DEFS_STATELESS; \
-		info->doomednum = ednum; \
-	}
+		DECLARE_STATELESS_ACTOR (A##color##ParticleFountain, AParticleFountain) }; \
+	IMPLEMENT_STATELESS_ACTOR (A##color##ParticleFountain, Any, ednum, 0) \
+		PROP_SpawnHealth (ednum-9026) \
+	END_DEFAULTS
 
 FOUNTAIN (Red, 9027);
 FOUNTAIN (Green, 9028);
@@ -50,7 +43,7 @@ void AParticleFountain::Activate (AActor *activator)
 {
 	Super::Activate (activator);
 	effects &= ~FX_FOUNTAINMASK;
-	effects |= (GetInfo (this)->doomednum - 9026) << FX_FOUNTAINSHIFT;
+	effects |= health << FX_FOUNTAINSHIFT;
 }
 
 void AParticleFountain::Deactivate (AActor *activator)

@@ -25,7 +25,7 @@
 
 
 
-// NOT called by W_Ticker. Fixme.
+// NOT called by W_Ticker. Fixme. [RH] Is that bad?
 //
 // [RH] The only parameter used is mapname, so I removed playermask and skill.
 //		On September 1, 1998, I added the position to indicate which set
@@ -36,8 +36,3 @@ void P_SetupLevel (char *mapname, int position);
 void P_Init (void);
 
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------

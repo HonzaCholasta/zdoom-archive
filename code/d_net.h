@@ -40,7 +40,7 @@
 
 #ifdef DJGPP
 // The DOS drivers provide a pretty skimpy buffer.
-// Should be enough, anyway.
+// Probably not enough.
 #define MAX_MSGLEN		(BACKUPTICS*10)
 #else
 #define MAX_MSGLEN		1400
@@ -124,7 +124,9 @@ void Net_NewMakeTic ();
 void Net_WriteByte (byte);
 void Net_WriteWord (short);
 void Net_WriteLong (int);
+void Net_WriteFloat (float);
 void Net_WriteString (const char *);
+void Net_WriteBytes (const byte *, int len);
 
 void Net_DoCommand (int type, byte **stream, int player);
 void Net_SkipCommand (int type, byte **stream);

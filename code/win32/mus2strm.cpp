@@ -5,7 +5,7 @@
 ** This is a much cleaner solution than the one I was using previously,
 ** which was to use the qmus2mid code to convert the MUS lump into a
 ** temporary MIDI file on disk and then use MCI calls to play that file.
-** (The switch even shrank the executable by 3K. Woo!)
+** (The switch even shrank the executable by 3K. Woohoo!)
 */
 
 #include <ctype.h>
@@ -49,7 +49,7 @@ typedef struct
 
 
 static INFILESTATE ifs;
-static byte MUS2MIDcontrol[15] = {
+static const byte MUS2MIDcontrol[15] = {
 	0,			/* Program change - not a MIDI control change */
 	0x00,		/* Bank select */
 	0x01,		/* Modulation pot */
@@ -232,7 +232,7 @@ static int DoConversion (byte *in, DWORD insize, int division)
 	static BYTE tempoSet[3] = { 0x07, 0xa1, 0x20 };
 	static MEVENT tempoEvent = {
 		0,
-		MIDI_META, MIDI_META_TEMPO, 0, 0,
+		{ MIDI_META, MIDI_META_TEMPO, 0, 0 },
 		3,
 		tempoSet
 	};
@@ -297,16 +297,16 @@ PSTREAMBUF mus2strmConvert (BYTE *inFile, DWORD inSize)
 	int error = DoConversion (inFile, inSize, 0);
 
 	if (error) {
-		Printf (PRINT_HIGH, "MUS error: ");
+		Printf ("MUS error: ");
 		switch (error) {
 			case NOTMUSFILE:
-				Printf (PRINT_HIGH, "Not a MUS file.\n"); break;
+				Printf ("Not a MUS file.\n"); break;
 			case MUSFILECOR:
-				Printf (PRINT_HIGH, "MUS file is corrupt.\n"); break;
+				Printf ("MUS file is corrupt.\n"); break;
 			case TOOMCHAN:
-				Printf (PRINT_HIGH, "MUS file has more than 16 channels.\n"); break;
+				Printf ("MUS file has more than 16 channels.\n"); break;
 			case MEMALLOC:
-				Printf (PRINT_HIGH, "Not enough memory.\n"); break;
+				Printf ("Not enough memory.\n"); break;
 		}
 		mus2strmCleanup ();
 		return NULL;

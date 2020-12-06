@@ -11,14 +11,11 @@ void A_XScream (AActor *);
 
 class ADoomPlayer : public APlayerPawn
 {
-	DECLARE_ACTOR (ADoomPlayer, APlayerPawn);
+	DECLARE_ACTOR (ADoomPlayer, APlayerPawn)
 public:
 	void GiveDefaultInventory ();
 	int GetMOD ();
 };
-
-IMPLEMENT_DEF_SERIAL (ADoomPlayer, APlayerPawn);
-REGISTER_ACTOR (ADoomPlayer, Doom);
 
 FState ADoomPlayer::States[] =
 {
@@ -46,7 +43,7 @@ FState ADoomPlayer::States[] =
 	S_NORMAL (PLAY, 'K',   10, NULL 						, &States[S_PLAY_DIE+4]),
 	S_NORMAL (PLAY, 'L',   10, NULL 						, &States[S_PLAY_DIE+5]),
 	S_NORMAL (PLAY, 'M',   10, NULL 						, &States[S_PLAY_DIE+6]),
-	S_NORMAL (PLAY, 'N',   -1, NULL 						, NULL),
+	S_NORMAL (PLAY, 'N',   -1, NULL							, NULL),
 
 #define S_PLAY_XDIE (S_PLAY_DIE+7)
 	S_NORMAL (PLAY, 'O',	5, NULL 						, &States[S_PLAY_XDIE+1]),
@@ -57,28 +54,25 @@ FState ADoomPlayer::States[] =
 	S_NORMAL (PLAY, 'T',	5, NULL 						, &States[S_PLAY_XDIE+6]),
 	S_NORMAL (PLAY, 'U',	5, NULL 						, &States[S_PLAY_XDIE+7]),
 	S_NORMAL (PLAY, 'V',	5, NULL 						, &States[S_PLAY_XDIE+8]),
-	S_NORMAL (PLAY, 'W',   -1, NULL 						, NULL)
+	S_NORMAL (PLAY, 'W',   -1, NULL							, NULL)
 };
 
-void ADoomPlayer::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_PLAY];
-	info->spawnhealth = 100;
-	info->seestate = &States[S_PLAY_RUN];
-	info->painstate = &States[S_PLAY_PAIN];
-	info->painchance = 255;
-	info->painsound = "*pain100_1";
-	info->missilestate = &States[S_PLAY_ATK];
-	info->deathstate = &States[S_PLAY_DIE];
-	info->xdeathstate = &States[S_PLAY_XDIE];
-	info->deathsound = "*death1";
-	info->radius = 16 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 100;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_PICKUP|MF_NOTDMATCH;
-	info->flags2 = MF2_SLIDE|MF2_PASSMOBJ|MF2_PUSHWALL;
-}
+IMPLEMENT_ACTOR (ADoomPlayer, Doom, -1, 0)
+	PROP_SpawnHealth (100)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (56)
+	PROP_Mass (100)
+	PROP_PainChance (255)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_PICKUP|MF_NOTDMATCH)
+	PROP_Flags2 (MF2_SLIDE|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_PLAY)
+	PROP_SeeState (S_PLAY_RUN)
+	PROP_PainState (S_PLAY_PAIN)
+	PROP_MissileState (S_PLAY_ATK)
+	PROP_DeathState (S_PLAY_DIE)
+	PROP_XDeathState (S_PLAY_XDIE)
+END_DEFAULTS
 
 void ADoomPlayer::GiveDefaultInventory ()
 {
@@ -105,33 +99,29 @@ int ADoomPlayer::GetMOD ()
 
 void A_PlayerScream (AActor *self)
 {
-	char nametemp[128];
-	char *sound;
+	const char *sound;
 
+	// Handle the different player death screams
 	if (gameinfo.gametype == GAME_Doom)
 	{
 		if (self->health < -50)
-		{
-			// IF THE PLAYER DIES LESS THAN -50% WITHOUT GIBBING
-			sound = "*xdeath1";
+		{ // IF THE PLAYER DIES LESS THAN -50% WITHOUT GIBBING
+			sound = "*xdeath";
 		}
 		else
 		{
-			// [RH] More variety in death sounds
-			sprintf (nametemp, "*death%d", (P_Random (pr_playerscream)&3) + 1);
-			sound = nametemp;
+			sound = "*death";
 		}
 	}
 	else
 	{	// Heretic
-		// Handle the different player death screams
 		if (self->special1 < 10)
 		{ // Wimpy death sound
 			sound = "*wimpydeath";
 		}
 		else if (self->health > -50)
 		{ // Normal death sound
-			sound = GetInfo (self)->deathsound;
+			sound = "*death";
 		}
 		else if (self->health > -100)
 		{ // Crazy death sound
@@ -149,48 +139,32 @@ void A_PlayerScream (AActor *self)
 
 class ADeadMarine : public AActor
 {
-	DECLARE_STATELESS_ACTOR (ADeadMarine, AActor);
+	DECLARE_STATELESS_ACTOR (ADeadMarine, AActor)
 };
 
-IMPLEMENT_DEF_SERIAL (ADeadMarine, AActor);
-REGISTER_ACTOR (ADeadMarine, Doom);
-
-void ADeadMarine::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 15;
-	info->spawnstate = &ADoomPlayer::States[S_PLAY_DIE+6];
-}
+IMPLEMENT_STATELESS_ACTOR (ADeadMarine, Doom, 15, 0)
+	PROP_STATE_BASE (ADoomPlayer)
+	PROP_SpawnState (S_PLAY_DIE+6)
+END_DEFAULTS
 
 // Gibbed marine -----------------------------------------------------------
 
 class AGibbedMarine : public AActor
 {
-	DECLARE_STATELESS_ACTOR (AGibbedMarine, AActor);
+	DECLARE_STATELESS_ACTOR (AGibbedMarine, AActor)
 };
 
-IMPLEMENT_DEF_SERIAL (AGibbedMarine, AActor);
-REGISTER_ACTOR (AGibbedMarine, Doom);
-
-void AGibbedMarine::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 10;
-	info->spawnstate = &ADoomPlayer::States[S_PLAY_XDIE+8];
-}
+IMPLEMENT_STATELESS_ACTOR (AGibbedMarine, Doom, 10, 145)
+	PROP_STATE_BASE (ADoomPlayer)
+	PROP_SpawnState (S_PLAY_XDIE+8)
+END_DEFAULTS
 
 // Gibbed marine (extra copy) ----------------------------------------------
 
 class AGibbedMarineExtra : public AGibbedMarine
 {
-	DECLARE_STATELESS_ACTOR (AGibbedMarineExtra, AGibbedMarine);
+	DECLARE_STATELESS_ACTOR (AGibbedMarineExtra, AGibbedMarine)
 };
 
-IMPLEMENT_DEF_SERIAL (AGibbedMarineExtra, AGibbedMarine);
-REGISTER_ACTOR (AGibbedMarineExtra, Doom);
-
-void AGibbedMarineExtra::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 12;
-}
+IMPLEMENT_STATELESS_ACTOR (AGibbedMarineExtra, Doom, 12, 0)
+END_DEFAULTS

@@ -49,6 +49,7 @@
 #include "i_video.h"
 #include "i_sound.h"
 #include "i_music.h"
+#include "resource.h"
 
 #include "d_main.h"
 #include "d_net.h"
@@ -59,6 +60,8 @@
 
 #include "stats.h"
 
+EXTERN_CVAR (String, language)
+
 #ifdef USEASM
 extern "C" BOOL STACK_ARGS CheckMMX (char *vendorid);
 #endif
@@ -66,6 +69,7 @@ extern "C" BOOL STACK_ARGS CheckMMX (char *vendorid);
 extern "C"
 {
 	BOOL		HaveRDTSC = 0;
+	BOOL		HaveCMOV = 0;
 	double		SecondsPerCycle = 1e-6;
 	double		CyclesPerSecond = 1e6;
 	byte		CPUFamily, CPUModel, CPUStepping;
@@ -75,11 +79,13 @@ static LARGE_INTEGER PerformanceFreq, PerformanceBase;
 static cycle_t ClockCalibration;
 
 extern HWND Window;
+extern HINSTANCE hInstance;
 
 BOOL UseMMX;
 UINT TimerPeriod;
 UINT TimerEventID;
 HANDLE NewTicArrived;
+DWORD LanguageIDs[4];
 
 float mb_used = 8.0;
 
@@ -120,14 +126,6 @@ byte *I_ZoneBase (size_t *size)
 
 	return (byte *)zone;
 }	
-
-void I_BeginRead(void)
-{
-}
-
-void I_EndRead(void)
-{
-}
 
 byte *I_AllocLow(int length)
 {
@@ -215,7 +213,7 @@ void I_WaitVBL (int count)
 void I_DetectOS (void)
 {
 	OSVERSIONINFO info;
-	char *osname;
+	const char *osname;
 
 	info.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 	GetVersionEx (&info);
@@ -229,7 +227,7 @@ void I_DetectOS (void)
 			osname = info.dwMinorVersion >= 10 ? "Windows 98" : "Windows 95";
 			break;
 		case VER_PLATFORM_WIN32_NT:
-			OSPlatform = os_WinNT;
+			OSPlatform = info.dwMajorVersion < 5 ? os_WinNT : os_Win2k;
 			osname = "Windows NT";
 			break;
 		default:
@@ -238,20 +236,71 @@ void I_DetectOS (void)
 			break;
 	}
 
-	Printf (PRINT_HIGH, "OS: %s %u.%u (build %u)\n",
+	Printf ("OS: %s %u.%u (build %u)\n",
 			osname,
 			info.dwMajorVersion, info.dwMinorVersion,
-			info.dwBuildNumber & (OSPlatform == os_Win95 ? 0xffff : 0xfffffff),
+			OSPlatform == os_Win95 ? info.dwBuildNumber & 0xffff : info.dwBuildNumber,
 			info.szCSDVersion);
 	if (info.szCSDVersion[0])
-		Printf (PRINT_HIGH, "  %s\n", info.szCSDVersion);
+		Printf ("  %s\n", info.szCSDVersion);
 
 	if (OSPlatform == os_Win32s) {
 		I_FatalError ("Sorry, Win32s is not supported.\n"
 					  "Upgrade to a newer version of Windows.");
 	} else if (OSPlatform == os_unknown) {
-		Printf (PRINT_HIGH, "(Assuming Windows 95)\n");
+		Printf ("(Assuming Windows 95)\n");
 		OSPlatform = os_Win95;
+	}
+}
+
+//
+// SubsetLanguageIDs
+//
+static void SubsetLanguageIDs (LCID id, LCTYPE type, int idx)
+{
+	char buf[8];
+	LCID langid;
+	char *idp;
+
+	if (!GetLocaleInfo (id, type, buf, 8))
+		return;
+	langid = MAKELCID (strtoul(buf, NULL, 16), SORT_DEFAULT);
+	if (!GetLocaleInfo (langid, LOCALE_SABBREVLANGNAME, buf, 8))
+		return;
+	idp = (char *)(&LanguageIDs[idx]);
+	memset (idp, 0, 4);
+	idp[0] = tolower(buf[0]);
+	idp[1] = tolower(buf[1]);
+	idp[2] = tolower(buf[2]);
+	idp[3] = 0;
+}
+
+//
+// SetLanguageIDs
+//
+void SetLanguageIDs ()
+{
+	int langlen = strlen (*language);
+
+	if (langlen < 2 || langlen > 3)
+	{
+		memset (LanguageIDs, 0, sizeof(LanguageIDs));
+		SubsetLanguageIDs (LOCALE_USER_DEFAULT, LOCALE_ILANGUAGE, 0);
+		SubsetLanguageIDs (LOCALE_USER_DEFAULT, LOCALE_IDEFAULTLANGUAGE, 1);
+		SubsetLanguageIDs (LOCALE_SYSTEM_DEFAULT, LOCALE_ILANGUAGE, 2);
+		SubsetLanguageIDs (LOCALE_SYSTEM_DEFAULT, LOCALE_IDEFAULTLANGUAGE, 3);
+	}
+	else
+	{
+		DWORD lang = 0;
+
+		((BYTE *)&lang)[0] = (*language)[0];
+		((BYTE *)&lang)[1] = (*language)[1];
+		((BYTE *)&lang)[2] = (*language)[2];
+		LanguageIDs[0] = lang;
+		LanguageIDs[1] = lang;
+		LanguageIDs[2] = lang;
+		LanguageIDs[3] = lang;
 	}
 }
 
@@ -271,15 +320,15 @@ void I_Init (void)
 		UseMMX = 0;
 
 	if (vendorid[0])
-		Printf (PRINT_HIGH, "CPUID: %s  (", vendorid);
+		Printf ("CPUID: %s  (", vendorid);
 
 	if (UseMMX)
-		Printf (PRINT_HIGH, "using MMX)\n");
+		Printf ("using MMX)\n");
 	else
-		Printf (PRINT_HIGH, "not using MMX)\n");
+		Printf ("not using MMX)\n");
 
-	Printf (PRINT_HIGH, "-> family %d, model %d, stepping %d\n", CPUFamily, CPUModel, CPUStepping);
-	Printf (PRINT_HIGH, "-> Processor %s RDTSC\n", HaveRDTSC ? "has" : "does not have");
+	Printf ("-> family %d, model %d, stepping %d\n", CPUFamily, CPUModel, CPUStepping);
+	Printf ("-> Processor %s RDTSC\n", HaveRDTSC ? "has" : "does not have");
 	if (HaveRDTSC)
 	{
 		QueryPerformanceFrequency (&PerformanceFreq);
@@ -345,7 +394,7 @@ void I_FinishClockCalibration ()
 			SecondsPerCycle = 1.0 / CyclesPerSecond;
 
 		}
-		Printf (PRINT_HIGH, "CPU Frequency: ~%f MHz\n", CyclesPerSecond / 1e6);
+		Printf ("CPU Frequency: ~%f MHz\n", CyclesPerSecond / 1e6);
 	}
 }
 
@@ -391,7 +440,7 @@ void STACK_ARGS I_FatalError (const char *error, ...)
 		va_list argptr;
 		va_start (argptr, error);
 		index = vsprintf (errortext, error, argptr);
-		sprintf (errortext + index, "\nGetLastError = %d", GetLastError());
+		sprintf (errortext + index, "\nGetLastError = %ld", GetLastError());
 		va_end (argptr);
 
 		// Record error to log (if logging)
@@ -437,16 +486,79 @@ void I_PrintStr (int xp, const char *cp, int count, BOOL scroll)
 	// used in the DOS version
 }
 
+EXTERN_CVAR (Bool, queryiwad);
+static WadStuff *WadList;
+static int NumWads;
+
+static void SetQueryIWad (HWND dialog)
+{
+	HWND checkbox = GetDlgItem (dialog, IDC_DONTASKIWAD);
+	int state = SendMessage (checkbox, BM_GETCHECK, 0, 0);
+
+	queryiwad = (state != BST_CHECKED);
+}
+
+BOOL CALLBACK IWADBoxCallback (HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+	HWND list;
+	int i;
+
+	switch (message)
+	{
+	case WM_INITDIALOG:
+		list = GetDlgItem (hDlg, IDC_IWADLIST);
+		for (i = 0; i < NumWads; i++)
+		{
+			char work[256];
+			char *filepart = strrchr (WadList[i].Path, '/');
+			if (filepart == NULL)
+				filepart = WadList[i].Path;
+			else
+				filepart++;
+			sprintf (work, "%s (%s)", IWADTypeNames[WadList[i].Type], filepart);
+			SendMessage (list, LB_ADDSTRING, 0, (LPARAM)work);
+			SendMessage (list, LB_SETITEMDATA, i, (LPARAM)i);
+		}
+		SendMessage (list, LB_SETCURSEL, 0, 0);
+		SetFocus (list);
+		break;
+
+	case WM_COMMAND:
+		if (LOWORD(wParam) == IDCANCEL)
+		{
+			EndDialog (hDlg, -1);
+		}
+		else if (LOWORD(wParam) == IDOK ||
+			(LOWORD(wParam) == IDC_IWADLIST && HIWORD(wParam) == LBN_DBLCLK))
+		{
+			SetQueryIWad (hDlg);
+			list = GetDlgItem (hDlg, IDC_IWADLIST);
+			EndDialog (hDlg, SendMessage (list, LB_GETCURSEL, 0, 0));
+		}
+		break;
+	}
+	return FALSE;
+}
+
+int I_PickIWad (WadStuff *wads, int numwads)
+{
+	WadList = wads;
+	NumWads = numwads;
+
+	return DialogBox (hInstance, MAKEINTRESOURCE(IDD_IWADDIALOG),
+		(HWND)Window, (DLGPROC)IWADBoxCallback);
+}
+
 long I_FindFirst (char *filespec, findstate_t *fileinfo)
 {
-	return _findfirst (filespec, fileinfo);
+	return (long)FindFirstFileA (filespec, (LPWIN32_FIND_DATAA)fileinfo);
 }
 int I_FindNext (long handle, findstate_t *fileinfo)
 {
-	return _findnext (handle, fileinfo);
+	return !FindNextFileA ((HANDLE)handle, (LPWIN32_FIND_DATAA)fileinfo);
 }
 
 int I_FindClose (long handle)
 {
-	return _findclose (handle);
+	return FindClose ((HANDLE)handle);
 }

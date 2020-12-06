@@ -18,12 +18,12 @@ enum EHudState
 class FHUDMessage
 {
 public:
-	FHUDMessage (char *text, float x, float y, EColorRange textColor,
+	FHUDMessage (const char *text, float x, float y, EColorRange textColor,
 		float holdTime);
 	virtual ~FHUDMessage ();
 
 	void Draw (int bottom);
-	virtual void ResetText (char *text);
+	virtual void ResetText (const char *text);
 	virtual void DrawSetup ();
 	virtual void DoDraw (int linenum, int x, int y, int xscale, int yscale, bool clean);
 	virtual bool Tick ();	// Returns true to indicate time for removal
@@ -40,6 +40,7 @@ protected:
 
 private:
 	FHUDMessage *Next;
+	DWORD SBarID;
 
 	friend class FBaseStatusBar;
 };
@@ -47,7 +48,7 @@ private:
 class FHUDMessageFadeOut : public FHUDMessage
 {
 public:
-	FHUDMessageFadeOut (char *text, float x, float y, EColorRange textColor,
+	FHUDMessageFadeOut (const char *text, float x, float y, EColorRange textColor,
 		float holdTime, float fadeOutTime);
 
 	virtual void DoDraw (int linenum, int x, int y, int xscale, int yscale, bool clean);
@@ -55,6 +56,22 @@ public:
 
 protected:
 	int FadeOutTics;
+};
+
+class FHUDMessageTypeOnFadeOut : public FHUDMessageFadeOut
+{
+public:
+	FHUDMessageTypeOnFadeOut (const char *text, float x, float y, EColorRange textColor,
+		float typeTime, float holdTime, float fadeOutTime);
+
+	virtual void DoDraw (int linenum, int x, int y, int xscale, int yscale, bool clean);
+	virtual bool Tick ();
+
+protected:
+	float TypeOnTime;
+	int CurrLine;
+	int LineVisible;
+	int LineLen;
 };
 
 class FBaseStatusBar
@@ -65,19 +82,21 @@ public:
 
 	void SetScaled (bool scale);
 
-	void AttachMessage (FHUDMessage *msg);
+	void AttachMessage (FHUDMessage *msg, DWORD id=0);
 	FHUDMessage *DetachMessage (FHUDMessage *msg);
+	FHUDMessage *DetachMessage (DWORD id);
+	void DetachAllMessages ();
 	bool CheckMessage (FHUDMessage *msg);
 	void ShowPlayerName ();
 	fixed_t GetDisplacement () { return Displacement; }
 
 	virtual void Tick ();
 	virtual void Draw (EHudState state);
-	virtual void FlashArtifact (int arti) {}
+	virtual void FlashArtifact (int arti);
 	virtual void AttachToPlayer (player_s *player);
 	virtual void FlashCrosshair ();
 	virtual void BlendView (float blend[4]);
-	virtual void SetFace (void *) {}		// Takes a playerskin_t as input
+	virtual void SetFace (void *);		// Takes a FPlayerSkin as input
 
 protected:
 	void DrawImage (const FImageCollection &collection, int image, int x, int y, byte *translation=NULL) const;
@@ -130,6 +149,7 @@ protected:
 	FImageCollection AmmoImages;
 	FImageCollection ArtiImages;
 	FImageCollection ArmorImages;
+	DCanvas *ScaleCopy;
 
 	player_s *CPlayer;
 
@@ -140,11 +160,9 @@ private:
 
 	fixed_t ScaleX, ScaleY;
 	fixed_t ScaleIX, ScaleIY;
-	DCanvas *ScaleCopy;
 
 	static byte DamageToAlpha[114];
 
-	FHUDMessageFadeOut *PlayerName;
 	FHUDMessage *Messages;
 };
 

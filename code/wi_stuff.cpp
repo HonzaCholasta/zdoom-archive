@@ -36,6 +36,7 @@
 #include "s_sound.h"
 #include "doomstat.h"
 #include "v_video.h"
+#include "i_video.h"
 #include "wi_stuff.h"
 #include "c_console.h"
 #include "hu_stuff.h"
@@ -52,7 +53,7 @@ typedef enum
 	LeavingIntermission
 } stateenum_t;
 
-CVAR (wi_percents, "1", CVAR_ARCHIVE)
+CVAR (Bool, wi_percents, true, CVAR_ARCHIVE)
 
 void WI_unloadData ();
 
@@ -354,20 +355,20 @@ void WI_slamBackground ()
 {
 	if (background)
 	{
-		background->Blit (0, 0, background->width, background->height,
-			FB, 0, 0, FB->width, FB->height);
+		background->Blit (0, 0, background->GetWidth(), background->GetHeight(),
+			FB, 0, 0, SCREENWIDTH, SCREENHEIGHT);
 	}
 	else if (state != NoState)
 	{
 		int lump = W_CheckNumForName ("FLOOR16", ns_flats);
 		if (lump >= 0)
 		{
-			FB->FlatFill (0, 0, FB->width, FB->height,
+			FB->FlatFill (0, 0, SCREENWIDTH, SCREENHEIGHT,
 				(byte *)W_CacheLumpNum (lump, PU_CACHE));
 		}
 		else
 		{
-			FB->Clear (0, 0, FB->width, FB->height, 0);
+			FB->Clear (0, 0, SCREENWIDTH, SCREENHEIGHT, 0);
 		}
 	}
 }
@@ -389,7 +390,7 @@ static int WI_DrawName (char *str, int x, int y, bool nomove=false)
 	screen->SetFont (BigFont);
 	if (nomove)
 	{
-		x = (screen->width - x*CleanXfac) / 2;
+		x = (SCREENWIDTH - x*CleanXfac) / 2;
 		if (gameinfo.gametype == GAME_Doom)
 		{
 			screen->DrawTextClean (CR_UNTRANSLATED, x, y, str);
@@ -476,14 +477,14 @@ void WI_drawEL ()
 		y = WI_TITLEY;
 
 		// draw "Entering"
-		FB->DrawPatchCleanNoMove (entering, (screen->width - SHORT(entering->width)*CleanXfac)/2, y);
+		FB->DrawPatchCleanNoMove (entering, (SCREENWIDTH - SHORT(entering->width)*CleanXfac)/2, y);
 
 		// [RH] Changed to adjust by height of entering patch instead of title
 		y += (5*SHORT(entering->height))/4*CleanYfac;
 
 		if (lnames[1])
 		{ // draw level
-			FB->DrawPatchCleanNoMove (lnames[1], (screen->width - SHORT(lnames[1]->width)*CleanXfac)/2, y);
+			FB->DrawPatchCleanNoMove (lnames[1], (SCREENWIDTH - SHORT(lnames[1]->width)*CleanXfac)/2, y);
 		}
 		else
 		{ // [RH] draw a dynamic title string
@@ -493,7 +494,7 @@ void WI_drawEL ()
 	else
 	{
 		screen->DrawTextClean (CR_UNTRANSLATED,
-			(screen->width - screen->StringWidth ("NOW ENTERING:") * CleanXfac)/2, 10, "NOW ENTERING:");
+			(SCREENWIDTH - screen->StringWidth ("NOW ENTERING:") * CleanXfac)/2, 10, "NOW ENTERING:");
 		WI_DrawName (lnametexts[1], lnamewidths[1], 10+10*CleanYfac, true);
 	}
 }
@@ -602,7 +603,7 @@ void WI_initAnimatedBack ()
 		if (lump >= 0)
 		{
 			bg = (patch_t *)W_CacheLumpNum (lump, PU_CACHE);
-			background = new DCanvas (SHORT(bg->width), SHORT(bg->height), 8);
+			background = I_NewStaticCanvas (SHORT(bg->width), SHORT(bg->height));
 			background->Lock ();
 			background->DrawPatch (bg, 0, 0);
 			background->Unlock ();
@@ -745,7 +746,7 @@ void WI_drawPercent (int x, int y, int p, int b)
 	if (p < 0)
 		return;
 
-	if (wi_percents.value)
+	if (*wi_percents)
 	{
 		FB->DrawPatchClean (percent, x, y);
 		if (b == 0)
@@ -1639,11 +1640,11 @@ void WI_Ticker ()
 	{
 		// intermission music
 		if (gameinfo.gametype == GAME_Heretic)
-			S_ChangeMusic ("mus_intr", true);
+			S_ChangeMusic ("mus_intr");
 		else if (gamemode == commercial)
-			S_ChangeMusic ("d_dm2int", true);
+			S_ChangeMusic ("d_dm2int");
 		else
-			S_ChangeMusic ("d_inter", true); 
+			S_ChangeMusic ("d_inter"); 
 	}
 
 	WI_checkForAccelerate ();
@@ -1651,7 +1652,7 @@ void WI_Ticker ()
 	switch (state)
 	{
 	case StatCount:
-		if (deathmatch.value)
+		if (*deathmatch)
 			WI_updateDeathmatchStats ();
 		else if (multiplayer)
 			WI_updateNetgameStats ();
@@ -1666,6 +1667,9 @@ void WI_Ticker ()
 	case NoState:
 		WI_updateNoState ();
 		break;
+
+	case LeavingIntermission:
+		break;	// Silence GCC
 	}
 }
 
@@ -1686,7 +1690,7 @@ void WI_loadData (void)
 
 		// background
 		bg = (patch_t *)W_CacheLumpName (name, PU_CACHE);
-		background = new DCanvas (SHORT(bg->width), SHORT(bg->height), 8);
+		background = I_NewStaticCanvas (SHORT(bg->width), SHORT(bg->height));
 		background->Lock ();
 		background->DrawPatch (bg, 0, 0);
 		background->Unlock ();
@@ -1866,7 +1870,7 @@ void WI_Drawer (void)
 	switch (state)
 	{
 	case StatCount:
-		if (deathmatch.value)
+		if (*deathmatch)
 			WI_drawDeathmatchStats();
 		else if (multiplayer)
 			WI_drawNetgameStats();
@@ -1903,7 +1907,7 @@ void WI_Start (wbstartstruct_t *wbstartstruct)
 	V_SetBlend (0,0,0,0);
 	WI_initVariables (wbstartstruct);
 	WI_loadData ();
-	if (deathmatch.value)
+	if (*deathmatch)
 		WI_initDeathmatchStats();
 	else if (multiplayer)
 		WI_initNetgameStats();

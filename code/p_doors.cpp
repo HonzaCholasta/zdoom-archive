@@ -30,10 +30,9 @@
 #include "s_sndseq.h"
 #include "doomstat.h"
 #include "r_state.h"
-#include "dstrings.h"
 #include "c_console.h"
 
-IMPLEMENT_SERIAL (DDoor, DMovingCeiling)
+IMPLEMENT_CLASS (DDoor)
 
 DDoor::DDoor ()
 {
@@ -43,7 +42,8 @@ void DDoor::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
 	arc << m_Type
-		<< m_TopHeight
+		<< m_TopDist
+		<< m_BotSpot << m_BotDist << m_OldFloorDist
 		<< m_Speed
 		<< m_Direction
 		<< m_TopWait
@@ -61,7 +61,14 @@ void DDoor::Serialize (FArchive &arc)
 void DDoor::RunThink ()
 {
 	EResult res;
-		
+
+	if (m_Sector->floorplane.d != m_OldFloorDist)
+	{
+		m_OldFloorDist = m_Sector->floorplane.d;
+		m_BotDist = m_Sector->ceilingplane.PointToDist (m_BotSpot,
+			m_Sector->floorplane.ZatPoint (m_BotSpot));
+	}
+
 	switch (m_Direction)
 	{
 	case 0:
@@ -106,7 +113,7 @@ void DDoor::RunThink ()
 		
 	case -1:
 		// DOWN
-		res = MoveCeiling (m_Speed, m_Sector->floorheight, -1, m_Direction);
+		res = MoveCeiling (m_Speed, m_BotDist, -1, m_Direction);
 		if (res == pastdest)
 		{
 			SN_StopSequence (m_Sector);
@@ -144,7 +151,7 @@ void DDoor::RunThink ()
 		
 	case 1:
 		// UP
-		res = MoveCeiling (m_Speed, m_TopHeight, -1, m_Direction);
+		res = MoveCeiling (m_Speed, m_TopDist, -1, m_Direction);
 		
 		if (res == pastdest)
 		{
@@ -202,6 +209,9 @@ DDoor::DDoor (sector_t *sector)
 DDoor::DDoor (sector_t *sec, EVlDoor type, fixed_t speed, int delay)
 	: DMovingCeiling (sec)
 {
+	vertex_t *spot;
+	fixed_t height;
+
 	m_Type = type;
 	m_TopWait = delay;
 	m_Speed = speed;
@@ -209,32 +219,44 @@ DDoor::DDoor (sector_t *sec, EVlDoor type, fixed_t speed, int delay)
 	switch (type)
 	{
 	case doorClose:
-		m_TopHeight = P_FindLowestCeilingSurrounding (sec) - 4*FRACUNIT;
-		m_TopHeight -= 4*FRACUNIT;
 		m_Direction = -1;
+		height = sec->FindLowestCeilingSurrounding (&spot);
+		m_TopDist = sec->ceilingplane.PointToDist (spot, height - 4*FRACUNIT);
 		DoorSound (false);
 		break;
 
 	case doorOpen:
 	case doorRaise:
 		m_Direction = 1;
-		m_TopHeight = P_FindLowestCeilingSurrounding (sec) - 4*FRACUNIT;
-		if (m_TopHeight != sec->ceilingheight)
+		height = sec->FindLowestCeilingSurrounding (&spot);
+		m_TopDist = sec->ceilingplane.PointToDist (spot, height - 4*FRACUNIT);
+		if (m_TopDist != sec->ceilingplane.d)
 			DoorSound (true);
 		break;
 
 	case doorCloseWaitOpen:
-		m_TopHeight = sec->ceilingheight;
+		m_TopDist = sec->ceilingplane.d;
 		m_Direction = -1;
 		DoorSound (false);
 		break;
+
+	case doorRaiseIn5Mins:
+		m_Direction = 2;
+		height = sec->FindLowestCeilingSurrounding (&spot);
+		m_TopDist = sec->ceilingplane.PointToDist (spot, height - 4*FRACUNIT);
+		m_TopCountdown = 5 * 60 * TICRATE;
+		break;
 	}
+
+	height = sec->FindHighestFloorPoint (&m_BotSpot);
+	m_BotDist = sec->ceilingplane.PointToDist (m_BotSpot, height);
+	m_OldFloorDist = sec->floorplane.d;
 }
 
-BOOL EV_DoDoor (DDoor::EVlDoor type, line_t *line, AActor *thing,
+bool EV_DoDoor (DDoor::EVlDoor type, line_t *line, AActor *thing,
 				int tag, int speed, int delay, keyspecialtype_t lock)
 {
-	BOOL		rtn = false;
+	bool		rtn = false;
 	int 		secnum;
 	sector_t*	sec;
 
@@ -317,6 +339,7 @@ BOOL EV_DoDoor (DDoor::EVlDoor type, line_t *line, AActor *thing,
 //
 void P_SpawnDoorCloseIn30 (sector_t *sec)
 {
+	fixed_t height;
 	DDoor *door = new DDoor (sec);
 
 	sec->special = 0;
@@ -326,6 +349,9 @@ void P_SpawnDoorCloseIn30 (sector_t *sec)
 	door->m_Type = DDoor::doorRaise;
 	door->m_Speed = FRACUNIT*2;
 	door->m_TopCountdown = 30 * TICRATE;
+	height = sec->FindHighestFloorPoint (&door->m_BotSpot);
+	door->m_BotDist = sec->ceilingplane.PointToDist (door->m_BotSpot, height);
+	door->m_OldFloorDist = sec->floorplane.d;
 }
 
 //
@@ -333,15 +359,6 @@ void P_SpawnDoorCloseIn30 (sector_t *sec)
 //
 void P_SpawnDoorRaiseIn5Mins (sector_t *sec)
 {
-	DDoor *door = new DDoor (sec);
-
 	sec->special = 0;
-
-	door->m_Direction = 2;
-	door->m_Type = DDoor::doorRaiseIn5Mins;
-	door->m_Speed = FRACUNIT * 2;
-	door->m_TopHeight = P_FindLowestCeilingSurrounding (sec);
-	door->m_TopHeight -= 4*FRACUNIT;
-	door->m_TopWait = (150*TICRATE)/35;
-	door->m_TopCountdown = 5 * 60 * TICRATE;
+	new DDoor (sec, DDoor::doorRaiseIn5Mins, 2*FRACUNIT, TICRATE*30/7);
 }

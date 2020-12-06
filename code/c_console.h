@@ -37,7 +37,7 @@ void C_FlushDisplay (void);
 void C_InitTicker (const char *label, unsigned int max);
 void C_SetTicker (unsigned int at);
 
-void C_MidPrint (char *message);
+void C_MidPrint (const char *message);
 
 BOOL C_Responder (event_t *ev);
 

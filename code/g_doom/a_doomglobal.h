@@ -6,24 +6,26 @@
 
 class ABossBrain : public AActor
 {
-	DECLARE_ACTOR (ABossBrain, AActor);
+	DECLARE_ACTOR (ABossBrain, AActor)
 };
 
 class AExplosiveBarrel : public AActor
 {
-	DECLARE_ACTOR (AExplosiveBarrel, AActor);
+	DECLARE_ACTOR (AExplosiveBarrel, AActor)
 public:
 	int GetMOD () { return MOD_BARREL; }
 };
 
 class ABulletPuff : public AActor
 {
-	DECLARE_ACTOR (ABulletPuff, AActor);
+	DECLARE_ACTOR (ABulletPuff, AActor)
+public:
+	void BeginPlay ();
 };
 
 class ARocket : public AActor
 {
-	DECLARE_ACTOR (ARocket, AActor);
+	DECLARE_ACTOR (ARocket, AActor)
 public:
 	void BeginPlay ();
 	int GetMOD () { return MOD_ROCKET; }
@@ -31,15 +33,20 @@ public:
 
 class AArchvile : public AActor
 {
-	DECLARE_ACTOR (AArchvile, AActor);
+	DECLARE_ACTOR (AArchvile, AActor)
 public:
 	bool SuggestMissileAttack (fixed_t dist);
 	const char *GetObituary ();
 };
 
+class APainElemental : public AActor
+{
+	DECLARE_ACTOR (APainElemental, AActor)
+};
+
 class ALostSoul : public AActor
 {
-	DECLARE_ACTOR (ALostSoul, AActor);
+	DECLARE_ACTOR (ALostSoul, AActor)
 public:
 	bool SuggestMissileAttack (fixed_t dist);
 	void Die (AActor *source, AActor *inflictor);
@@ -48,7 +55,7 @@ public:
 
 class APlasmaBall : public AActor
 {
-	DECLARE_ACTOR (APlasmaBall, AActor);
+	DECLARE_ACTOR (APlasmaBall, AActor)
 	int GetMOD () { return MOD_PLASMARIFLE; }
 };
 

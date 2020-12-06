@@ -24,7 +24,7 @@
 #include "m_argv.h"
 #include "cmdlib.h"
 
-IMPLEMENT_CLASS (DArgs, DObject)
+IMPLEMENT_CLASS (DArgs)
 
 DArgs::DArgs ()
 {

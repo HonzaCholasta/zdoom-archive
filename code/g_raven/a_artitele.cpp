@@ -1,7 +1,7 @@
 #include "info.h"
 #include "a_pickups.h"
 #include "a_artifacts.h"
-#include "hstrings.h"
+#include "gstrings.h"
 #include "p_local.h"
 #include "gi.h"
 #include "s_sound.h"
@@ -9,7 +9,8 @@
 
 // Teleport (self) ----------------------------------------------------------
 
-BASIC_ARTI (Teleport, arti_teleport, TXT_ARTITELEPORT)
+BASIC_ARTI (Teleport, arti_teleport, GStrings(TXT_ARTITELEPORT))
+	AT_GAME_SET_FRIEND (ArtiTeleport)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
@@ -17,7 +18,7 @@ private:
 		fixed_t destY;
 		angle_t destAngle;
 
-		if (deathmatch.value)
+		if (*deathmatch)
 		{
 			int selections = deathmatchstarts.Size ();
 			int i = P_Random() % selections;
@@ -44,8 +45,6 @@ private:
 	}
 };
 
-ARTI_SETUP (Teleport, Raven);
-
 FState AArtiTeleport::States[] =
 {
 	S_NORMAL (ATLP, 'A',	4, NULL, &States[1]),
@@ -54,13 +53,14 @@ FState AArtiTeleport::States[] =
 	S_NORMAL (ATLP, 'B',	4, NULL, &States[0])
 };
 
-void AArtiTeleport::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiTeleport, Raven, 36, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (ArtiTeleport)
 {
-	INHERIT_DEFS;
-	info->doomednum = 36;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	ArtiDispatch[arti_teleport] = ActivateArti;
+	ArtiDispatch[arti_teleport] = AArtiTeleport::ActivateArti;
 	ArtiPics[arti_teleport] = "ARTIATLP";
 }

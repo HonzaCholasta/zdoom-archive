@@ -23,6 +23,7 @@
 //
 //-----------------------------------------------------------------------------
 
+#include "templates.h"
 #include "doomdef.h"
 #include "d_event.h"
 #include "p_local.h"
@@ -34,18 +35,17 @@
 #include "m_random.h"
 #include "p_pspr.h"
 #include "p_enemy.h"
+#include "p_effect.h"
 #include "s_sound.h"
 #include "a_sharedglobal.h"
+#include "statnums.h"
+#include "v_palette.h"
+#include "v_video.h"
 
 extern void P_UpdateBeak (player_t *, pspdef_t *);
 
-// Index of the special effects (INVUL inverse) map.
-#define INVERSECOLORMAP 		32
-
 // [RH] # of ticks to complete a turn180
 #define TURN180_TICKS	9
-
-CVAR (weapondrop, "0", CVAR_SERVERINFO)
 
 //
 // Movement.
@@ -96,20 +96,74 @@ void player_s::FixPointers (const DObject *obj)
 		last_mate = NULL;
 }
 
-IMPLEMENT_DEF_SERIAL (APlayerPawn, AActor);
-IMPLEMENT_DEF_SERIAL (APlayerChunk, APlayerPawn);
+IMPLEMENT_ABSTRACT_ACTOR (APlayerPawn)
+IMPLEMENT_ABSTRACT_ACTOR (APlayerChunk)
 
-REGISTER_ACTOR (APlayerPawn, Any);
-REGISTER_ACTOR (APlayerChunk, Any);
-
-void APlayerPawn::SetDefaults (FActorInfo *info)
+void APlayerPawn::BeginPlay ()
 {
-	ACTOR_DEFS_STATELESS;
+	Super::BeginPlay ();
+	ChangeStatNum (STAT_PLAYER);
 }
 
-void APlayerChunk::SetDefaults (FActorInfo *info)
+const char *APlayerPawn::GetSoundClass ()
 {
-	INHERIT_DEFS_STATELESS;
+	if (player != NULL &&
+		player->userinfo.skin != 0 &&
+		(unsigned)player->userinfo.skin < numskins)
+	{
+		return skins[player->userinfo.skin].name;
+	}
+	return "player";
+}
+
+void APlayerPawn::PlayIdle ()
+{
+	if (state >= SeeState && state < MissileState)
+		SetState (SpawnState);
+}
+
+void APlayerPawn::PlayRunning ()
+{
+	if (state == SpawnState)
+		SetState (SeeState);
+}
+
+void APlayerPawn::PlayAttacking ()
+{
+	SetState (MissileState);
+}
+
+void APlayerPawn::PlayAttacking2 ()
+{
+	SetState (MissileState+1);
+}
+
+bool APlayerPawn::HealOther (player_s *pawn)
+{
+	return false;
+}
+
+void APlayerPawn::ThrowPoisonBag ()
+{
+}
+
+void APlayerPawn::GiveDefaultInventory ()
+{
+}
+
+int APlayerPawn::GetAutoArmorSave ()
+{
+	return 0;
+}
+
+fixed_t APlayerPawn::GetArmorIncrement (int armortype)
+{
+	return 10*FRACUNIT;
+}
+
+fixed_t APlayerPawn::GetJumpZ ()
+{
+	return 8*FRACUNIT;
 }
 
 const TypeInfo *APlayerPawn::GetDropType ()
@@ -127,42 +181,38 @@ const TypeInfo *APlayerPawn::GetDropType ()
 
 void APlayerPawn::NoBlockingSet ()
 {
-	if (weapondrop.value)
+	if (*dmflags2 & DF2_YES_WEAPONDROP)
 	{
 		const TypeInfo *droptype = GetDropType ();
 		if (droptype)
 		{
-			P_DropItem (this, droptype, droptype->ActorInfo->spawnhealth, 256);
+			P_DropItem (this, droptype, -1, 256);
 		}
 	}
 }
 
 class APlayerSpeedTrail : public AActor
 {
-	DECLARE_STATELESS_ACTOR (APlayerSpeedTrail, AActor);
+	DECLARE_STATELESS_ACTOR (APlayerSpeedTrail, AActor)
 public:
 	void RunThink ();
 };
 
-IMPLEMENT_DEF_SERIAL (APlayerSpeedTrail, AActor);
-REGISTER_ACTOR (APlayerSpeedTrail, Any);
-
-void APlayerSpeedTrail::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = OPAQUE*6/10;
-}
+IMPLEMENT_STATELESS_ACTOR (APlayerSpeedTrail, Any, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_Alpha (FRACUNIT*6/10)
+	PROP_RenderStyle (STYLE_Translucent)
+END_DEFAULTS
 
 void APlayerSpeedTrail::RunThink ()
 {
 	const int fade = OPAQUE*6/10/8;
-	if (translucency <= fade)
+	if (alpha <= fade)
 	{
 		Destroy ();
 		return;
 	}
-	translucency -= fade;
+	alpha -= fade;
 }
 
 /*
@@ -328,11 +378,10 @@ void P_CalcHeight (player_t *player)
 =
 =================
 */
-BEGIN_CUSTOM_CVAR (sv_aircontrol, "0.00390625", CVAR_SERVERINFO)
+CUSTOM_CVAR (Float, sv_aircontrol, 0.00390625f, CVAR_SERVERINFO)
 {
-	level.aircontrol = (fixed_t)(var.value * 65536.f);
+	level.aircontrol = (fixed_t)(*var * 65536.f);
 }
-END_CUSTOM_CVAR (sv_aircontrol)
 
 void P_MovePlayer (player_t *player)
 {
@@ -449,7 +498,7 @@ void P_FallingDamage (AActor *ent)
 		if (damage < 1)
 			damage = 1;
 
-		if (dmflags & DF_YES_FALLING)
+		if (*dmflags & DF_YES_FALLING)
 			P_DamageMobj (ent, NULL, NULL, damage, MOD_FALLING);
 	}
 	else
@@ -558,7 +607,7 @@ void P_DeathThink (player_t *player)
 	if (level.time >= player->respawn_time)
 	{
 		if (player->cmd.ucmd.buttons & BT_USE ||
-			((deathmatch.value || alwaysapplydmflags.value) && (dmflags & DF_FORCE_RESPAWN)))
+			((*deathmatch || *alwaysapplydmflags) && (*dmflags & DF_FORCE_RESPAWN)))
 		{
 			player->playerstate = PST_REBORN;
 			if (player->mo->special1 > 2)
@@ -601,7 +650,7 @@ void P_MorphPlayerThink (player_t *player)
 		if ((pmo->z <= pmo->floorz) && (P_Random() < 32))
 		{ // Jump and noise
 			pmo->momz += pmo->GetJumpZ ();
-			pmo->SetState (GetInfo (pmo)->painstate);
+			pmo->SetState (pmo->PainState);
 		}
 		if (P_Random () < 48)
 		{ // Just noise
@@ -645,25 +694,33 @@ void P_PlayerThink (player_t *player)
 {
 	ticcmd_t *cmd;
 
-	// [RH] Error out if player doesn't have an mobj, but just make
-	//		it a warning if the player trying to spawn is a bot
-	if (!player->mo)
+	if (player->mo == NULL)
 	{
-		if (player->isbot)
-		{
-			Printf (PRINT_HIGH, "%s left: No player %d start\n",
-				player->userinfo.netname, player - players + 1);
-			bglobal.ClearPlayer (player - players);
-			return;
-		}
-		else
-		{
-			I_Error ("No player %ld start\n", player - players + 1);
-		}
+		I_Error ("No player %ld start\n", player - players + 1);
 	}
 
 	player->xviewshift = 0;		// [RH] Make sure view is in right place
 
+	// [RH] Zoom the player's FOV
+	if (player->FOV != player->DesiredFOV)
+	{
+		if (fabsf (player->FOV - player->DesiredFOV) < 7.f)
+		{
+			player->FOV = player->DesiredFOV;
+		}
+		else
+		{
+			float zoom = MAX(7.f, fabsf (player->FOV - player->DesiredFOV) * 0.025f);
+			if (player->FOV > player->DesiredFOV)
+			{
+				player->FOV = player->FOV - zoom;
+			}
+			else
+			{
+				player->FOV = player->FOV + zoom;
+			}
+		}
+	}
 	if (player->inventorytics)
 	{
 		player->inventorytics--;
@@ -709,7 +766,7 @@ void P_PlayerThink (player_t *player)
 	}
 
 	// [RH] Look up/down stuff
-	if (dmflags & DF_NO_FREELOOK)
+	if (*dmflags & DF_NO_FREELOOK)
 	{
 		player->mo->pitch = 0;
 	}
@@ -772,11 +829,11 @@ void P_PlayerThink (player_t *player)
 				speedMo->translation = pmo->translation;
 				speedMo->target = pmo;
 				speedMo->sprite = pmo->sprite;
-				speedMo->frame = pmo->frame & FF_FRAMEMASK;
+				speedMo->frame = pmo->frame;
 				speedMo->floorclip = pmo->floorclip;
 				if (player == &players[consoleplayer])
 				{
-					speedMo->flags2 |= MF2_DONTDRAW;
+					speedMo->renderflags |= RF_INVISIBLE;
 				}
 			}
 		}
@@ -792,10 +849,10 @@ void P_PlayerThink (player_t *player)
 			{
 				player->mo->momz = 3*FRACUNIT;
 			}
-			else if (!(dmflags & DF_NO_JUMP) && onground && !player->jumpTics)
+			else if (!(*dmflags & DF_NO_JUMP) && onground && !player->jumpTics)
 			{
 				player->mo->momz += player->mo->GetJumpZ ();
-				S_Sound (player->mo, CHAN_BODY, "*jump1", 1, ATTN_NORM);
+				S_Sound (player->mo, CHAN_BODY, "*jump", 1, ATTN_NORM);
 				player->mo->flags2 &= ~MF2_ONMOBJ;
 				player->jumpTics = 18;
 			}
@@ -843,7 +900,7 @@ void P_PlayerThink (player_t *player)
 		&& player->mo->momz >= -40*FRACUNIT && !player->morphTics)
 	{
 		int id = S_FindSkinnedSound (player->mo, "*falling");
-		if (id != -1 && !S_GetSoundPlayingInfo (player->mo, id))
+		if (id != 0 && !S_GetSoundPlayingInfo (player->mo, id))
 		{
 			S_SoundID (player->mo, CHAN_VOICE, id, 1, ATTN_NORM);
 		}
@@ -872,39 +929,41 @@ void P_PlayerThink (player_t *player)
 	{
 		if (player->mo->flags3 & MF3_CLERICINVUL)
 		{
-			if (!(level.time & 7) && player->mo->translucency > 0
-				&& player->mo->translucency < OPAQUE)
+			player->mo->RenderStyle = STYLE_Translucent;
+			if (!(level.time & 7) && player->mo->alpha > 0
+				&& player->mo->alpha < OPAQUE)
 			{
-				if (player->mo->translucency == HX_SHADOW)
+				if (player->mo->alpha == HX_SHADOW)
 				{
-					player->mo->translucency = HX_ALTSHADOW;
+					player->mo->alpha = HX_ALTSHADOW;
 				}
 				else
 				{
-					player->mo->translucency = 0;
+					player->mo->alpha = 0;
 					player->mo->flags2 |= MF2_NONSHOOTABLE;
 				}
 			}
 			if (!(level.time & 31))
 			{
-				if (player->mo->translucency == 0)
+				if (player->mo->alpha == 0)
 				{
 					player->mo->flags2 &= ~MF2_NONSHOOTABLE;
-					player->mo->translucency = HX_ALTSHADOW;
+					player->mo->alpha = HX_ALTSHADOW;
 				}
 				else
 				{
-					player->mo->translucency = HX_SHADOW;
+					player->mo->alpha = HX_SHADOW;
 				}
 			}
 		}
 		if (!(--player->powers[pw_invulnerability]))
 		{
 			player->mo->flags2 &= ~(MF2_INVULNERABLE|MF2_REFLECTIVE);
+			player->mo->effects &= ~ FX_RESPAWNINVUL;
 			if (player->mo->flags3 & MF3_CLERICINVUL)
 			{
 				player->mo->flags2 &= ~MF2_NONSHOOTABLE;
-				player->mo->translucency = OPAQUE;
+				player->mo->RenderStyle = STYLE_Normal;
 			}
 		}
 	}
@@ -916,7 +975,7 @@ void P_PlayerThink (player_t *player)
 		if (!--player->powers[pw_invisibility])
 		{
 			player->mo->flags &= ~MF_SHADOW;
-			player->mo->translucency = OPAQUE;
+			player->mo->RenderStyle = STYLE_Normal;
 		}
 
 	if (player->powers[pw_infrared])
@@ -942,7 +1001,7 @@ void P_PlayerThink (player_t *player)
 			}
 			player->mo->flags2 &= ~MF2_FLY;
 			player->mo->flags &= ~MF_NOGRAVITY;
-			BorderTopRefresh = true; //make sure the sprite's cleared out
+			BorderTopRefresh = screen->GetPageCount (); //make sure the sprite's cleared out
 		}
 	}
 
@@ -968,7 +1027,7 @@ void P_PlayerThink (player_t *player)
 			{
 				player->pendingweapon = player->readyweapon;
 			}
-			BorderTopRefresh = true;
+			BorderTopRefresh = screen->GetPageCount ();
 		}
 	}
 
@@ -991,10 +1050,11 @@ void P_PlayerThink (player_t *player)
 	// Handling colormaps.
 	if (player->powers[pw_invulnerability] && gameinfo.gametype != GAME_Hexen)
 	{
-		if (player->powers[pw_invulnerability] > BLINKTHRESHOLD
-			|| (player->powers[pw_invulnerability] & 8))
+		if ((player->powers[pw_invulnerability] > BLINKTHRESHOLD
+			|| (player->powers[pw_invulnerability] & 8)) &&
+			!(player->mo->effects & FX_RESPAWNINVUL))
 		{
-			player->fixedcolormap = INVERSECOLORMAP;
+			player->fixedcolormap = NUMCOLORMAPS;
 		}
 		else
 		{
@@ -1093,7 +1153,7 @@ void player_s::Serialize (FArchive &arc)
 		<< playerstate
 		<< cmd
 		<< *ui
-		<< fov
+		<< DesiredFOV << FOV
 		<< viewz
 		<< viewheight
 		<< deltaviewheight
@@ -1110,6 +1170,9 @@ void player_s::Serialize (FArchive &arc)
 		<< pieces
 		<< backpack
 		<< fragcount
+		<< spreecount
+		<< multicount
+		<< lastkilltime
 		<< readyweapon
 		<< pendingweapon
 		<< cheats

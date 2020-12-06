@@ -29,6 +29,7 @@
 
 #include "v_palette.h"
 #include "v_font.h"
+#include "colormatcher.h"
 
 #include "doomdef.h"
 
@@ -43,18 +44,9 @@ extern int DisplayWidth, DisplayHeight, DisplayBits;
 //
 // [RH] Made screens more implementation-independant:
 //
-// V_LockScreen() must be called before drawing on a
-// screen, and V_UnlockScreen() must be called when
-// drawing is finished. As far as ZDoom is concerned,
-// there are only two display depths: 8-bit indexed and
-// 32-bit RGBA. The video driver is expected to be able
-// to convert these to a format supported by the hardware.
-// As such, the bits field is only used as an indicator
-// of the output display depth and not as the screen's
-// display depth (use is8bit for that).
 class DCanvas : DObject
 {
-	DECLARE_CLASS (DCanvas, DObject)
+	DECLARE_ABSTRACT_CLASS (DCanvas, DObject)
 public:
 	enum EWrapperCode
 	{
@@ -70,63 +62,58 @@ public:
 		ETWrapper_Shadow = 2,		// Shadowed text
 	};
 
-	//DCanvas ();
-	DCanvas (int width, int height, int bits);
-	~DCanvas ();
-
-	int bits;
-	byte *buffer;
-	int width;
-	int height;
-	int pitch;
-	bool is8bit;
-
-	int m_LockCount;
-	palette_t *m_Palette;
-	void *m_Private;
 	FFont *Font;
 
-	void SetFont (FFont *font);
+	DCanvas (int width, int height);
+	virtual ~DCanvas ();
 
-	// Copy blocks from one canvas to another
-	void Blit (int srcx, int srcy, int srcwidth, int srcheight, DCanvas *dest, int destx, int desty, int destwidth, int destheight);
-	void CopyRect (int srcx, int srcy, int width, int height, int destx, int desty, DCanvas *destscrn);
+	// Member variable access
+	inline BYTE *GetBuffer () const { return Buffer; }
+	inline int GetWidth () const { return Width; }
+	inline int GetHeight () const { return Height; }
+	inline int GetPitch () const { return Pitch; }
 
-	// Draw a linear block of pixels into the view buffer.
-	void DrawBlock (int x, int y, int width, int height, const byte *src) const;
-	void DrawPageBlock (const byte *src) const;
-
-	// Draw a masked, translated block of pixels (e.g. chars stored in an FFont)
-	void DrawMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors) const;
-	void ScaleMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors) const;
-	void DrawTranslucentMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors, fixed_t fade) const;
-	void ScaleTranslucentMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors, fixed_t fade) const;
-	void DrawShadowedMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors, fixed_t shade) const;
-	void ScaleShadowedMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors, fixed_t shade) const;
-	void DrawAlphaMaskedBlock (int x, int y, int width, int height, const byte *src, int color) const;
-	void ScaleAlphaMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, int color) const;
-
-	// Reads a linear block of pixels into the view buffer.
-	void GetBlock (int x, int y, int width, int height, byte *dest) const;
-
-	// Darken the entire canvas
-	void Dim () const;
-
-	// Fill an area with a 64x64 flat texture
-	void FlatFill (int left, int top, int right, int bottom, const byte *src) const;
-
-	// Set an area to a specified color
-	void Clear (int left, int top, int right, int bottom, int color) const;
+	virtual bool IsValid ();
 
 	// Access control
-	void Lock ();
-	void Unlock ();
+	virtual bool Lock () = 0;		// Returns true if the surface was lost since last time
+	virtual void Unlock () = 0;
 
-	// Palette control (unused)
-	void AttachPalette (palette_t *pal);
-	void DetachPalette ();
+	// Copy blocks from one canvas to another
+	virtual void Blit (int srcx, int srcy, int srcwidth, int srcheight, DCanvas *dest, int destx, int desty, int destwidth, int destheight);
 
-	// Text drawing functions
+	// Draw a linear block of pixels into the canvas
+	virtual void DrawBlock (int x, int y, int width, int height, const byte *src) const;
+	virtual void DrawPageBlock (const byte *src) const;
+
+	// Draw a masked, translated block of pixels (e.g. chars stored in an FFont)
+	virtual void DrawMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors) const;
+	virtual void ScaleMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors) const;
+	virtual void DrawTranslucentMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors, fixed_t fade) const;
+	virtual void ScaleTranslucentMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors, fixed_t fade) const;
+	virtual void DrawShadowedMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors, fixed_t shade) const;
+	virtual void ScaleShadowedMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors, fixed_t shade) const;
+	virtual void DrawAlphaMaskedBlock (int x, int y, int width, int height, const byte *src, int color) const;
+	virtual void ScaleAlphaMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, int color) const;
+
+	// Reads a linear block of pixels into the view buffer.
+	virtual void GetBlock (int x, int y, int width, int height, byte *dest) const;
+
+	// Darken the entire canvas
+	virtual void Dim () const;
+
+	// Fill an area with a 64x64 flat texture
+	virtual void FlatFill (int left, int top, int right, int bottom, const byte *src) const;
+
+	// Set an area to a specified color
+	virtual void Clear (int left, int top, int right, int bottom, int color) const;
+
+	// Calculate gamma table
+	void CalcGamma (float gamma, BYTE gammalookup[256]);
+
+	// Text drawing functions -----------------------------------------------
+
+	virtual void SetFont (FFont *font);
 
 	// Return width of string in pixels (unscaled)
 	int StringWidth (const char *str) const;
@@ -204,14 +191,23 @@ public:
 	inline void DrawShadowedPatchCleanNoMove (const patch_t *patch, int x, int y) const;
 
 protected:
-	void TextWrapper (EWrapperCode drawer, int normalcolor, int x, int y, const byte *string) const;
-	void TextSWrapper (EWrapperCode drawer, int normalcolor, int x, int y, const byte *string) const;
+	BYTE *Buffer;
+	int Width;
+	int Height;
+	int Pitch;
+	int LockCount;
 
-	void DrawWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y) const;
-	void DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y, int destwidth, int destheight) const;
-	void DrawIWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y) const;
-	void DrawCWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y) const;
-	void DrawCNMWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y) const;
+	virtual void TextWrapper (EWrapperCode drawer, int normalcolor, int x, int y, const byte *string) const;
+	virtual void TextSWrapper (EWrapperCode drawer, int normalcolor, int x, int y, const byte *string) const;
+
+	virtual void DrawWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y) const;
+	virtual void DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y, int destwidth, int destheight) const;
+	virtual void DrawIWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y) const;
+	virtual void DrawCWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y) const;
+	virtual void DrawCNMWrapper (EWrapperCode drawer, const patch_t *patch, int x, int y) const;
+
+	bool ClipBox (int &left, int &top, int &width, int &height, const byte *&src, const int srcpitch) const;
+	bool ClipScaleBox (int &left, int &top, int &width, int &height, int &dwidth, int &dheight, const byte *&src, const int srcpitch, fixed_t &xinc, fixed_t &yinc, fixed_t &xstart, fixed_t &yerr) const;
 
 	static void DrawPatchP (const byte *source, byte *dest, int count, int pitch);
 	static void DrawLucentPatchP (const byte *source, byte *dest, int count, int pitch);
@@ -246,13 +242,16 @@ protected:
 	static vdrawfunc Pfuncs[6];
 	static vdrawsfunc Psfuncs[6];
 
-	// Direct (true-color) versions of the column drawers
-	static vdrawfunc Dfuncs[6];
-	static vdrawsfunc Dsfuncs[6];
-
 	// The current set of column drawers (set in V_SetResolution)
 	static vdrawfunc *m_Drawfuncs;
 	static vdrawsfunc *m_Drawsfuncs;
+
+private:
+	// Keep track of canvases, for automatic destruction at exit
+	DCanvas *Next;
+	static DCanvas *CanvasChain;
+
+	friend void STACK_ARGS FreeCanvasChain ();
 };
 
 // The color to fill with for #4 and #5 above
@@ -287,8 +286,8 @@ inline void DCanvas::DrawTextCleanLuc (int normalcolor, int x, int y, const byte
 inline void DCanvas::DrawTextCleanMove (int normalcolor, int x, int y, const byte *string) const
 {
 	TextSWrapper (ETWrapper_Normal, normalcolor,
-		(x - 160) * CleanXfac + width / 2,
-		(y - 100) * CleanYfac + height / 2,
+		(x - 160) * CleanXfac + Width / 2,
+		(y - 100) * CleanYfac + Height / 2,
 		string);
 }
 inline void DCanvas::DrawTextShadow (int normalcolor, int x, int y, const byte *string) const
@@ -302,8 +301,8 @@ inline void DCanvas::DrawTextCleanShadow (int normalcolor, int x, int y, const b
 inline void DCanvas::DrawTextCleanShadowMove (int normalcolor, int x, int y, const byte *string) const
 {
 	TextSWrapper (ETWrapper_Shadow, normalcolor,
-		(x - 160) * CleanXfac + width / 2,
-		(y - 100) * CleanYfac + height / 2,
+		(x - 160) * CleanXfac + Width / 2,
+		(y - 100) * CleanYfac + Height / 2,
 		string);
 }
 
@@ -328,8 +327,8 @@ inline void DCanvas::DrawTextCleanLuc (int normalcolor, int x, int y, const char
 inline void DCanvas::DrawTextCleanMove (int normalcolor, int x, int y, const char *string) const
 {
 	TextSWrapper (ETWrapper_Normal, normalcolor,
-		(x - 160) * CleanXfac + width / 2,
-		(y - 100) * CleanYfac + height / 2,
+		(x - 160) * CleanXfac + Width / 2,
+		(y - 100) * CleanYfac + Height / 2,
 		(const byte *)string);
 }
 inline void DCanvas::DrawTextShadow (int normalcolor, int x, int y, const char *string) const
@@ -343,8 +342,8 @@ inline void DCanvas::DrawTextCleanShadow (int normalcolor, int x, int y, const c
 inline void DCanvas::DrawTextCleanShadowMove (int normalcolor, int x, int y, const char *string) const
 {
 	TextSWrapper (ETWrapper_Shadow, normalcolor,
-		(x - 160) * CleanXfac + width / 2,
-		(y - 100) * CleanYfac + height / 2,
+		(x - 160) * CleanXfac + Width / 2,
+		(y - 100) * CleanYfac + Height / 2,
 		(const byte *)string);
 }
 
@@ -535,28 +534,102 @@ inline void DCanvas::DrawShadowedPatchCleanNoMove (const patch_t *patch, int x, 
 	DrawCNMWrapper (EWrapper_Normal, patch, x, y);
 }
 
-extern "C" palette_t *DefaultPalette;
+// A canvas in system memory.
+
+class DSimpleCanvas : public DCanvas
+{
+	DECLARE_CLASS (DSimpleCanvas, DCanvas)
+public:
+	DSimpleCanvas (int width, int height);
+	~DSimpleCanvas ();
+
+	bool IsValid ();
+	bool Lock ();
+	void Unlock ();
+
+protected:
+	BYTE *MemBuffer;
+};
+
+// A canvas that represents the actual display. The video code is responsible
+// for actually implementing this. Built on top of SimpleCanvas, because it
+// needs a system memory buffer when buffered output is enabled.
+
+class DFrameBuffer : public DSimpleCanvas
+{
+	DECLARE_ABSTRACT_CLASS (DFrameBuffer, DSimpleCanvas)
+public:
+	DFrameBuffer (int width, int height);
+
+	// Force the surface to use buffered output if true is passed.
+	virtual bool Lock (bool buffered) = 0;
+
+	// Locks the surface, using whatever the previous buffered status was.
+	virtual bool Relock () = 0;
+
+	// If the surface is buffered by choice, copy the specified region
+	// to the screen and then go unbuffered. If the surface must be
+	// buffered (e.g. if the display is not 8-bit), then does nothing.
+	virtual void PartialUpdate (int x, int y, int width, int height) = 0;
+
+	// Make the surface visible. Also implies Unlock().
+	virtual void Update () = 0;
+
+	// Return a pointer to 256 palette entries that can be written to.
+	virtual PalEntry *GetPalette () = 0;
+
+	// Mark the palette as changed. It will be updated on the next Update().
+	virtual void UpdatePalette () = 0;
+
+	// Sets the gamma level. Returns false if the hardware does not support
+	// gamma changing. (Always true for now, since palettes can always be
+	// gamma adjusted.)
+	virtual bool SetGamma (float gamma) = 0;
+
+	// Sets a color flash. RGB is the color, and amount is 0-256, with 256
+	// being all flash and 0 being no flash. Returns false if the hardware
+	// does not support this. (Always true for now, since palettes can always
+	// be flashed.)
+	virtual bool SetFlash (PalEntry rgb, int amount) = 0;
+
+	// Returns the number of video pages the frame buffer is using.
+	virtual int GetPageCount () = 0;
+
+#ifdef _WIN32
+	virtual int QueryNewPalette () = 0;
+#endif
+
+protected:
+	void DrawRateStuff ();
+	void CopyFromBuff (BYTE *src, int srcPitch, int width, int height, BYTE *dest);
+
+private:
+	DWORD LastMS, LastSec, FrameCount, LastCount, LastTic;
+};
+
+extern FColorMatcher ColorMatcher;
 
 // This is the screen updated by I_FinishUpdate.
-extern	DCanvas *screen;
+extern DFrameBuffer *screen;
 
-extern	byte	newgamma[256];
-EXTERN_CVAR (Gamma)
+#define SCREENWIDTH (screen->GetWidth ())
+#define SCREENHEIGHT (screen->GetHeight ())
+#define SCREENPITCH (screen->GetPitch ())
+
+EXTERN_CVAR (Float, Gamma)
 
 // Translucency tables
-extern unsigned int Col2RGB8[65][256];
-extern byte RGB32k[32][32][32];
+extern "C" DWORD Col2RGB8[65][256];
+extern "C" byte RGB32k[32][32][32];
+extern "C" DWORD *Col2RGB8_LessPrecision[65];
+
+extern int TransArea, TotalArea;
 
 // Allocates buffer screens, call before R_Init.
-void V_Init (void);
-
-// The palette lookup table to be used with for direct modes
-extern unsigned int *V_Palette;
+void V_Init ();
 
 void V_MarkRect (int x, int y, int width, int height);
 
-// BestColor
-byte BestColor (const DWORD *palette, const int r, const int g, const int b, const int numcolors);
 // Returns the closest color to the one desired. String
 // should be of the form "rr gg bb".
 int V_GetColorFromString (const DWORD *palette, const char *colorstring);
@@ -564,8 +637,10 @@ int V_GetColorFromString (const DWORD *palette, const char *colorstring);
 // and returns a color string suitable for V_GetColorFromString.
 char *V_GetColorStringByName (const char *name);
 
+// Tries to get color by name, then by string
+int V_GetColor (const DWORD *palette, const char *str);
 
-BOOL V_SetResolution (int width, int height, int bpp);
+bool V_SetResolution (int width, int height, int bpp);
 
 
 #ifdef USEASM

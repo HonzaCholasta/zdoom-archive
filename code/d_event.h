@@ -20,8 +20,8 @@
 //-----------------------------------------------------------------------------
 
 
-#ifndef __D_EVENT__
-#define __D_EVENT__
+#ifndef __D_EVENT_H__
+#define __D_EVENT_H__
 
 
 #include "doomtype.h"
@@ -32,21 +32,26 @@
 //
 
 // Input event types.
-typedef enum
+enum EGenericEvent
 {
-	ev_keydown,
-	ev_keyup,
-	ev_mouse,
-	ev_joystick
-} evtype_t;
+	EV_None,
+	EV_KeyDown,		// data1: scan code, data2: Qwerty ASCII code
+	EV_KeyUp,		// same
+	EV_Mouse,		// x, y: mouse movement deltas
+	EV_Joystick,	// x, y: joystick position
+	EV_GUI_Event	// subtype specifies actual event
+};
 
 // Event structure.
 typedef struct
 {
-	evtype_t	type;
-	int 		data1;			// keys / mouse/joystick buttons
-	int 		data2;			// mouse/joystick x move
-	int 		data3;			// mouse/joystick y move
+	BYTE		type;
+	BYTE		subtype;
+	SWORD 		data1;		// keys / mouse/joystick buttons
+	SWORD		data2;
+	SWORD		data3;
+	int 		x;			// mouse/joystick x move
+	int 		y;			// mouse/joystick y move
 } event_t;
 
  
@@ -86,7 +91,7 @@ typedef enum
 //
 // GLOBAL VARIABLES
 //
-#define MAXEVENTS				128
+#define MAXEVENTS		128
 
 extern	event_t 		events[MAXEVENTS];
 extern	int 			eventhead;
@@ -96,8 +101,3 @@ extern	gameaction_t	gameaction;
 
 
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------

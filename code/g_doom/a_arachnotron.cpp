@@ -4,7 +4,7 @@
 #include "p_local.h"
 #include "p_enemy.h"
 #include "a_doomglobal.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_BspiAttack (AActor *self);
@@ -13,13 +13,10 @@ void A_SpidRefire (AActor *self);
 
 class AArachnotron : public AActor
 {
-	DECLARE_ACTOR (AArachnotron, AActor);
+	DECLARE_ACTOR (AArachnotron, AActor)
 public:
-	const char *GetObituary () { return OB_BABY; }
+	const char *GetObituary () { return GStrings(OB_BABY); }
 };
-
-IMPLEMENT_DEF_SERIAL (AArachnotron, AActor);
-REGISTER_ACTOR (AArachnotron, Doom);
 
 FState AArachnotron::States[] =
 {
@@ -73,57 +70,46 @@ FState AArachnotron::States[] =
 	S_NORMAL (BSPI, 'J',	5, NULL 						, &States[S_BSPI_RUN+0])
 };
 
-void AArachnotron::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 68;
-	info->spawnid = 6;
-	info->spawnstate = &States[S_BSPI_STND];
-	info->spawnhealth = 500;
-	info->seestate = &States[S_BSPI_SIGHT];
-	info->seesound = "baby/sight";
-	info->painstate = &States[S_BSPI_PAIN];
-	info->painchance = 128;
-	info->painsound = "baby/pain";
-	info->missilestate = &States[S_BSPI_ATK];
-	info->deathstate = &States[S_BSPI_DIE];
-	info->deathsound = "baby/death";
-	info->speed = 12;
-	info->radius = 64 * FRACUNIT;
-	info->height = 64 * FRACUNIT;
-	info->mass = 600;
-	info->activesound = "baby/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_BSPI_RAISE];
-}
+IMPLEMENT_ACTOR (AArachnotron, Doom, 68, 6)
+	PROP_SpawnHealth (500)
+	PROP_RadiusFixed (64)
+	PROP_HeightFixed (64)
+	PROP_Mass (600)
+	PROP_SpeedFixed (12)
+	PROP_PainChance (128)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_BSPI_STND)
+	PROP_SeeState (S_BSPI_SIGHT)
+	PROP_PainState (S_BSPI_PAIN)
+	PROP_MissileState (S_BSPI_ATK)
+	PROP_DeathState (S_BSPI_DIE)
+	PROP_RaiseState (S_BSPI_RAISE)
+
+	PROP_SeeSound ("baby/sight")
+	PROP_PainSound ("baby/pain")
+	PROP_DeathSound ("baby/death")
+	PROP_ActiveSound ("baby/active")
+END_DEFAULTS
 
 class AStealthArachnotron : public AArachnotron
 {
-	DECLARE_STATELESS_ACTOR (AStealthArachnotron, AArachnotron);
+	DECLARE_STATELESS_ACTOR (AStealthArachnotron, AArachnotron)
 public:
-	const char *GetObituary () { return OB_STEALTHBABY; }
+	const char *GetObituary () { return GStrings(OB_STEALTHBABY); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthArachnotron, AArachnotron);
-REGISTER_ACTOR (AStealthArachnotron, Doom);
-
-void AStealthArachnotron::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9050;
-	info->spawnid = 117;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthArachnotron, Doom, 9050, 117)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 class AArachnotronPlasma : public APlasmaBall
 {
-	DECLARE_ACTOR (AArachnotronPlasma, APlasmaBall);
+	DECLARE_ACTOR (AArachnotronPlasma, APlasmaBall)
 };
-
-IMPLEMENT_DEF_SERIAL (AArachnotronPlasma, APlasmaBall);
-REGISTER_ACTOR (AArachnotronPlasma, Doom);
 
 FState AArachnotronPlasma::States[] =
 {
@@ -139,22 +125,21 @@ FState AArachnotronPlasma::States[] =
 	S_BRIGHT (APBX, 'E',	5, NULL 						, NULL)
 };
 
-void AArachnotronPlasma::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnid = 129;
-	info->spawnstate = &States[S_ARACH_PLAZ];
-	info->seesound = "baby/attack";
-	info->deathstate = &States[S_ARACH_PLEX];
-	info->deathsound = "baby/shotx";
-	info->speed = 25 * FRACUNIT;
-	info->radius = 13 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 5;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-	info->translucency = TRANSLUC66;
-}
+IMPLEMENT_ACTOR (AArachnotronPlasma, Doom, -1, 129)
+	PROP_RadiusFixed (13)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (25)
+	PROP_Damage (5)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_ARACH_PLAZ)
+	PROP_DeathState (S_ARACH_PLEX)
+
+	PROP_SeeSound ("baby/attack")
+	PROP_DeathSound ("baby/shotx")
+END_DEFAULTS
 
 void A_BspiAttack (AActor *self)
 {		

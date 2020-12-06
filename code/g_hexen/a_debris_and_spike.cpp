@@ -7,30 +7,25 @@
 // Convenient macros --------------------------------------------------------
 
 #define _DEBCOMMON(cls,ns,dstate,sid) \
-	class cls : public AActor { DECLARE_STATELESS_ACTOR (cls, AActor); static FState States[ns]; }; \
-	IMPLEMENT_DEF_SERIAL (cls, AActor); \
-	REGISTER_ACTOR (cls, Hexen); \
-	void cls::SetDefaults (FActorInfo *info) { \
-		INHERIT_DEFS; \
-		info->spawnid = sid; \
-		info->deathstate = &States[dstate]; \
-		info->spawnstate = &States[0];
-		
+	class cls : public AActor { DECLARE_STATELESS_ACTOR (cls, AActor) static FState States[ns]; }; \
+	IMPLEMENT_ACTOR (cls, Hexen, -1, sid) \
+		PROP_DeathState (dstate) \
+		PROP_SpawnState (0)
 
 #define _DEBSTARTSTATES(cls,ns) \
-	FState cls::States[ns] =
+	END_DEFAULTS  FState cls::States[ns] =
 
 #define DEBRIS(cls,spawnnum,ns,dstate) \
 	_DEBCOMMON(cls,ns,dstate,spawnnum) \
-	info->flags = MF_NOBLOCKMAP|MF_DROPOFF|MF_MISSILE; \
-	info->flags2 = MF2_NOTELEPORT; } \
+		PROP_Flags (MF_NOBLOCKMAP|MF_DROPOFF|MF_MISSILE) \
+		PROP_Flags2 (MF2_NOTELEPORT) \
 	 _DEBSTARTSTATES(cls,ns)
 
 #define SHARD(cls,spawnnum,ns,dstate) \
 	_DEBCOMMON(cls,ns,dstate,spawnnum) \
-	info->radius = 5 * FRACUNIT; \
-	info->flags = MF_NOBLOCKMAP|MF_DROPOFF|MF_MISSILE|MF_NOGRAVITY; \
-	info->flags2 = MF2_NOTELEPORT|MF2_FLOORBOUNCE; } \
+		PROP_RadiusFixed (5) \
+		PROP_Flags (MF_NOBLOCKMAP|MF_DROPOFF|MF_MISSILE|MF_NOGRAVITY) \
+		PROP_Flags2 (MF2_NOTELEPORT|MF2_FLOORBOUNCE) \
 	 _DEBSTARTSTATES(cls,ns)
 
 // Rocks --------------------------------------------------------------------
@@ -239,24 +234,19 @@ SHARD (ASGShard0, 63, 2, S_SGSHARD0_D)
 
 class ADirtClump : public AActor
 {
-	DECLARE_ACTOR (ADirtClump, AActor);
+	DECLARE_ACTOR (ADirtClump, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ADirtClump, AActor);
-REGISTER_ACTOR (ADirtClump, Hexen)
 
 FState ADirtClump::States[] =
 {
 	S_NORMAL (TSPK, 'C',   20, NULL, &States[0])
 };
 
-void ADirtClump::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP;
-	info->flags2 = MF2_NOTELEPORT;
-}
+IMPLEMENT_ACTOR (ADirtClump, Hexen, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP)
+	PROP_Flags2 (MF2_NOTELEPORT)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Dirt stuff
 
@@ -321,10 +311,10 @@ BOOL PIT_ThrustStompThing (AActor *thing)
 	if ( abs(thing->x - tsthing->x) >= blockdist || 
 		  abs(thing->y - tsthing->y) >= blockdist ||
 			(thing->z > tsthing->z+tsthing->height) )
-		return true;            // didn't hit it
+		return true;	// didn't hit it
 
 	if (thing == tsthing)
-		return true;            // don't clip against self
+		return true;	// don't clip against self
 
 	P_DamageMobj (thing, tsthing, tsthing, 10001);
 	tsthing->args[1] = 1;	// Mark thrust thing as bloody
@@ -339,10 +329,10 @@ void PIT_ThrustSpike (AActor *actor)
 
 	tsthing = actor;
 
-	x0 = actor->x - GetInfo (actor)->radius;
-	x2 = actor->x + GetInfo (actor)->radius;
-	y0 = actor->y - GetInfo (actor)->radius;
-	y2 = actor->y + GetInfo (actor)->radius;
+	x0 = actor->x - actor->radius;
+	x2 = actor->x + actor->radius;
+	y0 = actor->y - actor->radius;
+	y2 = actor->y + actor->radius;
 
 	xl = (x0 - bmaporgx - MAXRADIUS)>>MAPBLOCKSHIFT;
 	xh = (x2 - bmaporgx + MAXRADIUS)>>MAPBLOCKSHIFT;
@@ -360,19 +350,20 @@ void PIT_ThrustSpike (AActor *actor)
 
 class AThrustFloor : public AActor
 {
-	DECLARE_ACTOR (AThrustFloor, AActor);
+	DECLARE_ACTOR (AThrustFloor, AActor)
+	HAS_OBJECT_POINTERS
 public:
+	void Serialize (FArchive &arc);
+
 	fixed_t GetSinkSpeed () { return 6*FRACUNIT; }
 	fixed_t GetRaiseSpeed () { return special2*FRACUNIT; }
 
 	ADirtClump *DirtClump;
 };
 
-IMPLEMENT_POINTY_SERIAL (AThrustFloor, AActor)
+IMPLEMENT_POINTY_CLASS (AThrustFloor)
  DECLARE_POINTER (DirtClump)
 END_POINTERS
-
-REGISTER_ACTOR (AThrustFloor, Hexen);
 
 void AThrustFloor::Serialize (FArchive &arc)
 {
@@ -442,49 +433,36 @@ FState AThrustFloor::States[] =
 
 };
 
-void AThrustFloor::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->radius = 20 * FRACUNIT;
-	info->height = 128 * FRACUNIT;
-}
+BEGIN_DEFAULTS (AThrustFloor, Hexen, -1, 0)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (128)
+END_DEFAULTS
 
 // Spike up -----------------------------------------------------------------
 
 class AThrustFloorUp : public AThrustFloor
 {
-	DECLARE_STATELESS_ACTOR (AThrustFloorUp, AThrustFloor);
+	DECLARE_STATELESS_ACTOR (AThrustFloorUp, AThrustFloor)
 };
 
-IMPLEMENT_DEF_SERIAL (AThrustFloorUp, AThrustFloor);
-REGISTER_ACTOR (AThrustFloorUp, Hexen);
-
-void AThrustFloorUp::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 10091;
-	info->spawnstate = &Super::States[S_THRUSTINIT2];
-	info->flags = MF_SOLID;
-	info->flags2 = MF2_NOTELEPORT|MF2_FLOORCLIP;
-}
+IMPLEMENT_STATELESS_ACTOR (AThrustFloorUp, Hexen, 10091, 0)
+	PROP_Flags (MF_SOLID)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_FLOORCLIP)
+	PROP_SpawnState (S_THRUSTINIT2)
+END_DEFAULTS
 
 // Spike down ---------------------------------------------------------------
 
 class AThrustFloorDown : public AThrustFloor
 {
-	DECLARE_STATELESS_ACTOR (AThrustFloorDown, AThrustFloor);
+	DECLARE_STATELESS_ACTOR (AThrustFloorDown, AThrustFloor)
 };
 
-IMPLEMENT_DEF_SERIAL (AThrustFloorDown, AThrustFloor);
-REGISTER_ACTOR (AThrustFloorDown, Hexen);
-
-void AThrustFloorDown::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 10090;
-	info->spawnstate = &Super::States[S_THRUSTINIT1];
-	info->flags2 = MF2_NOTELEPORT|MF2_FLOORCLIP|MF2_DONTDRAW;
-}
+IMPLEMENT_STATELESS_ACTOR (AThrustFloorDown, Hexen, 10090, 0)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_FLOORCLIP)
+	PROP_RenderFlags (RF_INVISIBLE)
+	PROP_SpawnState (S_THRUSTINIT1)
+END_DEFAULTS
 
 //===========================================================================
 //
@@ -499,7 +477,7 @@ void AThrustFloorDown::SetDefaults (FActorInfo *info)
 
 void A_ThrustInitUp (AActor *actor)
 {
-	actor->special2 = 5;		// Raise speed
+	actor->special2 = 5;	// Raise speed
 	actor->args[0] = 1;		// Mark as up
 	actor->floorclip = 0;
 	actor->flags = MF_SOLID;
@@ -509,11 +487,12 @@ void A_ThrustInitUp (AActor *actor)
 
 void A_ThrustInitDn (AActor *actor)
 {
-	actor->special2 = 5;		// Raise speed
+	actor->special2 = 5;	// Raise speed
 	actor->args[0] = 0;		// Mark as down
-	actor->floorclip = GetInfo (actor)->height;
+	actor->floorclip = actor->GetDefault()->height;
 	actor->flags = 0;
-	actor->flags2 = MF2_NOTELEPORT|MF2_FLOORCLIP|MF2_DONTDRAW;
+	actor->flags2 = MF2_NOTELEPORT|MF2_FLOORCLIP;
+	actor->renderflags = RF_INVISIBLE;
 	static_cast<AThrustFloor *>(actor)->DirtClump =
 		Spawn<ADirtClump> (actor->x, actor->y, actor->z);
 }

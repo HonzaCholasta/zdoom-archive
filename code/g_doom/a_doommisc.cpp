@@ -1,12 +1,17 @@
 #include "actor.h"
 #include "info.h"
 #include "p_enemy.h"
+#include "p_local.h"
 #include "a_doomglobal.h"
+#include "a_sharedglobal.h"
+#include "m_random.h"
+#include "gi.h"
+#include "doomstat.h"
 
 // The barrel of green goop ------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (AExplosiveBarrel, AActor);
-REGISTER_ACTOR (AExplosiveBarrel, Doom);
+void A_BarrelDestroy (AActor *);
+void A_BarrelRespawn (AActor *);
 
 FState AExplosiveBarrel::States[] =
 {
@@ -19,27 +24,62 @@ FState AExplosiveBarrel::States[] =
 	S_BRIGHT (BEXP, 'B',	5, A_Scream 					, &States[S_BEXP+2]),
 	S_BRIGHT (BEXP, 'C',	5, NULL 						, &States[S_BEXP+3]),
 	S_BRIGHT (BEXP, 'D',   10, A_Explode					, &States[S_BEXP+4]),
-	S_BRIGHT (BEXP, 'E',   10, NULL 						, NULL)
+	S_BRIGHT (BEXP, 'E',   10, NULL 						, &States[S_BEXP+5]),
+	S_BRIGHT (BEXP, 'E', 50, A_BarrelDestroy				, &States[S_BEXP+6]),
+	S_BRIGHT (BEXP, 'E',    5, A_BarrelRespawn				, &States[S_BEXP+6])
 };
 
-void AExplosiveBarrel::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AExplosiveBarrel, Doom, 2035, 125)
+	PROP_SpawnHealth (20)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (34)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD)
+
+	PROP_SpawnState (S_BAR)
+	PROP_DeathState (S_BEXP)
+
+	PROP_DeathSound ("world/barrelx")
+END_DEFAULTS
+
+void A_BarrelDestroy (AActor *actor)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2035;
-	info->spawnid = 125;
-	info->spawnstate = &States[S_BAR];
-	info->spawnhealth = 20;
-	info->deathstate = &States[S_BEXP];
-	info->deathsound = "world/barrelx";
-	info->radius = 10 * FRACUNIT;
-	info->height = 34 * FRACUNIT;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_NOBLOOD;
+	if ((*dmflags2 & DF2_BARRELS_RESPAWN) &&
+		(*deathmatch || *alwaysapplydmflags))
+	{
+		actor->height = actor->GetDefault()->height;
+		actor->renderflags |= RF_INVISIBLE;
+	}
+	else
+	{
+		actor->Destroy ();
+	}
+}
+
+void A_BarrelRespawn (AActor *actor)
+{
+	fixed_t x = actor->spawnpoint.x << FRACBITS;
+	fixed_t y = actor->spawnpoint.y << FRACBITS;
+	sector_t *sec;
+
+	actor->flags |= MF_SOLID;
+	sec = R_PointInSubsector (x, y)->sector;
+	actor->SetOrigin (x, y, sec->floorplane.ZatPoint (x, y));
+	if (P_TestMobjLocation (actor))
+	{
+		AActor *defs = actor->GetDefault();
+		actor->health = defs->health;
+		actor->flags = defs->flags;
+		actor->flags2 = defs->flags2;
+		actor->SetState (actor->SpawnState);
+		Spawn<ATeleportFog> (x, y, actor->z + TELEFOGHEIGHT);
+	}
+	else
+	{
+		actor->flags &= ~MF_SOLID;
+	}
 }
 
 // Bullet puff -------------------------------------------------------------
-
-IMPLEMENT_DEF_SERIAL (ABulletPuff, AActor);
-REGISTER_ACTOR (ABulletPuff, Doom);
 
 FState ABulletPuff::States[] =
 {
@@ -49,13 +89,22 @@ FState ABulletPuff::States[] =
 	S_NORMAL (PUFF, 'D',	4, NULL 						, NULL)
 };
 
-void ABulletPuff::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABulletPuff, Doom, -1, 131)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (TRANSLUC50)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+void ABulletPuff::BeginPlay ()
 {
-	INHERIT_DEFS;
-	info->spawnid = 131;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = TRANSLUC50;
+	Super::BeginPlay ();
+
+	momz = FRACUNIT;
+	tics -= P_Random (pr_spawnpuff) & 3;
+	if (tics < 1)
+		tics = 1;
 }
 
 // Container for an unused state -------------------------------------------
@@ -67,11 +116,8 @@ void ABulletPuff::SetDefaults (FActorInfo *info)
 
 class ADoomUnusedStates : public AActor
 {
-	DECLARE_ACTOR (ADoomUnusedStates, AActor);
+	DECLARE_ACTOR (ADoomUnusedStates, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ADoomUnusedStates, AActor);
-REGISTER_ACTOR (ADoomUnusedStates, Doom);
 
 FState ADoomUnusedStates::States[] =
 {
@@ -85,8 +131,6 @@ FState ADoomUnusedStates::States[] =
 	S_NORMAL (PLAY, 'S',   -1, NULL 			, NULL)
 };
 
-void ADoomUnusedStates::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->deathstate = &States[S_DEADTORSO];
-}
+IMPLEMENT_ACTOR (ADoomUnusedStates, Doom, -1, 0)
+	PROP_DeathState (S_DEADTORSO)
+END_DEFAULTS

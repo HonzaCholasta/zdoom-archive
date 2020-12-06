@@ -3,20 +3,14 @@
 
 class AWaterZone : public AActor
 {
-	DECLARE_STATELESS_ACTOR (AWaterZone, AActor);
+	DECLARE_STATELESS_ACTOR (AWaterZone, AActor)
 public:
 	void PostBeginPlay ();
 };
 
-IMPLEMENT_DEF_SERIAL (AWaterZone, AActor);
-REGISTER_ACTOR (AWaterZone, Any);
-
-void AWaterZone::SetDefaults (FActorInfo *info)
-{
-	ACTOR_DEFS_STATELESS;
-	info->doomednum = 9045;
-	info->flags = MF_NOBLOCKMAP|MF_NOSECTOR|MF_NOGRAVITY;
-}
+IMPLEMENT_STATELESS_ACTOR (AWaterZone, Any, 9045, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR|MF_NOGRAVITY)
+END_DEFAULTS
 
 void AWaterZone::PostBeginPlay ()
 {

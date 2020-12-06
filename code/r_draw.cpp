@@ -25,6 +25,7 @@
 
 #include <stddef.h>
 
+#include "templates.h"
 #include "m_alloc.h"
 #include "doomdef.h"
 #include "i_system.h"
@@ -56,13 +57,14 @@ extern	int		ST_Y;
 byte*			viewimage;
 extern "C" {
 int 			viewwidth;
+int				halfviewwidth;
 int 			viewheight;
 }
 int 			scaledviewwidth;
 int 			viewwindowx;
 int 			viewwindowy;
-byte**			ylookup;
-int* 			columnofs;
+byte*			ylookup[MAXHEIGHT];
+int 			columnofs[MAXWIDTH];
 
 extern "C" {
 int				realviewwidth;		// [RH] Physical width of view window
@@ -77,8 +79,8 @@ int				detailyshift;		// [RH] Y shift for vertical detail level
 void (*R_DrawColumnHoriz)(void);
 void (*R_DrawColumn)(void);
 void (*R_DrawFuzzColumn)(void);
-void (*R_DrawTranslucentColumn)(void);
 void (*R_DrawTranslatedColumn)(void);
+void (*R_DrawShadedColumn)(void);
 void (*R_DrawSpan)(void);
 void (*rt_map4cols)(int,int,int);
 
@@ -98,6 +100,8 @@ fixed_t 		dc_iscale;
 fixed_t 		dc_texturemid;
 fixed_t			dc_texturefrac;
 int				dc_color;				// [RH] Color for column filler
+DWORD			*dc_srcblend;			// [RH] Source and destination
+DWORD			*dc_destblend;			// blending lookups
 
 // first pixel in a column (possibly virtual) 
 byte*			dc_source;				
@@ -142,7 +146,7 @@ void R_DrawColumnP_C (void)
 	if (dc_x >= screen->width
 		|| dc_yl < 0
 		|| dc_yh >= screen->height) {
-		Printf (PRINT_HIGH, "R_DrawColumnP_C: %i to %i at %i\n", dc_yl, dc_yh, dc_x);
+		Printf ("R_DrawColumnP_C: %i to %i at %i\n", dc_yl, dc_yh, dc_x);
 		return;
 	}
 #endif
@@ -203,7 +207,7 @@ void R_StretchColumnP_C (void)
 	if (dc_x >= screen->width
 		|| dc_yl < 0
 		|| dc_yh >= screen->height) {
-		Printf (PRINT_HIGH, "R_StretchColumnP_C: %i to %i at %i\n", dc_yl, dc_yh, dc_x);
+		Printf ("R_StretchColumnP_C: %i to %i at %i\n", dc_yl, dc_yh, dc_x);
 		return;
 	}
 #endif
@@ -243,7 +247,7 @@ void R_FillColumnP (void)
 	if (dc_x >= screen->width
 		|| dc_yl < 0
 		|| dc_yh >= screen->height) {
-		Printf (PRINT_HIGH, "R_StretchColumnP_C: %i to %i at %i\n", dc_yl, dc_yh, dc_x);
+		Printf ("R_StretchColumnP_C: %i to %i at %i\n", dc_yl, dc_yh, dc_x);
 		return;
 	}
 #endif
@@ -266,12 +270,11 @@ void R_FillColumnP (void)
 // Spectre/Invisibility.
 //
 // [RH] FUZZTABLE changed from 50 to 64
-#define FUZZTABLE	64
-#define FUZZOFF		(screen->pitch)
+#define FUZZTABLE	50
 
 extern "C"
 {
-int 	fuzzoffset[FUZZTABLE];
+int 	fuzzoffset[FUZZTABLE+1];	// [RH] +1 for the assembly routine
 int 	fuzzpos = 0; 
 }
 /*
@@ -285,37 +288,30 @@ int 	fuzzpos = 0;
 */
 
 static const signed char fuzzinit[FUZZTABLE] = {
-	1,-1, 1,-1, 1, 1,-1, 1,
-	1,-1, 1, 1, 1,-1, 1, 1,
-	1,-1,-1,-1,-1, 1,-1,-1,
-	1, 1, 1, 1,-1, 1,-1, 1,
-	1,-1,-1, 1, 1,-1,-1,-1,
-   -1, 1, 1, 1, 1,-1, 1, 1,
-   -1, 1, 1, 1,-1, 1, 1, 1,
-   -1, 1, 1,-1, 1, 1,-1, 1
+	1,-1, 1,-1, 1, 1,-1,
+	1, 1,-1, 1, 1, 1,-1,
+	1, 1, 1,-1,-1,-1,-1,
+	1,-1,-1, 1, 1, 1, 1,-1,
+	1,-1, 1, 1,-1,-1, 1,
+	1,-1,-1,-1,-1, 1, 1,
+	1, 1,-1, 1, 1,-1, 1 
 };
 
-void R_InitFuzzTable (void)
+void R_InitFuzzTable (int fuzzoff)
 {
 	int i;
-	int fuzzoff;
-
-	screen->Lock ();
-	fuzzoff = FUZZOFF << detailyshift;
-	screen->Unlock ();
 
 	for (i = 0; i < FUZZTABLE; i++)
+	{
 		fuzzoffset[i] = fuzzinit[i] * fuzzoff;
+	}
 }
 
 #ifndef USEASM
 //
-// Framebuffer postprocessing.
-// Creates a fuzzy image by copying pixels
-//	from adjacent ones to left and right.
-// Used with an all black colormap, this
-//	could create the SHADOW effect,
-//	i.e. spectres and invisible players.
+// Creates a fuzzy image by copying pixels from adjacent ones above and below.
+// Used with an all black colormap, this could create the SHADOW effect,
+// i.e. spectres and invisible players.
 //
 void R_DrawFuzzColumnP_C (void)
 {
@@ -350,31 +346,51 @@ void R_DrawFuzzColumnP_C (void)
 
 	dest = ylookup[dc_yl] + columnofs[dc_x];
 
-	// Looks like an attempt at dithering,
-	//	using the colormap #6 (of 0-31, a bit
-	//	brighter than average).
+	// colormap #6 is used for shading (of 0-31, a bit brighter than average)
 	{
 		// [RH] Make local copies of global vars to try and improve
 		//		the optimizations made by the compiler.
 		int pitch = dc_pitch;
 		int fuzz = fuzzpos;
-		byte *map = DefaultPalette->maps.colormaps + 6*256;
+		int cnt;
+		byte *map = &NormalLight.Maps[6*256];
 
-		do 
+		// [RH] Split this into three separate loops to minimize
+		// the number of times fuzzpos needs to be clamped.
+		if (fuzz)
 		{
-			// Lookup framebuffer, and retrieve
-			//	a pixel that is either one column
-			//	left or right of the current one.
-			// Add index from colormap to index.
-			*dest = map[dest[fuzzoffset[fuzz]]]; 
-
-			// Clamp table lookup index.
-			fuzz = (fuzz + 1) & (FUZZTABLE - 1);
-			
-			dest += pitch;
-		} while (--count);
-
-		fuzzpos = (fuzz + 3) & (FUZZTABLE - 1);
+			cnt = MIN(FUZZTABLE-fuzz,count);
+			count -= cnt;
+			do
+			{
+				*dest = map[dest[fuzzoffset[fuzz++]]];
+				dest += pitch;
+			} while (--cnt);
+		}
+		if (fuzz == FUZZTABLE || count > 0)
+		{
+			while (count >= FUZZTABLE)
+			{
+				fuzz = 0;
+				cnt = FUZZTABLE;
+				count -= FUZZTABLE;
+				do
+				{
+					*dest = map[dest[fuzzoffset[fuzz++]]];
+					dest += pitch;
+				} while (--cnt);
+			}
+			fuzz = 0;
+			if (count > 0)
+			{
+				do
+				{
+					*dest = map[dest[fuzzoffset[fuzz++]]];
+					dest += pitch;
+				} while (--count);
+			}
+		}
+		fuzzpos = fuzz;
 	}
 } 
 #endif	// USEASM
@@ -382,7 +398,6 @@ void R_DrawFuzzColumnP_C (void)
 //
 // R_DrawTranlucentColumn
 //
-fixed_t dc_translevel;
 
 /*
 [RH] This translucency algorithm is based on DOSDoom 0.65's, but uses
@@ -426,13 +441,12 @@ algorithm that uses RGB tables.
 
 */
 
-void R_DrawTranslucentColumnP_C (void)
+void R_DrawAddColumnP_C (void)
 {
 	int count;
 	byte *dest;
 	fixed_t frac;
 	fixed_t fracstep;
-	unsigned int *fg2rgb, *bg2rgb;
 
 	count = dc_yh - dc_yl;
 	if (count < 0)
@@ -449,21 +463,14 @@ void R_DrawTranslucentColumnP_C (void)
 	}
 #endif 
 
-	{
-		fixed_t fglevel, bglevel;
-
-		fglevel = dc_translevel & ~0x3ff;
-		bglevel = FRACUNIT-fglevel;
-		fg2rgb = Col2RGB8[fglevel>>10];
-		bg2rgb = Col2RGB8[bglevel>>10];
-	}
-
 	dest = ylookup[dc_yl] + columnofs[dc_x];
 
 	fracstep = dc_iscale;
 	frac = dc_texturefrac;
 
 	{
+		DWORD *fg2rgb = dc_srcblend;
+		DWORD *bg2rgb = dc_destblend;
 		byte *colormap = dc_colormap;
 		byte *source = dc_source;
 		int mask = dc_mask;
@@ -471,8 +478,8 @@ void R_DrawTranslucentColumnP_C (void)
 
 		do
 		{
-			unsigned int fg = colormap[source[(frac>>FRACBITS)&mask]];
-			unsigned int bg = *dest;
+			DWORD fg = colormap[source[(frac>>FRACBITS)&mask]];
+			DWORD bg = *dest;
 
 			fg = fg2rgb[fg];
 			bg = bg2rgb[bg];
@@ -543,13 +550,12 @@ void R_DrawTranslatedColumnP_C (void)
 }
 
 // Draw a column that is both translated and translucent
-void R_DrawTlatedLucentColumnP_C (void)
+void R_DrawTlatedAddColumnP_C (void)
 {
 	int count;
 	byte *dest;
 	fixed_t frac;
 	fixed_t fracstep;
-	unsigned int *fg2rgb, *bg2rgb;
 
 	count = dc_yh - dc_yl;
 	if (count < 0)
@@ -567,14 +573,160 @@ void R_DrawTlatedLucentColumnP_C (void)
 	
 #endif 
 
-	{
-		fixed_t fglevel, bglevel;
+	dest = ylookup[dc_yl] + columnofs[dc_x];
 
-		fglevel = dc_translevel & ~0x3ff;
-		bglevel = FRACUNIT-fglevel;
-		fg2rgb = Col2RGB8[fglevel>>10];
-		bg2rgb = Col2RGB8[bglevel>>10];
+	fracstep = dc_iscale;
+	frac = dc_texturefrac;
+
+	{
+		DWORD *fg2rgb = dc_srcblend;
+		DWORD *bg2rgb = dc_destblend;
+		byte *translation = dc_translation;
+		byte *colormap = dc_colormap;
+		byte *source = dc_source;
+		int mask = dc_mask;
+		int pitch = dc_pitch;
+
+		do
+		{
+			DWORD fg = colormap[translation[source[(frac>>FRACBITS)&mask]]];
+			DWORD bg = *dest;
+
+			fg = fg2rgb[fg];
+			bg = bg2rgb[bg];
+			fg = (fg+bg) | 0x1f07c1f;
+			*dest = RGB32k[0][0][fg & (fg>>15)];
+			dest += pitch;
+			frac += fracstep;
+		} while (--count);
 	}
+}
+
+// Draw a column whose "color" values are actually translucency
+// levels for a base color stored in dc_color.
+void R_DrawShadedColumnP_C (void)
+{
+	int  count;
+	byte *dest;
+	fixed_t frac, fracstep;
+
+	count = dc_yh - dc_yl;
+
+	if (count < 0)
+		return;
+
+	count++;
+
+#ifdef RANGECHECK 
+	if (dc_x >= screen->width
+		|| dc_yl < 0
+		|| dc_yh >= screen->height) {
+		Printf ("R_DrawShadedColumnP_C: %i to %i at %i\n", dc_yl, dc_yh, dc_x);
+		return;
+	}
+#endif
+
+	dest = ylookup[dc_yl] + columnofs[dc_x];
+
+	fracstep = dc_iscale; 
+	frac = dc_texturefrac;
+
+	{
+		int mask = dc_mask;
+		byte *source = dc_source;
+		byte *colormap = dc_colormap;
+		int pitch = dc_pitch;
+		DWORD *fgstart = &Col2RGB8[0][dc_color];
+
+		do
+		{
+			DWORD val = colormap[source[(frac>>FRACBITS)&mask]];
+			DWORD fg = fgstart[val<<8];
+			val = (Col2RGB8[64-val][*dest] + fg) | 0x1f07c1f;
+			*dest = RGB32k[0][0][val & (val>>15)];
+
+			dest += pitch;
+			frac += fracstep;
+		} while (--count);
+	}
+} 
+
+// Add source to destination, clamping it to white
+void R_DrawAddClampColumnP_C ()
+{
+	int count;
+	byte *dest;
+	fixed_t frac;
+	fixed_t fracstep;
+
+	count = dc_yh - dc_yl;
+	if (count < 0)
+		return;
+	count++;
+
+#ifdef RANGECHECK
+	if (dc_x >= screen->width
+		|| dc_yl < 0
+		|| dc_yh >= screen->height)
+	{
+		I_Error ( "R_DrawAddColumnP_C: %i to %i at %i",
+				  dc_yl, dc_yh, dc_x);
+	}
+#endif 
+
+	dest = ylookup[dc_yl] + columnofs[dc_x];
+
+	fracstep = dc_iscale;
+	frac = dc_texturefrac;
+
+	{
+		byte *colormap = dc_colormap;
+		byte *source = dc_source;
+		int mask = dc_mask;
+		int pitch = dc_pitch;
+		DWORD *fg2rgb = dc_srcblend;
+		DWORD *bg2rgb = dc_destblend;
+
+		do
+		{
+			DWORD a = fg2rgb[colormap[source[(frac>>FRACBITS)&mask]]]
+				+ bg2rgb[*dest];
+			DWORD b = a;
+
+			a |= 0x01f07c1f;
+			b &= 0x40100400;
+			a &= 0x3fffffff;
+			b = b - (b >> 5);
+			a |= b;
+			*dest = RGB32k[0][0][a & (a>>15)];
+			dest += pitch;
+			frac += fracstep;
+		} while (--count);
+	}
+}
+
+// Add source to destination, clamping it to white
+void R_DrawAddClampTranslatedColumnP_C ()
+{
+	int count;
+	byte *dest;
+	fixed_t frac;
+	fixed_t fracstep;
+
+	count = dc_yh - dc_yl;
+	if (count < 0)
+		return;
+	count++;
+
+#ifdef RANGECHECK
+	if (dc_x >= screen->width
+		|| dc_yl < 0
+		|| dc_yh >= screen->height)
+	{
+		I_Error ( "R_DrawAddColumnP_C: %i to %i at %i",
+				  dc_yl, dc_yh, dc_x);
+	}
+#endif 
 
 	dest = ylookup[dc_yl] + columnofs[dc_x];
 
@@ -587,21 +739,27 @@ void R_DrawTlatedLucentColumnP_C (void)
 		byte *source = dc_source;
 		int mask = dc_mask;
 		int pitch = dc_pitch;
+		DWORD *fg2rgb = dc_srcblend;
+		DWORD *bg2rgb = dc_destblend;
 
 		do
 		{
-			unsigned int fg = colormap[translation[source[(frac>>FRACBITS)&mask]]];
-			unsigned int bg = *dest;
+			DWORD a = fg2rgb[colormap[translation[source[(frac>>FRACBITS)&mask]]]]
+				+ bg2rgb[*dest];
+			DWORD b = a;
 
-			fg = fg2rgb[fg];
-			bg = bg2rgb[bg];
-			fg = (fg+bg) | 0x1f07c1f;
-			*dest = RGB32k[0][0][fg & (fg>>15)];
+			a |= 0x01f07c1f;
+			b &= 0x40100400;
+			a &= 0x3fffffff;
+			b = b - (b >> 5);
+			a |= b;
+			*dest = RGB32k[0][0][(a>>15) & a];
 			dest += pitch;
 			frac += fracstep;
 		} while (--count);
 	}
 }
+
 
 
 //
@@ -708,257 +866,6 @@ void R_FillSpan (void)
 	memset (ylookup[ds_y] + columnofs[ds_x1], ds_color, ds_x2 - ds_x1 + 1);
 }
 
-
-
-/****************************************/
-/*										*/
-/* [RH] ARGB8888 drawers (C versions)	*/
-/*										*/
-/****************************************/
-
-#define dc_shademap ((unsigned int *)dc_colormap)
-
-void R_DrawColumnD_C (void) 
-{ 
-	int 				count;
-	unsigned int*		dest;
-	fixed_t 			frac;
-	fixed_t 			fracstep;
-
-	count = dc_yh - dc_yl;
-
-	// Zero length, column does not exceed a pixel.
-	if (count < 0)
-		return;
-	count++;
-
-#ifdef RANGECHECK 
-	if (dc_x >= screen->width
-		|| dc_yl < 0
-		|| dc_yh >= screen->height) {
-		Printf (PRINT_HIGH, "R_DrawColumnD_C: %i to %i at %i\n", dc_yl, dc_yh, dc_x);
-		return;
-	}
-#endif
-
-	dest = (unsigned int *)(ylookup[dc_yl] + columnofs[dc_x]);
-
-	fracstep = dc_iscale;
-	frac = dc_texturefrac;
-
-	{
-		unsigned int *shademap = dc_shademap;
-		byte *source = dc_source;
-		int mask = dc_mask;
-		int pitch = dc_pitch >> 2;
-
-		do
-		{
-			*dest = shademap[source[(frac>>FRACBITS)&mask]];
-
-			dest += pitch;
-			frac += fracstep;
-
-		} while (--count);
-	}
-}
-
-void R_DrawFuzzColumnD_C (void)
-{
-	int 				count;
-	unsigned int*		dest;
-
-	// Adjust borders. Low...
-	if (!dc_yl)
-		dc_yl = 1;
-
-	// .. and high.
-	if (dc_yh == realviewheight-1)
-		dc_yh = realviewheight - 2;
-
-	count = dc_yh - dc_yl;
-
-	// Zero length.
-	if (count < 0)
-		return;
-	count++;
-
-#ifdef RANGECHECK
-	if (dc_x >= screen->width
-		|| dc_yl < 0 || dc_yh >= screen->height)
-	{
-		I_Error ("R_DrawFuzzColumnD_C: %i to %i at %i",
-				 dc_yl, dc_yh, dc_x);
-	}
-#endif
-
-	dest = (unsigned int *)(ylookup[dc_yl] + columnofs[dc_x]);
-
-	// [RH] This is actually slightly brighter than
-	//		the indexed version, but it's close enough.
-	{
-		int fuzz = fuzzpos;
-		int pitch = dc_pitch >> 2;
-
-		do
-		{
-			unsigned int work = dest[fuzzoffset[fuzz]>>2];
-			*dest = work - ((work >> 2) & 0x3f3f3f);
-
-			// Clamp table lookup index.
-			fuzz = (fuzz + 1) & (FUZZTABLE - 1);
-			
-			dest += pitch;
-		} while (--count);
-
-		fuzzpos = (fuzz + 3) & (FUZZTABLE - 1);
-	}
-}
-
-void R_DrawTranslucentColumnD_C (void)
-{
-	int 				count;
-	unsigned int*		dest;
-	fixed_t 			frac;
-	fixed_t 			fracstep;
-
-	count = dc_yh - dc_yl;
-	if (count < 0)
-		return;
-	count++;
-
-#ifdef RANGECHECK
-	if (dc_x >= screen->width
-		|| dc_yl < 0
-		|| dc_yh >= screen->height)
-	{
-		I_Error ( "R_DrawTranslucentColumnD_C: %i to %i at %i",
-				  dc_yl, dc_yh, dc_x);
-	}
-	
-#endif 
-
-	dest = (unsigned int *)(ylookup[dc_yl] + columnofs[dc_x]);
-
-	fracstep = dc_iscale;
-	frac = dc_texturefrac;
-
-	{
-		unsigned int *shademap = dc_shademap;
-		byte *source = dc_source;
-		int mask = dc_mask;
-		int pitch = dc_pitch >> 2;
-
-		do
-		{
-			*dest = ((*dest >> 1) & 0x7f7f7f) +
-					((shademap[source[(frac>>FRACBITS)&mask]] >> 1) & 0x7f7f7f);
-			dest += pitch;
-
-			frac += fracstep;
-		} while (--count);
-	}
-}
-
-void R_DrawTranslatedColumnD_C (void)
-{
-	int 				count;
-	unsigned int*		dest;
-	fixed_t 			frac;
-	fixed_t 			fracstep;
-
-	count = dc_yh - dc_yl;
-	if (count < 0)
-		return;
-	count++;
-
-#ifdef RANGECHECK
-	if (dc_x >= screen->width
-		|| dc_yl < 0
-		|| dc_yh >= screen->height)
-	{
-		I_Error ( "R_DrawTranslatedColumnD_C: %i to %i at %i",
-				  dc_yl, dc_yh, dc_x);
-	}
-	
-#endif
-
-
-	dest = (unsigned int *)(ylookup[dc_yl] + columnofs[dc_x]);
-
-	fracstep = dc_iscale;
-	frac = dc_texturefrac;
-
-	// Here we do an additional index re-mapping.
-	{
-		byte *source = dc_source;
-		unsigned int *shademap = dc_shademap;
-		byte *translation = dc_translation;
-		int mask = dc_mask;
-		int pitch = dc_pitch >> 2;
-
-		do
-		{
-			*dest = shademap[translation[source[(frac>>FRACBITS) & mask]]];
-			dest += pitch;
-			
-			frac += fracstep;
-		} while (--count);
-	}
-}
-
-void R_DrawSpanD (void)
-{ 
-	fixed_t 			xfrac;
-	fixed_t 			yfrac;
-	unsigned int*		dest;
-	int 				count;
-	int 				spot;
-
-#ifdef RANGECHECK 
-	if (ds_x2 < ds_x1
-		|| ds_x1<0
-		|| ds_x2>=screen->width
-		|| ds_y>screen->height)
-	{
-		I_Error( "R_DrawSpan: %i to %i at %i",
-				 ds_x1,ds_x2,ds_y);
-	}
-//		dscount++;
-#endif
-
-	
-	xfrac = ds_xfrac;
-	yfrac = ds_yfrac;
-
-	dest = (unsigned int *)(ylookup[ds_y] + columnofs[ds_x1]);
-
-	count = ds_x2 - ds_x1 + 1;
-
-	{
-		byte *source = ds_source;
-		unsigned int *shademap = (unsigned int *)ds_colormap;
-		int colsize = ds_colsize >> 2;
-		int xstep = ds_xstep;
-		int ystep = ds_ystep;
-
-		do {
-			spot = ((yfrac>>(16-6))&(63*64)) + ((xfrac>>16)&63);
-
-			// Lookup pixel from flat texture tile,
-			//  re-index using light/colormap.
-			*dest = shademap[source[spot]];
-			dest += colsize;
-
-			// Next step in u,v.
-			xfrac += xstep; 
-			yfrac += ystep;
-		} while (--count);
-	}
-}
-
-
-
 /****************************************************/
 /****************************************************/
 
@@ -971,16 +878,13 @@ void R_DrawSpanD (void)
 //
 void R_InitTranslationTables ()
 {
-	int i;
+	int i, j;
 		
-	translationtables = (byte *)Z_Malloc (256*(2*MAXPLAYERS+3)+255, PU_STATIC, NULL);
+	translationtables = (byte *)Z_Malloc (256*(2*MAXPLAYERS+3+32)+255, PU_STATIC, NULL);
 	translationtables = (byte *)(((ptrdiff_t)translationtables + 255) & ~255);
 	
-	// [RH] Each player now gets their own translation table
-	//		(soon to be palettes). These are set up during
-	//		netgame arbitration and as-needed rather than
-	//		in here. We do, however load some text translation
-	//		tables from our PWAD (ala BOOM).
+	// [RH] Each player now gets their own translation table. These are set
+	//		up during netgame arbitration and as-needed rather than in here.
 
 	for (i = 0; i < 256; i++)
 		translationtables[i] = i;
@@ -1007,15 +911,29 @@ void R_InitTranslationTables ()
 			translationtables[i+(MAXPLAYERS*2+2)*256] = 190+(i-225); // blue
 		}
 	}
+
+	// set up shading tables for shaded columns
+	for (j = 0; j < 256; j++)
+	{
+		translationtables[j+(MAXPLAYERS*2+3)*256] = (j+1) >> 2;
+	}
+	for (i = 1; i < NUMCOLORMAPS; i++)
+	{
+		int a = (NUMCOLORMAPS - i) * (256 / NUMCOLORMAPS);
+		for (j = 0; j < 256; j++)
+		{
+			BYTE v = ((j * a) + 256) >> 10;
+			translationtables[j+(MAXPLAYERS*2+3+i)*256] = MIN<BYTE> (v, 64);
+		}
+	}
 }
 
 // [RH] Create a player's translation table based on
 //		a given mid-range color.
 void R_BuildPlayerTranslation (int player, int color)
 {
-	palette_t *pal = GetDefaultPalette();
 	byte *table = &translationtables[player*256*2];
-	playerskin_t *skin = &skins[players[player].userinfo.skin];
+	FPlayerSkin *skin = &skins[players[player].userinfo.skin];
 
 	byte i;
 	byte start = skin->range0start;
@@ -1046,16 +964,13 @@ void R_BuildPlayerTranslation (int player, int color)
 		for (i = start; i <= end; i++)
 		{
 			float uses, usev;
-			uses = MAX (0.f, s);
-			uses = MIN (1.f, s);
-			usev = MAX (0.f, v);
-			usev = MIN (1.f, v);
+			uses = clamp (s, 0.f, 1.f);
+			usev = clamp (v, 0.f, 1.f);
 			HSVtoRGB (&r, &g, &b, h, uses, usev);
-			table[i] = BestColor (pal->basecolors,
-								  (int)(r * 255.f),
-								  (int)(g * 255.f),
-								  (int)(b * 255.f),
-								  pal->numcolors);
+			table[i] = ColorMatcher.Pick (
+				clamp ((int)(r * 255.f), 0, 255),
+				clamp ((int)(g * 255.f), 0, 255),
+				clamp ((int)(b * 255.f), 0, 255));
 			s += sdelta;
 			v += vdelta;
 		}
@@ -1068,14 +983,12 @@ void R_BuildPlayerTranslation (int player, int color)
 		for (i = start; i <= end; i++)
 		{
 			v = vdelta * (float)(i - start) + basev - 0.2352937f;
-			v = MIN (1.f, v);
-			v = MAX (0.f, v);
+			v = clamp (v, 0.f, 1.f);
 			HSVtoRGB (&r, &g, &b, h, s, v);
-			table[i] = BestColor (pal->basecolors,
-								  (int)(r * 255.f),
-								  (int)(g * 255.f),
-								  (int)(b * 255.f),
-								  pal->numcolors);
+			table[i] = ColorMatcher.Pick (
+				clamp ((int)(r * 255.f), 0, 255),
+				clamp ((int)(g * 255.f), 0, 255),
+				clamp ((int)(b * 255.f), 0, 255));
 		}
 
 		// Build rain/lifegem translation
@@ -1087,57 +1000,26 @@ void R_BuildPlayerTranslation (int player, int color)
 			s = MIN (bases, 0.8965f - 0.0962f*(float)(i - 161));
 			v = MIN (1.f, (0.2102f + 0.0489f*(float)(i - 144)) * basev);
 			HSVtoRGB (&r, &g, &b, h, s, v);
-			table[i] = BestColor (pal->basecolors,
-								  (int)(r * 255.f),
-								  (int)(g * 255.f),
-								  (int)(b * 255.f),
-								  pal->numcolors);
+			table[i] = ColorMatcher.Pick (
+				clamp ((int)(r * 255.f), 0, 255),
+				clamp ((int)(g * 255.f), 0, 255),
+				clamp ((int)(b * 255.f), 0, 255));
 		}
 	}
 }
 
 //
-// R_InitBuffer 
-// Creates lookup tables that avoid
-//	multiplies and other hassles
-//	for getting the framebuffer address
-//	of a pixel to draw.
+// R_InitBuffer
+//
+// Creates lookup tables that avoid multiplies and other hassles
+// for getting the framebuffer address of a pixel to draw.
 //
 void R_InitBuffer (int width, int height)
 {
-	int 		i;
-	byte		*buffer;
-	int			pitch;
-	int			xshift;
-
-	// Handle resize,
-	//	e.g. smaller view windows
-	//	with border and/or status bar.
-	viewwindowx = (screen->width-(width<<detailxshift))>>1;
-
-	// [RH] Adjust column offset according to bytes per pixel
-	//		and detail mode
-	xshift = (screen->is8bit) ? 0 : 2;
-	xshift += detailxshift;
-
-	// Column offset. For windows
-	for (i = 0; i < width; i++)
-		columnofs[i] = viewwindowx + (i << xshift);
-
-	// Same with base row offset.
-	if ((width<<detailxshift) == screen->width)
-		viewwindowy = 0;
-	else
-		viewwindowy = (ST_Y-(height<<detailyshift)) >> 1;
-
-	screen->Lock ();
-	buffer = screen->buffer;
-	pitch = screen->pitch;
-	screen->Unlock ();
-
-	// Precalculate all row offsets.
-	for (i=0 ; i<height ; i++)
-		ylookup[i] = buffer + ((i<<detailyshift)+viewwindowy)*pitch;
+	// Column offset for windows. (This should go away.)
+	// [Row offsets are calculated in R_SetupBuffer()]
+	for (int i = 0; i < width; i++)
+		columnofs[i] = viewwindowx + (i << detailxshift);
 }
 
 
@@ -1167,64 +1049,32 @@ void R_DrawBorder (int x1, int y1, int x2, int y2)
 ==================
 */
 
-BOOL BorderNeedRefresh;
+int BorderNeedRefresh;
 
 void V_MarkRect (int x, int y, int width, int height);
+void M_DrawFrame (int x, int y, int width, int height);
 
 void R_DrawViewBorder (void)
 {
-	int x, y;
-	int offset, size;
-	gameborder_t *border;
-
 	// [RH] Redraw the status bar if SCREENWIDTH > status bar width.
 	// Will draw borders around itself, too.
-	if (screen->width > 320)
+	if (SCREENWIDTH > 320)
 	{
-		SB_state = -1;
+		SB_state = screen->GetPageCount ();
 	}
 
-	if (realviewwidth == screen->width) {
+	if (realviewwidth == SCREENWIDTH)
+	{
 		return;
 	}
 
-	border = gameinfo.border;
-	offset = border->offset;
-	size = border->size;
-
-	R_DrawBorder (0, 0, screen->width, viewwindowy);
+	R_DrawBorder (0, 0, SCREENWIDTH, viewwindowy);
 	R_DrawBorder (0, viewwindowy, viewwindowx, realviewheight + viewwindowy);
-	R_DrawBorder (viewwindowx + realviewwidth, viewwindowy, screen->width, realviewheight + viewwindowy);
-	R_DrawBorder (0, viewwindowy + realviewheight, screen->width, ST_Y);
+	R_DrawBorder (viewwindowx + realviewwidth, viewwindowy, SCREENWIDTH, realviewheight + viewwindowy);
+	R_DrawBorder (0, viewwindowy + realviewheight, SCREENWIDTH, ST_Y);
 
-	for (x = viewwindowx; x < viewwindowx + realviewwidth; x += size)
-	{
-		screen->DrawPatch ((patch_t *)W_CacheLumpName (border->t, PU_CACHE),
-			x, viewwindowy - offset);
-		screen->DrawPatch ((patch_t *)W_CacheLumpName (border->b, PU_CACHE),
-			x, viewwindowy + realviewheight);
-	}
-	for (y = viewwindowy; y < viewwindowy + realviewheight; y += size)
-	{
-		screen->DrawPatch ((patch_t *)W_CacheLumpName (border->l, PU_CACHE),
-			viewwindowx - offset, y);
-		screen->DrawPatch ((patch_t *)W_CacheLumpName (border->r, PU_CACHE),
-			viewwindowx + realviewwidth, y);
-	}
-	// Draw beveled edge.
-	screen->DrawPatch ((patch_t *)W_CacheLumpName (border->tl, PU_CACHE),
-		viewwindowx-offset, viewwindowy-offset);
-	
-	screen->DrawPatch ((patch_t *)W_CacheLumpName (border->tr, PU_CACHE),
-		viewwindowx+realviewwidth, viewwindowy-offset);
-	
-	screen->DrawPatch ((patch_t *)W_CacheLumpName (border->bl, PU_CACHE),
-		viewwindowx-offset, viewwindowy+realviewheight);
-	
-	screen->DrawPatch ((patch_t *)W_CacheLumpName (border->br, PU_CACHE),
-		viewwindowx+realviewwidth, viewwindowy+realviewheight);
-
-	V_MarkRect (0, 0, screen->width, ST_Y);
+	M_DrawFrame (viewwindowx, viewwindowy, realviewwidth, realviewheight);
+	V_MarkRect (0, 0, SCREENWIDTH, ST_Y);
 }
 
 /*
@@ -1236,18 +1086,18 @@ void R_DrawViewBorder (void)
 ==================
 */
 
-BOOL BorderTopRefresh;
+int BorderTopRefresh;
 
-void R_DrawTopBorder (void)
+void R_DrawTopBorder ()
 {
 	int x, y;
 	int offset;
 	int size;
 
-	if (realviewwidth == screen->width)
+	if (realviewwidth == SCREENWIDTH)
 		return;
 
-	R_DrawBorder (0, 0, screen->width, 34);
+	R_DrawBorder (0, 0, SCREENWIDTH, 34);
 	offset = gameinfo.border->offset;
 	size = gameinfo.border->size;
 
@@ -1276,18 +1126,18 @@ void R_DrawTopBorder (void)
 
 // [RH] Double pixels in the view window horizontally
 //		and/or vertically (or not at all).
-void R_DetailDouble (void)
+void R_DetailDouble ()
 {
 	switch ((detailxshift << 1) | detailyshift)
 	{
 		case 1:		// y-double
 		{
-			int rowsize = realviewwidth << ((screen->is8bit) ? 0 : 2);
-			int pitch = screen->pitch;
+			int rowsize = realviewwidth;
+			int pitch = SCREENPITCH;
 			int y;
 			byte *line;
 
-			line = screen->buffer + viewwindowy*pitch + viewwindowx;
+			line = screen->GetBuffer() + viewwindowy*pitch + viewwindowx;
 			for (y = 0; y < viewheight; y++, line += pitch<<1)
 			{
 				memcpy (line+pitch, line, rowsize);
@@ -1298,11 +1148,11 @@ void R_DetailDouble (void)
 		case 2:		// x-double
 		{
 			int rowsize = realviewwidth >> 2;
-			int pitch = screen->pitch >> (2-detailyshift);
+			int pitch = SCREENPITCH >> (2-detailyshift);
 			int y,x;
-			unsigned *line,a,b;
+			DWORD *line,a,b;
 
-			line = (unsigned *)(screen->buffer + viewwindowy*screen->pitch + viewwindowx);
+			line = (DWORD *)(screen->GetBuffer() + viewwindowy*SCREENPITCH + viewwindowx);
 			for (y = 0; y < viewheight; y++, line += pitch)
 			{
 				for (x = 0; x < rowsize; x += 2)
@@ -1321,12 +1171,12 @@ void R_DetailDouble (void)
 		case 3:		// x- and y-double
 		{
 			int rowsize = realviewwidth >> 2;
-			int pitch = screen->pitch >> (2-detailyshift);
-			int realpitch = screen->pitch >> 2;
+			int pitch = SCREENPITCH >> (2-detailyshift);
+			int realpitch = SCREENPITCH >> 2;
 			int y,x;
-			unsigned *line,a,b;
+			DWORD *line,a,b;
 
-			line = (unsigned *)(screen->buffer + viewwindowy*screen->pitch + viewwindowx);
+			line = (DWORD *)(screen->GetBuffer() + viewwindowy*SCREENPITCH + viewwindowx);
 			for (y = 0; y < viewheight; y++, line += pitch)
 			{
 				for (x = 0; x < rowsize; x += 2)
@@ -1335,10 +1185,8 @@ void R_DetailDouble (void)
 					b = line[x+1];
 					a &= 0x00ff00ff;
 					b &= 0x00ff00ff;
-					line[x+0] = a | (a << 8);
-					line[x+0+realpitch] = a | (a << 8);
-					line[x+1] = b | (b << 8);
-					line[x+1+realpitch] = b | (b << 8);
+					line[x+0+realpitch] = line[x+0] = a | (a << 8);
+					line[x+1+realpitch] = line[x+1] = b | (b << 8);
 				}
 			}
 		}
@@ -1347,47 +1195,171 @@ void R_DetailDouble (void)
 }
 
 // [RH] Initialize the column drawer pointers
-void R_InitColumnDrawers (BOOL is8bit)
+void R_InitColumnDrawers ()
 {
-	if (is8bit)
+#ifdef USEASM
+	R_DrawColumn			= R_DrawColumnP_ASM;
+	R_DrawColumnHoriz		= R_DrawColumnHorizP_ASM;
+	R_DrawFuzzColumn		= R_DrawFuzzColumnP_ASM;
+	R_DrawTranslatedColumn	= R_DrawTranslatedColumnP_C;
+	R_DrawShadedColumn		= R_DrawShadedColumnP_C;
+	R_DrawSpan				= R_DrawSpanP_ASM;
+	if (CPUFamily <= 5)
+		rt_map4cols			= rt_map4cols_asm2;
+	else
+		rt_map4cols			= rt_map4cols_asm1;
+#else
+	R_DrawColumnHoriz		= R_DrawColumnHorizP_C;
+	R_DrawColumn			= R_DrawColumnP_C;
+	R_DrawFuzzColumn		= R_DrawFuzzColumnP_C;
+	R_DrawTranslatedColumn	= R_DrawTranslatedColumnP_C;
+	R_DrawShadedColumn		= R_DrawShadedColumnP_C;
+	R_DrawSpan				= R_DrawSpanP_C;
+	rt_map4cols				= rt_map4cols_c;
+#endif
+}
+
+// [RH] Choose column drawers in a single place
+EXTERN_CVAR (Bool, r_drawfuzz)
+EXTERN_CVAR (Float, transsouls)
+CVAR (Bool, r_drawtrans, true, 0)
+
+static BYTE *basecolormapsave;
+
+// Convenience macros, to make the following look more like OpenGL/Direct3D
+#define BL_ONE				FRACUNIT
+#define BL_ZERO				0
+#define BL_SRC_ALPHA		alpha
+#define BL_INV_SRC_ALPHA	(FRACUNIT-alpha)
+
+static bool R_SetBlendFunc (fixed_t fglevel, fixed_t bglevel)
+{
+	if (!*r_drawtrans || (fglevel == BL_ONE && bglevel == BL_ZERO))
 	{
-#ifdef USEASM
-		if (screen->height <= 240)
-			R_DrawColumn		= R_DrawColumnP_Unrolled;
+		if (dc_translation == NULL)
+		{
+			colfunc = basecolfunc;
+			hcolfunc_post1 = rt_map1col;
+			hcolfunc_post2 = rt_map2cols;
+			hcolfunc_post4 = rt_map4cols;
+		}
 		else
-			R_DrawColumn		= R_DrawColumnP_ASM;
-		R_DrawColumnHoriz		= R_DrawColumnHorizP_ASM;
-		R_DrawFuzzColumn		= R_DrawFuzzColumnP_ASM;
-		R_DrawTranslucentColumn = R_DrawTranslucentColumnP_C;
-		R_DrawTranslatedColumn	= R_DrawTranslatedColumnP_C;
-		R_DrawSpan				= R_DrawSpanP_ASM;
-		if (CPUFamily <= 5)
-			rt_map4cols			= rt_map4cols_asm2;
-		else
-			rt_map4cols			= rt_map4cols_asm1;
-#else
-		R_DrawColumnHoriz		= R_DrawColumnHorizP_C;
-		R_DrawColumn			= R_DrawColumnP_C;
-		R_DrawFuzzColumn		= R_DrawFuzzColumnP_C;
-		R_DrawTranslucentColumn = R_DrawTranslucentColumnP_C;
-		R_DrawTranslatedColumn	= R_DrawTranslatedColumnP_C;
-		R_DrawSpan				= R_DrawSpanP_C;
-		rt_map4cols				= rt_map4cols_c;
-#endif
-	} else {
-#ifdef USEASM
-		R_DrawColumnHoriz		= R_DrawColumnHorizP_ASM;
-		R_DrawColumn			= R_DrawColumnD_C;
-		R_DrawFuzzColumn		= R_DrawFuzzColumnD_C;
-		R_DrawTranslucentColumn = R_DrawTranslucentColumnD_C;
-		R_DrawTranslatedColumn	= R_DrawTranslatedColumnD_C;
-#else
-		R_DrawColumnHoriz		= R_DrawColumnHorizP_C;
-		R_DrawColumn			= R_DrawColumnD_C;
-		R_DrawFuzzColumn		= R_DrawFuzzColumnD_C;
-		R_DrawTranslucentColumn = R_DrawTranslucentColumnD_C;
-		R_DrawTranslatedColumn	= R_DrawTranslatedColumnD_C;
-#endif
-		R_DrawSpan				= R_DrawSpanD;
+		{
+			colfunc = transcolfunc;
+			hcolfunc_post1 = rt_tlate1col;
+			hcolfunc_post2 = rt_tlate2cols;
+			hcolfunc_post4 = rt_tlate4cols;
+		}
+		r_MarkTrans = false;
+		return true;
 	}
+	if (fglevel == BL_ZERO && bglevel == BL_ONE)
+	{
+		return false;
+	}
+	if (fglevel + bglevel <= BL_ONE)
+	{ // Colors won't overflow when added
+		dc_srcblend = Col2RGB8[fglevel>>10];
+		dc_destblend = Col2RGB8[bglevel>>10];
+		if (dc_translation == NULL)
+		{
+			colfunc = R_DrawAddColumnP_C;
+			hcolfunc_post1 = rt_add1col;
+			hcolfunc_post2 = rt_add2cols;
+			hcolfunc_post4 = rt_add4cols;
+		}
+		else
+		{
+			colfunc = R_DrawTlatedAddColumnP_C;
+			hcolfunc_post1 = rt_tlateadd1col;
+			hcolfunc_post2 = rt_tlateadd2cols;
+			hcolfunc_post4 = rt_tlateadd4cols;
+		}
+	}
+	else
+	{ // Colors might overflow when added
+		dc_srcblend = Col2RGB8_LessPrecision[fglevel>>10];
+		dc_destblend = Col2RGB8_LessPrecision[bglevel>>10];
+		if (dc_translation == NULL)
+		{
+			colfunc = R_DrawAddClampColumnP_C;
+			hcolfunc_post1 = rt_addclamp1col;
+			hcolfunc_post2 = rt_addclamp2cols;
+			hcolfunc_post4 = rt_addclamp4cols;
+		}
+		else
+		{
+			colfunc = R_DrawAddClampTranslatedColumnP_C;
+			hcolfunc_post1 = rt_tlateaddclamp1col;
+			hcolfunc_post2 = rt_tlateaddclamp2cols;
+			hcolfunc_post4 = rt_tlateaddclamp4cols;
+		}
+	}
+	r_MarkTrans = true;
+	return true;
+}
+
+ESPSResult R_SetPatchStyle (int style, fixed_t alpha, BYTE *translation, DWORD color)
+{
+	fixed_t fglevel, bglevel;
+
+	if (style == STYLE_OptFuzzy)
+	{
+		style = (*r_drawfuzz || !*r_drawtrans) ? STYLE_Fuzzy : STYLE_Translucent;
+	}
+	else if (style == STYLE_SoulTrans)
+	{
+		style = STYLE_Translucent;
+		alpha = (fixed_t)(FRACUNIT * *transsouls);
+	}
+
+	alpha = clamp<fixed_t> (alpha, 0, FRACUNIT);
+
+	dc_translation = translation;
+	basecolormapsave = basecolormap;
+
+	switch (style)
+	{
+		// Special modes
+	case STYLE_Fuzzy:
+		colfunc = fuzzcolfunc;
+		r_MarkTrans = true;
+		return DoDraw0;
+
+	case STYLE_Shaded:
+		colfunc = R_DrawShadedColumn;
+		dc_color = basecolormap[APART(color)];
+		dc_colormap = basecolormap = &translationtables[(MAXPLAYERS*2+3)*256];
+		hcolfunc_post1 = rt_shaded1col;
+		hcolfunc_post2 = rt_shaded2cols;
+		hcolfunc_post4 = rt_shaded4cols;
+		r_MarkTrans = true;
+		return *r_columnmethod ? DoDraw1 : DoDraw0;
+
+		// Standard modes
+	case STYLE_Normal:
+		fglevel = BL_ONE;
+		bglevel = BL_ZERO;
+		break;
+
+	case STYLE_Translucent:
+		fglevel = BL_SRC_ALPHA;
+		bglevel = BL_INV_SRC_ALPHA;
+		break;
+
+	case STYLE_Add:
+		fglevel = BL_SRC_ALPHA;
+		bglevel = BL_ONE;
+		break;
+
+	default:
+		return DontDraw;
+	}
+	return R_SetBlendFunc (fglevel, bglevel) ?
+		(*r_columnmethod ? DoDraw1 : DoDraw0) : DontDraw;
+}
+
+void R_FinishSetPatchStyle ()
+{
+	basecolormap = basecolormapsave;
 }

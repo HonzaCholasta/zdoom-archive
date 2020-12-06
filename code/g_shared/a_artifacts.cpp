@@ -4,13 +4,13 @@
 #include "p_local.h"
 #include "c_dispatch.h"
 #include "gi.h"
-#include "dstrings.h"
 #include "s_sound.h"
 #include "m_random.h"
 #include "p_local.h"
 #include "p_spec.h"
 #include "p_lnspec.h"
 #include "p_enemy.h"
+#include "p_effect.h"
 #include "a_artifacts.h"
 #include "sbar.h"
 
@@ -23,10 +23,12 @@
 #define SPEEDTICS (45*TICRATE)
 #define MAULATORTICS (25*TICRATE)
 
+EXTERN_CVAR (Bool, r_drawfuzz);
+
 bool (*ArtiDispatch[NUMARTIFACTS]) (player_t *, artitype_t);
 const char *ArtiPics[NUMARTIFACTS];
 
-IMPLEMENT_DEF_SERIAL (APowerup, AArtifact);
+IMPLEMENT_ABSTRACT_ACTOR (APowerup)
 
 static int PowerTics[NUMPOWERS] =
 {
@@ -132,8 +134,18 @@ bool P_GivePower (player_t *player, powertype_t power)
 		if (gameinfo.gametype == GAME_Heretic)
 		{
 			player->mo->flags3 |= MF3_GHOST;
-			player->mo->translucency = HR_SHADOW;
+			player->mo->alpha = HR_SHADOW;
+			player->mo->RenderStyle = STYLE_Translucent;
 		}
+		else if (gameinfo.gametype == GAME_Doom)
+		{
+			player->mo->alpha = FRACUNIT/5;
+			player->mo->RenderStyle = STYLE_OptFuzzy;
+		}
+	}
+	else if (power == pw_invulnerability)
+	{
+		player->mo->effects &= ~FX_RESPAWNINVUL;
 	}
 	return true;
 }
@@ -161,7 +173,7 @@ bool P_GiveArtifact (player_t *player, artitype_t arti)
 	}
 	else
 	{
-		if (arti >= arti_firstpuzzitem && multiplayer && !deathmatch.value)
+		if (arti >= arti_firstpuzzitem && multiplayer && !*deathmatch)
 		{ // Can't carry more than 1 puzzle item in coop netplay
 			return false;
 		}
@@ -259,11 +271,8 @@ void A_CheckTeleRing (AActor *);
 
 class ATelOtherFX1 : public AActor
 {
-	DECLARE_ACTOR (ATelOtherFX1, AActor);
+	DECLARE_ACTOR (ATelOtherFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ATelOtherFX1, AActor);
-REGISTER_ACTOR (ATelOtherFX1, Any);
 
 FState ATelOtherFX1::States[] =
 {
@@ -313,71 +322,50 @@ FState ATelOtherFX1::States[] =
 	S_BRIGHT (TRNG, 'D',    4, A_CheckTeleRing              , &States[S_TELO_FX5+0])
 };
 
-void ATelOtherFX1::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_TELO_FX1];
-	info->deathstate = &States[S_TELO_FX_DONE];
-	info->damage = 10001;
-	info->flags = MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_NOBLOCKMAP;
-	info->flags2 = MF2_NOTELEPORT;
-}
+IMPLEMENT_ACTOR (ATelOtherFX1, Any, -1, 0)
+	PROP_DamageLong (10001)
+	PROP_Flags (MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_NOBLOCKMAP)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_TELO_FX1)
+	PROP_DeathState (S_TELO_FX_DONE)
+END_DEFAULTS
 
 class ATelOtherFX2 : public ATelOtherFX1
 {
-	DECLARE_STATELESS_ACTOR (ATelOtherFX2, ATelOtherFX1);
+	DECLARE_STATELESS_ACTOR (ATelOtherFX2, ATelOtherFX1)
 };
 
-IMPLEMENT_DEF_SERIAL (ATelOtherFX2, ATelOtherFX1);
-REGISTER_ACTOR (ATelOtherFX2, Any);
-
-void ATelOtherFX2::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->spawnstate = &ATelOtherFX1::States[S_TELO_FX2];
-}
+IMPLEMENT_STATELESS_ACTOR (ATelOtherFX2, Any, -1, 0)
+	PROP_SpawnState (S_TELO_FX2)
+END_DEFAULTS
 
 class ATelOtherFX3 : public ATelOtherFX1
 {
-	DECLARE_STATELESS_ACTOR (ATelOtherFX3, ATelOtherFX1);
+	DECLARE_STATELESS_ACTOR (ATelOtherFX3, ATelOtherFX1)
 };
 
-IMPLEMENT_DEF_SERIAL (ATelOtherFX3, ATelOtherFX1);
-REGISTER_ACTOR (ATelOtherFX3, Any);
-
-void ATelOtherFX3::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->spawnstate = &ATelOtherFX1::States[S_TELO_FX3];
-}
+IMPLEMENT_STATELESS_ACTOR (ATelOtherFX3, Any, -1, 0)
+	PROP_SpawnState (S_TELO_FX3)
+END_DEFAULTS
 
 class ATelOtherFX4 : public ATelOtherFX1
 {
-	DECLARE_STATELESS_ACTOR (ATelOtherFX4, ATelOtherFX1);
+	DECLARE_STATELESS_ACTOR (ATelOtherFX4, ATelOtherFX1)
 };
 
-IMPLEMENT_DEF_SERIAL (ATelOtherFX4, ATelOtherFX1);
-REGISTER_ACTOR (ATelOtherFX4, Any);
-
-void ATelOtherFX4::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->spawnstate = &ATelOtherFX1::States[S_TELO_FX4];
-}
+IMPLEMENT_STATELESS_ACTOR (ATelOtherFX4, Any, -1, 0)
+	PROP_SpawnState (S_TELO_FX4)
+END_DEFAULTS
 
 class ATelOtherFX5 : public ATelOtherFX1
 {
-	DECLARE_STATELESS_ACTOR (ATelOtherFX5, ATelOtherFX1);
+	DECLARE_STATELESS_ACTOR (ATelOtherFX5, ATelOtherFX1)
 };
 
-IMPLEMENT_DEF_SERIAL (ATelOtherFX5, ATelOtherFX1);
-REGISTER_ACTOR (ATelOtherFX5, Any);
-
-void ATelOtherFX5::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->spawnstate = &ATelOtherFX1::States[S_TELO_FX5];
-}
+IMPLEMENT_STATELESS_ACTOR (ATelOtherFX5, Any, -1, 0)
+	PROP_SpawnState (S_TELO_FX5)
+END_DEFAULTS
 
 static void TeloSpawn (AActor *source, const TypeInfo *type)
 {
@@ -419,7 +407,7 @@ void A_CheckTeleRing (AActor *actor)
 {
 	if (actor->special1-- <= 0)
 	{
-		actor->SetState (GetInfo (actor)->deathstate);
+		actor->SetState (actor->DeathState);
 	}
 }
 
@@ -491,7 +479,7 @@ void P_TeleportOther (AActor *victim)
 {
 	if (victim->player)
 	{
-		if (deathmatch.value)
+		if (*deathmatch)
 			P_TeleportToDeathmatchStarts (victim);
 		else
 			P_TeleportToPlayerStarts (victim);
@@ -522,11 +510,8 @@ void P_TeleportOther (AActor *victim)
 
 class ABlastEffect : public AActor
 {
-	DECLARE_ACTOR (ABlastEffect, AActor);
+	DECLARE_ACTOR (ABlastEffect, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABlastEffect, AActor);
-REGISTER_ACTOR (ABlastEffect, Any);
 
 FState ABlastEffect::States[] =
 {
@@ -541,14 +526,14 @@ FState ABlastEffect::States[] =
 	S_NORMAL (RADE, 'I',    4, NULL                         , NULL)
 };
 
-void ABlastEffect::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY|MF_NOCLIP;
-	info->flags2 = MF2_NOTELEPORT;
-	info->translucency = TRANSLUC66;
-}
+IMPLEMENT_ACTOR (ABlastEffect, Any, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY|MF_NOCLIP)
+	PROP_Flags2 (MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (TRANSLUC66)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 void ResetBlasted (AActor *mo)
 {
@@ -630,7 +615,7 @@ void P_BlastMobj (AActor *source, AActor *victim, fixed_t strength)
 		}
 		else
 		{
-			victim->momz = (1000 / GetInfo (victim)->mass) << FRACBITS;
+			victim->momz = (1000 / victim->Mass) << FRACBITS;
 		}
 		if (victim->player)
 		{

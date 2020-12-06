@@ -26,7 +26,7 @@
 
 // Data.
 #include "doomdef.h"
-#include "dstrings.h"
+#include "gstrings.h"
 
 #include "doomstat.h"
 
@@ -43,6 +43,7 @@
 #include "p_inter.h"
 #include "p_lnspec.h"
 #include "p_effect.h"
+#include "p_acs.h"
 
 #include "b_bot.h"	//Added by MC:
 
@@ -53,7 +54,10 @@
 #include "a_pickups.h"
 #include "gi.h"
 
+#include "sbar.h"
 
+CVAR (Bool, cl_showsprees, true, CVAR_ARCHIVE)
+CVAR (Bool, cl_showmultikills, true, CVAR_ARCHIVE)
 
 //
 // GET STUFF
@@ -84,9 +88,9 @@ void P_TouchSpecialThing (AActor *special, AActor *toucher)
     	toucher->player->dest = NULL;
 	}
 
-	if (special->IsKindOf (RUNTIME_CLASS (APickup)))
+	if (special->IsKindOf (RUNTIME_CLASS (AInventory)))
 	{
-		static_cast<APickup *>(special)->Touch (toucher);
+		static_cast<AInventory *>(special)->Touch (toucher);
 	}
 	else
 	{
@@ -102,34 +106,57 @@ void P_TouchSpecialThing (AActor *special, AActor *toucher)
 //		%g -> he/she/it
 //		%h -> him/her/it
 //		%p -> his/her/its
+//		%o -> other (victim)
+//		%k -> killer
 //
-void SexMessage (const char *from, char *to, int gender)
+void SexMessage (const char *from, char *to, int gender, const char *victim, const char *killer)
 {
-	static const char *genderstuff[3][3] = {
+	static const char *genderstuff[3][3] =
+	{
 		{ "he",  "him", "his" },
 		{ "she", "her", "her" },
 		{ "it",  "it",  "its" }
 	};
-	static const int gendershift[3][3] = {
+	static const int gendershift[3][3] =
+	{
 		{ 2, 3, 3 },
 		{ 3, 3, 3 },
 		{ 2, 2, 3 }
 	};
 	int gendermsg;
+	const char *subst = NULL;
 
-	do {
-		if (*from != '%') {
+	do
+	{
+		if (*from != '%')
+		{
 			*to++ = *from;
-		} else {
-			switch (from[1]) {
-				case 'g':	gendermsg = 0;	break;
-				case 'h':	gendermsg = 1;	break;
-				case 'p':	gendermsg = 2;	break;
-				default:	gendermsg = -1;	break;
+		}
+		else
+		{
+			switch (from[1])
+			{
+			default:	gendermsg = -1;	break;
+			case 'g':	gendermsg = 0;	break;
+			case 'h':	gendermsg = 1;	break;
+			case 'p':	gendermsg = 2;	break;
+			case 'o':	subst = victim;	break;
+			case 'k':	subst = killer;	break;
 			}
-			if (gendermsg < 0) {
+			if (subst != NULL)
+			{
+				int len = strlen (subst);
+				memcpy (to, subst, len);
+				to += len;
+				from++;
+				subst = NULL;
+			}
+			else if (gendermsg < 0)
+			{
 				*to++ = '%';
-			} else {
+			}
+			else
+			{
 				strcpy (to, genderstuff[gender][gendermsg]);
 				to += gendershift[gender][gendermsg];
 				from++;
@@ -145,11 +172,12 @@ void ClientObituary (AActor *self, AActor *inflictor, AActor *attacker)
 {
 	int	 mod;
 	const char *message;
+	int messagenum;
 	char gendermessage[1024];
 	BOOL friendly;
 	int  gender;
 
-	if (!self->player)
+	if (self->player == NULL)
 		return;
 
 	gender = self->player->userinfo.gender;
@@ -158,62 +186,43 @@ void ClientObituary (AActor *self, AActor *inflictor, AActor *attacker)
 	if (inflictor && inflictor->player == self->player)
 		MeansOfDeath = MOD_UNKNOWN;
 
-	if (multiplayer && !deathmatch.value)
+	if (multiplayer && !*deathmatch)
 		MeansOfDeath |= MOD_FRIENDLY_FIRE;
 
 	friendly = MeansOfDeath & MOD_FRIENDLY_FIRE;
 	mod = MeansOfDeath & ~MOD_FRIENDLY_FIRE;
 	message = NULL;
+	messagenum = 0;
 
 	switch (mod)
 	{
-		case MOD_SUICIDE:
-			message = OB_SUICIDE;
-			break;
-		case MOD_FALLING:
-			message = OB_FALLING;
-			break;
-		case MOD_CRUSH:
-			message = OB_CRUSH;
-			break;
-		case MOD_EXIT:
-			message = OB_EXIT;
-			break;
-		case MOD_WATER:
-			message = OB_WATER;
-			break;
-		case MOD_SLIME:
-			message = OB_SLIME;
-			break;
-		case MOD_LAVA:
-			message = OB_LAVA;
-			break;
-		case MOD_BARREL:
-			message = OB_BARREL;
-			break;
-		case MOD_SPLASH:
-			message = OB_SPLASH;
-			break;
+	case MOD_SUICIDE:		messagenum = OB_SUICIDE;	break;
+	case MOD_FALLING:		messagenum = OB_FALLING;	break;
+	case MOD_CRUSH:			messagenum = OB_CRUSH;		break;
+	case MOD_EXIT:			messagenum = OB_EXIT;		break;
+	case MOD_WATER:			messagenum = OB_WATER;		break;
+	case MOD_SLIME:			messagenum = OB_SLIME;		break;
+	case MOD_LAVA:			messagenum = OB_LAVA;		break;
+	case MOD_BARREL:		messagenum = OB_BARREL;		break;
+	case MOD_SPLASH:		messagenum = OB_SPLASH;		break;
 	}
 
-	if (attacker && !message)
+	if (messagenum)
+		message = GStrings(messagenum);
+
+	if (attacker != NULL && message == NULL)
 	{
 		if (attacker == self)
 		{
 			switch (mod)
 			{
-				case MOD_R_SPLASH:
-					message = OB_R_SPLASH;
-					break;
-				case MOD_ROCKET:
-					message = OB_ROCKET;
-					break;
-				default:
-					message = OB_KILLEDSELF;
-					break;
+			case MOD_R_SPLASH:	messagenum = OB_R_SPLASH;		break;
+			case MOD_ROCKET:	messagenum = OB_ROCKET;			break;
+			default:			messagenum = OB_KILLEDSELF;		break;
 			}
+			message = GStrings(messagenum);
 		}
-		else if (!attacker->player)
+		else if (attacker->player == NULL)
 		{
 			if (mod == MOD_HIT)
 				message = attacker->GetHitObituary ();
@@ -222,14 +231,18 @@ void ClientObituary (AActor *self, AActor *inflictor, AActor *attacker)
 		}
 	}
 
-	if (message) {
-		SexMessage (message, gendermessage, gender);
-		Printf (PRINT_MEDIUM, "%s %s.\n", self->player->userinfo.netname, gendermessage);
+	if (message)
+	{
+		SexMessage (message, gendermessage, gender,
+			self->player->userinfo.netname, self->player->userinfo.netname);
+		Printf (PRINT_MEDIUM, "%s\n", gendermessage);
 		return;
 	}
 
-	if (attacker && attacker->player) {
-		if (friendly) {
+	if (attacker != NULL && attacker->player != NULL)
+	{
+		if (friendly)
+		{
 			int rnum = P_Random (pr_obituary);
 
 			attacker->player->fragcount -= 2;
@@ -237,81 +250,58 @@ void ClientObituary (AActor *self, AActor *inflictor, AActor *attacker)
 			self = attacker;
 			gender = self->player->userinfo.gender;
 
-			if (rnum < 64)
-				message = OB_FRIENDLY1;
-			else if (rnum < 128)
-				message = OB_FRIENDLY2;
-			else if (rnum < 192)
-				message = OB_FRIENDLY3;
-			else
-				message = OB_FRIENDLY4;
-		} else {
-			switch (mod) {
-				case MOD_FIST:
-					message = OB_MPFIST;
-					break;
-				case MOD_CHAINSAW:
-					message = OB_MPCHAINSAW;
-					break;
-				case MOD_PISTOL:
-					message = OB_MPPISTOL;
-					break;
-				case MOD_SHOTGUN:
-					message = OB_MPSHOTGUN;
-					break;
-				case MOD_SSHOTGUN:
-					message = OB_MPSSHOTGUN;
-					break;
-				case MOD_CHAINGUN:
-					message = OB_MPCHAINGUN;
-					break;
-				case MOD_ROCKET:
-					message = OB_MPROCKET;
-					break;
-				case MOD_R_SPLASH:
-					message = OB_MPR_SPLASH;
-					break;
-				case MOD_PLASMARIFLE:
-					message = OB_MPPLASMARIFLE;
-					break;
-				case MOD_BFG_BOOM:
-					message = OB_MPBFG_BOOM;
-					break;
-				case MOD_BFG_SPLASH:
-					message = OB_MPBFG_SPLASH;
-					break;
-				case MOD_TELEFRAG:
-					message = OB_MPTELEFRAG;
-					break;
-				case MOD_RAILGUN:
-					message = OB_RAILGUN;
-					break;
+			messagenum = OB_FRIENDLY1 + (rnum & 3);
+		}
+		else
+		{
+			switch (mod)
+			{
+			case MOD_FIST:			messagenum = OB_MPFIST;			break;
+			case MOD_CHAINSAW:		messagenum = OB_MPCHAINSAW;		break;
+			case MOD_PISTOL:		messagenum = OB_MPPISTOL;		break;
+			case MOD_SHOTGUN:		messagenum = OB_MPSHOTGUN;		break;
+			case MOD_SSHOTGUN:		messagenum = OB_MPSSHOTGUN;		break;
+			case MOD_CHAINGUN:		messagenum = OB_MPCHAINGUN;		break;
+			case MOD_ROCKET:		messagenum = OB_MPROCKET;		break;
+			case MOD_R_SPLASH:		messagenum = OB_MPR_SPLASH;		break;
+			case MOD_PLASMARIFLE:	messagenum = OB_MPPLASMARIFLE;	break;
+			case MOD_BFG_BOOM:		messagenum = OB_MPBFG_BOOM;		break;
+			case MOD_BFG_SPLASH:	messagenum = OB_MPBFG_SPLASH;	break;
+			case MOD_TELEFRAG:		messagenum = OB_MPTELEFRAG;		break;
+			case MOD_RAILGUN:		messagenum = OB_RAILGUN;		break;
 			}
 		}
+		if (messagenum)
+			message = GStrings(messagenum);
 	}
 
-	if (message) {
-		char work[256];
-
-		SexMessage (message, gendermessage, gender);
-		sprintf (work, "%%s %s\n", gendermessage);
-		Printf (PRINT_MEDIUM, work, self->player->userinfo.netname,
-				attacker->player->userinfo.netname);
+	if (message)
+	{
+		SexMessage (message, gendermessage, gender,
+			self->player->userinfo.netname, attacker->player->userinfo.netname);
+		Printf (PRINT_MEDIUM, "%s\n", gendermessage);
 		return;
 	}
 
-	SexMessage (OB_DEFAULT, gendermessage, gender);
-	Printf (PRINT_MEDIUM, "%s %s.\n", self->player->userinfo.netname, gendermessage);
+	SexMessage (GStrings(OB_DEFAULT), gendermessage, gender,
+		self->player->userinfo.netname, self->player->userinfo.netname);
+	Printf (PRINT_MEDIUM, "%s\n", gendermessage);
 }
 
 
 //
 // KillMobj
 //
-EXTERN_CVAR (fraglimit)
+EXTERN_CVAR (Int, fraglimit)
+extern void P_ExplodeMissile (AActor *);
 
 void AActor::Die (AActor *source, AActor *inflictor)
 {
+	if (flags & MF_MISSILE)
+	{ // [RH] When missiles die, they just explode
+		P_ExplodeMissile (this);
+		return;
+	}
 	flags &= ~(MF_SHOOTABLE|MF_FLOAT|MF_SKULLFLY|MF_NOGRAVITY);
 	flags |= MF_CORPSE|MF_DROPOFF;
 	flags2 &= ~MF2_PASSMOBJ;
@@ -341,15 +331,118 @@ void AActor::Die (AActor *source, AActor *inflictor)
 		{
 			source->player->frags[player - players]++;
 			if (player == source->player)	// [RH] Cumulative frag count
-				source->player->fragcount--;
+			{
+				char buff[256];
+
+				player->fragcount--;
+				if (*deathmatch && player->spreecount >= 5 && *cl_showsprees)
+				{
+					SexMessage (GStrings(SPREEKILLSELF), buff,
+						player->userinfo.gender, player->userinfo.netname,
+						player->userinfo.netname);
+					StatusBar->AttachMessage (new FHUDMessageFadeOut (buff,
+							1.5f, 0.2f, CR_WHITE, 3.f, 0.5f), 'KSPR');
+				}
+			}
 			else
-				source->player->fragcount++;
+			{
+				++source->player->fragcount;
+				++source->player->spreecount;
+				if (*deathmatch && *cl_showsprees)
+				{
+					const char *spreemsg;
+					char buff[256];
+
+					switch (source->player->spreecount)
+					{
+					case 5:
+						spreemsg = GStrings(SPREE5);
+						break;
+					case 10:
+						spreemsg = GStrings(SPREE10);
+						break;
+					case 15:
+						spreemsg = GStrings(SPREE15);
+						break;
+					case 20:
+						spreemsg = GStrings(SPREE20);
+						break;
+					case 25:
+						spreemsg = GStrings(SPREE25);
+						break;
+					default:
+						spreemsg = NULL;
+						break;
+					}
+
+					if (spreemsg == NULL && player->spreecount >= 5)
+					{
+						SexMessage (GStrings(SPREEOVER), buff, player->userinfo.gender,
+							player->userinfo.netname, source->player->userinfo.netname);
+						StatusBar->AttachMessage (new FHUDMessageFadeOut (buff,
+							1.5f, 0.2f, CR_WHITE, 3.f, 0.5f), 'KSPR');
+					}
+					else if (spreemsg != NULL)
+					{
+						SexMessage (spreemsg, buff, player->userinfo.gender,
+							player->userinfo.netname, source->player->userinfo.netname);
+						StatusBar->AttachMessage (new FHUDMessageFadeOut (buff,
+							1.5f, 0.2f, CR_WHITE, 3.f, 0.5f), 'KSPR');
+					}
+				}
+			}
+
+			// [RH] Multikills
+			source->player->multicount++;
+			if (source->player->lastkilltime > 0)
+			{
+				if (source->player->lastkilltime < level.time - 3*TICRATE)
+				{
+					source->player->multicount = 1;
+				}
+
+				if (*deathmatch &&
+					source->player->mo == players[consoleplayer].camera &&
+					*cl_showmultikills)
+				{
+					const char *multimsg;
+
+					switch (source->player->multicount)
+					{
+					case 1:
+						multimsg = NULL;
+						break;
+					case 2:
+						multimsg = GStrings(MULTI2);
+						break;
+					case 3:
+						multimsg = GStrings(MULTI3);
+						break;
+					case 4:
+						multimsg = GStrings(MULTI4);
+						break;
+					default:
+						multimsg = GStrings(MULTI5);
+						break;
+					}
+					if (multimsg != NULL)
+					{
+						char buff[256];
+
+						SexMessage (multimsg, buff, player->userinfo.gender,
+							player->userinfo.netname, source->player->userinfo.netname);
+						StatusBar->AttachMessage (new FHUDMessageFadeOut (buff,
+							1.5f, 0.8f, CR_RED, 3.f, 0.5f), 'MKIL');
+					}
+				}
+			}
+			source->player->lastkilltime = level.time;
 
 			// [RH] Implement fraglimit
-			if (deathmatch.value && fraglimit.value &&
-				(int)fraglimit.value == source->player->fragcount)
+			if (*deathmatch && *fraglimit &&
+				*fraglimit == source->player->fragcount)
 			{
-				Printf (PRINT_HIGH, "Fraglimit hit.\n");
+				Printf ("%s\n", GStrings(TXT_FRAGLIMIT));
 				G_ExitLevel (0);
 			}
 		}
@@ -364,6 +457,15 @@ void AActor::Die (AActor *source, AActor *inflictor)
 	
 	if (player)
 	{
+		// [RH] Death messages
+		ClientObituary (this, inflictor, source);
+
+		// Death script execution, care of Skull Tag
+		if (level.behavior != NULL)
+		{
+			level.behavior->StartTypedScripts (SCRIPT_Death, this);
+		}
+
 		// [RH] Force a delay between death and respawn
 		player->respawn_time = level.time + TICRATE;
 
@@ -383,6 +485,9 @@ void AActor::Die (AActor *source, AActor *inflictor)
 					players[i].enemy = NULL;
 				}
 			}
+
+			player->spreecount = 0;
+			player->multicount = 0;
 		}
 
 		// count environment kills against you
@@ -402,31 +507,26 @@ void AActor::Die (AActor *source, AActor *inflictor)
 		}
 	}
 
-	if (flags2 & MF2_FIREDAMAGE && GetInfo (this)->bdeathstate)
+	if (flags2 & MF2_FIREDAMAGE && BDeathState)
 	{ // Burn death
-		SetState (GetInfo (this)->bdeathstate);
+		SetState (BDeathState);
 	}
-	else if (flags2 & MF2_ICEDAMAGE && GetInfo (this)->ideathstate)
+	else if (flags2 & MF2_ICEDAMAGE && IDeathState)
 	{ // Ice death
-		SetState (GetInfo (this)->ideathstate);
+		SetState (IDeathState);
 	}
-	else if (health < -GetInfo (this)->spawnhealth 
-		&& GetInfo (this)->xdeathstate)
+	else if (health < -GetDefault()->health && XDeathState)
 	{ // Extreme death
-		SetState (GetInfo (this)->xdeathstate);
+		SetState (XDeathState);
 	}
 	else
 	{ // Normal death
-		SetState (GetInfo (this)->deathstate);
+		SetState (DeathState);
 	}
 
 	tics -= P_Random (pr_killmobj) & 3;
 	if (tics < 1)
 		tics = 1;
-				
-	// [RH] Death messages
-	if (player && level.time)
-		ClientObituary (this, inflictor, source);
 }
 
 
@@ -447,7 +547,7 @@ void P_AutoUseHealth(player_t *player, int saveHealth)
 
 	normalCount = player->inventory[arti_health];
 	superCount = player->inventory[arti_superhealth];
-	if ((gameskill.value == sk_baby) && (normalCount*25 >= saveHealth))
+	if ((*gameskill == sk_baby) && (normalCount*25 >= saveHealth))
 	{ // Use quartz flasks
 		count = (saveHealth+24)/25;
 		for(i = 0; i < count; i++)
@@ -465,7 +565,7 @@ void P_AutoUseHealth(player_t *player, int saveHealth)
 			P_PlayerRemoveArtifact (player, arti_superhealth);
 		}
 	}
-	else if ((gameskill.value == sk_baby)
+	else if ((*gameskill == sk_baby)
 		&& (superCount*100+normalCount*25 >= saveHealth))
 	{ // Use mystic urns and quartz flasks
 		count = (saveHealth+24)/25;
@@ -534,7 +634,7 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 	// [RH] Andy Baker's Stealth monsters
 	if (target->flags & MF_STEALTH)
 	{
-		target->translucency = OPAQUE;
+		target->alpha = OPAQUE;
 		target->visdir = -1;
 	}
 	if (target->flags & MF_SKULLFLY)
@@ -552,7 +652,7 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 		return;
 	}
 	player = target->player;
-	if (player && gameskill.value == sk_baby)
+	if (player && *gameskill == sk_baby)
 	{
 		// Take half damage in trainer mode
 		damage >>= 1;
@@ -568,8 +668,7 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 	// (i.e. Guantets/Chainsaw)
 	if (inflictor
 		&& !(target->flags & MF_NOCLIP)
-		&& (!source || !source->player)
-		&& !(inflictor->flags2 & MF2_NODMGTHRUST))
+		&& (!source || !source->player || !(inflictor->flags2 & MF2_NODMGTHRUST)))
 	{
 		int kickback;
 
@@ -584,7 +683,7 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 		{
 			ang = R_PointToAngle2 (inflictor->x, inflictor->y,
 				target->x, target->y);
-			thrust = damage*(FRACUNIT>>3)*kickback / GetInfo (target)->mass;
+			thrust = damage*(FRACUNIT>>3)*kickback / target->Mass;
 			// make fall forwards sometimes
 			if ((damage < 40) && (damage > target->health)
 				 && (target->z - inflictor->z > 64*FRACUNIT)
@@ -610,6 +709,11 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 			{
 				target->momx += FixedMul (thrust, finecosine[ang]);
 				target->momy += FixedMul (thrust, finesine[ang]);
+			}
+			// killough 11/98: thrust objects hanging off ledges
+			if (target->flags & MF_FALLING && target->gear >= MAXGEAR)
+			{
+				target->gear = 0;
 			}
 		}
 	}
@@ -644,7 +748,7 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 			MeansOfDeath |= MOD_FRIENDLY_FIRE;
 			if (damage < 10000)
 			{ // Still allow telefragging :-(
-				damage = (int)((float)damage * friendlyfire.value);
+				damage = (int)((float)damage * *teamdamage);
 				if (damage <= 0)
 					return;
 			}
@@ -692,15 +796,15 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 					if (player->armorpoints[i])
 					{
 						player->armorpoints[i] -= 
-							FixedDiv(FixedMul(damage<<FRACBITS,
-							player->mo->GetArmorIncrement (i)), 300*FRACUNIT);
+							Scale(damage<<FRACBITS,
+							player->mo->GetArmorIncrement (i), 300*FRACUNIT);
 						if (player->armorpoints[i] < 2*FRACUNIT)
 						{
 							player->armorpoints[i] = 0;
 						}
 					}
 				}
-				saved = FixedDiv (FixedMul (damage<<FRACBITS, savedPercent),
+				saved = Scale (damage<<FRACBITS, savedPercent,
 					100*FRACUNIT);
 				if (saved > savedPercent*2)
 				{	
@@ -710,7 +814,7 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 			}
 		}
 		if (damage >= player->health
-			&& ((gameskill.value == sk_baby) || deathmatch.value)
+			&& ((*gameskill == sk_baby) || *deathmatch)
 			&& !player->morphTics)
 		{ // Try to use some inventory health
 			P_AutoUseHealth (player, damage - player->health + 1);
@@ -788,7 +892,7 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 		target->Die (source, inflictor);
 		return;
 	}
-	if ((P_Random (pr_damagemobj) < GetInfo (target)->painchance)
+	if ((P_Random (pr_damagemobj) < target->PainChance)
 		 && !(target->flags & MF_SKULLFLY))
 	{
 		if (inflictor && inflictor->IsKindOf (RUNTIME_CLASS(ALightning)))
@@ -796,11 +900,11 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 			if (P_Random() < 96)
 			{
 				target->flags |= MF_JUSTHIT; // fight back!
-				target->SetState (GetInfo (target)->painstate);
+				target->SetState (target->PainState);
 			}
 			else
 			{ // "electrocute" the target
-				target->frame |= FF_FULLBRIGHT;
+				target->renderflags |= RF_FULLBRIGHT;
 				if (target->flags & MF_COUNTKILL && P_Random() < 128)
 				{
 					target->Howl ();
@@ -810,7 +914,7 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 		else
 		{
 			target->flags |= MF_JUSTHIT; // fight back!
-			target->SetState (GetInfo (target)->painstate);	
+			target->SetState (target->PainState);	
 			if (inflictor && inflictor->IsKindOf (RUNTIME_CLASS(APoisonCloud)))
 			{
 				if (target->flags & MF_COUNTKILL && P_Random() < 128)
@@ -838,10 +942,10 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 
 		target->target = source;
 		target->threshold = BASETHRESHOLD;
-		if (target->state == GetInfo (target)->spawnstate
-			&& GetInfo (target)->seestate != NULL)
+		if (target->state == target->SpawnState
+			&& target->SeeState != NULL)
 		{
-			target->SetState (GetInfo (target)->seestate);
+			target->SetState (target->SeeState);
 		}
 	}
 }
@@ -868,7 +972,7 @@ void P_PoisonDamage (player_t *player, AActor *source, int damage,
 	{ // target is invulnerable
 		return;
 	}
-	if (player && gameskill.value == sk_baby)
+	if (player && *gameskill == sk_baby)
 	{
 		// Take half damage in trainer mode
 		damage >>= 1;
@@ -879,7 +983,7 @@ void P_PoisonDamage (player_t *player, AActor *source, int damage,
 		return;
 	}
 	if (damage >= player->health
-		&& ((gameskill.value == sk_baby) || deathmatch.value)
+		&& ((*gameskill == sk_baby) || *deathmatch)
 		&& !player->morphTics)
 	{ // Try to use some inventory health
 		P_AutoUseHealth (player, damage - player->health+1);
@@ -915,7 +1019,7 @@ void P_PoisonDamage (player_t *player, AActor *source, int damage,
 	}
 	if (!(level.time&63) && playPainSound)
 	{
-		target->SetState (GetInfo (target)->painstate);
+		target->SetState (target->PainState);
 	}
 /*
 	if((P_Random() < target->info->painchance)
@@ -929,7 +1033,7 @@ void P_PoisonDamage (player_t *player, AActor *source, int damage,
 
 BOOL CheckCheatmode ();
 
-BEGIN_COMMAND (kill)
+CCMD (kill)
 {
 	if (argc > 1 && !stricmp (argv[1], "monsters"))
 	{
@@ -947,4 +1051,3 @@ BEGIN_COMMAND (kill)
 	}
 	C_HideConsole ();
 }
-END_COMMAND (kill)

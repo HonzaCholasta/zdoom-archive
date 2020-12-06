@@ -1,3 +1,4 @@
+#include "templates.h"
 #include "d_main.h"
 #include "m_alloc.h"
 #include "g_level.h"
@@ -18,7 +19,7 @@
 #include "r_sky.h"
 #include "c_console.h"
 #include "f_finale.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "v_video.h"
 #include "st_stuff.h"
 #include "hu_stuff.h"
@@ -33,8 +34,8 @@
 
 #include "gi.h"
 
-EXTERN_CVAR (sv_gravity)
-EXTERN_CVAR (sv_aircontrol)
+EXTERN_CVAR (Float, sv_gravity)
+EXTERN_CVAR (Float, sv_aircontrol)
 
 #define lioffset(x)		myoffsetof(level_pwad_info_t,x)
 #define cioffset(x)		myoffsetof(cluster_info_t,x)
@@ -97,7 +98,10 @@ int starttime;
 
 
 // ACS variables with world scope
-int WorldVars[NUM_WORLDVARS];
+int ACS_WorldVars[NUM_WORLDVARS];
+
+// ACS variables with global scope
+int ACS_GlobalVars[NUM_GLOBALVARS];
 
 
 extern BOOL netdemo;
@@ -173,7 +177,10 @@ static const char *MapInfoMapLevel[] =
 	"nofreelook",
 	"allowjump",
 	"nojump",
+	"fallingdamage",
+	"nofallingdamage",
 	"cdtrack",
+	"cdid",
 	"cd_start_track",
 	"cd_end1_track",
 	"cd_end2_track",
@@ -181,6 +188,8 @@ static const char *MapInfoMapLevel[] =
 	"cd_intermission_track",
 	"cd_title_track",
 	"warptrans",
+	"vertwallshade",
+	"horizwallshade",
 	NULL
 };
 
@@ -189,6 +198,7 @@ enum EMIType
 	MITYPE_IGNORE,
 	MITYPE_EATNEXT,
 	MITYPE_INT,
+	MITYPE_HEX,
 	MITYPE_COLOR,
 	MITYPE_MAPNAME,
 	MITYPE_LUMPNAME,
@@ -196,7 +206,10 @@ enum EMIType
 	MITYPE_SETFLAG,
 	MITYPE_SCFLAGS,
 	MITYPE_CLUSTER,
-	MITYPE_STRING
+	MITYPE_STRING,
+	MITYPE_MUSIC,
+	MITYPE_RELLIGHT,
+	MITYPE_CLRBYTES
 };
 
 struct MapInfoHandler
@@ -216,7 +229,7 @@ MapHandlers[] =
 	{ MITYPE_COLOR,		lioffset(outsidefog), 0 },
 	{ MITYPE_LUMPNAME,	lioffset(pname), 0 },
 	{ MITYPE_INT,		lioffset(partime), 0 },
-	{ MITYPE_STRING,	lioffset(music), 0 },
+	{ MITYPE_MUSIC,		lioffset(music), lioffset(musicorder) },
 	{ MITYPE_SETFLAG,	LEVEL_NOINTERMISSION, 0 },
 	{ MITYPE_SETFLAG,	LEVEL_DOUBLESKY, 0 },
 	{ MITYPE_SETFLAG,	LEVEL_NOSOUNDCLIPPING, 0 },
@@ -230,13 +243,17 @@ MapHandlers[] =
 	{ MITYPE_SCFLAGS,	LEVEL_SPECLOWERFLOOR, ~LEVEL_SPECACTIONSMASK },
 	{ MITYPE_IGNORE,	0, 0 },		// lightning
 	{ MITYPE_LUMPNAME,	lioffset(fadetable), 0 },
-	{ MITYPE_SETFLAG,	LEVEL_EVENLIGHTING, 0 },
+	{ MITYPE_CLRBYTES,	lioffset(WallVertLight), lioffset(WallHorizLight) },
 	{ MITYPE_SETFLAG,	LEVEL_SNDSEQTOTALCTRL, 0 },
 	{ MITYPE_SETFLAG,	LEVEL_FORCENOSKYSTRETCH, 0 },
 	{ MITYPE_SCFLAGS,	LEVEL_FREELOOK_YES, ~LEVEL_FREELOOK_NO },
 	{ MITYPE_SCFLAGS,	LEVEL_FREELOOK_NO, ~LEVEL_FREELOOK_YES },
 	{ MITYPE_SCFLAGS,	LEVEL_JUMP_YES, ~LEVEL_JUMP_NO },
 	{ MITYPE_SCFLAGS,	LEVEL_JUMP_NO, ~LEVEL_JUMP_YES },
+	{ MITYPE_SCFLAGS,	LEVEL_FALLDMG_YES, ~LEVEL_FALLDMG_NO },
+	{ MITYPE_SCFLAGS,	LEVEL_FALLDMG_NO, ~LEVEL_FALLDMG_YES },
+	{ MITYPE_INT,		lioffset(cdtrack), 0 },
+	{ MITYPE_HEX,		lioffset(cdid), 0 },
 	{ MITYPE_EATNEXT,	0, 0 },
 	{ MITYPE_EATNEXT,	0, 0 },
 	{ MITYPE_EATNEXT,	0, 0 },
@@ -244,7 +261,8 @@ MapHandlers[] =
 	{ MITYPE_EATNEXT,	0, 0 },
 	{ MITYPE_EATNEXT,	0, 0 },
 	{ MITYPE_EATNEXT,	0, 0 },
-	{ MITYPE_EATNEXT,	0, 0 },
+	{ MITYPE_RELLIGHT,	lioffset(WallVertLight), 0 },
+	{ MITYPE_RELLIGHT,	lioffset(WallHorizLight), 0 },
 };
 
 static const char *MapInfoClusterLevel[] =
@@ -254,6 +272,8 @@ static const char *MapInfoClusterLevel[] =
 	"music",
 	"flat",
 	"hub",
+	"cdtrack",
+	"cdid",
 	NULL
 };
 
@@ -261,9 +281,11 @@ MapInfoHandler ClusterHandlers[] =
 {
 	{ MITYPE_STRING,	cioffset(entertext), 0 },
 	{ MITYPE_STRING,	cioffset(exittext), 0 },
-	{ MITYPE_STRING,	cioffset(messagemusic), 0 },
+	{ MITYPE_MUSIC,		cioffset(messagemusic), cioffset(musicorder) },
 	{ MITYPE_LUMPNAME,	cioffset(finaleflat), 0 },
-	{ MITYPE_SETFLAG,	CLUSTER_HUB, 0 }
+	{ MITYPE_SETFLAG,	CLUSTER_HUB, 0 },
+	{ MITYPE_INT,		cioffset(cdtrack), 0 },
+	{ MITYPE_HEX,		cioffset(cdid), 0 }
 };
 
 static void ParseMapInfoLower (MapInfoHandler *handlers,
@@ -299,6 +321,8 @@ static void SetLevelDefaults (level_pwad_info_t *levelinfo)
 	memset (levelinfo, 0, sizeof(*levelinfo));
 	levelinfo->snapshot = NULL;
 	levelinfo->outsidefog = 0xff000000;
+	levelinfo->WallHorizLight = -8;
+	levelinfo->WallVertLight = +8;
 	strncpy (levelinfo->fadetable, "COLORMAP", 8);
 }
 
@@ -343,7 +367,6 @@ void G_ParseMapInfo ()
 					// Hexen levels are automatically nointermission
 					// and even lighting and no auto sound sequences
 					levelflags |= LEVEL_NOINTERMISSION
-								| LEVEL_EVENLIGHTING
 								| LEVEL_SNDSEQTOTALCTRL;
 				}
 				levelindex = FindWadLevelInfo (sc_String);
@@ -354,6 +377,10 @@ void G_ParseMapInfo ()
 				}
 				levelinfo = wadlevelinfos + levelindex;
 				memcpy (levelinfo, &defaultinfo, sizeof(*levelinfo));
+				if (HexenHack)
+				{
+					levelinfo->WallHorizLight = levelinfo->WallVertLight = 0;
+				}
 				uppercopy (levelinfo->mapname, sc_String);
 				SC_MustGetString ();
 				ReplaceString (&levelinfo->level_name, sc_String);
@@ -386,6 +413,7 @@ void G_ParseMapInfo ()
 		}
 		SC_Close ();
 	}
+	EndSequences.ShrinkToFit ();
 }
 
 static void ParseMapInfoLower (MapInfoHandler *handlers,
@@ -396,7 +424,6 @@ static void ParseMapInfoLower (MapInfoHandler *handlers,
 {
 	int entry;
 	MapInfoHandler *handler;
-	char *string;
 	byte *info;
 
 	info = levelinfo ? (byte *)levelinfo : (byte *)clusterinfo;
@@ -424,20 +451,14 @@ static void ParseMapInfoLower (MapInfoHandler *handlers,
 			*((int *)(info + handler->data1)) = sc_Number;
 			break;
 
+		case MITYPE_HEX:
+			SC_MustGetString ();
+			*((int *)(info + handler->data1)) = strtoul (sc_String, NULL, 16);
+			break;
+
 		case MITYPE_COLOR:
 			SC_MustGetString ();
-			string = V_GetColorStringByName (sc_String);
-			if (string)
-			{
-				*((DWORD *)(info + handler->data1)) =
-					V_GetColorFromString (NULL, string);
-				delete[] string;
-			}
-			else
-			{
-				*((DWORD *)(info + handler->data1)) =
-									V_GetColorFromString (NULL, sc_String);
-			}
+			*((DWORD *)(info + handler->data1)) = V_GetColor (NULL, sc_String);
 			break;
 
 		case MITYPE_MAPNAME: {
@@ -556,6 +577,29 @@ static void ParseMapInfoLower (MapInfoHandler *handlers,
 			SC_MustGetString ();
 			ReplaceString ((char **)(info + handler->data1), sc_String);
 			break;
+
+		case MITYPE_MUSIC:
+			SC_MustGetString ();
+			{
+				char *colon = strchr (sc_String, ':');
+				if (colon)
+				{
+					*colon = 0;
+				}
+				ReplaceString ((char **)(info + handler->data1), sc_String);
+				*((int *)(info + handler->data2)) = colon ? atoi (colon + 1) : 0;
+			}
+			break;
+
+		case MITYPE_RELLIGHT:
+			SC_MustGetNumber ();
+			*((SBYTE *)(info + handler->data1)) = (SBYTE)clamp (sc_Number / 2, -128, 127);
+			break;
+
+		case MITYPE_CLRBYTES:
+			*((BYTE *)(info + handler->data1)) = 0;
+			*((BYTE *)(info + handler->data2)) = 0;
+			break;
 		}
 	}
 	if (levelinfo)
@@ -598,6 +642,19 @@ static void SetEndSequence (char *nextmap, int type)
 	}
 	strcpy (nextmap, "enDSeQ");
 	*((WORD *)(nextmap + 6)) = (WORD)seqnum;
+}
+
+void G_SetForEndGame (char *nextmap)
+{
+	if (gamemode == commercial)
+	{
+		SetEndSequence (nextmap, END_Cast);
+	}
+	else
+	{ // The ExMx games actually have different ends based on the episode,
+	  // but I want to keep this simple.
+		SetEndSequence (nextmap, END_Pic1);
+	}
 }
 
 static void zapDefereds (acsdefered_t *def)
@@ -645,22 +702,21 @@ void G_DeferedInitNew (char *mapname)
 	gameaction = ga_newgame2;
 }
 
-BEGIN_COMMAND (map)
+CCMD (map)
 {
 	if (argc > 1)
 	{
 		if (W_CheckNumForName (argv[1]) == -1)
-			Printf (PRINT_HIGH, "No map %s\n", argv[1]);
+			Printf ("No map %s\n", argv[1]);
 		else
 			G_DeferedInitNew (argv[1]);
 	}
 }
-END_COMMAND (map)
 
 void G_NewInit ()
 {
 	G_ClearSnapshots ();
-	SB_state = -1;
+	SB_state = screen->GetPageCount ();
 	netgame = false;
 	netdemo = false;
 	multiplayer = false;
@@ -686,8 +742,8 @@ void G_DoNewGame (void)
 
 void G_InitNew (char *mapname)
 {
-	static BOOL isFast;
-	BOOL wantFast;
+	EGameSpeed oldSpeed;
+	bool wantFast;
 	int i;
 
 	// [RH] Remove all particles
@@ -708,10 +764,10 @@ void G_InitNew (char *mapname)
 
 	UnlatchCVars ();
 
-	if (gameskill.value > sk_nightmare)
-		gameskill.Set (sk_nightmare);
-	else if (gameskill.value < sk_baby)
-		gameskill.Set (sk_baby);
+	if (*gameskill > sk_nightmare)
+		gameskill = sk_nightmare;
+	else if (*gameskill < sk_baby)
+		gameskill = sk_baby;
 
 	UnlatchCVars ();
 
@@ -728,26 +784,29 @@ void G_InitNew (char *mapname)
 	}
 
 	respawnmonsters =
-		((gameinfo.gametype == GAME_Doom && gameskill.value == sk_nightmare)
-		|| (dmflags & DF_MONSTERS_RESPAWN));
+		((gameinfo.gametype == GAME_Doom && *gameskill == sk_nightmare)
+		|| (*dmflags & DF_MONSTERS_RESPAWN));
 
-	wantFast = (dmflags & DF_FAST_MONSTERS) || (gameskill.value == sk_nightmare);
+	oldSpeed = GameSpeed;
+	wantFast = (*dmflags & DF_FAST_MONSTERS) || (*gameskill == sk_nightmare);
 	GameSpeed = wantFast ? SPEED_Fast : SPEED_Normal;
-	if (wantFast != isFast)
+
+	FActorInfo::StaticGameSet ();
+	if (oldSpeed != GameSpeed)
 	{
-		FActorInfoInitializer::StaticSetDefaults (gameinfo.gametype);
-		isFast = wantFast;
+		FActorInfo::StaticSpeedSet ();
 	}
 
 	if (!savegamerestore)
 	{
 		M_ClearRandom ();
-		memset (WorldVars, 0, sizeof(WorldVars));
+		memset (ACS_WorldVars, 0, sizeof(ACS_WorldVars));
+		memset (ACS_GlobalVars, 0, sizeof(ACS_GlobalVars));
 		level.time = 0;
 
 		// force players to be initialized upon first level load
 		for (i = 0; i < MAXPLAYERS; i++)
-			players[i].playerstate = PST_REBORN;
+			players[i].playerstate = PST_ENTER;	// [BC]
 	}
 
 	usergame = true;				// will be set false if a demo
@@ -755,7 +814,7 @@ void G_InitNew (char *mapname)
 	demoplayback = false;
 	automapactive = false;
 	viewactive = true;
-	BorderNeedRefresh = true;
+	BorderNeedRefresh = screen->GetPageCount ();
 
 	strncpy (level.mapname, mapname, 8);
 	G_DoLoadLevel (0);
@@ -775,7 +834,6 @@ static void goOn (int position)
 {
 	cluster_info_t *thiscluster = FindClusterInfo (level.cluster);
 	cluster_info_t *nextcluster = FindClusterInfo (FindLevelInfo (level.nextmap)->cluster);
-
 
 	startpos = position;
 	gameaction = ga_completed;
@@ -805,7 +863,7 @@ void G_SecretExitLevel (int position)
 	goOn (position);
 }
 
-void G_DoCompleted (void) 
+void G_DoCompleted (void)
 {
 	int i; 
 
@@ -822,8 +880,8 @@ void G_DoCompleted (void)
 	strncpy (wminfo.lname0, level.info->pname, 8);
 	strncpy (wminfo.current, level.mapname, 8);
 
-	if (deathmatch.value &&
-		(dmflags & DF_SAME_LEVEL) &&
+	if (*deathmatch &&
+		(*dmflags & DF_SAME_LEVEL) &&
 		!(level.flags & LEVEL_CHANGEMAPCHEAT))
 	{
 		strncpy (wminfo.next, level.mapname, 8);
@@ -881,7 +939,7 @@ void G_DoCompleted (void)
 		EFinishLevelType mode;
 
 		if (thiscluster != nextcluster ||
-			deathmatch.value ||
+			*deathmatch ||
 			!(thiscluster->flags & CLUSTER_HUB))
 		{
 			if (nextcluster->flags & CLUSTER_HUB)
@@ -908,7 +966,7 @@ void G_DoCompleted (void)
 
 		if (mode == FINISH_NextHub)
 		{
-			memset (WorldVars, 0, sizeof(WorldVars));
+			memset (ACS_WorldVars, 0, sizeof(ACS_WorldVars));
 			P_RemoveDefereds ();
 			G_ClearSnapshots ();
 		}
@@ -921,7 +979,7 @@ void G_DoCompleted (void)
 			level.time = 0;
 		}
 
-		if (!deathmatch.value &&
+		if (!*deathmatch &&
 			((level.flags & LEVEL_NOINTERMISSION) ||
 			((nextcluster == thiscluster) && (thiscluster->flags & CLUSTER_HUB))))
 		{
@@ -937,7 +995,7 @@ void G_DoCompleted (void)
 // [RH] If you ever get a statistics driver operational, adapt this.
 //	if (statcopy)
 //		memcpy (statcopy, &wminfo, sizeof(wminfo));
-		
+
 	WI_Start (&wminfo);
 }
 
@@ -959,8 +1017,9 @@ void G_DoLoadLevel (int position)
 		lastposition = position;
 
 	G_InitLevelLocals ();
+	StatusBar->DetachAllMessages ();
 
-	Printf (PRINT_HIGH, 
+	Printf (
 			"\n\35\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36\36"
 			"\36\36\36\36\36\36\36\36\36\36\36\36\37\n"
 			TEXTCOLOR_BOLD "%s\n\n",
@@ -990,10 +1049,10 @@ void G_DoLoadLevel (int position)
 	// [RH] Set up details about sky rendering
 	R_InitSkyMap ();
 
-	for (i = 0; i < MAXPLAYERS; i++) 
+	for (i = 0; i < MAXPLAYERS; i++)
 	{ 
 		if (playeringame[i] && players[i].playerstate == PST_DEAD) 
-			players[i].playerstate = PST_REBORN; 
+			players[i].playerstate = PST_ENTER;	// [BC]
 		memset (players[i].frags,0,sizeof(players[i].frags)); 
 		players[i].fragcount = 0;
 	}
@@ -1013,24 +1072,27 @@ void G_DoLoadLevel (int position)
 		TThinkerIterator<AActor> iterator;
 
 		while ( (actor = iterator.Next ()) )
+		{
 			actor->touching_sectorlist = NULL;
+		}
 	}
 
 	SN_StopAllSequences ();
-	P_SetupLevel (level.mapname, position);	 
+	P_SetupLevel (level.mapname, position);
 	displayplayer = consoleplayer;		// view the guy you are playing
 	StatusBar->AttachToPlayer (&players[consoleplayer]);
 	gameaction = ga_nothing; 
 	Z_CheckHeap ();
-	
+
 	// clear cmd building stuff
 	for (i = 0; i < NUM_ACTIONS; i++)
 		if (i != ACTION_MLOOK && i != ACTION_KLOOK)
 			Actions[i] = 0;
+
 	SendWeaponSlot = SendWeaponChoice = 255;
 	SendItemSelect = 0;
 	SendItemUse = arti_none;
-	joyxmove = joyymove = 0; 
+	joyxmove = joyymove = 0;
 	mousex = mousey = 0; 
 	sendpause = sendsave = sendcenterview = sendturn180 = SendLand = false;
 	paused = 0;
@@ -1064,6 +1126,7 @@ void G_WorldDone (void)
 { 
 	cluster_info_t *nextcluster;
 	cluster_info_t *thiscluster;
+	char *nextmap;
 
 	gameaction = ga_worlddone; 
 
@@ -1071,28 +1134,33 @@ void G_WorldDone (void)
 		return;
 
 	thiscluster = FindClusterInfo (level.cluster);
-	if (strncmp (level.nextmap, "enDSeQ", 6) == 0)
+	nextmap = !secretexit || !level.secretmap[0] ? level.nextmap : level.secretmap;
+
+	if (strncmp (nextmap, "enDSeQ", 6) == 0)
 	{
-		F_StartFinale (thiscluster->messagemusic, thiscluster->finaleflat, thiscluster->exittext);
+		F_StartFinale (thiscluster->messagemusic, thiscluster->musicorder,
+			thiscluster->cdtrack, thiscluster->cdid,
+			thiscluster->finaleflat, thiscluster->exittext);
 	}
 	else
 	{
-		if (!secretexit)
-			nextcluster = FindClusterInfo (FindLevelInfo (level.nextmap)->cluster);
-		else
-			nextcluster = FindClusterInfo (FindLevelInfo (level.secretmap)->cluster);
+		nextcluster = FindClusterInfo (FindLevelInfo (nextmap)->cluster);
 
-		if (nextcluster->cluster != level.cluster && !deathmatch.value)
+		if (nextcluster->cluster != level.cluster && !*deathmatch)
 		{
 			// Only start the finale if the next level's cluster is different
 			// than the current one and we're not in deathmatch.
 			if (nextcluster->entertext)
 			{
-				F_StartFinale (nextcluster->messagemusic, nextcluster->finaleflat, nextcluster->entertext);
+				F_StartFinale (nextcluster->messagemusic, nextcluster->musicorder,
+					nextcluster->cdtrack, nextcluster->cdid,
+					nextcluster->finaleflat, nextcluster->entertext);
 			}
 			else if (thiscluster->exittext)
 			{
-				F_StartFinale (thiscluster->messagemusic, thiscluster->finaleflat, thiscluster->exittext);
+				F_StartFinale (thiscluster->messagemusic, thiscluster->musicorder,
+					thiscluster->cdtrack, nextcluster->cdid,
+					thiscluster->finaleflat, thiscluster->exittext);
 			}
 		}
 	}
@@ -1105,7 +1173,7 @@ void G_DoWorldDone (void)
 	{
 		// Don't crash if no next map is given,
 		// just repeat the current one.
-		Printf (PRINT_HIGH, "No next map specified.\n");
+		Printf ("No next map specified.\n");
 	}
 	else
 	{
@@ -1117,17 +1185,13 @@ void G_DoWorldDone (void)
 	viewactive = true; 
 } 
  
-
-extern dyncolormap_t NormalLight;
-
 void G_InitLevelLocals ()
 {
-	int oldfade = level.fadeto;
 	level_info_t *info;
 	int i;
 
 	BaseBlendA = 0.0f;		// Remove underwater blend effect, if any
-	NormalLight.maps = realcolormaps;
+	NormalLight.Maps = realcolormaps;
 
 	if ((i = FindWadLevelInfo (level.mapname)) > -1)
 	{
@@ -1139,16 +1203,22 @@ void G_InitLevelLocals ()
 		info = (level_info_t *)pinfo;
 		strncpy (level.skypic2, pinfo->skypic2, 8);
 		level.fadeto = pinfo->fadeto;
-		if (level.fadeto)
+		level.cdtrack = pinfo->cdtrack;
+		level.cdid = pinfo->cdid;
+		if (level.fadeto == 0)
 		{
-			NormalLight.maps = DefaultPalette->maps.colormaps;
+			R_SetDefaultColormap (pinfo->fadetable);
+			/*
 		}
 		else
 		{
-			R_SetDefaultColormap (pinfo->fadetable);
+			NormalLight.ChangeFade (level.fadeto);
+			*/
 		}
 		level.outsidefog = pinfo->outsidefog;
 		level.flags |= LEVEL_DEFINEDINMAPINFO;
+		level.WallVertLight = pinfo->WallVertLight;
+		level.WallHorizLight = pinfo->WallHorizLight;
 	}
 	else
 	{
@@ -1158,6 +1228,10 @@ void G_InitLevelLocals ()
 		level.fadeto = 0;
 		level.outsidefog = 0xff000000;	// 0xff000000 signals not to handle it special
 		level.skypic2[0] = 0;
+		level.cdtrack = 0;
+		level.cdid = 0;
+		level.WallVertLight = +8;
+		level.WallHorizLight = -8;
 		R_SetDefaultColormap ("COLORMAP");
 	}
 
@@ -1168,6 +1242,7 @@ void G_InitLevelLocals ()
 		level.flags = info->flags;
 		level.levelnum = info->levelnum;
 		level.music = info->music;
+		level.musicorder = info->musicorder;
 
 		strncpy (level.level_name, info->level_name, 63);
 		strncpy (level.nextmap, info->nextmap, 8);
@@ -1190,7 +1265,6 @@ void G_InitLevelLocals ()
 	}
 
 	int clear = 0, set = 0;
-	char buf[16];
 
 	if (level.flags & LEVEL_JUMP_YES)
 		clear = DF_NO_JUMP;
@@ -1200,19 +1274,25 @@ void G_InitLevelLocals ()
 		clear |= DF_NO_FREELOOK;
 	if (level.flags & LEVEL_FREELOOK_NO)
 		set |= DF_NO_FREELOOK;
+	if (level.flags & LEVEL_FALLDMG_YES)
+		set |= DF_YES_FALLING;
+	if (level.flags & LEVEL_FALLDMG_NO)
+		clear |= DF_YES_FALLING;
 
-	dmflags &= ~clear;
-	dmflags |= set;
-	sprintf (buf, "%d", dmflags);
-	cvar_set ("dmflags", buf);
+	dmflags = (*dmflags & ~clear) | set;
 
-	level.gravity = sv_gravity.value;
-	level.aircontrol = (fixed_t)(sv_aircontrol.value * 65536.f);
+	level.gravity = *sv_gravity;
+	level.aircontrol = (fixed_t)(*sv_aircontrol * 65536.f);
 
 	memset (level.vars, 0, sizeof(level.vars));
 
-	if (oldfade != level.fadeto)
-		RefreshPalettes ();
+	NormalLight.ChangeFade (level.fadeto);
+
+	if (level.Scrolls != NULL)
+	{
+		delete[] level.Scrolls;
+		level.Scrolls = NULL;
+	}
 }
 
 char *CalcMapName (int episode, int level)
@@ -1269,8 +1349,9 @@ level_info_t *FindLevelByNum (int num)
 	}
 	{
 		level_info_t *i = LevelInfos;
-		while (i->level_name) {
-			if (i->levelnum == num)
+		while (i->level_name)
+		{
+			if (i->levelnum == num && W_CheckNumForName (i->mapname) != -1)
 				return i;
 			i++;
 		}
@@ -1302,20 +1383,20 @@ cluster_info_t *FindClusterInfo (int cluster)
 void G_SetLevelStrings (void)
 {
 	char temp[8];
-	char *namepart;
+	const char *namepart;
 	int i, start;
 
 	temp[0] = '0';
 	temp[1] = ':';
 	temp[2] = 0;
-	for (i = 65; i < 101; i++)		// HUSTR_E1M1 .. HUSTR_E4M9
+	for (i = HUSTR_E1M1; i <= HUSTR_E4M9; ++i)
 	{
 		if (temp[0] < '9')
 			temp[0]++;
 		else
 			temp[0] = '1';
 
-		if ( (namepart = strstr (Strings[i].string, temp)) )
+		if ( (namepart = strstr (GStrings(i), temp)) )
 		{
 			namepart += 2;
 			while (*namepart && *namepart <= ' ')
@@ -1323,13 +1404,13 @@ void G_SetLevelStrings (void)
 		}
 		else
 		{
-			namepart = Strings[i].string;
+			namepart = GStrings(i);
 		}
 
 		if (gameinfo.gametype != GAME_Heretic)
 		{
-			ReplaceString (&LevelInfos[i-65].level_name, namepart);
-			ReplaceString (&LevelInfos[i-65].music, Musics1[i-65]);
+			ReplaceString (&LevelInfos[i-HUSTR_E1M1].level_name, namepart);
+			ReplaceString (&LevelInfos[i-HUSTR_E1M1].music, Musics1[i-HUSTR_E1M1]);
 		}
 	}
 
@@ -1337,7 +1418,7 @@ void G_SetLevelStrings (void)
 	{
 		for (i = 0; i < 4*9; i++)
 		{
-			ReplaceString (&LevelInfos[i].level_name, Strings[i+344].string);
+			ReplaceString (&LevelInfos[i].level_name, GStrings(HHUSTR_E1M1+i));
 			ReplaceString (&LevelInfos[i].music, Musics2[i]);
 			LevelInfos[i].cluster = 11 + (i / 9);
 			LevelInfos[i].pname[0] = 0;
@@ -1373,24 +1454,24 @@ void G_SetLevelStrings (void)
 	for (i = 0; i < 12; i++)
 	{
 		if (i < 9)
-			ReplaceString (&LevelInfos[i+36].level_name, Strings[i+380].string);
+			ReplaceString (&LevelInfos[i+36].level_name, GStrings(HHUSTR_E5M1+i));
 		ReplaceString (&LevelInfos[i+36].music, Musics1[i+36]);
 	}
 
 	for (i = 0; i < 4; i++)
-		ReplaceString (&ClusterInfos[i].exittext, Strings[221+i].string);
+		ReplaceString (&ClusterInfos[i].exittext, GStrings(E1TEXT+i));
 
 	if (gamemission == pack_plut)
-		start = 133;		// PHUSTR_1
+		start = PHUSTR_1;
 	else if (gamemission == pack_tnt)
-		start = 165;		// THUSTR_1
+		start = THUSTR_1;
 	else
-		start = 101;		// HUSTR_1
+		start = HUSTR_1;
 
 	for (i = 0; i < 32; i++)
 	{
 		sprintf (temp, "%d:", i + 1);
-		if ( (namepart = strstr (Strings[i+start].string, temp)) )
+		if ( (namepart = strstr (GStrings(i+start), temp)) )
 		{
 			namepart += strlen (temp);
 			while (*namepart && *namepart <= ' ')
@@ -1398,25 +1479,25 @@ void G_SetLevelStrings (void)
 		}
 		else
 		{
-			namepart = Strings[i+start].string;
+			namepart = GStrings(i+start);
 		}
 		ReplaceString (&LevelInfos[48+i].level_name, namepart);
 		ReplaceString (&LevelInfos[48+i].music, Musics3[i]);
 	}
 
 	if (gamemission == pack_plut)
-		start = 231;		// P1TEXT
+		start = P1TEXT;		// P1TEXT
 	else if (gamemission == pack_tnt)
-		start = 237;		// T1TEXT
+		start = T1TEXT;		// T1TEXT
 	else
-		start = 225;		// C1TEXT
+		start = C1TEXT;		// C1TEXT
 
 	for (i = 0; i < 4; i++)
-		ReplaceString (&ClusterInfos[4 + i].exittext, Strings[start+i].string);
+		ReplaceString (&ClusterInfos[4 + i].exittext, GStrings(start+i));
 	for (; i < 6; i++)
-		ReplaceString (&ClusterInfos[4 + i].entertext, Strings[start+i].string);
-	for (; i < 11; i++)
-		ReplaceString (&ClusterInfos[4 + i].exittext, Strings[333+i].string);
+		ReplaceString (&ClusterInfos[4 + i].entertext, GStrings(start+i));
+	for (i = HE1TEXT; i <= HE5TEXT; i++)
+		ReplaceString (&ClusterInfos[10 + i - HE1TEXT].exittext, GStrings(i));
 	for (i = 0; i < 15; i++)
 		ReplaceString (&ClusterInfos[i].messagemusic, Musics4[i]);
 
@@ -1438,14 +1519,40 @@ void G_SerializeLevel (FArchive &arc, bool hubLoad)
 		<< level.aircontrol;
 
 	for (i = 0; i < NUM_MAPVARS; i++)
+	{
 		arc << level.vars[i];
+	}
+
+	BYTE t;
+
+	if (arc.IsStoring ())
+	{
+		t = level.Scrolls ? 1 : 0;
+		arc << t;
+	}
+	else
+	{
+		arc << t;
+		if (level.Scrolls)
+		{
+			delete[] level.Scrolls;
+			level.Scrolls = NULL;
+		}
+		if (t)
+		{
+			level.Scrolls = new FSectorScrollValues[numsectors];
+			memset (level.Scrolls, 0, sizeof(level.Scrolls)*numsectors);
+		}
+	}
 
 	P_SerializeThinkers (arc, hubLoad);
 	P_SerializeWorld (arc);
 	P_SerializePolyobjs (arc);
 	P_SerializeSounds (arc);
 	if (!hubLoad)
+	{
 		P_SerializePlayers (arc);
+	}
 }
 
 // Archives the current level
@@ -1454,7 +1561,7 @@ void G_SnapshotLevel ()
 	if (level.info->snapshot)
 		delete level.info->snapshot;
 
-	level.info->snapshot = new FLZOMemFile;
+	level.info->snapshot = new FCompressedMemFile;
 	level.info->snapshot->Open ();
 
 	FArchive arc (*level.info->snapshot);
@@ -1534,7 +1641,7 @@ void G_SerializeSnapshots (FArchive &arc)
 		{
 			arc.Read (&mapname[1], 7);
 			level_info_t *i = FindLevelInfo (mapname);
-			i->snapshot = new FLZOMemFile;
+			i->snapshot = new FCompressedMemFile;
 			i->snapshot->Serialize (arc);
 			arc << mapname[0];
 		}
@@ -1591,6 +1698,28 @@ void P_SerializeACSDefereds (FArchive &arc)
 	}
 }
 
+
+void level_locals_s::Tick ()
+{
+	// Reset carry sectors
+	if (Scrolls != NULL)
+	{
+		memset (Scrolls, 0, sizeof(*Scrolls)*numsectors);
+	}
+}
+
+void level_locals_s::AddScroller (DScroller *scroller, int secnum)
+{
+	if (secnum < 0)
+	{
+		return;
+	}
+	if (Scrolls == NULL)
+	{
+		Scrolls = new FSectorScrollValues[numsectors];
+		memset (Scrolls, 0, sizeof(*Scrolls)*numsectors);
+	}
+}
 
 // Static level info from original game.
 // The level names, cluster messages, and music get filled in

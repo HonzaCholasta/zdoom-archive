@@ -10,15 +10,33 @@
 #include "i_system.h"
 #include "r_state.h"
 
-ClassInit::ClassInit (TypeInfo *type)
-{
-	type->RegisterType ();
-}
-
 TypeInfo **TypeInfo::m_Types;
 unsigned short TypeInfo::m_NumTypes;
 unsigned short TypeInfo::m_MaxTypes;
 unsigned int TypeInfo::TypeHash[256];	// Why can't I use TypeInfo::HASH_SIZE?
+
+#if defined(_MSC_VER) || defined(__GNUC__)
+#include "autosegs.h"
+
+TypeInfo DObject::_StaticType =
+{
+	"DObject",
+	NULL,
+	sizeof(DObject),
+};
+
+void TypeInfo::StaticInit ()
+{
+	TAutoSegIterator<TypeInfo *, &CRegHead, &CRegTail> probe;
+
+	while (++probe != NULL)
+	{
+		probe->RegisterType ();
+	}
+}
+#else
+TypeInfo DObject::_StaticType(NULL, "DObject", NULL, sizeof(DObject));
+#endif
 
 void TypeInfo::RegisterType ()
 {
@@ -96,7 +114,7 @@ const TypeInfo *TypeInfo::IFindType (const char *name)
 	return NULL;
 }
 
-BEGIN_COMMAND (dumpclasses)
+CCMD (dumpclasses)
 {
 	const TypeInfo *root;
 	int i;
@@ -108,7 +126,7 @@ BEGIN_COMMAND (dumpclasses)
 		root = TypeInfo::IFindType (argv[1]);
 		if (root == NULL)
 		{
-			Printf (PRINT_HIGH, "Class '%s' not found\n", argv[1]);
+			Printf ("Class '%s' not found\n", argv[1]);
 			return;
 		}
 		if (stricmp (argv[1], "Actor") == 0)
@@ -132,7 +150,7 @@ BEGIN_COMMAND (dumpclasses)
 			 (showall || TypeInfo::m_Types[i] == root ||
 			  TypeInfo::m_Types[i]->ActorInfo != root->ActorInfo)))
 		{
-			Printf (PRINT_HIGH, " %s\n", TypeInfo::m_Types[i]->Name + 1);
+			Printf (" %s\n", TypeInfo::m_Types[i]->Name + 1);
 			shown++;
 		}
 		else
@@ -140,11 +158,8 @@ BEGIN_COMMAND (dumpclasses)
 			omitted++;
 		}
 	}
-	Printf (PRINT_HIGH, "%d classes shown, %d omitted\n", shown, omitted);
+	Printf ("%d classes shown, %d omitted\n", shown, omitted);
 }
-END_COMMAND (dumpclasses)
-
-TypeInfo DObject::_StaticType(NULL, "DObject", NULL, sizeof(DObject));
 
 TArray<DObject *> DObject::Objects;
 TArray<size_t> DObject::FreeIndices;
@@ -213,7 +228,7 @@ void DObject::EndFrame ()
 	if (ToDestroy.Size ())
 	{
 		DestroyScan ();
-		//Printf (PRINT_HIGH, "Destroyed %d objects\n", ToDestroy.Size());
+		//Printf ("Destroyed %d objects\n", ToDestroy.Size());
 
 		DObject *obj;
 		while (ToDestroy.Pop (obj))
@@ -259,7 +274,7 @@ void DObject::DestroyScan (DObject *obj)
 				const size_t *offsets = info->Pointers;
 				if (offsets)
 				{
-					while (*offsets != ~0)
+					while (*offsets != (size_t)~0)
 					{
 						if (*((DObject **)(((byte *)current) + *offsets)) == obj)
 						{
@@ -316,7 +331,7 @@ void DObject::DestroyScan ()
 				const size_t *offsets = info->Pointers;
 				if (offsets)
 				{
-					while (*offsets != ~0)
+					while (*offsets != (size_t)~0)
 					{
 						j = destroycount;
 						do
@@ -363,4 +378,21 @@ void DObject::DestroyScan ()
 void STACK_ARGS DObject::StaticShutdown ()
 {
 	Inactive = true;
+}
+
+void DObject::Serialize (FArchive &arc)
+{
+	ObjectFlags |= OF_SerialSuccess;
+}
+
+void DObject::CheckIfSerialized () const
+{
+	if (!(ObjectFlags & OF_SerialSuccess))
+	{
+		I_Error (
+			"BUG: %s::Serialize\n"
+			"(or one of its superclasses) needs to call\n"
+			"Super::Serialize\n",
+			StaticType ()->Name);
+	}
 }

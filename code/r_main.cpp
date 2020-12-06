@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "templates.h"
 #include "m_alloc.h"
 #include "doomdef.h"
 #include "d_net.h"
@@ -43,10 +44,11 @@
 #include "stats.h"
 #include "z_zone.h"
 #include "i_video.h"
+#include "vectors.h"
 
 // MACROS ------------------------------------------------------------------
 
-#define DISTMAP			2
+#define DISTMAP			(2)
 
 // TYPES -------------------------------------------------------------------
 
@@ -60,29 +62,77 @@ void R_SpanInitData ();
 
 // EXTERNAL DATA DECLARATIONS ----------------------------------------------
 
-extern int dmflags;
-extern int *walllights;
 extern bool DrawFSHUD;		// [RH] Defined in d_main.cpp
-extern dyncolormap_t NormalLight;
+extern short *openings;
+EXTERN_CVAR (Bool, r_particles)
+
+// PRIVATE DATA DECLARATIONS -----------------------------------------------
+
+static float LastFOV;
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
 
-CVAR (r_viewsize, "0", CVAR_NOSET)
+CVAR (String, r_viewsize, "", CVAR_NOSET)
 
+//==========================================================================
+//
+// CVAR r_visibility
+//
+// Controls how quickly light ramps across a 1/z range. Set this, and it
+// sets all the r_*Visibility variables (except r_SkyVisibilily, which is
+// currently unused).
+//
+//==========================================================================
+
+CUSTOM_CVAR (Float, r_visibility, 8, CVAR_NOINITCALL)
+{
+	r_BaseVisibility = toint (*var * 65536.f);
+
+	r_WallVisibility = FixedMul (Scale (InvZtoScale, SCREENWIDTH*(200>>detailyshift),
+		(viewwidth<<detailxshift)*SCREENHEIGHT), FixedMul (r_BaseVisibility, FocalTangent));
+	r_FloorVisibility = FixedDiv (160*r_BaseVisibility, FocalLengthY);
+	r_TiltVisibility = *var * 16.f * 320.f
+		* (float)FocalTangent / (float)viewwidth;
+	r_SpriteVisibility = r_WallVisibility;
+	
+	// particles are slightly more visible than regular sprites
+	r_ParticleVisibility = r_SpriteVisibility * 2;
+}
+
+fixed_t			r_BaseVisibility;
+fixed_t			r_WallVisibility;
+fixed_t			r_FloorVisibility;
+float			r_TiltVisibility;
+fixed_t			r_SpriteVisibility;
+fixed_t			r_ParticleVisibility;
+fixed_t			r_SkyVisibility;
+
+fixed_t			GlobVis;
+fixed_t			FocalTangent;
 fixed_t			FocalLengthX;
 fixed_t			FocalLengthY;
+float			FocalLengthXfloat;
 int 			viewangleoffset;
 int 			validcount = 1; 	// increment every time a check is made
 lighttable_t	*basecolormap;		// [RH] colormap currently drawing with
 int				fixedlightlev;
 lighttable_t	*fixedcolormap;
+float			WallTMapScale;
+float			WallTMapScale2;
 
+extern "C" {
 int 			centerx;
-extern "C" {int	centery; }
+int				centery;
+}
 
+DCanvas			*RenderTarget;		// [RH] canvas to render to
+bool			bRenderingToCanvas;	// [RH] True if rendering to a special canvas
+fixed_t			globaluclip, globaldclip;
 fixed_t 		centerxfrac;
 fixed_t 		centeryfrac;
 fixed_t			yaspectmul;
+float			iyaspectmulfloat;
+fixed_t			InvZtoScale;
 
 // just for profiling purposes
 int 			framecount; 	
@@ -95,40 +145,27 @@ fixed_t 		viewz;
 
 angle_t 		viewangle;
 
-fixed_t 		viewcos;
-fixed_t 		viewsin;
+fixed_t 		viewcos, viewtancos;
+fixed_t 		viewsin, viewtansin;
 
 AActor			*camera;	// [RH] camera to draw from. doesn't have to be a player
+bool			r_MarkTrans;
 
 //
 // precalculated math tables
 //
-angle_t 		clipangle;
-
-// The viewangletox[viewangle + FINEANGLES/4] lookup
-// maps the visible view angles to screen X coordinates,
-// flattening the arc to a flat projection plane.
-// There will be many angles mapped to the same X. 
-int 			viewangletox[FINEANGLES/2];
+int FieldOfView = 2048;		// Fineangles in the SCREENWIDTH wide window
 
 // The xtoviewangleangle[] table maps a screen pixel
 // to the lowest viewangle that maps back to x ranges
 // from clipangle to -clipangle.
-angle_t 		*xtoviewangle;
-
-fixed_t			*finecosine = &finesine[FINEANGLES/4];
-
-int				scalelight[LIGHTLEVELS][MAXLIGHTSCALE];
-int				scalelightfixed[MAXLIGHTSCALE];
-int				zlight[LIGHTLEVELS][MAXLIGHTZ];
-
-int				lightscalexmul;	// [RH] used to keep hires modes dark enough
-int				lightscaleymul;
+angle_t 		xtoviewangle[MAXWIDTH+1];
 
 int 			extralight;		// bumped light from gun blasts
-BOOL			foggy;			// [RH] ignore extralight and fullbright
+bool			foggy;			// [RH] ignore extralight and fullbright?
+int				r_actualextralight;
 
-BOOL			setsizeneeded;
+bool			setsizeneeded;
 int				setblocks, setdetail = -1;
 
 fixed_t			freelookviewheight;
@@ -138,9 +175,7 @@ unsigned int	R_OldBlend = ~0;
 void (*colfunc) (void);
 void (*basecolfunc) (void);
 void (*fuzzcolfunc) (void);
-void (*lucentcolfunc) (void);
 void (*transcolfunc) (void);
-void (*tlatedlucentcolfunc) (void);
 void (*spanfunc) (void);
 
 void (*hcolfunc_pre) (void);
@@ -153,7 +188,6 @@ cycle_t WallCycles, PlaneCycles, MaskedCycles;
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
 
 static int lastcenteryfrac;
-static int FieldOfView = 2048;	// Fineangles in the SCREENWIDTH wide window
 
 // CODE --------------------------------------------------------------------
 
@@ -181,8 +215,8 @@ int R_PointOnSide (fixed_t x, fixed_t y, node_t *node)
   
 	// Try to quickly decide by looking at sign bits.
 	if ((node->dy ^ node->dx ^ x ^ y) < 0)
-		return (node->dy ^ x) < 0;  // (left is negative)
-	return FixedMul (y, node->dx >> FRACBITS) >= FixedMul (node->dy >> FRACBITS, x);
+		return (node->dy ^ x) < 0;	// (left is negative)
+	return DMulScale32 (y, node->dx, -node->dy, x) >= 0;
 }
 
 //==========================================================================
@@ -213,8 +247,36 @@ int R_PointOnSegSide (fixed_t x, fixed_t y, seg_t *line)
       
 	// Try to quickly decide by looking at sign bits.
 	if ((ldy ^ ldx ^ x ^ y) < 0)
-		return (ldy ^ x) < 0;          // (left is negative)
-	return FixedMul (y, ldx >> FRACBITS) >= FixedMul (ldy >> FRACBITS, x);
+		return (ldy ^ x) < 0;			// (left is negative)
+	return DMulScale32 (y, ldx, -ldy, x) >= 0;
+}
+
+//==========================================================================
+//
+// R_PointOnSegSide2
+//
+// [RH] Same, except returns 2 for "on the line"
+//
+//==========================================================================
+
+int R_PointOnSegSide2 (fixed_t x, fixed_t y, seg_t *line)
+{
+	fixed_t lx = line->v1->x;
+	fixed_t ly = line->v1->y;
+	fixed_t ldx = line->v2->x - lx;
+	fixed_t ldy = line->v2->y - ly;
+
+	if (!ldx)
+		return x == lx ? 2 : x < lx ? ldy > 0 : ldy < 0;
+
+	if (!ldy)
+		return y == ly ? 2 : y < ly ? ldx < 0 : ldx > 0;
+  
+	x -= lx;
+	y -= ly;
+      
+	fixed_t d = DMulScale32 (y, ldx, -ldy, x);
+	return d > 0 ? 1 : d < 0 ? 0 : 2;
 }
 
 //==========================================================================
@@ -252,21 +314,16 @@ angle_t R_PointToAngle2 (fixed_t x1, fixed_t y1, fixed_t x, fixed_t y)
 
 void R_InitPointToAngle (void)
 {
-	// UNUSED - now getting from tables.c
-	// [RH] Actually, if you define CALC_TABLES, the game will use the FPU
-	//		to calculate these tables at runtime so that a little space
-	//		can be saved on disk.
-#ifdef CALC_TABLES
-	double i, f;
+	double f;
+	int i;
 //
 // slope (tangent) to angle lookup
 //
-	for (i = 0; i <= (double)SLOPERANGE; i++)
+	for (i = 0; i <= SLOPERANGE; i++)
 	{
-		f = atan2 (i, (double)SLOPERANGE) / (6.28318530718 /* 2*pi */);
-		tantoangle[(int)i] = (angle_t)(0xffffffff*f);
+		f = atan2 ((double)i, (double)SLOPERANGE) / (6.28318530718 /* 2*pi */);
+		tantoangle[i] = (angle_t)(0xffffffff*f);
 	}
-#endif
 }
 
 //==========================================================================
@@ -289,9 +346,7 @@ fixed_t R_PointToDist (fixed_t x, fixed_t y)
 
 	if (dy > dx)
 	{
-		fixed_t t = dx;
-		dx = dy;
-		dy = t;
+		swap (dx, dy);
 	}
 
 	return FixedDiv (dx, finecosine[tantoangle[FixedDiv (dy, dx) >> DBITS] >> ANGLETOFINESHIFT]);
@@ -310,45 +365,10 @@ fixed_t R_PointToDist2 (fixed_t dx, fixed_t dy)
 
 	if (dy > dx)
 	{
-		fixed_t t = dx;
-		dx = dy;
-		dy = t;
+		swap (dx, dy);
 	}
 
 	return FixedDiv (dx, finecosine[tantoangle[FixedDiv (dy, dx) >> DBITS] >> ANGLETOFINESHIFT]);
-}
-
-//==========================================================================
-//
-// R_ScaleFromGlobalAngle
-//
-// Returns the texture mapping scale for the current line (horizontal span)
-// at the given angle. rw_distance must be calculated first.
-//
-//==========================================================================
-
-fixed_t R_ScaleFromGlobalAngle (angle_t visangle)
-{
-	fixed_t scale;
-
-	angle_t anglea = ANG90 + (visangle - viewangle);
-	angle_t angleb = ANG90 + (visangle - rw_normalangle);
-	// both sines are always positive
-	fixed_t num = FixedMul (FocalLengthY, finesine[angleb>>ANGLETOFINESHIFT]);
-	fixed_t den = FixedMul (rw_distance, finesine[anglea>>ANGLETOFINESHIFT]);
-
-	if (den > num>>16)
-	{
-		scale = FixedDiv (num, den);
-
-		if (scale > 64*FRACUNIT)
-			scale = 64*FRACUNIT;
-		else if (scale < 256)
-			scale = 256;
-	}
-	else
-		scale = 64*FRACUNIT;
-	return scale;
 }
 
 //==========================================================================
@@ -359,31 +379,30 @@ fixed_t R_ScaleFromGlobalAngle (angle_t visangle)
 
 void R_InitTables (void)
 {
-	// UNUSED: now getting from tables.c
-	// [RH] As with R_InitPointToAngle, you can #define CALC_TABLES
-	//		to generate these tables at runtime.
-#ifdef CALC_TABLES
 	int i;
-	double a, fv;
-	
+	const double pimul = PI*2/FINEANGLES;
+
 	// viewangle tangent table
-	for (i = 0; i < FINEANGLES/2; i++)
+	finetangent[0] = (angle_t)(FRACUNIT*tan ((0.5-FINEANGLES/4)*pimul)+0.5);
+	for (i = 1; i < FINEANGLES/2; i++)
 	{
-		a = (i-FINEANGLES/4+0.5)*PI*2/FINEANGLES;
-		fv = FRACUNIT*tan (a);
-		finetangent[i] = (angle_t)fv;
+		finetangent[i] = (angle_t)(FRACUNIT*tan ((i-FINEANGLES/4)*pimul)+0.5);
 	}
 	
 	// finesine table
-	for (i = 0; i < 5*FINEANGLES/4; i++)
+	for (i = 0; i < FINEANGLES/4; i++)
 	{
-		// OPTIMIZE: mirror...
-		a = (i+0.5)*PI*2/FINEANGLES;
-		// [RH] -25 so that we have perfect N,S,E,W directions
-		finesine[i] = (angle_t)(FRACUNIT * sin (a)) - 25;
+		finesine[i] = (angle_t)(FRACUNIT * sin (i*pimul));
 	}
-#endif
-
+	for (i = 0; i < FINEANGLES/4; i++)
+	{
+		finesine[i+FINEANGLES/4] = finesine[FINEANGLES/4-1-i];
+	}
+	for (i = 0; i < FINEANGLES/2; i++)
+	{
+		finesine[i+FINEANGLES/2] = -finesine[i];
+	}
+	memcpy (&finesine[FINEANGLES], &finesine[0], sizeof(angle_t)*FINEANGLES/4);
 }
 
 
@@ -393,135 +412,73 @@ void R_InitTables (void)
 //
 //==========================================================================
 
-void R_InitTextureMapping (void)
+void R_InitTextureMapping ()
 {
-	int i, t, x;
-	
-	// Use tangent table to generate viewangletox: viewangletox will give
-	// the next greatest x after the view angle.
+	int i;
+	fixed_t slope;
 
-	const fixed_t hitan = finetangent[FINEANGLES/4+FieldOfView/2];
-	const fixed_t lotan = finetangent[FINEANGLES/4-FieldOfView/2];
-	const int highend = viewwidth + 1;
+	const int hitan = finetangent[FINEANGLES/4+FieldOfView/2];
 
-	// Calc focallength so FieldOfView angles covers viewwidth.
+	// Calc focallength so FieldOfView fineangles covers viewwidth.
+	FocalTangent = hitan;
 	FocalLengthX = FixedDiv (centerxfrac, hitan);
-	FocalLengthY = FixedDiv (FixedMul (centerxfrac, yaspectmul), hitan);
+	FocalLengthY = Scale (centerxfrac, yaspectmul, hitan);
+	FocalLengthXfloat = (float)FocalLengthX / 65536.f;
 
-	for (i = 0; i < FINEANGLES/2; i++)
-	{
-		fixed_t tangent = finetangent[i];
+	// Now generate xtoviewangle for sky texture mapping.
+	// [RH] Do not generate viewangletox, because texture mapping is no
+	// longer done with trig, so it's not needed.
+	const int t = MIN ((FocalLengthX >> FRACBITS) + centerx, viewwidth);
+	const fixed_t slopestep = hitan / centerx;
+	const fixed_t dfocus = FocalLengthX >> DBITS;
 
-		if (tangent > hitan)
-			t = -1;
-		else if (tangent < lotan)
-			t = highend;
-		else
-		{
-			t = (centerxfrac - FixedMul (tangent, FocalLengthX) + FRACUNIT - 1) >> FRACBITS;
-
-			if (t < -1)
-				t = -1;
-			else if (t > highend)
-				t = highend;
-		}
-		viewangletox[i] = t;
-	}
-	
-	// Scan viewangletox[] to generate xtoviewangle[]:
-	//	xtoviewangle will give the smallest view angle
-	//	that maps to x.
-	for (x = 0; x <= viewwidth; x++)
+	for (i = centerx, slope = 0; i <= t; i++, slope += slopestep)
 	{
-		i = 0;
-		while (viewangletox[i] > x)
-			i++;
-		xtoviewangle[x] = (i<<ANGLETOFINESHIFT)-ANG90;
+		xtoviewangle[i] = (angle_t)-(signed)tantoangle[slope >> DBITS];
 	}
-	
-	// Take out the fencepost cases from viewangletox.
-	for (i = 0; i < FINEANGLES/2; i++)
+	for (; i <= viewwidth; i++)
 	{
-		t = FixedMul (finetangent[i], FocalLengthX);
-		t = centerx - t;
-		
-		if (viewangletox[i] == -1)
-			viewangletox[i] = 0;
-		else if (viewangletox[i] == highend)
-			viewangletox[i]--;
+		xtoviewangle[i] = ANG270+tantoangle[dfocus / (i - centerx)];
 	}
-		
-	clipangle = xtoviewangle[0];
+	for (i = 0; i < centerx; i++)
+	{
+		xtoviewangle[i] = (angle_t)(-(signed)xtoviewangle[viewwidth-i-1]);
+	}
 }
 
 //==========================================================================
 //
 // R_SetFOV
 //
-// Changes the field of view
+// Changes the field of view in degrees
 //
 //==========================================================================
 
 void R_SetFOV (float fov)
 {
-	static float lastfov = 90.0f;
-	if (fov != lastfov)
+	if (fov < 5.f)
+		fov = 5.f;
+	else if (fov > 175.f)
+		fov = 175.f;
+	if (fov != LastFOV)
 	{
-		if (fov < 1)
-			fov = 1;
-		else if (fov > 179)
-			fov = 179;
-		if (fov == lastfov)
-			return;
-		lastfov = fov;
-		FieldOfView = (int)(fov * (float)FINEANGLES / 360.0f);
+		LastFOV = fov;
+		FieldOfView = (int)(fov * (float)FINEANGLES / 360.f);
 		setsizeneeded = true;
 	}
 }
 
 //==========================================================================
 //
-// R_InitLightTables
+// R_GetFOV
 //
-// Only inits the zlight table, because the scalelight table changes with
-// view size.
-//
-// [RH] This now sets up indices into a colormap rather than pointers into
-// the colormap, because the colormap can vary by sector, but the indices
-// into it don't.
+// Returns the current field of view in degrees
 //
 //==========================================================================
 
-void R_InitLightTables (void)
+float R_GetFOV ()
 {
-	int i;
-	int j;
-	int level;
-	int startmap;		
-	int scale;
-	int lightmapsize = 8 + (screen->is8bit ? 0 : 2);
-
-	// Calculate the light levels to use
-	//	for each level / distance combination.
-	for (i = 0; i < LIGHTLEVELS; i++)
-	{
-		startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
-		for (j=0 ; j<MAXLIGHTZ ; j++)
-		{
-			scale = FixedDiv (160*FRACUNIT, (j+1)<<LIGHTZSHIFT);
-			scale >>= LIGHTSCALESHIFT-LIGHTSCALEMULBITS;
-			level = startmap - scale/DISTMAP;
-			
-			if (level < 0)
-				level = 0;
-			else if (level >= NUMCOLORMAPS)
-				level = NUMCOLORMAPS-1;
-
-			zlight[i][j] = level << lightmapsize;
-		}
-	}
-
-	lightscalexmul = ((320<<detailyshift) * (1<<LIGHTSCALEMULBITS)) / screen->width;
+	return LastFOV;
 }
 
 //==========================================================================
@@ -547,9 +504,9 @@ void R_SetViewSize (int blocks)
 //
 //==========================================================================
 
-BEGIN_CUSTOM_CVAR (r_detail, "0", CVAR_ARCHIVE)
+CUSTOM_CVAR (Int, r_detail, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
-	static BOOL badrecovery = false;
+	static bool badrecovery = false;
 
 	if (badrecovery)
 	{
@@ -557,85 +514,87 @@ BEGIN_CUSTOM_CVAR (r_detail, "0", CVAR_ARCHIVE)
 		return;
 	}
 
-	if (var.value < 0.0 || var.value > 3.0)
+	if (*var < 0 || *var > 3.0)
 	{
-		Printf (PRINT_HIGH, "Bad detail mode. (Use 0-3)\n");
+		Printf ("Bad detail mode. (Use 0-3)\n");
 		badrecovery = true;
-		var.Set ((float)((detailyshift << 1)|detailxshift));
+		var = (detailyshift << 1) | detailxshift;
 		return;
 	}
 
-	setdetail = (int)var.value;
+	setdetail = *var;
 	setsizeneeded = true;
 }
-END_CUSTOM_CVAR (r_detail)
 
 //==========================================================================
 //
-// R_ExecuteSetViewSize
+// R_SetDetail
 //
 //==========================================================================
 
-void R_ExecuteSetViewSize (void)
+void R_SetDetail (int detail)
 {
-	int i, j;
-	int level;
-	int startmap;
+	if (!*r_columnmethod)
+	{
+		R_RenderSegLoop = R_RenderSegLoop1;
+		// [RH] x-doubling only works with the standard column drawer
+		detailxshift = detail & 1;
+	}
+	else
+	{
+		R_RenderSegLoop = R_RenderSegLoop2;
+		detailxshift = 0;
+	}
+	detailyshift = (detail >> 1) & 1;
+	ds_colsize = 1 << detailxshift;
+#ifdef USEASM
+	ASM_PatchColSize ();
+#endif
+}
+
+//==========================================================================
+//
+// R_SetWindow
+//
+//==========================================================================
+
+void R_SetWindow (int windowSize, int fullWidth, int fullHeight, int stHeight)
+{
 	int virtheight, virtwidth;
-	int lightmapsize = 8 + (screen->is8bit ? 0 : 2);
 
-	setsizeneeded = false;
-	BorderNeedRefresh = true;
-
-	if (setdetail >= 0)
+	if (windowSize >= 11)
 	{
-		if (!r_columnmethod.value)
-		{
-			R_RenderSegLoop = R_RenderSegLoop1;
-			// [RH] x-doubling only works with the standard column drawer
-			detailxshift = setdetail & 1;
-		}
-		else
-		{
-			R_RenderSegLoop = R_RenderSegLoop2;
-			detailxshift = 0;
-		}
-		detailyshift = (setdetail >> 1) & 1;
-		setdetail = -1;
+		realviewwidth = fullWidth;
+		freelookviewheight = realviewheight = fullHeight;
 	}
-
-	if (setblocks == 11 || setblocks == 12)
+	else if (windowSize == 10)
 	{
-		realviewwidth = screen->width;
-		freelookviewheight = realviewheight = screen->height;
-	}
-	else if (setblocks == 10)
-	{
-		realviewwidth = screen->width;
-		realviewheight = ST_Y;
-		freelookviewheight = screen->height;
+		realviewwidth = fullWidth;
+		realviewheight = stHeight;
+		freelookviewheight = fullHeight;
 	}
 	else
 	{
-		realviewwidth = ((setblocks*screen->width)/10) & (~(15>>(screen->is8bit ? 0 : 2)));
-		realviewheight = ((setblocks*ST_Y)/10)&~7;
-		freelookviewheight = ((setblocks*screen->height)/10)&~7;
+		realviewwidth = ((setblocks*fullWidth)/10) & (~15);
+		realviewheight = ((setblocks*stHeight)/10)&~7;
+		freelookviewheight = ((setblocks*fullHeight)/10)&~7;
 	}
 
-	if (setblocks == 11)
-		DrawFSHUD = true;
-	else
-		DrawFSHUD = false;
+	DrawFSHUD = (windowSize == 11);
 	
 	viewwidth = realviewwidth >> detailxshift;
 	viewheight = realviewheight >> detailyshift;
 	freelookviewheight >>= detailyshift;
+	halfviewwidth = (viewwidth >> 1) - 1;
 
-	{
+	if (!bRenderingToCanvas)
+	{ // Set r_viewsize cvar to reflect the current view size
+		UCVarValue value;
 		char temp[16];
 
 		sprintf (temp, "%d x %d", viewwidth, viewheight);
-		r_viewsize.ForceSet (temp);
+		value.String = temp;
+		r_viewsize.ForceSet (value, CVAR_String);
 	}
 
 	lastcenteryfrac = 1<<30;
@@ -644,16 +603,64 @@ void R_ExecuteSetViewSize (void)
 	centerxfrac = centerx<<FRACBITS;
 	centeryfrac = centery<<FRACBITS;
 
-	virtwidth = screen->width >> detailxshift;
-	virtheight = screen->height >> detailyshift;
+	virtwidth = fullWidth >> detailxshift;
+	virtheight = fullHeight >> detailyshift;
 
-	yaspectmul = (fixed_t)(65536.f*(320.f*(float)virtheight/(200.f*(float)virtwidth)));
+	yaspectmul = Scale ((320<<FRACBITS), virtheight, 200 * virtwidth);
+	iyaspectmulfloat = (float)virtwidth * 0.625f / (float)virtheight;	// 0.625 = 200/320
+	InvZtoScale = yaspectmul * centerx;
+
+	WallTMapScale = (float)centerx * 32.f;
+	WallTMapScale2 = iyaspectmulfloat * 2.f / (float)centerx;
+
+	// psprite scales
+	pspritexscale = centerxfrac / 160;
+	pspriteyscale = FixedMul (pspritexscale, yaspectmul);
+	pspritexiscale = FixedDiv (FRACUNIT, pspritexscale);
+
+	// thing clipping
+	clearbufshort (screenheightarray, viewwidth, (WORD)viewheight);
+
+	// [RH] Sky height fix for screens not 200 (or 240) pixels tall
+	R_InitSkyMap ();
+
+	R_InitTextureMapping ();
+
+	// Reset r_*Visibility vars
+	r_visibility = *r_visibility;
+}
+
+//==========================================================================
+//
+// R_ExecuteSetViewSize
+//
+//==========================================================================
+
+void R_ExecuteSetViewSize ()
+{
+	setsizeneeded = false;
+	BorderNeedRefresh = screen->GetPageCount ();
+
+	if (setdetail >= 0)
+	{
+		R_SetDetail (setdetail);
+		setdetail = -1;
+	}
+
+	R_SetWindow (setblocks, SCREENWIDTH, SCREENHEIGHT, ST_Y);
+
+	// Handle resize, e.g. smaller view windows with border and/or status bar.
+	viewwindowx = (screen->GetWidth() - (viewwidth<<detailxshift))>>1;
+
+	// Same with base row offset.
+	viewwindowy = ((viewwidth<<detailxshift) == screen->GetWidth()) ?
+		0 : (ST_Y-(viewheight<<detailyshift)) >> 1;
+
+	R_InitBuffer (viewwidth, viewheight);
 
 	colfunc = basecolfunc = R_DrawColumn;
-	lucentcolfunc = R_DrawTranslucentColumn;
 	fuzzcolfunc = R_DrawFuzzColumn;
 	transcolfunc = R_DrawTranslatedColumn;
-	tlatedlucentcolfunc = R_DrawTlatedLucentColumn;
 	spanfunc = R_DrawSpan;
 
 	// [RH] Horizontal column drawers
@@ -661,48 +668,6 @@ void R_ExecuteSetViewSize (void)
 	hcolfunc_post1 = rt_map1col;
 	hcolfunc_post2 = rt_map2cols;
 	hcolfunc_post4 = rt_map4cols;
-
-	R_InitBuffer (viewwidth, viewheight);
-	R_InitTextureMapping ();
-	
-	// psprite scales
-	pspritexscale = centerxfrac / 160;
-	pspriteyscale = FixedMul (pspritexscale, yaspectmul);
-	pspritexiscale = FixedDiv (FRACUNIT, pspritexscale);
-
-	// [RH] Sky height fix for screens not 200 (or 240) pixels tall
-	R_InitSkyMap ();
-
-	// thing clipping
-	for (i = 0; i < viewwidth; i++)
-		screenheightarray[i] = (short)viewheight;
-	
-	// planes
-	for (i = 0; i < viewwidth; i++)
-	{
-		fixed_t cosadj = abs (finecosine[xtoviewangle[i]>>ANGLETOFINESHIFT]);
-		distscale[i] = FixedDiv (FRACUNIT, cosadj);
-	}
-
-	// Calculate the light levels to use for each level / scale combination.
-	// [RH] This just stores indices into the colormap rather than pointers to a specific one.
-	for (i = 0; i < LIGHTLEVELS; i++)
-	{
-		startmap = ((LIGHTLEVELS-1-i)*2)*NUMCOLORMAPS/LIGHTLEVELS;
-		for (j = 0; j < MAXLIGHTSCALE; j++)
-		{
-			level = startmap - (j*(screen->width>>detailxshift))/((viewwidth*DISTMAP));
-			if (level < 0)
-				level = 0;
-			else if (level >= NUMCOLORMAPS)
-				level = NUMCOLORMAPS-1;
-
-			scalelight[i][j] = level << lightmapsize;
-		}
-	}
-
-	// [RH] Initialize z-light tables here
-	R_InitLightTables ();
 }
 
 //==========================================================================
@@ -713,16 +678,15 @@ void R_ExecuteSetViewSize (void)
 //
 //==========================================================================
 
-BEGIN_CUSTOM_CVAR (screenblocks, "10", CVAR_ARCHIVE)
+CUSTOM_CVAR (Int, screenblocks, 10, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
-	if (var.value > 12.0)
-		var.Set (12.0);
-	else if (var.value < 3.0)
-		var.Set (3.0);
+	if (*var > 12)
+		var = 12;
+	else if (*var < 3)
+		var = 3;
 	else
-		R_SetViewSize ((int)var.value);
+		R_SetViewSize (*var);
 }
-END_CUSTOM_CVAR (screenblocks)
 
 //==========================================================================
 //
@@ -732,15 +696,14 @@ END_CUSTOM_CVAR (screenblocks)
 //
 //==========================================================================
 
-BEGIN_CUSTOM_CVAR (r_columnmethod, "1", CVAR_ARCHIVE)
+CUSTOM_CVAR (Int, r_columnmethod, 1, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
-	if (var.value != 0 && var.value != 1)
-		var.Set (1);
+	if (*var != 0 && *var != 1)
+		var = 1;
 	else
 		// Trigger the change
 		r_detail.Callback ();
 }
-END_CUSTOM_CVAR (r_columnmethod)
 
 //==========================================================================
 //
@@ -755,9 +718,8 @@ void R_Init (void)
 	R_InitTables ();
 	// viewwidth / viewheight are set by the defaults
 
-	R_SetViewSize ((int)screenblocks.value);
+	R_SetViewSize (*screenblocks);
 	R_InitPlanes ();
-	R_InitLightTables ();
 	R_InitTranslationTables ();
 
 	R_InitParticles ();	// [RH] Setup particle engine
@@ -824,10 +786,10 @@ void R_SetupFrame (player_t *player)
 
 	if (camera->player && camera->player->xviewshift && !paused)
 	{
-		int intensity = camera->player->xviewshift;;
+		int intensity = camera->player->xviewshift;
 		viewx += ((P_Random(pr_torch) % (intensity<<2))
 					-(intensity<<1))<<FRACBITS;
-		viewy += ((P_Random(pr_torch)%(intensity<<2))
+		viewy += ((P_Random(pr_torch) % (intensity<<2))
 					-(intensity<<1))<<FRACBITS;
 	}
 
@@ -835,6 +797,9 @@ void R_SetupFrame (player_t *player)
 
 	viewsin = finesine[viewangle>>ANGLETOFINESHIFT];
 	viewcos = finecosine[viewangle>>ANGLETOFINESHIFT];
+
+	viewtansin = FixedMul (FocalTangent, viewsin);
+	viewtancos = FixedMul (FocalTangent, viewcos);
 		
 	// killough 3/20/98, 4/4/98: select colormap based on player status
 	// [RH] Can also select a blend
@@ -842,11 +807,12 @@ void R_SetupFrame (player_t *player)
 	if (camera->subsector->sector->heightsec)
 	{
 		const sector_t *s = camera->subsector->sector->heightsec;
-		newblend = viewz < s->floorheight ? s->bottommap : viewz > s->ceilingheight ?
-				   s->topmap : s->midmap;
-		if (!screen->is8bit)
-			newblend = R_BlendForColormap (newblend);
-		else if (APART(newblend) == 0 && newblend >= numfakecmaps)
+		newblend = viewz < s->floorplane.ZatPoint (viewx, viewy)
+			? s->bottommap
+			: viewz > s->ceilingplane.ZatPoint (viewx, viewy)
+			? s->topmap
+			: s->midmap;
+		if (APART(newblend) == 0 && newblend >= numfakecmaps)
 			newblend = 0;
 	}
 	else
@@ -865,14 +831,14 @@ void R_SetupFrame (player_t *player)
 			BaseBlendR = RPART(newblend);
 			BaseBlendG = GPART(newblend);
 			BaseBlendB = BPART(newblend);
-			BaseBlendA = APART(newblend) / 255.0f;
-			NormalLight.maps = realcolormaps;
+			BaseBlendA = APART(newblend) / 255.f;
+			NormalLight.Maps = realcolormaps;;
 		}
 		else
 		{
-			NormalLight.maps = realcolormaps + (NUMCOLORMAPS+1)*256*newblend;
+			NormalLight.Maps = realcolormaps + NUMCOLORMAPS*256*newblend;
 			BaseBlendR = BaseBlendG = BaseBlendB = 0;
-			BaseBlendA = 0.0f;
+			BaseBlendA = 0.f;
 		}
 	}
 
@@ -884,23 +850,12 @@ void R_SetupFrame (player_t *player)
 		if (player->fixedcolormap < NUMCOLORMAPS)
 		{
 			fixedlightlev = player->fixedcolormap*256;
-			fixedcolormap = DefaultPalette->maps.colormaps;
+			fixedcolormap = NormalLight.Maps;
 		}
 		else
 		{
-			if (screen->is8bit)
-				fixedcolormap =
-					DefaultPalette->maps.colormaps
-					+ player->fixedcolormap*256;
-			else
-				fixedcolormap = (lighttable_t *)
-					(DefaultPalette->maps.shades
-					+ player->fixedcolormap*256);
+			fixedcolormap = InvulnerabilityColormap;
 		}
-		
-		walllights = scalelightfixed;
-
-		memset (scalelightfixed, 0, MAXLIGHTSCALE*sizeof(*scalelightfixed));
 	}
 
 	// [RH] freelook stuff
@@ -909,6 +864,8 @@ void R_SetupFrame (player_t *player)
 
 		centeryfrac = (viewheight << (FRACBITS-1)) + dy;
 		centery = centeryfrac >> FRACBITS;
+		globaluclip = FixedDiv (-centeryfrac, InvZtoScale);
+		globaldclip = FixedDiv ((viewheight<<FRACBITS)-centeryfrac, InvZtoScale);
 
 		//centeryfrac &= 0xffff0000;
 		int i = lastcenteryfrac - centeryfrac;
@@ -1003,50 +960,193 @@ void R_SetupFrame (player_t *player)
 		
 	framecount++;
 	validcount++;
+}
 
-	if (BorderNeedRefresh)
+//==========================================================================
+//
+// R_RefreshViewBorder
+//
+// Draws the border around the player view, if needed.
+//
+//==========================================================================
+
+void R_RefreshViewBorder ()
+{
+	if (setblocks < 10)
 	{
-		if (setblocks < 10)
+		if (BorderNeedRefresh)
 		{
+			BorderNeedRefresh--;
+			if (BorderTopRefresh)
+			{
+				BorderTopRefresh--;
+			}
 			R_DrawViewBorder();
 		}
-		BorderNeedRefresh = false;
-		BorderTopRefresh = false;
-	}
-	else if (BorderTopRefresh)
-	{
-		if (setblocks < 10)
+		else if (BorderTopRefresh)
 		{
+			BorderTopRefresh--;
 			R_DrawTopBorder();
 		}
-		BorderTopRefresh = false;
 	}
 }
 
 //==========================================================================
 //
-// R_RenderView
+// R_EnterMirror
+//
+// [RH] Draw the reflection inside a mirror
 //
 //==========================================================================
 
-void R_RenderPlayerView (player_t *player)
+void R_EnterMirror (drawseg_t *ds, int depth)
+{
+	angle_t startang = viewangle;
+	fixed_t startx = viewx;
+	fixed_t starty = viewy;
+
+	size_t mirrorsAtStart = WallMirrors.Size ();
+
+	vertex_t *v1 = ds->curline->v1;
+
+	// Reflect the current view behind the mirror.
+	if (ds->curline->linedef->dx == 0)
+	{ // vertical mirror
+		viewx = 2*v1->x - startx;
+	}
+	else if (ds->curline->linedef->dy == 0)
+	{ // horizontal mirror
+		viewy = 2*v1->y - starty;
+	}
+	else
+	{ // any mirror--use floats to avoid integer overflow
+		vertex_t *v2 = ds->curline->v2;
+
+		float dx = FIXED2FLOAT(v2->x - v1->x);
+		float dy = FIXED2FLOAT(v2->y - v1->y);
+		float x1 = FIXED2FLOAT(v1->x);
+		float y1 = FIXED2FLOAT(v1->y);
+		float x = FIXED2FLOAT(startx);
+		float y = FIXED2FLOAT(starty);
+
+		// the above two cases catch len == 0
+		float r = ((x - x1)*dx + (y - y1)*dy) / (dx*dx + dy*dy);
+
+		viewx = FLOAT2FIXED((x1 + r * dx)*2 - x);
+		viewy = FLOAT2FIXED((y1 + r * dy)*2 - y);
+	}
+	viewangle = 2*ds->curline->angle - startang;
+
+	viewsin = finesine[viewangle>>ANGLETOFINESHIFT];
+	viewcos = finecosine[viewangle>>ANGLETOFINESHIFT];
+
+	viewtansin = FixedMul (FocalTangent, viewsin);
+	viewtancos = FixedMul (FocalTangent, viewcos);
+
+	validcount++;
+	ActiveWallMirror = ds->curline;
+
+	R_ClearPlanes (false);
+	R_ClearClipSegs (ds->x1, ds->x2 + 1);
+
+	memcpy (ceilingclip + ds->x1, openings + ds->sprtopclip, (ds->x2 - ds->x1 + 1)*sizeof(*ceilingclip));
+	memcpy (floorclip + ds->x1, openings + ds->sprbottomclip, (ds->x2 - ds->x1 + 1)*sizeof(*floorclip));
+
+	WindowLeft = ds->x1;
+	WindowRight = ds->x2;
+	MirrorFlags = (depth + 1) & 1;
+
+	R_RenderBSPNode (numnodes - 1);
+
+	if (*r_particles)
+	{
+		// [RH] add all the particles
+		int i = ActiveParticles;
+		while (i != -1)
+		{
+			R_ProjectParticle (Particles + i);
+			i = Particles[i].next;
+		}
+	}
+
+	R_DrawPlanes ();
+	R_DrawSkyBoxes ();
+
+	// Allow up to 4 recursions through a mirror
+	if (depth < 4)
+	{
+		size_t mirrorsAtEnd = WallMirrors.Size ();
+
+		for (; mirrorsAtStart < mirrorsAtEnd; mirrorsAtStart++)
+		{
+			R_EnterMirror (drawsegs + WallMirrors[mirrorsAtStart], depth + 1);
+		}
+	}
+	else
+	{
+		depth = depth;
+	}
+
+	viewangle = startang;
+	viewx = startx;
+	viewy = starty;
+}
+
+//==========================================================================
+//
+// R_SetupBuffer
+//
+// Precalculate all row offsets and fuzz table.
+//
+//==========================================================================
+
+static void R_SetupBuffer ()
+{
+	static BYTE *lastbuff = NULL;
+
+	int pitch = RenderTarget->GetPitch() << detailyshift;
+	BYTE *lineptr = RenderTarget->GetBuffer() + viewwindowy*pitch;
+
+	if (dc_pitch != pitch || lineptr != lastbuff)
+	{
+		if (dc_pitch != pitch)
+		{
+			dc_pitch = pitch;
+			R_InitFuzzTable (pitch);
+#ifdef USEASM
+			ASM_PatchPitch ();
+#endif
+		}
+		for (size_t i = 0; i < (size_t)viewheight; i++, lineptr += pitch)
+		{
+			ylookup[i] = lineptr;
+		}
+	}
+}
+
+//==========================================================================
+//
+// R_RenderPlayerView
+//
+//==========================================================================
+
+void R_RenderPlayerView (player_t *player, void (*lengthyCallback)())
 {
 	WallCycles = PlaneCycles = MaskedCycles = 0;
+
+	R_SetupBuffer ();
 	R_SetupFrame (player);
 
 	// Clear buffers.
-	R_ClearClipSegs ();
+	R_ClearClipSegs (0, viewwidth);
 	R_ClearDrawSegs ();
-	R_ClearPlanes ();
+	R_ClearPlanes (true);
 	R_ClearSprites ();
-	
-	I_FinishUpdateNoBlit ();
-	// check for new console commands.
-	NetUpdate ();
-	I_BeginUpdate ();
+
+	if (lengthyCallback != NULL)	lengthyCallback ();
 
 	// [RH] Show off segs if r_drawflat is 1
-	if (r_drawflat.value)
+	if (*r_drawflat)
 	{
 		hcolfunc_pre = R_FillColumnHorizP;
 		hcolfunc_post1 = rt_copy1col;
@@ -1063,46 +1163,96 @@ void R_RenderPlayerView (player_t *player)
 		hcolfunc_post2 = rt_map2cols;
 		hcolfunc_post4 = rt_map4cols;
 	}
+
+	WindowLeft = 0;
+	WindowRight = viewwidth - 1;
+	MirrorFlags = 0;
+	ActiveWallMirror = NULL;
 	
 	clock (WallCycles);
 	// Never draw the player unless in chasecam mode
 	if (camera->player && !(player->cheats & CF_CHASECAM))
 	{
-		camera->flags2 |= MF2_DONTDRAW;
+		WORD savedflags = camera->renderflags;
+		camera->renderflags |= RF_INVISIBLE;
 		R_RenderBSPNode (numnodes - 1);
-		camera->flags2 &= ~MF2_DONTDRAW;
+		camera->renderflags = savedflags;
 	}
 	else
-		R_RenderBSPNode (numnodes-1);	// The head node is the last node output.
+	{	// The head node is the last node output.
+		R_RenderBSPNode (numnodes - 1);
+	}
 	unclock (WallCycles);
 
-	I_FinishUpdateNoBlit ();
-	// Check for new console commands.
-	NetUpdate ();
-	I_BeginUpdate ();
-	
+	if (*r_particles)
+	{
+		// [RH] add all the particles
+		int i = ActiveParticles;
+		while (i != -1)
+		{
+			R_ProjectParticle (Particles + i);
+			i = Particles[i].next;
+		}
+	}
+
+	if (lengthyCallback != NULL)	lengthyCallback ();
+
 	clock (PlaneCycles);
 	R_DrawPlanes ();
+	R_DrawSkyBoxes ();
 	unclock (PlaneCycles);
+
+	// [RH] Walk through mirrors
+	size_t lastmirror = WallMirrors.Size ();
+	for (size_t i = 0; i < lastmirror; i++)
+	{
+		R_EnterMirror (drawsegs + WallMirrors[i], 0);
+	}
+	WallMirrors.Clear ();
 
 	spanfunc = R_DrawSpan;
 
-	I_FinishUpdateNoBlit ();
-	// Check for new console commands.
-	NetUpdate ();
-	I_BeginUpdate ();
+	if (lengthyCallback != NULL)	lengthyCallback ();
 	
 	clock (MaskedCycles);
 	R_DrawMasked ();
 	unclock (MaskedCycles);
 
-	I_FinishUpdateNoBlit ();
-	// Check for new console commands.
-	NetUpdate ();
-	I_BeginUpdate ();
+	if (lengthyCallback != NULL)	lengthyCallback ();
+}
 
-	// [RH] Apply detail mode doubling
-	R_DetailDouble ();
+//==========================================================================
+//
+// R_RenderViewToCanvas
+//
+// Pre: Canvas is already locked.
+//
+//==========================================================================
+
+void R_RenderViewToCanvas (player_t *player, DCanvas *canvas,
+	int x, int y, int width, int height)
+{
+	const int saveddetail = detailxshift | (detailyshift << 1);
+
+	detailxshift = detailyshift = 0;
+	R_RenderSegLoop = *r_columnmethod ? R_RenderSegLoop2 : R_RenderSegLoop1;
+	realviewwidth = viewwidth = width;
+
+	RenderTarget = canvas;
+	bRenderingToCanvas = true;
+
+	R_SetDetail (0);
+	R_SetWindow (12, width, height, height);
+	viewwindowx = x;
+	viewwindowy = y;
+	R_InitBuffer (width, height);
+
+	R_RenderPlayerView (player, NULL);
+
+	RenderTarget = screen;
+	bRenderingToCanvas = false;
+	R_SetDetail (saveddetail);
+	R_ExecuteSetViewSize ();
 }
 
 //==========================================================================
@@ -1113,34 +1263,8 @@ void R_RenderPlayerView (player_t *player)
 //
 //==========================================================================
 
-void R_MultiresInit (void)
+void R_MultiresInit ()
 {
-	int i;
-
-	// in r_things.c
-	extern short *r_dscliptop, *r_dsclipbot;
-	// in r_draw.c
-	extern byte **ylookup;
-	extern int *columnofs;
-
-	ylookup = (byte **)Realloc (ylookup, screen->height * sizeof(byte *));
-	columnofs = (int *)Realloc (columnofs, screen->width * sizeof(int));
-	r_dscliptop = (short *)Realloc (r_dscliptop, screen->width * sizeof(short));
-	r_dsclipbot = (short *)Realloc (r_dsclipbot, screen->width * sizeof(short));
-
-	// Moved from R_InitSprites()
-	negonearray = (short *)Realloc (negonearray, sizeof(short) * screen->width);
-
-	for (i=0 ; i<screen->width ; i++)
-	{
-		negonearray[i] = -1;
-	}
-
-	// These get set in R_ExecuteSetViewSize()
-	screenheightarray = (short *)Realloc (screenheightarray, sizeof(short) * screen->width);
-	xtoviewangle = (angle_t *)Realloc (xtoviewangle, sizeof(angle_t) * (screen->width + 1));
-
-	R_InitFuzzTable ();
 	R_PlaneInitData ();
 	R_OldBlend = ~0;
 }

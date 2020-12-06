@@ -63,18 +63,13 @@ static weapontype_t GetAmmoChange[] =
 	wp_mace
 };
 
-IMPLEMENT_DEF_SERIAL (AWeapon, APickup);
-REGISTER_ACTOR (AWeapon, Any);
-
 FState AWeapon::States[] =
 {
 	S_NORMAL (SHTG, 'E',	0, A_Light0 			, NULL)
 };
 
-void AWeapon::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-}
+IMPLEMENT_ACTOR (AWeapon, Any, -1, 0)
+END_DEFAULTS
 
 void AWeapon::PlayPickupSound (AActor *toucher)
 {
@@ -109,7 +104,7 @@ bool P_GiveAmmo (player_t *player, ammotype_t ammo, int count)
 	{
 		return false;
 	}
-	if (gameskill.value == sk_baby || gameskill.value == sk_nightmare)
+	if (*gameskill == sk_baby || *gameskill == sk_nightmare)
 	{ // extra ammo in baby mode and nightmare mode
 		if (gameinfo.gametype == GAME_Doom)
 			count <<= 1;
@@ -186,6 +181,9 @@ bool P_GiveAmmo (player_t *player, ammotype_t ammo, int count)
 
 	case GAME_Hexen:
 		break;
+
+	default:
+		break;	// Silence GCC
 	}
 
 	return true;
@@ -208,11 +206,11 @@ bool P_GiveWeapon (player_t *player, weapontype_t weapon, BOOL dropped)
 	if (!wpnlev1info[weapon])
 		return false;
 	FState *state = wpnlev1info[weapon]->readystate;
-	if ((state->frame & FF_FRAMEMASK) >= sprites[state->sprite.index].numframes)
+	if (state->GetFrame() >= sprites[state->sprite.index].numframes)
 		return false;
 
 	if (multiplayer &&
-		((!deathmatch.value && !alwaysapplydmflags.value) || dmflags & DF_WEAPONS_STAY) &&
+		((!*deathmatch && !*alwaysapplydmflags) || *dmflags & DF_WEAPONS_STAY) &&
 		!dropped)
 	{
 		// leave placed weapons forever on (cooperative) net games
@@ -223,7 +221,7 @@ bool P_GiveWeapon (player_t *player, weapontype_t weapon, BOOL dropped)
 		player->weaponowned[weapon] = true;
 
 		P_GiveAmmo (player, wpnlev1info[weapon]->ammo,
-			(deathmatch.value && gameinfo.gametype == GAME_Doom) ?
+			(*deathmatch && gameinfo.gametype == GAME_Doom) ?
 				wpnlev1info[weapon]->ammogive*5/2 :
 				wpnlev1info[weapon]->ammogive);
 
@@ -321,7 +319,7 @@ weapontype_t FWeaponSlot::PickWeapon (player_t *player)
 	int i, j;
 	FWeaponInfo **infos;
 
-	infos = (player->powers[pw_weaponlevel2] && deathmatch.value) ?
+	infos = (player->powers[pw_weaponlevel2] && *deathmatch) ?
 		wpnlev2info : wpnlev1info;
 
 	for (i = 0; i < MAX_WEAPONS_PER_SLOT; i++)
@@ -381,17 +379,44 @@ bool FWeaponSlot::LocateWeapon (weapontype_t weap, int *const slot, int *const i
 	return false;
 }
 
+static bool FindMostRecentWeapon (player_s *player, int *slot, int *index)
+{
+	if (player->pendingweapon != wp_nochange)
+	{
+		if (player->psprites[ps_weapon].state->GetAction().acp2 == A_Raise)
+		{
+			if (FWeaponSlot::LocateWeapon (player->pendingweapon, slot, index))
+			{
+				P_SetPsprite (player, ps_weapon,
+					player->powers[pw_weaponlevel2] ?
+					  wpnlev2info[player->readyweapon]->downstate :
+					  wpnlev1info[player->readyweapon]->downstate);
+				return true;
+			}
+			return false;
+		}
+		else
+		{
+			return FWeaponSlot::LocateWeapon (player->pendingweapon, slot, index);
+		}
+	}
+	else
+	{
+		return FWeaponSlot::LocateWeapon (player->readyweapon, slot, index);
+	}
+}
+
 weapontype_t PickNextWeapon (player_s *player)
 {
 	int startslot, startindex;
 
-	if (FWeaponSlot::LocateWeapon (player->readyweapon, &startslot, &startindex))
+	if (FindMostRecentWeapon (player, &startslot, &startindex))
 	{
 		int start = startslot * MAX_WEAPONS_PER_SLOT + startindex;
 		int i;
 		FWeaponInfo **infos;
 		
-		infos = (player->powers[pw_weaponlevel2] && deathmatch.value) ?
+		infos = (player->powers[pw_weaponlevel2] && *deathmatch) ?
 			wpnlev2info : wpnlev1info;
 
 		for (i = 1; i < NUM_WEAPON_SLOTS * MAX_WEAPONS_PER_SLOT + 1; i++)
@@ -417,13 +442,13 @@ weapontype_t PickPrevWeapon (player_s *player)
 {
 	int startslot, startindex;
 
-	if (FWeaponSlot::LocateWeapon (player->readyweapon, &startslot, &startindex))
+	if (FindMostRecentWeapon (player, &startslot, &startindex))
 	{
 		int start = startslot * MAX_WEAPONS_PER_SLOT + startindex;
 		int i;
 		FWeaponInfo **infos;
 		
-		infos = (player->powers[pw_weaponlevel2] && deathmatch.value) ?
+		infos = (player->powers[pw_weaponlevel2] && *deathmatch) ?
 			wpnlev2info : wpnlev1info;
 
 		for (i = 1; i < NUM_WEAPON_SLOTS * MAX_WEAPONS_PER_SLOT + 1; i++)

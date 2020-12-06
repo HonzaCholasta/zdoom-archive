@@ -23,8 +23,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <search.h>
 
+#include "templates.h"
 #include "m_alloc.h"
 #include "doomdef.h"
 #include "m_swap.h"
@@ -39,19 +39,19 @@
 #include "c_dispatch.h"
 #include "doomstat.h"
 #include "v_video.h"
-#include "cmdlib.h"
+#include "sc_man.h"
 #include "s_sound.h"
 #include "sbar.h"
 #include "gi.h"
 
-extern fixed_t FocalLengthX, FocalLengthY;
+extern fixed_t globaluclip, globaldclip;
 
 
-#define MINZ			(FRACUNIT*4)
+#define MINZ			(2048*4)
 #define BASEYCENTER 	(100)
 
-EXTERN_CVAR (st_scale)
-CVAR (r_drawfuzz, "1", CVAR_ARCHIVE)
+EXTERN_CVAR (Bool, st_scale)
+CVAR (Bool, r_drawfuzz, true, CVAR_ARCHIVE)
 
 
 //
@@ -66,18 +66,17 @@ fixed_t 		pspritexiscale;
 fixed_t			sky1scale;			// [RH] Sky 1 scale factor
 fixed_t			sky2scale;			// [RH] Sky 2 scale factor
 
-int*			spritelights;
+static int		spriteshade;
 
 // constant arrays
 //	used for psprite clipping and initializing clipping
-short			*negonearray;
-short			*screenheightarray;
+short			negonearray[MAXWIDTH];
+short			screenheightarray[MAXWIDTH];
 
 #define MAX_SPRITE_FRAMES	29		// [RH] Macro-ized as in BOOM.
-#define SPRITE_NEEDS_INFO	MAXINT
 
 
-CVAR (r_drawplayersprites, "1", 0)	// [RH] Draw player sprites?
+CVAR (Bool, r_drawplayersprites, true, 0)	// [RH] Draw player sprites?
 
 //
 // INITIALIZATION FUNCTIONS
@@ -92,7 +91,7 @@ int 			maxframe;
 char*			spritename;
 
 // [RH] skin globals
-playerskin_t	*skins;
+FPlayerSkin		*skins;
 size_t			numskins;
 
 // [RH] particle globals
@@ -101,32 +100,8 @@ int				ActiveParticles;
 int				InactiveParticles;
 particle_t		*Particles;
 
-CVAR (r_particles, "1", 0);
+CVAR (Bool, r_particles, true, 0);
 
-
-void R_CacheSprite (spritedef_t *sprite)
-{
-	int i, r;
-	patch_t *patch;
-
-	DPrintf ("cache sprite %c%c%c%c\n",
-		sprite->name[0], sprite->name[1], sprite->name[2], sprite->name[3]);
-	for (i = 0; i < sprite->numframes; i++)
-	{
-		for (r = 0; r < 8; r++)
-		{
-			if (sprite->spriteframes[i].width[r] == SPRITE_NEEDS_INFO)
-			{
-				if (sprite->spriteframes[i].lump[r] == -1)
-					I_Error ("Sprite %d, rotation %d has no lump", i, r);
-				patch = (patch_t *)W_CacheLumpNum (sprite->spriteframes[i].lump[r], PU_CACHE);
-				sprite->spriteframes[i].width[r] = SHORT(patch->width)<<FRACBITS;
-				sprite->spriteframes[i].offset[r] = SHORT(patch->leftoffset)<<FRACBITS;
-				sprite->spriteframes[i].topoffset[r] = SHORT(patch->topoffset)<<FRACBITS;
-			}
-		}
-	}
-}
 
 //
 // R_InstallSpriteLump
@@ -151,13 +126,14 @@ static void R_InstallSpriteLump (int lump, unsigned frame, unsigned rotation, BO
 		int r;
 
 		for (r = 7; r >= 0; r--)
+		{
 			if (sprtemp[frame].lump[r] == -1)
 			{
 				sprtemp[frame].lump[r] = (short)(lump);
 				sprtemp[frame].flip[r] = (byte)flipped;
 				sprtemp[frame].rotate = false;
-				sprtemp[frame].width[r] = SPRITE_NEEDS_INFO;
 			}
+		}
 	}
 	else if (sprtemp[frame].lump[--rotation] == -1)
 	{
@@ -165,7 +141,6 @@ static void R_InstallSpriteLump (int lump, unsigned frame, unsigned rotation, BO
 		sprtemp[frame].lump[rotation] = (short)(lump);
 		sprtemp[frame].flip[rotation] = (byte)flipped;
 		sprtemp[frame].rotate = true;
-		sprtemp[frame].width[rotation] = SPRITE_NEEDS_INFO;
 	}
 }
 
@@ -235,7 +210,7 @@ static void R_InstallSprite (int num)
 //
 void R_InitSpriteDefs () 
 { 
-	int i;
+	size_t i;
 	int l;
 	int intname;
 	int start;
@@ -285,74 +260,81 @@ void R_InitSpriteDefs ()
 //
 #define NUMSKINSOUNDS 9
 static const char *skinsoundnames[NUMSKINSOUNDS][2] = {
-	{ "dsplpain",	NULL },
-	{ "dspldeth",	NULL },
-	{ "dspdiehi",	"xdeath1" },
-	{ "dsoof",		"land1" },
-	{ "dsoof",		"grunt1" },
-	{ "dsnoway",	"usefail" },
-	{ "dsslop",		"gibbed" },
-	{ "dspunch",	"fist" },
-	{ "dsjump",		"jump1" }
+	{ "dsplpain",	"*pain100" },
+	{ "dspldeth",	"*death" },
+	{ "dspdiehi",	"*xdeath" },
+	{ "dsoof",		"*land" },
+	{ "dsoof",		"*grunt" },
+	{ "dsnoway",	"*usefail" },
+	{ "dsslop",		"*gibbed" },
+	{ "dspunch",	"*fist" },
+	{ "dsjump",		"*jump" }
 };
+static const char painname[3][8] = { "*pain25", "*pain50", "*pain75" };
+static WORD playersoundrefs[NUMSKINSOUNDS+3];
 
-static char facenames[8][8] = {
-	"xxxTR", "xxxTL", "xxxOUCH", "xxxEVL", "xxxKILL", "xxxGOD0",
-	"xxxST", { 'x','x','x','D','E','A','D','0' }
-};
-static const int facelens[8] = {
-	5, 5, 7, 6, 7, 7, 5, 8
-};
+static int STACK_ARGS skinsorter (const void *a, const void *b)
+{
+	return stricmp (((FPlayerSkin *)a)->name, ((FPlayerSkin *)b)->name);
+}
 
 void R_InitSkins (void)
 {
 	spritedef_t temp;
-	char sndname[128];
 	int sndlumps[NUMSKINSOUNDS];
 	char key[10];
 	int intname;
 	size_t i;
 	int j, k, base;
-	char *def;
 	int lastlump;
 
 	key[9] = 0;
 	i = 0;
 	lastlump = 0;
 
+	for (j = 0; j < NUMSKINSOUNDS; ++j)
+	{
+		playersoundrefs[j] = S_FindSound (skinsoundnames[j][1]);
+	}
+	for (j = 0; j < 3; ++j)
+	{
+		playersoundrefs[j+NUMSKINSOUNDS] = S_FindSound (painname[j]);
+	}
+
 	while ((base = W_FindLump ("S_SKIN", &lastlump)) != -1)
 	{
+		// The player sprite has 23 frames. This means that the S_SKIN
+		// marker needs a minimum of 23 lumps after it.
+		if (base >= numlumps - 23 || base == -1)
+			continue;
+
 		i++;
 		for (j = 0; j < NUMSKINSOUNDS; j++)
 			sndlumps[j] = -1;
-		// The player sprite has 23 frames. This means that the S_SKIN
-		// marker needs a minimum of 23 lumps after it (probably more).
-		if (base >= numlumps - 23 || base == -1)
-			continue;
 		skins[i].namespc = lumpinfo[base].namespc;
-		def = (char *)W_CacheLumpNum (base, PU_CACHE);
+
+		SC_OpenLumpNum (base, "S_SKIN");
 		intname = 0;
 
 		// Data is stored as "key = data".
-		while ( (def = COM_Parse (def)) )
+		while (SC_GetString ())
 		{
-			strncpy (key, com_token, 9);
-			def = COM_Parse (def);
-			if (com_token[0] != '=')
+			strncpy (key, sc_String, 9);
+			if (!SC_GetString() || sc_String[0] != '=')
 			{
-				Printf_Bold ("Bad format for skin %d: %s=%s\n", i, key, com_token);
+				Printf_Bold ("Bad format for skin %d: %s\n", i, key);
 				break;
 			}
-			def = COM_Parse (def);
+			SC_GetString ();
 			if (0 == stricmp (key, "name"))
 			{
-				strncpy (skins[i].name, com_token, 16);
+				strncpy (skins[i].name, sc_String, 16);
 				for (j = 0; j < i; j++)
 				{
 					if (stricmp (skins[i].name, skins[j].name) == 0)
 					{
 						sprintf (skins[i].name, "skin%d", i);
-						Printf_Bold ("Skin %s duplicated. Copy is %s\n",
+						Printf_Bold ("Skin %s duplicated as %s\n",
 							skins[j].name, skins[i].name);
 						break;
 					}
@@ -361,13 +343,17 @@ void R_InitSkins (void)
 			else if (0 == stricmp (key, "sprite"))
 			{
 				for (j = 3; j >= 0; j--)
-					com_token[j] = toupper (com_token[j]);
-				intname = *((int *)com_token);
+					sc_String[j] = toupper (sc_String[j]);
+				intname = *((int *)sc_String);
 			}
 			else if (0 == stricmp (key, "face"))
 			{
 				for (j = 2; j >= 0; j--)
-					skins[i].face[j] = toupper (com_token[j]);
+					skins[i].face[j] = toupper (sc_String[j]);
+			}
+			else if (0 == stricmp (key, "gender"))
+			{
+				skins[i].gender = D_GenderToInt (sc_String);
 			}
 			else
 			{
@@ -375,15 +361,15 @@ void R_InitSkins (void)
 				{
 					if (stricmp (key, skinsoundnames[j][0]) == 0)
 					{
-						sndlumps[j] = W_CheckNumForName (com_token, skins[i].namespc);
+						sndlumps[j] = W_CheckNumForName (sc_String, skins[i].namespc);
 						if (sndlumps[j] == -1)
 						{ // Replacement not found, try finding it in the global namespace
-							sndlumps[j] = W_CheckNumForName (com_token);
+							sndlumps[j] = W_CheckNumForName (sc_String);
 						}
 					}
 				}
 				//if (j == 8)
-				//	Printf (PRINT_HIGH, "Funny info for skin %i: %s = %s\n", i, key, com_token);
+				//	Printf ("Funny info for skin %i: %s = %s\n", i, key, sc_String);
 			}
 		}
 
@@ -400,7 +386,7 @@ void R_InitSkins (void)
 		memset (sprtemp, -1, sizeof(sprtemp));
 		maxframe = -1;
 
-		for (k = base + 1; lumpinfo[k].handle == lumpinfo[base].handle; k++)
+		for (k = base + 1; lumpinfo[k].wadnum == lumpinfo[base].wadnum; k++)
 		{
 			if (*(int *)lumpinfo[k].name == intname)
 			{
@@ -435,36 +421,22 @@ void R_InitSkins (void)
 		{
 			if (sndlumps[j] != -1)
 			{
-				if (j > 1)
-				{
-					sprintf (sndname, "player/%s/%s", skins[i].name, skinsoundnames[j][1]);
-					S_AddSoundLump (sndname, sndlumps[j]);
-				}
-				else if (j == 1)
-				{
-					int r;
+				int aliasid;
 
-					for (r = 1; r <= 4; r++)
-					{
-						sprintf (sndname, "player/%s/death%d", skins[i].name, r);
-						S_AddSoundLump (sndname, sndlumps[j]);
-					}
-				}
-				else	// j == 0
+				aliasid = S_AddPlayerSound (skins[i].name, skins[i].gender,
+					playersoundrefs[j], sndlumps[j]);
+				if (j == 0)
 				{
-					int l, r;
-
-					for (l =  1; l <= 4; l++)
+					for (int l = 3; l > 0; --l)
 					{
-						for (r = 1; r <= 2; r++)
-						{
-							sprintf (sndname, "player/%s/pain%d_%d", skins[i].name, l*25, r);
-							S_AddSoundLump (sndname, sndlumps[j]);
-						}
+						S_AddPlayerSoundExisting (skins[i].name, skins[i].gender,
+							playersoundrefs[NUMSKINSOUNDS-1+l], aliasid);
 					}
 				}
 			}
 		}
+
+		SC_Close ();
 
 		// Make sure face prefix is a full 3 chars
 		if (skins[i].face[1] == 0 || skins[i].face[2] == 0)
@@ -473,38 +445,56 @@ void R_InitSkins (void)
 		}
 	}
 
-	// Grrk. May have changed sound table. Fix it.
 	if (numskins > 1)
+	{ // The sound table may have changed, so rehash it.
 		S_HashSounds ();
+		S_ShrinkPlayerSoundLists ();
+	}
 }
 
 // [RH] Find a skin by name
 int R_FindSkin (const char *name)
 {
-	int i;
+	int min, max, mid;
+	int lexx;
 
-	for (i = 0; i < (int)numskins; i++)
-		if (!strnicmp (skins[i].name, name, 16))
-			return i;
+	if (stricmp ("base", name) == 0)
+	{
+		return 0;
+	}
 
+	min = 1;
+	max = numskins-1;
+
+	while (min <= max)
+	{
+		mid = (min + max)/2;
+		lexx = strnicmp (skins[mid].name, name, 16);
+		if (lexx == 0)
+			return mid;
+		else if (lexx < 0)
+			min = mid + 1;
+		else
+			max = mid - 1;
+	}
 	return 0;
 }
 
 // [RH] List the names of all installed skins
-BEGIN_COMMAND (skins)
+CCMD (skins)
 {
 	int i;
 
 	for (i = 0; i < (int)numskins; i++)
-		Printf (PRINT_HIGH, "% 3d %s\n", i, skins[i].name);
+		Printf ("% 3d %s\n", i, skins[i].name);
 }
-END_COMMAND (skins)
 
 //
 // GAME FUNCTIONS
 //
 int				MaxVisSprites;
 vissprite_t 	*vissprites;
+vissprite_t		*firstvissprite;
 vissprite_t		*vissprite_p;
 vissprite_t		*lastvissprite;
 int 			newvissprite;
@@ -519,10 +509,15 @@ void R_InitSprites ()
 {
 	byte rangestart, rangeend;
 	int lump, lastlump;
-	int i;
+	size_t i;
+
+	for (i = 0; i < MAXWIDTH; i++)
+	{
+		negonearray[i] = 0;
+	}
 
 	MaxVisSprites = 128;	// [RH] This is the initial default value. It grows as needed.
-	vissprites = (vissprite_t *)Malloc (MaxVisSprites * sizeof(vissprite_t));
+	firstvissprite = vissprites = (vissprite_t *)Malloc (MaxVisSprites * sizeof(vissprite_t));
 	lastvissprite = &vissprites[MaxVisSprites];
 
 	if (gameinfo.gametype == GAME_Doom)
@@ -550,7 +545,7 @@ void R_InitSprites ()
 	}
 
 	// [RH] Do some preliminary setup
-	skins = (playerskin_t *)Z_Malloc (sizeof(*skins) * numskins, PU_STATIC, 0);
+	skins = (FPlayerSkin *)Z_Malloc (sizeof(*skins) * numskins, PU_STATIC, 0);
 	memset (skins, 0, sizeof(*skins) * numskins);
 	for (i = 0; i < numskins; i++)
 	{
@@ -570,12 +565,15 @@ void R_InitSprites ()
 
 	for (i = 0; i < sprites.Size (); i++)
 	{
-		if (memcmp (sprites[i].name, "PLAY", 4) == 0)
+		if (memcmp (sprites[i].name, deh.PlayerSprite, 4) == 0)
 		{
 			skins[0].sprite = i;
 			break;
 		}
 	}
+
+	// [RH] Sort the skins, but leave base as skin 0
+	qsort (&skins[1], numskins-1, sizeof(FPlayerSkin), skinsorter);
 }
 
 
@@ -586,7 +584,7 @@ void R_InitSprites ()
 //
 void R_ClearSprites (void)
 {
-	vissprite_p = vissprites;
+	vissprite_p = firstvissprite;
 }
 
 
@@ -597,11 +595,13 @@ vissprite_t *R_NewVisSprite (void)
 {
 	if (vissprite_p == lastvissprite)
 	{
-		int prevvisspritenum = vissprite_p - vissprites;
+		ptrdiff_t firstvisspritenum = firstvissprite - vissprites;
+		ptrdiff_t prevvisspritenum = vissprite_p - vissprites;
 
 		MaxVisSprites *= 2;
 		vissprites = (vissprite_t *)Realloc (vissprites, MaxVisSprites * sizeof(vissprite_t));
 		lastvissprite = &vissprites[MaxVisSprites];
+		firstvissprite = &vissprites[firstvisspritenum];
 		vissprite_p = &vissprites[prevvisspritenum];
 		DPrintf ("MaxVisSprites increased to %d\n", MaxVisSprites);
 	}
@@ -623,18 +623,21 @@ short*			mceilingclip;
 fixed_t 		spryscale;
 fixed_t 		sprtopscreen;
 
+bool			sprflipvert;
+
 void R_DrawMaskedColumn (column_t *column, int baseclip)
 {
-	dc_texturefrac = 0;
-
-	while (column->topdelta != 0xff) 
+	for (; column->topdelta != 0xff; column = (column_t *)((byte *)column + column->length + 4))
 	{
 		// calculate unclipped screen coordinates for post
-		int topscreen = sprtopscreen + spryscale * column->topdelta - 1;
+		dc_yl = (sprtopscreen + spryscale * column->topdelta) >> FRACBITS;
+		dc_yh = (sprtopscreen + spryscale * (column->topdelta + column->length) - FRACUNIT) >> FRACBITS;
 
-		dc_yl = (topscreen + FRACUNIT) >> FRACBITS;
-		dc_yh = (topscreen + spryscale * column->length) >> FRACBITS;
-				
+		if (sprflipvert)
+		{
+			swap (dc_yl, dc_yh);
+		}
+
 		if (dc_yh >= mfloorclip[dc_x])
 		{
 			dc_yh = mfloorclip[dc_x] - 1;
@@ -643,26 +646,42 @@ void R_DrawMaskedColumn (column_t *column, int baseclip)
 		{
 			dc_yh = baseclip;
 		}
-		if (dc_yl <= mceilingclip[dc_x])
+		if (dc_yl < mceilingclip[dc_x])
 		{
-			int oldyl = dc_yl;
-			dc_yl = mceilingclip[dc_x] + 1;
-			dc_texturefrac = (dc_yl - oldyl) * dc_iscale;
-		}
-		else
-		{
-			dc_texturefrac = 0;
+			dc_yl = mceilingclip[dc_x];
 		}
 
 		if (dc_yl <= dc_yh)
 		{
+			if (sprflipvert)
+			{
+				dc_texturefrac = (dc_yl*dc_iscale) - (column->topdelta << FRACBITS)
+					- FixedMul (centeryfrac, dc_iscale) - dc_texturemid;
+				if (dc_texturefrac >= column->length << FRACBITS)
+				{
+					if (++dc_yl > dc_yh)
+						continue;
+					dc_texturefrac += dc_iscale;
+				}
+			}
+			else
+			{
+				dc_texturefrac = dc_texturemid - (column->topdelta << FRACBITS)
+					+ (dc_yl*dc_iscale) - FixedMul (centeryfrac-FRACUNIT, dc_iscale);
+				if (dc_texturefrac < 0)
+				{
+					if (++dc_yl > dc_yh)
+						continue;
+					dc_texturefrac += dc_iscale;
+				}
+			}
 			dc_source = (byte *)column + 3;
-			colfunc (); 
+			if (r_MarkTrans)
+				TransArea += dc_yh - dc_yl + 1;
+			colfunc ();
 		}
-		column = (column_t *)((byte *)column + column->length + 4);
 	}
 }
-
 
 //
 // R_DrawVisSprite
@@ -680,68 +699,20 @@ void R_DrawVisSprite (vissprite_t *vis, int x1, int x2)
 	// [RH] Tutti-Frutti fix (also allows sprites up to 256 pixels tall)
 	dc_mask = 0xff;
 
-	if (vis->patch == -1)
+	if (vis->picnum == -1)
 	{ // [RH] It's a particle
 		R_DrawParticle (vis, x1, x2);
 		return;
 	}
 
-	patch = (patch_t *)W_CacheLumpNum (vis->patch, PU_CACHE);
+	patch = TileCache[R_CacheTileNum (vis->picnum, PU_CACHE)];
 
 	dc_colormap = vis->colormap;
-	colfunc = basecolfunc;
-	hcolfunc_post1 = rt_map1col;
-	hcolfunc_post2 = rt_map2cols;
-	hcolfunc_post4 = rt_map4cols;
-
-	if (vis->translation)
-	{
-		colfunc = transcolfunc;
-		dc_translation = vis->translation;
-	}
-	else if (vis->mobjflags & MF_TRANSLATION)
-	{
-		// [RH] MF_TRANSLATION is still available for DeHackEd patches that
-		//		used it, but the prefered way to change a thing's colors
-		//		is now with the palette field.
-		colfunc = transcolfunc;
-		dc_translation = translationtables + (MAXPLAYERS-1)*256*2 +
-			( (vis->mobjflags & MF_TRANSLATION) >> (MF_TRANSSHIFT-8) );
-	}
-
-	if (vis->mobjflags & MF_SHADOW)
-	{
-		// [RH] I use MF_SHADOW to recognize fuzz effect now instead of
-		//		a NULL colormap. This allow proper substition of
-		//		translucency with light levels if desired. The original
-		//		code used colormap == NULL to indicate shadows.
-		dc_translevel = FRACUNIT/5;
-		if (r_drawfuzz.value && gameinfo.gametype == GAME_Doom)
-		{
-			colfunc = fuzzcolfunc;
-		}
-		else if (colfunc == basecolfunc)
-		{
-			colfunc = lucentcolfunc;
-		}
-		else
-		{
-			colfunc = tlatedlucentcolfunc;
-		}
-	}
-	else if (vis->translucency < FRACUNIT)
-	{	// [RH] draw translucent column
-		if (colfunc == basecolfunc)
-			colfunc = lucentcolfunc;
-		else
-			colfunc = tlatedlucentcolfunc;
-		dc_translevel = vis->translucency;
-	}
-
-	dc_iscale = FixedDiv (FRACUNIT, vis->yscale);
+	spryscale = vis->yscale;
+	sprflipvert = false;
+	dc_iscale = 0xffffffffu / (unsigned)vis->yscale;
 	dc_texturemid = vis->texturemid;
 	frac = vis->startfrac;
-	spryscale = vis->yscale;
 
 	sprtopscreen = centeryfrac - FixedMul (dc_texturemid, spryscale);
 
@@ -754,16 +725,22 @@ void R_DrawVisSprite (vissprite_t *vis, int x1, int x2)
 	}
 	else
 	{
-		baseclip = MAXINT;
+		baseclip = FIXED_MAX;
 	}
 
 #ifdef RANGECHECK
 	patchwidth = (unsigned)SHORT(patch->width);
 #endif
 
-	if (!r_columnmethod.value || colfunc == fuzzcolfunc)
+	switch (R_SetPatchStyle (vis->RenderStyle, vis->alpha,
+		vis->translation, vis->AlphaColor))
 	{
-		// [RH] The original Doom method of drawing sprites
+	case DontDraw:
+		break;
+
+	case DoDraw0:
+		// One column at a time
+		{
 		int x1 = vis->x1, x2 = vis->x2;
 		fixed_t xiscale = vis->xiscale;
 
@@ -772,7 +749,8 @@ void R_DrawVisSprite (vissprite_t *vis, int x1, int x2)
 			unsigned int texturecolumn = frac>>FRACBITS;
 
 #ifdef RANGECHECK
-			if (texturecolumn >= patchwidth) {
+			if (texturecolumn >= patchwidth)
+			{
 				DPrintf ("R_DrawSpriteRange: bad texturecolumn (%d)\n", texturecolumn);
 				continue;
 			}
@@ -780,38 +758,31 @@ void R_DrawVisSprite (vissprite_t *vis, int x1, int x2)
 
 			R_DrawMaskedColumn ((column_t *)((byte *)patch + LONG(patch->columnofs[texturecolumn])), baseclip);
 		}
-	} else {
-		// [RH] Cache-friendly drawer
+		}
+		break;
+
+	case DoDraw1:
+		// Up to four columns at a time
+		{
 		int x1 = vis->x1, x2 = vis->x2 + 1;
 		fixed_t xiscale = vis->xiscale;
 		int stop = x2 & ~3;
 
-		if (x1 < x2) {
-			// Set things up for the cache-friendly drawers
-			if (colfunc == lucentcolfunc) {
-				hcolfunc_post1 = rt_lucent1col;
-				hcolfunc_post2 = rt_lucent2cols;
-				hcolfunc_post4 = rt_lucent4cols;
-			} else if (colfunc == tlatedlucentcolfunc) {
-				hcolfunc_post1 = rt_tlatelucent1col;
-				hcolfunc_post2 = rt_tlatelucent2cols;
-				hcolfunc_post4 = rt_tlatelucent4cols;
-			} else if (colfunc == transcolfunc) {
-				hcolfunc_post1 = rt_tlate1col;
-				hcolfunc_post2 = rt_tlate2cols;
-				hcolfunc_post4 = rt_tlate4cols;
-			}
-
+		if (x1 < x2)
+		{
 			dc_x = x1;
 
-			if (dc_x & 1) {
+			if (dc_x & 1)
+			{
 				R_DrawMaskedColumn ((column_t *)((byte *)patch + LONG(patch->columnofs[frac>>FRACBITS])), baseclip);
 				dc_x++;
 				frac += xiscale;
 			}
 
-			if (dc_x & 2) {
-				if (dc_x < x2 - 1) {
+			if (dc_x & 2)
+			{
+				if (dc_x < x2 - 1)
+				{
 					rt_initcols();
 					R_DrawMaskedColumnHoriz ((column_t *)((byte *)patch + LONG(patch->columnofs[frac>>FRACBITS])), baseclip);
 					dc_x++;
@@ -820,14 +791,17 @@ void R_DrawVisSprite (vissprite_t *vis, int x1, int x2)
 					rt_draw2cols ((dc_x - 1) & 3, dc_x - 1);
 					dc_x++;
 					frac += xiscale;
-				} else if (dc_x == x2 - 1) {
+				}
+				else if (dc_x == x2 - 1)
+				{
 					R_DrawMaskedColumn ((column_t *)((byte *)patch + LONG(patch->columnofs[frac>>FRACBITS])), baseclip);
 					dc_x++;
 					frac += xiscale;
 				}
 			}
 
-			while (dc_x < stop) {
+			while (dc_x < stop)
+			{
 				rt_initcols();
 				R_DrawMaskedColumnHoriz ((column_t *)((byte *)patch + LONG(patch->columnofs[frac>>FRACBITS])), baseclip);
 				dc_x++;
@@ -844,31 +818,31 @@ void R_DrawVisSprite (vissprite_t *vis, int x1, int x2)
 				frac += xiscale;
 			}
 
-			if (x2 - dc_x == 1) {
+			if (x2 - dc_x == 1)
+			{
 				R_DrawMaskedColumn ((column_t *)((byte *)patch + LONG(patch->columnofs[frac>>FRACBITS])), baseclip);
-			} else if (x2 - dc_x >= 2) {
+			}
+			else if (x2 - dc_x >= 2)
+			{
 				rt_initcols();
 				R_DrawMaskedColumnHoriz ((column_t *)((byte *)patch + LONG(patch->columnofs[frac>>FRACBITS])), baseclip);
 				dc_x++;
 				frac += xiscale;
 				R_DrawMaskedColumnHoriz ((column_t *)((byte *)patch + LONG(patch->columnofs[frac>>FRACBITS])), baseclip);
 				rt_draw2cols ((dc_x - 1) & 3, dc_x - 1);
-				dc_x++;
 				frac += xiscale;
-				if (++dc_x < x2) {
+				if (++dc_x < x2)
+				{
 					R_DrawMaskedColumn ((column_t *)((byte *)patch + LONG(patch->columnofs[frac>>FRACBITS])), baseclip);
 				}
 			}
 		}
+		}
+		break;
 	}
 
-	colfunc = basecolfunc;
-	hcolfunc_post1 = rt_map1col;
-	hcolfunc_post2 = rt_map2cols;
-	hcolfunc_post4 = rt_map4cols;
+	R_FinishSetPatchStyle ();
 }
-
-
 
 //
 // R_ProjectSprite
@@ -879,10 +853,8 @@ void R_ProjectSprite (AActor *thing)
 	fixed_t 			tr_x;
 	fixed_t 			tr_y;
 	
-	fixed_t 			gxt;
-	fixed_t 			gyt;
-	
 	fixed_t				gzt;				// killough 3/27/98
+	fixed_t				gzb;				// [RH] use bottom of sprite, not actor
 	fixed_t 			tx;
 	fixed_t 			tz;
 
@@ -896,10 +868,8 @@ void R_ProjectSprite (AActor *thing)
 	int 				lump;
 	
 	unsigned			rot;
-	BOOL 				flip;
+	byte 				flip;
 	
-	int 				index;
-
 	vissprite_t*		vis;
 	
 	angle_t 			ang;
@@ -907,32 +877,35 @@ void R_ProjectSprite (AActor *thing)
 
 	sector_t*			heightsec;			// killough 3/27/98
 
-	if (thing->flags2 & MF2_DONTDRAW || thing->translucency == 0)
+	if (thing->renderflags & RF_INVISIBLE || thing->alpha == 0)
 		return;
 
 	// transform the origin point
 	tr_x = thing->x - viewx;
 	tr_y = thing->y - viewy;
-		
-	gxt = FixedMul (tr_x,viewcos); 
-	gyt = -FixedMul (tr_y,viewsin);
-	
-	tz = gxt-gyt; 
+
+	tz = DMulScale20 (tr_x, viewtancos, tr_y, viewtansin);
 
 	// thing is behind view plane?
 	if (tz < MINZ)
 		return;
-	
-	xscale = FixedDiv (FocalLengthX, tz);
-		
-	gxt = -FixedMul (tr_x, viewsin); 
-	gyt = FixedMul (tr_y, viewcos); 
-	tx = -(gyt+gxt); 
+
+	tx = DMulScale16 (tr_x, viewsin, -tr_y, viewcos);
+
+	// [RH] Flip for mirrors
+	if (MirrorFlags & RF_XFLIP)
+	{
+		tx = viewwidth - tx - 1;
+	}
 
 	// too far off the side?
-	if (abs(tx)>(tz<<2))
+	if ((abs (tx) >> 6) > tz)
+	{
 		return;
-	
+	}
+
+	xscale = Scale (centerxfrac, (thing->xscale+1)<<6, tz);
+
 	// decide which patch to use for sprite relative to player
 #ifdef RANGECHECK
 	if ((unsigned)thing->sprite >= (unsigned)sprites.Size ())
@@ -942,16 +915,14 @@ void R_ProjectSprite (AActor *thing)
 	}
 #endif
 	sprdef = &sprites[thing->sprite];
-#ifdef RANGECHECK
-	if ( (thing->frame&FF_FRAMEMASK) >= sprdef->numframes )
+	if (thing->frame >= sprdef->numframes)
 	{
 		DPrintf ("R_ProjectSprite: invalid sprite frame %c%c%c%c: %c (max %c)\n",
 			sprdef->name[0], sprdef->name[1], sprdef->name[2], sprdef->name[3],
-			(thing->frame&FF_FRAMEMASK) + 'A', sprdef->numframes + 'A' - 1);
+			thing->frame + 'A', sprdef->numframes + 'A' - 1);
 		return;
 	}
-#endif
-	sprframe = &sprdef->spriteframes[thing->frame & FF_FRAMEMASK];
+	sprframe = &sprdef->spriteframes[thing->frame];
 
 	if (sprframe->rotate)
 	{
@@ -959,40 +930,45 @@ void R_ProjectSprite (AActor *thing)
 		ang = R_PointToAngle (thing->x, thing->y);
 		rot = (ang-thing->angle+(unsigned)(ANG45/2)*9)>>29;
 		lump = sprframe->lump[rot];
-		flip = (BOOL)sprframe->flip[rot];
+		flip = sprframe->flip[rot];
 	}
 	else
 	{
 		// use single rotation for all views
 		lump = sprframe->lump[rot = 0];
-		flip = (BOOL)sprframe->flip[0];
+		flip = sprframe->flip[0];
 	}
 
-	if (sprframe->width[rot] == SPRITE_NEEDS_INFO)
-		R_CacheSprite (sprdef);	// [RH] speeds up game startup time
+	if (TileSizes[lump].Width == 0xffff)
+	{
+		R_CacheTileNum (lump, PU_CACHE);	// [RH] get sprite's size
+	}
 	
+	// [RH] Added scaling
+	gzt = thing->z + (TileSizes[lump].TopOffset << (FRACBITS-6)) * (thing->yscale+1);
+	gzb = thing->z + ((TileSizes[lump].TopOffset - TileSizes[lump].Height) << (FRACBITS-6)) * (thing->yscale+1);
+
+	// [RH] Reject sprites that are off the top or bottom of the screen
+	if (MulScale12 (globaluclip, tz) > viewz - gzb ||
+		MulScale12 (globaldclip, tz) < viewz - gzt)
+	{
+		return;
+	}
+
 	// calculate edges of the shape
-	tx -= sprframe->offset[rot];	// [RH] Moved out of spriteoffset[]
-	x1 = (centerxfrac + FixedMul (tx,xscale)) >> FRACBITS;
+	tx -= TileSizes[lump].LeftOffset << 16;
+	x1 = (centerxfrac + MulScale16 (tx, xscale)) >> FRACBITS;
 
 	// off the right side?
-	if (x1 > viewwidth)
+	if (x1 > WindowRight)
 		return;
 	
-	tx += sprframe->width[rot];	// [RH] Moved out of spritewidth[]
-	x2 = ((centerxfrac + FixedMul (tx,xscale)) >> FRACBITS) - 1;
+	tx += TileSizes[lump].Width << 16;
+	x2 = ((centerxfrac + MulScale16 (tx, xscale)) >> FRACBITS) - 1;
 
-	// off the left side
-	if (x2 < 0)
+	// off the left side or too small?
+	if (x2 < WindowLeft || x2 < x1)
 		return;
-
-	gzt = thing->z + sprframe->topoffset[rot];	// [RH] Moved out of spritetopoffset[]
-
-	// killough 4/9/98: clip things which are out of view due to height
-// [RH] This doesn't work too well with freelook
-//	if (thing->z > viewz + FixedDiv(centeryfrac, yscale) ||
-//		gzt      < viewz - FixedDiv(centeryfrac-viewheight, yscale))
-//		return;
 
 	// killough 3/27/98: exclude things totally separated
 	// from the viewer, by either water or fake ceilings
@@ -1003,15 +979,21 @@ void R_ProjectSprite (AActor *thing)
 	if (heightsec)	// only clip things which are in special sectors
 	{
 		sector_t *phs = camera->subsector->sector->heightsec;
-		if (phs && viewz < phs->floorheight ?
-			thing->z >= heightsec->floorheight :
-			gzt < heightsec->floorheight)
+		if (phs && viewz < phs->floorplane.ZatPoint (viewx, viewy) ?
+			gzb >= heightsec->floorplane.ZatPoint (thing->x, thing->y) :
+			gzt < heightsec->floorplane.ZatPoint (thing->x, thing->y))
 		  return;
-		if (phs && viewz > phs->ceilingheight ?
-			gzt < heightsec->ceilingheight &&
-			viewz >= heightsec->ceilingheight :
-			thing->z >= heightsec->ceilingheight)
+		if (phs && viewz > phs->ceilingplane.ZatPoint (viewx, viewy) ?
+			gzt < heightsec->ceilingplane.ZatPoint (thing->x, thing->y) &&
+			viewz >= heightsec->ceilingplane.ZatPoint (viewx, viewy) :
+			gzb >= heightsec->ceilingplane.ZatPoint (thing->x, thing->y))
 		  return;
+	}
+
+	// [RH] Flip for mirrors and renderflags
+	if ((MirrorFlags ^ thing->renderflags) & RF_XFLIP)
+	{
+		flip = !flip;
 	}
 
 	// store information in a vissprite
@@ -1020,32 +1002,34 @@ void R_ProjectSprite (AActor *thing)
 	// killough 3/27/98: save sector for special clipping later
 	vis->heightsec = heightsec;
 
-	vis->mobjflags = thing->flags;
+	vis->renderflags = thing->renderflags;
+	vis->RenderStyle = thing->RenderStyle;
+	vis->AlphaColor = thing->alphacolor;
 	vis->xscale = xscale;
-	vis->yscale = FixedDiv (FocalLengthY, tz);
+	vis->yscale = Scale (InvZtoScale, (thing->yscale+1)<<6, tz);
+	vis->depth = tz;
 	vis->gx = thing->x;
 	vis->gy = thing->y;
-	vis->gz = thing->z;
+	vis->gz = gzb;		// [RH] use gzb, not thing->z
 	vis->gzt = gzt;		// killough 3/27/98
 	vis->floorclip = thing->floorclip;
-	vis->texturemid = gzt - viewz - vis->floorclip;
-	vis->x1 = x1 < 0 ? 0 : x1;
-	vis->x2 = x2 >= viewwidth ? viewwidth-1 : x2;
+	vis->texturemid = (TileSizes[lump].TopOffset << FRACBITS)
+		- SafeDivScale6 (viewz-thing->z, thing->yscale+1) - vis->floorclip;
+	vis->x1 = x1 < WindowLeft ? WindowLeft : x1;
+	vis->x2 = x2 > WindowRight ? WindowRight : x2;
 	vis->translation = thing->translation;		// [RH] thing translation table
-	vis->translucency = thing->translucency;
-	vis->depth = tz;
-	iscale = FixedDiv (tz, FocalLengthX);
-
-	// [RH] Special handling: If an actor has both MF_SHADOW and
-	// MF3_GHOST set, MF_SHADOW is only used for AI and not rendering,
-	// thus we avoid the potential for Doom shadow effects on Heretic
-	// ghosts.
-	if (thing->flags3 & MF3_GHOST)
-		vis->mobjflags &= ~MF_SHADOW;
+	if (vis->translation == NULL && (thing->flags & MF_TRANSLATION))
+	{
+		vis->translation = translationtables + MAXPLAYERS*256*2 - 256 +
+			((thing->flags & MF_TRANSLATION) >> (MF_TRANSSHIFT-8));
+	}
+	vis->alpha = thing->alpha;
+	vis->picnum = lump;
+	iscale = DivScale32 (1, xscale);
 
 	if (flip)
 	{
-		vis->startfrac = sprframe->width[rot]-1;	// [RH] Moved out of spritewidth
+		vis->startfrac = (TileSizes[lump].Width << FRACBITS) - 1;
 		vis->xiscale = -iscale;
 	}
 	else
@@ -1056,7 +1040,6 @@ void R_ProjectSprite (AActor *thing)
 
 	if (vis->x1 > x1)
 		vis->startfrac += vis->xiscale*(vis->x1-x1);
-	vis->patch = lump;
 	
 	// get light level
 	if (fixedlightlev)
@@ -1068,7 +1051,7 @@ void R_ProjectSprite (AActor *thing)
 		// fixed map
 		vis->colormap = fixedcolormap;
 	}
-	else if (!foggy && (thing->frame & FF_FULLBRIGHT))
+	else if (!foggy && (thing->renderflags & RF_FULLBRIGHT))
 	{
 		// full bright
 		vis->colormap = basecolormap;	// [RH] Use basecolormap
@@ -1076,13 +1059,9 @@ void R_ProjectSprite (AActor *thing)
 	else
 	{
 		// diminished light
-		index = (vis->yscale*lightscalexmul)>>LIGHTSCALESHIFT;	// [RH]
-
-		if (index >= MAXLIGHTSCALE) 
-			index = MAXLIGHTSCALE-1;
-
-		vis->colormap = spritelights[index] + basecolormap;	// [RH] Use basecolormap
-	}	
+		vis->colormap = basecolormap + (GETPALOOKUP (
+			(fixed_t)DivScale12 (r_SpriteVisibility, tz), spriteshade) << COLORMAPSHIFT);
+	}
 }
 
 
@@ -1094,26 +1073,18 @@ void R_ProjectSprite (AActor *thing)
 void R_AddSprites (sector_t *sec, int lightlevel)
 {
 	AActor *thing;
-	int 	lightnum;
 
 	// BSP is traversed by subsector.
 	// A sector might have been split into several
 	//	subsectors during BSP building.
 	// Thus we check whether it was already added.
-	if (sec->validcount == validcount)
-		return; 		
+	if (sec->thinglist == NULL || sec->validcount == validcount)
+		return;
 
 	// Well, now it will be done.
 	sec->validcount = validcount;
-		
-	lightnum = (lightlevel >> LIGHTSEGSHIFT) + (foggy ? 0 : extralight);
 
-	if (lightnum < 0)			
-		spritelights = scalelight[0];
-	else if (lightnum >= LIGHTLEVELS)
-		spritelights = scalelight[LIGHTLEVELS-1];
-	else
-		spritelights = scalelight[lightnum];
+	spriteshade = LIGHT2SHADE(lightlevel + r_actualextralight);
 
 	// Handle all things in sector.
 	for (thing = sec->thinglist; thing; thing = thing->snext)
@@ -1140,37 +1111,41 @@ void R_DrawPSprite (pspdef_t* psp, AActor *owner)
 	
 	// decide which patch to use
 #ifdef RANGECHECK
-	if ( (unsigned)psp->state->sprite.index >= (unsigned)sprites.Size ()) {
-		DPrintf ("R_DrawPSprite: invalid sprite number %i\n", psp->state->sprite);
+	if ( (unsigned)psp->state->sprite.index >= (unsigned)sprites.Size ())
+	{
+		DPrintf ("R_DrawPSprite: invalid sprite number %i\n", psp->state->sprite.index);
 		return;
 	}
 #endif
 	sprdef = &sprites[psp->state->sprite.index];
 #ifdef RANGECHECK
-	if ( (psp->state->frame & FF_FRAMEMASK) >= sprdef->numframes) {
-		DPrintf ("R_DrawPSprite: invalid sprite frame %i : %i\n", psp->state->sprite, psp->state->frame);
+	if (psp->state->GetFrame() >= sprdef->numframes)
+	{
+		DPrintf ("R_DrawPSprite: invalid sprite frame %i : %i\n", psp->state->sprite.index, psp->state->GetFrame());
 		return;
 	}
 #endif
-	sprframe = &sprdef->spriteframes[ psp->state->frame & FF_FRAMEMASK ];
+	sprframe = &sprdef->spriteframes[psp->state->GetFrame()];
 
 	lump = sprframe->lump[0];
 	flip = (BOOL)sprframe->flip[0];
 
-	if (sprframe->width[0] == SPRITE_NEEDS_INFO)
-		R_CacheSprite (sprdef);	// [RH] speeds up game startup time
-	
+	if (TileSizes[lump].Width == 0xffff)
+	{
+		R_CacheTileNum (lump, PU_CACHE);
+	}
+
 	// calculate edges of the shape
 	tx = psp->sx-((320/2)<<FRACBITS);
 		
-	tx -= sprframe->offset[0];	// [RH] Moved out of spriteoffset[]
+	tx -= TileSizes[lump].LeftOffset << FRACBITS;
 	x1 = (centerxfrac + FixedMul (tx, pspritexscale)) >>FRACBITS;
 
 	// off the right side
 	if (x1 > viewwidth)
-		return; 		
+		return; 
 
-	tx += sprframe->width[0];	// [RH] Moved out of spritewidth[]
+	tx += TileSizes[lump].Width << FRACBITS;
 	x2 = ((centerxfrac + FixedMul (tx, pspritexscale)) >>FRACBITS) - 1;
 
 	// off the left side
@@ -1179,12 +1154,13 @@ void R_DrawPSprite (pspdef_t* psp, AActor *owner)
 	
 	// store information in a vissprite
 	vis = &avis;
-	vis->mobjflags = owner->flags;
+	vis->renderflags = owner->renderflags;
 	vis->floorclip = 0;
-	vis->texturemid = (BASEYCENTER<<FRACBITS)+FRACUNIT/2-
-		(psp->sy-sprframe->topoffset[0]);	// [RH] Moved out of spritetopoffset[]
-	if (camera->player && (realviewheight == screen->height ||
-		(screen->width > 320 && !st_scale.value)))
+	vis->texturemid = (BASEYCENTER<<FRACBITS) -
+		(psp->sy - (TileSizes[lump].TopOffset << FRACBITS));
+	if (camera->player && (RenderTarget != screen ||
+		realviewheight == RenderTarget->GetHeight() ||
+		(RenderTarget->GetWidth() > 320 && !*st_scale)))
 	{	// Adjust PSprite for fullscreen views
 		FWeaponInfo *weapon;
 		if (camera->player->powers[pw_weaponlevel2])
@@ -1193,7 +1169,7 @@ void R_DrawPSprite (pspdef_t* psp, AActor *owner)
 			weapon = wpnlev1info[camera->player->readyweapon];
 		if (weapon && weapon->yadjust)
 		{
-			if (realviewheight == screen->height)
+			if (RenderTarget != screen || realviewheight == RenderTarget->GetHeight())
 			{
 				vis->texturemid -= weapon->yadjust;
 			}
@@ -1205,31 +1181,27 @@ void R_DrawPSprite (pspdef_t* psp, AActor *owner)
 		}
 	}
 	vis->x1 = x1 < 0 ? 0 : x1;
-	vis->x2 = x2 >= viewwidth ? viewwidth-1 : x2;		
+	vis->x2 = x2 >= viewwidth ? viewwidth-1 : x2;
 	vis->xscale = pspritexscale;
 	vis->yscale = pspriteyscale;
 	vis->translation = NULL;		// [RH] Use default colors
-	vis->translucency = owner->translucency;
-	if ((owner->flags & MF_SHADOW) && (gameinfo.gametype != GAME_Doom))
-	{
-		vis->mobjflags &= ~MF_SHADOW;
-	}
+	vis->alpha = owner->alpha;
+	vis->RenderStyle = owner->RenderStyle;
+	vis->picnum = lump;
 
 	if (flip)
 	{
 		vis->xiscale = -pspritexiscale;
-		vis->startfrac = sprframe->width[0]-1;	// [RH] Moved out of spritewidth[]
+		vis->startfrac = (TileSizes[lump].Width << FRACBITS) - 1;
 	}
 	else
 	{
 		vis->xiscale = pspritexiscale;
 		vis->startfrac = 0;
 	}
-	
+
 	if (vis->x1 > x1)
 		vis->startfrac += vis->xiscale*(vis->x1-x1);
-
-	vis->patch = lump;
 
 	if (fixedlightlev)
 	{
@@ -1240,7 +1212,7 @@ void R_DrawPSprite (pspdef_t* psp, AActor *owner)
 		// fixed color
 		vis->colormap = fixedcolormap;
 	}
-	else if (psp->state->frame & FF_FULLBRIGHT)
+	else if (psp->state->GetFullbright())
 	{
 		// full bright
 		vis->colormap = basecolormap;	// [RH] use basecolormap
@@ -1248,14 +1220,16 @@ void R_DrawPSprite (pspdef_t* psp, AActor *owner)
 	else
 	{
 		// local light
-		vis->colormap = spritelights[MAXLIGHTSCALE-1] + basecolormap;	// [RH] add basecolormap
+		vis->colormap = basecolormap + (GETPALOOKUP (0, spriteshade) << COLORMAPSHIFT);
 	}
 	if (camera->player &&
 		(camera->player->powers[pw_invisibility] > 4*32
 		 || camera->player->powers[pw_invisibility] & 8))
 	{
 		// shadow draw
-		vis->mobjflags = MF_SHADOW;
+		vis->alpha = FRACUNIT/5;
+		vis->RenderStyle = (gameinfo.gametype == GAME_Doom) ?
+			STYLE_OptFuzzy : STYLE_Translucent;
 	}
 		
 	R_DrawVisSprite (vis, vis->x1, vis->x2);
@@ -1275,7 +1249,7 @@ void R_DrawPlayerSprites (void)
 	static sector_t tempsec;
 	int			floorlight, ceilinglight;
 	
-	if (!r_drawplayersprites.value ||
+	if (!*r_drawplayersprites ||
 		!camera->player ||
 		(players[consoleplayer].cheats & CF_CHASECAM))
 		return;
@@ -1284,21 +1258,15 @@ void R_DrawPlayerSprites (void)
 		&ceilinglight, false);
 
 	// [RH] set foggy flag
-	foggy = (level.fadeto || sec->floorcolormap->fade);
+	foggy = (level.fadeto || sec->floorcolormap->Fade || sec->ceilingcolormap->Fade);
+	r_actualextralight = foggy ? 0 : extralight << 4;
 
 	// [RH] set basecolormap
-	basecolormap = sec->floorcolormap->maps;
+	basecolormap = sec->floorcolormap->Maps;
 
 	// get light level
-	lightnum = ((floorlight + ceilinglight) >> (LIGHTSEGSHIFT+1))
-		+ (foggy ? 0 : extralight);
-
-	if (lightnum < 0)				
-		spritelights = scalelight[0];
-	else if (lightnum >= LIGHTLEVELS)
-		spritelights = scalelight[LIGHTLEVELS-1];
-	else
-		spritelights = scalelight[lightnum];
+	lightnum = ((floorlight + ceilinglight) >> 1) + r_actualextralight;
+	spriteshade = LIGHT2SHADE(lightnum) - 24*FRACUNIT;
 
 	// clip to screen bounds
 	mfloorclip = screenheightarray;
@@ -1332,75 +1300,124 @@ void R_DrawPlayerSprites (void)
 // R_SortVisSprites
 //
 // [RH] The old code for this function used a bubble sort, which was far less
-//		than optimal with large numbers of sprties. I changed it to use the
+//		than optimal with large numbers of sprites. I changed it to use the
 //		stdlib qsort() function instead, and now it is a *lot* faster; the
 //		more vissprites that need to be sorted, the better the performance
 //		gain compared to the old function.
 //
-static struct vissort_s {
-	vissprite_t *sprite;
-	fixed_t		depth;
-}				*spritesorter;
-static int		spritesortersize = 0;
-static int		vsprcount;
+static vissprite_t **spritesorter;
+static int spritesortersize = 0;
+static int vsprcount;
 
 static int STACK_ARGS sv_compare (const void *arg1, const void *arg2)
 {
-	return ((struct vissort_s *)arg2)->depth - ((struct vissort_s *)arg1)->depth;
+	int diff = (*(vissprite_t **)arg1)->depth - (*(vissprite_t **)arg2)->depth;
+	if (diff == 0)
+		return (*(vissprite_t **)arg2)->gzt - (*(vissprite_t **)arg1)->gzt;
+	return diff;
 }
 
 void R_SortVisSprites (void)
 {
 	int i;
+	vissprite_t *spr;
 
-	vsprcount = vissprite_p - vissprites;
+	vsprcount = vissprite_p - firstvissprite;
 
 	if (!vsprcount)
 		return;
 
 	if (spritesortersize < MaxVisSprites)
 	{
-		spritesorter = (vissort_s *)Realloc (spritesorter, sizeof(struct vissort_s) * MaxVisSprites);
+		if (spritesorter != NULL)
+			delete[] spritesorter;
+		spritesorter = new vissprite_t *[MaxVisSprites];
 		spritesortersize = MaxVisSprites;
 	}
 
-	for (i = 0; i < vsprcount; i++)
+	for (i = 0, spr = firstvissprite; i < vsprcount; i++, spr++)
 	{
-		spritesorter[i].sprite = &vissprites[i];
-		spritesorter[i].depth = vissprites[i].depth;
+		spritesorter[i] = spr;
 	}
 
-	qsort (spritesorter, vsprcount, sizeof (struct vissort_s), sv_compare);
+	qsort (spritesorter, vsprcount, sizeof (vissprite_t *), sv_compare);
 }
 
-
-// [RH] Allocated in R_MultiresInit() to
-// SCREENWIDTH entries each.
-short *r_dsclipbot, *r_dscliptop;
-
-// [RH] The original code used -2 to indicate that a sprite was not clipped.
-//		With ZDoom's freelook, it's possible that the rendering process
-//		could actually generate a clip value of -2, and the rendering code
-//		would mistake this to indicate the the sprite wasn't clipped.
-#define NOT_CLIPPED		(-32768)
 
 //
 // R_DrawSprite
 //
 void R_DrawSprite (vissprite_t *spr)
 {
-	drawseg_t*			ds;
-	int 				x;
-	int 				r1;
-	int 				r2;
-	fixed_t 			scale;
-	fixed_t 			lowscale;
+	static short clipbot[MAXWIDTH];
+	static short cliptop[MAXWIDTH];
+	drawseg_t *ds;
+	int i;
+	int r1, r2;
+	short topclip, botclip;
+	short *clip1, *clip2;
 
-	for (x = spr->x1 ; x<=spr->x2 ; x++)
-		r_dsclipbot[x] = r_dscliptop[x] = NOT_CLIPPED;
+	// [RH] Quickly reject sprites with bad x ranges.
+	if (spr->x1 > spr->x2)
+		return;
+
+	// [RH] Initialize the clipping arrays to their largest possible range
+	// instead of using a special "not clipped" value.
+	topclip = 0;
+	botclip = viewheight;
+
+	// killough 3/27/98:
+	// Clip the sprite against deep water and/or fake ceilings.
+	// killough 4/9/98: optimize by adding mh
+	// killough 4/11/98: improve sprite clipping for underwater/fake ceilings
+	// killough 11/98: fix disappearing sprites
+
+	if (spr->heightsec)	// only things in specially marked sectors
+	{
+		fixed_t h, mh;
+		sector_t *phs = camera->subsector->sector->heightsec;
+		if ((mh = spr->heightsec->floorplane.ZatPoint (spr->gx, spr->gy)) > spr->gz &&
+			(h = centeryfrac - FixedMul (mh-=viewz, spr->yscale)) >= 0 &&
+			(h >>= FRACBITS) < viewheight)
+		{
+			if (mh <= 0 || (phs && viewz > phs->floorplane.ZatPoint (viewx, viewy)) && h < botclip)
+			{						// clip bottom
+				botclip = h;
+			}
+			else if (h > topclip &&
+				phs != NULL && viewz <= phs->floorplane.ZatPoint (viewx, viewy)) // killough 11/98
+			{						// clip top
+				topclip = h;
+			}
+		}
+
+		if ((mh = spr->heightsec->ceilingplane.ZatPoint (viewx, viewy)) < spr->gzt &&
+			(h = centeryfrac - FixedMul(mh-viewz, spr->yscale)) >= 0 &&
+			(h >>= FRACBITS) < viewheight)
+		{
+			if (phs && viewz >= phs->ceilingplane.ZatPoint (viewx, viewy) && h < botclip)
+			{						// clip bottom
+				botclip = h;
+			}
+			else if (h > topclip)
+			{						// clip top
+				topclip = h;
+			}
+		}
+	}
+	// killough 3/27/98: end special clipping for deep water / fake ceilings
+
+	i = spr->x2 - spr->x1 + 1;
+	clip1 = clipbot + spr->x1;
+	clip2 = cliptop + spr->x1;
+	do
+	{
+		*clip1++ = botclip;
+		*clip2++ = topclip;
+	} while (--i);
 	
 	// Scan drawsegs from end to start for obscuring segs.
-	// The first drawseg that has a greater scale is the clip seg.
+	// The first drawseg that is closer than the sprite is the clip seg.
 
 	// Modified by Lee Killough:
 	// (pointer check was originally nonportable
@@ -1408,118 +1425,66 @@ void R_DrawSprite (vissprite_t *spr)
 
 	//		for (ds=ds_p-1 ; ds >= drawsegs ; ds--)    old buggy code
 
-	for (ds = ds_p ; ds-- > drawsegs ; )  // new -- killough
+	for (ds = ds_p; ds-- > firstdrawseg ; )  // new -- killough
 	{
 		// determine if the drawseg obscures the sprite
-		if (ds->x1 > spr->x2
-			|| ds->x2 < spr->x1
-			|| (!ds->silhouette && !ds->maskedtexturecol) )
+		if (ds->x1 > spr->x2 || ds->x2 < spr->x1 ||
+			(!ds->silhouette && ds->maskedtexturecol == -1) )
 		{
 			// does not cover sprite
 			continue;
 		}
-						
-		r1 = ds->x1 < spr->x1 ? spr->x1 : ds->x1;
-		r2 = ds->x2 > spr->x2 ? spr->x2 : ds->x2;
 
-		if (ds->scale1 > ds->scale2)
+		r1 = MAX<int> (ds->x1, spr->x1);
+		r2 = MIN<int> (ds->x2, spr->x2);
+
+		if (ds->neardepth > spr->depth || (ds->fardepth > spr->depth &&
+					!R_PointOnSegSide (spr->gx, spr->gy, ds->curline)))
 		{
-			lowscale = ds->scale2;
-			scale = ds->scale1;
-		}
-		else
-		{
-			lowscale = ds->scale1;
-			scale = ds->scale2;
-		}
-				
-		if (scale < spr->yscale
-			|| ( lowscale < spr->yscale
-				 && !R_PointOnSegSide (spr->gx, spr->gy, ds->curline) ) )
-		{
-			// masked mid texture?
-			if (ds->maskedtexturecol)	
+			// seg is behind sprite, so draw the mid texture if it has one
+			if (ds->maskedtexturecol != -1)
 				R_RenderMaskedSegRange (ds, r1, r2);
-			// seg is behind sprite
-			continue;					
+			continue;
 		}
 
-		
 		// clip this piece of the sprite
 		// killough 3/27/98: optimized and made much shorter
+		// [RH] Optimized further (at least for VC++;
+		// other compilers should be at least as good as before)
 
-		if (ds->silhouette&SIL_BOTTOM && spr->gz < ds->bsilheight) //bottom sil
-			for (x = r1; x <= r2; x++)
-				if (r_dsclipbot[x] == NOT_CLIPPED)
-					r_dsclipbot[x] = ds->sprbottomclip[x];
-
-		if (ds->silhouette&SIL_TOP && spr->gzt > ds->tsilheight)   // top sil
-			for (x = r1; x <= r2; x++)
-				if (r_dscliptop[x] == NOT_CLIPPED)
-					r_dscliptop[x] = ds->sprtopclip[x];
-	}
-
-	// killough 3/27/98:
-	// Clip the sprite against deep water and/or fake ceilings.
-	// killough 4/9/98: optimize by adding mh
-	// killough 4/11/98: improve sprite clipping for underwater/fake ceilings
-
-	if (spr->heightsec)	// only things in specially marked sectors
-	{
-		fixed_t h, mh;
-		sector_t *phs = camera->subsector->sector->heightsec;
-		if ((mh = spr->heightsec->floorheight) > spr->gz &&
-			(h = centeryfrac - FixedMul (mh-=viewz, spr->yscale)) >= 0 &&
-			(h >>= FRACBITS) < viewheight)
+		if (ds->silhouette & SIL_BOTTOM) //bottom sil
 		{
-			if (mh <= 0 || (phs && viewz > phs->floorheight))
-			{						// clip bottom
-				for (x=spr->x1 ; x<=spr->x2 ; x++)
-					if (r_dsclipbot[x] == NOT_CLIPPED || h < r_dsclipbot[x])
-						r_dsclipbot[x] = h;
-			}
-			else 
-			{						// clip top
-				for (x=spr->x1 ; x<=spr->x2 ; x++)
-					if (r_dscliptop[x] == NOT_CLIPPED || h > r_dscliptop[x])
-						r_dscliptop[x] = h;
-			}
+			clip1 = clipbot + r1;
+			clip2 = openings + ds->sprbottomclip + r1 - ds->x1;
+			i = r2 - r1 + 1;
+			do
+			{
+				if (*clip1 > *clip2)
+					*clip1 = *clip2;
+				clip1++;
+				clip2++;
+			} while (--i);
 		}
 
-		if ((mh = spr->heightsec->ceilingheight) < spr->gzt &&
-			(h = centeryfrac - FixedMul(mh-viewz, spr->yscale)) >= 0 &&
-			(h >>= FRACBITS) < viewheight)
+		if (ds->silhouette & SIL_TOP)   // top sil
 		{
-			if (phs && viewz >= phs->ceilingheight)
-			{						// clip bottom
-				for (x=spr->x1 ; x<=spr->x2 ; x++)
-					if (r_dsclipbot[x] == NOT_CLIPPED || h < r_dsclipbot[x])
-						r_dsclipbot[x] = h;
-			}
-			else
-			{						// clip top
-				for (x=spr->x1 ; x<=spr->x2 ; x++)
-					if (r_dscliptop[x] == NOT_CLIPPED || h > r_dscliptop[x])
-						r_dscliptop[x] = h;
-			}
+			clip1 = cliptop + r1;
+			clip2 = openings + ds->sprtopclip + r1 - ds->x1;
+			i = r2 - r1 + 1;
+			do
+			{
+				if (*clip1 < *clip2)
+					*clip1 = *clip2;
+				clip1++;
+				clip2++;
+			} while (--i);
 		}
 	}
-	// killough 3/27/98: end special clipping for deep water / fake ceilings
 
 	// all clipping has been performed, so draw the sprite
 
-	// check for unclipped columns
-	for (x = spr->x1 ; x<=spr->x2 ; x++)
-	{
-		if (r_dsclipbot[x] == NOT_CLIPPED)			
-			r_dsclipbot[x] = (short)viewheight;
-
-		if (r_dscliptop[x] == NOT_CLIPPED)
-			r_dscliptop[x] = -1;
-	}
-				
-	mfloorclip = r_dsclipbot;
-	mceilingclip = r_dscliptop;
+	mfloorclip = clipbot;
+	mceilingclip = cliptop;
 	R_DrawVisSprite (spr, spr->x1, spr->x2);
 }
 
@@ -1528,30 +1493,14 @@ void R_DrawSprite (vissprite_t *spr)
 //
 void R_DrawMasked (void)
 {
-	drawseg_t		 *ds;
-	struct vissort_s *sorttail;
-
-	if (r_particles.value)
-	{
-		// [RH] add all the particles
-		int i = ActiveParticles;
-		while (i != -1)
-		{
-			R_ProjectParticle (Particles + i);
-			i = Particles[i].next;
-		}
-	}
+	drawseg_t *ds;
+	int i;
 
 	R_SortVisSprites ();
 
-	if (vsprcount)
+	for (i = vsprcount; i > 0; i--)
 	{
-		sorttail = spritesorter + vsprcount;
-		vsprcount = -vsprcount;
-		do
-		{
-			R_DrawSprite (sorttail[vsprcount].sprite);
-		} while (++vsprcount);
+		R_DrawSprite (spritesorter[i-1]);
 	}
 
 	// render any remaining masked mid textures
@@ -1562,8 +1511,8 @@ void R_DrawMasked (void)
 
 	//		for (ds=ds_p-1 ; ds >= drawsegs ; ds--)    old buggy code
 
-	for (ds=ds_p ; ds-- > drawsegs ; )	// new -- killough
-		if (ds->maskedtexturecol)
+	for (ds = ds_p; ds-- > firstdrawseg; )	// new -- killough
+		if (ds->maskedtexturecol != -1)
 			R_RenderMaskedSegRange (ds, ds->x1, ds->x2);
 	
 	// draw the psprites on top of everything
@@ -1625,11 +1574,9 @@ void R_ProjectParticle (particle_t *particle)
 {
 	fixed_t 			tr_x;
 	fixed_t 			tr_y;
-	fixed_t 			gxt;
-	fixed_t 			gyt;
 	fixed_t				gzt;				// killough 3/27/98
 	fixed_t 			tx;
-	fixed_t 			tz;
+	fixed_t 			tz, tiz;
 	fixed_t 			xscale;
 	int 				x1;
 	int 				x2;
@@ -1640,37 +1587,35 @@ void R_ProjectParticle (particle_t *particle)
 	// transform the origin point
 	tr_x = particle->x - viewx;
 	tr_y = particle->y - viewy;
-		
-	gxt = FixedMul (tr_x, viewcos); 
-	gyt = -FixedMul (tr_y, viewsin);
-	
-	tz = gxt - gyt; 
+
+	tz = DMulScale20 (tr_x, viewtancos, tr_y, viewtansin);
 
 	// particle is behind view plane?
 	if (tz < MINZ)
 		return;
-	
-	xscale = FixedDiv (FocalLengthX, tz);
-		
-	gxt = -FixedMul (tr_x, viewsin); 
-	gyt = FixedMul (tr_y, viewcos); 
-	tx = -(gyt+gxt); 
+
+	tx = DMulScale20 (tr_x, viewsin, -tr_y, viewcos);
+
+	// Flip for mirrors
+	if (MirrorFlags & RF_XFLIP)
+	{
+		tx = viewwidth - tx - 1;
+	}
 
 	// too far off the side?
-	if (abs(tx)>(tz<<2))
+	if (tz <= abs (tx))
 		return;
-	
+
+	tiz = 268435456 / tz;
+	xscale = centerx * tiz;
+
 	// calculate edges of the shape
-	x1 = (centerxfrac + FixedMul (tx,xscale)) >> FRACBITS;
+	int psize = particle->size << (12-3);
 
-	// off the right side?
-	if (x1 >= viewwidth)
-		return;
-	
-	x2 = ((centerxfrac + FixedMul (tx+particle->size*(FRACUNIT/4),xscale)) >> FRACBITS);
+	x1 = MAX<int> (WindowLeft, (centerxfrac + MulScale12 (tx-psize, xscale)) >> FRACBITS);
+	x2 = MIN<int> (WindowRight, (centerxfrac + MulScale12 (tx+psize, xscale)) >> FRACBITS);
 
-	// off the left side
-	if (x2 < 0)
+	if (x1 > x2)
 		return;
 
 	gzt = particle->z+1;
@@ -1685,7 +1630,8 @@ void R_ProjectParticle (particle_t *particle)
 		{
 			sector = subsector->sector;
 			heightsec = sector->heightsec;
-			if (particle->z < sector->floorheight || particle->z > sector->ceilingheight)
+			if (particle->z < sector->floorplane.ZatPoint (particle->x, particle->y) ||
+				particle->z > sector->ceilingplane.ZatPoint (particle->y, particle->z))
 				return;
 		}
 	}
@@ -1694,14 +1640,14 @@ void R_ProjectParticle (particle_t *particle)
 	{
 		sector_t *phs = camera->subsector->sector->heightsec;
 
-		if (phs && viewz < phs->floorheight ?
-			particle->z >= heightsec->floorheight :
-			gzt < heightsec->floorheight)
+		if (phs && viewz < phs->floorplane.ZatPoint (viewx, viewy) ?
+			particle->z >= heightsec->floorplane.ZatPoint (particle->x, particle->y):
+			gzt < heightsec->floorplane.ZatPoint (particle->x, particle->y))
 		  return;
-		if (phs && viewz > phs->ceilingheight ?
-			gzt < heightsec->ceilingheight &&
-			viewz >= heightsec->ceilingheight :
-			particle->z >= heightsec->ceilingheight)
+		if (phs && viewz > phs->ceilingplane.ZatPoint (viewx, viewy) ?
+			gzt < heightsec->ceilingplane.ZatPoint (particle->x, particle->y) &&
+			viewz >= heightsec->ceilingplane.ZatPoint (viewx, viewy) :
+			particle->z >= heightsec->ceilingplane.ZatPoint (particle->x, particle->y))
 		  return;
 	}
 
@@ -1709,19 +1655,19 @@ void R_ProjectParticle (particle_t *particle)
 	vis = R_NewVisSprite ();
 	vis->heightsec = heightsec;
 	vis->xscale = xscale;
-	vis->yscale = FixedMul (xscale, yaspectmul);
+//	vis->yscale = FixedMul (xscale, InvZtoScale);
 	vis->depth = tz;
 	vis->gx = particle->x;
 	vis->gy = particle->y;
 	vis->gz = particle->z;
 	vis->gzt = gzt;
 	vis->texturemid = FixedMul (yaspectmul, vis->gzt - viewz);
-	vis->x1 = x1 < 0 ? 0 : x1;
-	vis->x2 = x2 >= viewwidth ? viewwidth-1 : x2;
+	vis->x1 = x1;
+	vis->x2 = x2;
 	vis->translation = NULL;
 	vis->startfrac = particle->color;
-	vis->patch = -1;
-	vis->mobjflags = particle->trans;
+	vis->picnum = -1;
+	vis->renderflags = particle->trans;
 
 	if (fixedcolormap)
 	{
@@ -1732,14 +1678,17 @@ void R_ProjectParticle (particle_t *particle)
 		byte *map;
 
 		if (sector->heightsec == NULL)
-			map = sector->floorcolormap->maps;
+		{
+			map = sector->floorcolormap->Maps;
+		}
 		else
 		{
 			const sector_t *s = sector->heightsec;
-			if (particle->z <= s->floorheight || particle->z > s->ceilingheight)
-				map = s->floorcolormap->maps;
+			if (particle->z <= s->floorplane.ZatPoint (particle->x, particle->y) ||
+				particle->z > s->ceilingplane.ZatPoint (particle->x, particle->y))
+				map = s->floorcolormap->Maps;
 			else
-				map = sector->floorcolormap->maps;
+				map = sector->floorcolormap->Maps;
 		}
 
 		if (fixedlightlev)
@@ -1748,18 +1697,8 @@ void R_ProjectParticle (particle_t *particle)
 		}
 		else
 		{
-			int index = (vis->yscale*lightscalexmul)>>(LIGHTSCALESHIFT-1);
-			int lightnum = (sector->lightlevel >> LIGHTSEGSHIFT)
-					+ (foggy ? 0 : extralight);
-
-			if (lightnum < 0)
-				lightnum = 0;
-			else if (lightnum >= LIGHTLEVELS)
-				lightnum = LIGHTLEVELS-1;
-			if (index >= MAXLIGHTSCALE) 
-				index = MAXLIGHTSCALE-1;
-
-			vis->colormap = scalelight[lightnum][index] + map;
+			vis->colormap = map + (GETPALOOKUP (FixedMul (tiz, r_ParticleVisibility),
+				LIGHT2SHADE(sector->lightlevel + r_actualextralight)) << COLORMAPSHIFT);
 		}
 	}
 	else
@@ -1776,13 +1715,6 @@ void R_DrawParticle (vissprite_t *vis, int x1, int x2)
 	x1 = vis->x1;
 	x2 = vis->x2;
 
-	if (x1 < 0)
-		x1 = 0;
-	if (x2 < x1)
-		x2 = x1;
-	if (x2 >= viewwidth)
-		x2 = viewwidth - 1;
-
 	yh = yl + (((x2 - x1)<<detailxshift)>>detailyshift);
 
 	// Don't bother clipping each individual column
@@ -1795,15 +1727,15 @@ void R_DrawParticle (vissprite_t *vis, int x1, int x2)
 	if (yl <= mceilingclip[x2])
 		yl = mceilingclip[x2]+1;
 
-	// vis->mobjflags holds translucency level (0-255)
+	// vis->renderflags holds translucency level (0-255)
 	{
-		unsigned int *bg2rgb;
+		DWORD *bg2rgb;
 		int countbase = x2 - x1 + 1;
 		int ycount;
 		int colsize = ds_colsize;
 		int spacing;
 		byte *dest;
-		unsigned int fg;
+		DWORD fg;
 
 		ycount = yh - yl;
 		if (ycount < 0)
@@ -1812,16 +1744,16 @@ void R_DrawParticle (vissprite_t *vis, int x1, int x2)
 
 		{
 			fixed_t fglevel, bglevel;
-			unsigned int *fg2rgb;
+			DWORD *fg2rgb;
 
-			fglevel = ((vis->mobjflags + 1) << 8) & ~0x3ff;
+			fglevel = ((vis->renderflags + 1) << 8) & ~0x3ff;
 			bglevel = FRACUNIT-fglevel;
 			fg2rgb = Col2RGB8[fglevel>>10];
 			bg2rgb = Col2RGB8[bglevel>>10];
 			fg = fg2rgb[color];
 		}
 
-		spacing = screen->pitch - (countbase << detailxshift);
+		spacing = SCREENPITCH - (countbase << detailxshift);
 		dest = ylookup[yl] + columnofs[x1];
 
 		do
@@ -1829,7 +1761,7 @@ void R_DrawParticle (vissprite_t *vis, int x1, int x2)
 			int count = countbase;
 			do
 			{
-				unsigned int bg = bg2rgb[*dest];
+				DWORD bg = bg2rgb[*dest];
 				bg = (fg+bg) | 0x1f07c1f;
 				*dest = RGB32k[0][0][bg & (bg>>15)];
 				dest += colsize;

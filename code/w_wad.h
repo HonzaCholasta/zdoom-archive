@@ -68,15 +68,11 @@ typedef struct
 typedef struct lumpinfo_s
 {
 	char		name[8];
-	int			handle;
 	int			position;
 	int			size;
-
-	// [RH] Hashing stuff
-	int			next;
-	int			index;
-
 	int			namespc;
+
+	int			wadnum;
 } lumpinfo_t;
 
 // [RH] Namespaces from BOOM.
@@ -91,34 +87,41 @@ extern	void**		lumpcache;
 extern	lumpinfo_t*	lumpinfo;
 extern	int			numlumps;
 
-void	W_InitMultipleFiles (wadlist_t** filenames);
+extern	WORD		*FirstLumpIndex;	// [RH] Move hashing stuff out of
+extern	WORD		*NextLumpIndex;		// lumpinfo structure
 
-int		W_CheckNumForName (const char *name, int);
-int		W_GetNumForName (const char *name);
+void W_InitMultipleFiles (wadlist_t **filenames);
+
+int W_FileHandleFromWad (int wadnum);
+const char *W_GetWadName (int wadnum);
+bool W_CheckIfWadLoaded (const char *wadname);
+
+int W_CheckNumForName (const char *name, int namespc);
+int W_GetNumForName (const char *name);
 
 inline int W_CheckNumForName (const byte *name) { return W_CheckNumForName ((const char *)name, ns_global); }
 inline int W_CheckNumForName (const char *name) { return W_CheckNumForName (name, ns_global); }
 inline int W_CheckNumForName (const byte *name, int ns) { return W_CheckNumForName ((const char *)name, ns); }
 inline int W_GetNumForName (const byte *name) { return W_GetNumForName ((const char *)name); }
 
-int		W_LumpLength (int lump);
-void	W_ReadLump (int lump, void *dest);
+int W_LumpLength (int lump);
+void W_ReadLump (int lump, void *dest);
 
-void   *W_CacheLumpNum (int lump, int tag);
+void *W_CacheLumpNum (int lump, int tag);
 
 // [RH] W_CacheLumpName() is now a macro
 #define W_CacheLumpName(name,tag) W_CacheLumpNum (W_GetNumForName(name), (tag))
 
-void	W_Profile (const char *fname);
+void W_Profile (const char *fname);
 
-int		W_FindLump (const char *name, int *lastlump);	// [RH]	Find lumps with duplication
-BOOL	W_CheckLumpName (int lump, const char *name);	// [RH] True if lump's name == name
+int W_FindLump (const char *name, int *lastlump);	// [RH]	Find lumps with duplication
+BOOL W_CheckLumpName (int lump, const char *name);	// [RH] True if lump's name == name
 
-unsigned W_LumpNameHash (const char *name);				// [RH] Create hash key from an 8-char name
-void	W_InitHashChains (void);						// [RH] Set up the lumpinfo hashing
+unsigned W_LumpNameHash (const char *name);			// [RH] Create hash key from an 8-char name
+void W_InitHashChains (void);						// [RH] Set up the lumpinfo hashing
 
 // [RH] Combine multiple marked ranges of lumps into one.
-void	W_MergeLumps (const char *start, const char *end, int);
+void W_MergeLumps (const char *start, const char *end, int);
 
 // [RH] Copy an 8-char string and uppercase it.
 void uppercopy (char *to, const char *from);

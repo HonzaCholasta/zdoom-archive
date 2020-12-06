@@ -4,7 +4,7 @@
 #include "s_sound.h"
 #include "p_enemy.h"
 #include "a_doomglobal.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_VileChase (AActor *);
@@ -14,9 +14,6 @@ void A_FireCrackle (AActor *);
 void A_Fire (AActor *);
 void A_VileTarget (AActor *);
 void A_VileAttack (AActor *);
-
-IMPLEMENT_DEF_SERIAL (AArchvile, AActor);
-REGISTER_ACTOR (AArchvile, Doom);
 
 FState AArchvile::States[] =
 {
@@ -73,61 +70,50 @@ FState AArchvile::States[] =
 	S_NORMAL (VILE, 'Z',   -1, NULL 						, NULL)
 };
 
-void AArchvile::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 64;
-	info->spawnid = 111;
-	info->spawnstate = &States[S_VILE_STND];
-	info->spawnhealth = 700;
-	info->seestate = &States[S_VILE_RUN];
-	info->seesound = "vile/sight";
-	info->painstate = &States[S_VILE_PAIN];
-	info->painchance = 10;
-	info->painsound = "vile/pain";
-	info->missilestate = &States[S_VILE_ATK];
-	info->deathstate = &States[S_VILE_DIE];
-	info->deathsound = "vile/death";
-	info->speed = 15;
-	info->radius = 20 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 500;
-	info->activesound = "vile/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-}
+IMPLEMENT_ACTOR (AArchvile, Doom, 64, 111)
+	PROP_SpawnHealth (700)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (56)
+	PROP_Mass (500)
+	PROP_SpeedFixed (15)
+	PROP_PainChance (10)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_VILE_STND)
+	PROP_SeeState (S_VILE_RUN)
+	PROP_PainState (S_VILE_PAIN)
+	PROP_MissileState (S_VILE_ATK)
+	PROP_DeathState (S_VILE_DIE)
+
+	PROP_SeeSound ("vile/sight")
+	PROP_PainSound ("vile/pain")
+	PROP_DeathSound ("vile/death")
+	PROP_ActiveSound ("vile/active")
+END_DEFAULTS
 
 const char *AArchvile::GetObituary ()
 {
-	return OB_VILE;
+	return GStrings(OB_VILE);
 }
 
 class AStealthArchvile : public AArchvile
 {
-	DECLARE_STATELESS_ACTOR (AStealthArchvile, AArchvile);
+	DECLARE_STATELESS_ACTOR (AStealthArchvile, AArchvile)
 public:
-	const char *GetObituary () { return OB_STEALTHVILE; }
+	const char *GetObituary () { return GStrings(OB_STEALTHVILE); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthArchvile, AArchvile);
-REGISTER_ACTOR (AStealthArchvile, Doom);
-
-void AStealthArchvile::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9051;
-	info->spawnid = 118;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthArchvile, Doom, 9051, 118)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 class AArchvileFire : public AActor
 {
-	DECLARE_ACTOR (AArchvileFire, AActor);
+	DECLARE_ACTOR (AArchvileFire, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AArchvileFire, AActor);
-REGISTER_ACTOR (AArchvileFire, Doom);
 
 FState AArchvileFire::States[] =
 {
@@ -163,15 +149,13 @@ FState AArchvileFire::States[] =
 	S_BRIGHT (FIRE, 'H',	2, A_Fire						, NULL)
 };
 
-void AArchvileFire::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnid = 98;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->translucency = TRANSLUC66;
-}
+IMPLEMENT_ACTOR (AArchvileFire, Doom, -1, 98)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 bool AArchvile::SuggestMissileAttack (fixed_t dist)
 {
@@ -200,10 +184,10 @@ BOOL PIT_VileCheck (AActor *thing)
 	if (thing->tics != -1)
 		return true;	// not lying still yet
 	
-	if (GetInfo (thing)->raisestate == NULL)
+	if (thing->RaiseState == NULL)
 		return true;	// monster doesn't have a raise state
 	
-	maxdist = GetInfo (thing)->radius + RUNTIME_CLASS(AArchvile)->ActorInfo->radius;
+	maxdist = thing->GetDefault()->radius + GetDefault<AArchvile>()->radius;
 		
 	if ( abs(thing->x - viletryx) > maxdist
 		 || abs(thing->y - viletryy) > maxdist )
@@ -218,7 +202,7 @@ BOOL PIT_VileCheck (AActor *thing)
 	int oldflags = corpsehit->flags;
 
 	corpsehit->flags |= MF_SOLID;
-	corpsehit->height = GetInfo (corpsehit)->height;
+	corpsehit->height = corpsehit->GetDefault()->height;
 	check = P_CheckPosition (corpsehit, corpsehit->x, corpsehit->y);
 	corpsehit->flags = oldflags;
 	corpsehit->radius = oldradius;
@@ -238,16 +222,16 @@ void A_VileChase (AActor *self)
 	int xl, xh, yl, yh;
 	int bx, by;
 
-	const FActorInfo *info;
+	const AActor *info;
 	AActor *temp;
 		
 	if (self->movedir != DI_NODIR)
 	{
+		const fixed_t absSpeed = abs (self->Speed);
+
 		// check for corpses to raise
-		viletryx =
-			self->x + GetInfo (self)->speed*xspeed[self->movedir];
-		viletryy =
-			self->y + GetInfo (self)->speed*yspeed[self->movedir];
+		viletryx = self->x + FixedMul (absSpeed, xspeed[self->movedir]);
+		viletryy = self->y + FixedMul (absSpeed, yspeed[self->movedir]);
 
 		xl = (viletryx - bmaporgx - MAXRADIUS*2)>>MAPBLOCKSHIFT;
 		xh = (viletryx - bmaporgx + MAXRADIUS*2)>>MAPBLOCKSHIFT;
@@ -272,16 +256,19 @@ void A_VileChase (AActor *self)
 										
 					self->SetState (&AArchvile::States[S_VILE_HEAL]);
 					S_Sound (corpsehit, CHAN_BODY, "vile/raise", 1, ATTN_IDLE);
-					info = GetInfo (corpsehit);
+					info = corpsehit->GetDefault ();
 					
-					corpsehit->SetState (GetInfo(corpsehit)->raisestate);
+					corpsehit->SetState (info->RaiseState);
 					corpsehit->height = info->height;	// [RH] Use real mobj height
 					corpsehit->radius = info->radius;	// [RH] Use real radius
-					if (corpsehit->translucency > TRANSLUC50)
-						corpsehit->translucency /= 2;
+					/*
+					// Make raised corpses look ghostly
+					if (corpsehit->alpha > TRANSLUC50)
+						corpsehit->alpha /= 2;
+					*/
 					corpsehit->flags = info->flags;
 					corpsehit->flags2 = info->flags2;
-					corpsehit->health = info->spawnhealth;
+					corpsehit->health = info->health;
 					corpsehit->target = NULL;
 
 					return;
@@ -385,7 +372,7 @@ void A_VileAttack (AActor *actor)
 
 	S_Sound (actor, CHAN_WEAPON, "vile/stop", 1, ATTN_NORM);
 	P_DamageMobj (actor->target, actor, actor, 20, MOD_UNKNOWN);
-	actor->target->momz = 1000 * FRACUNIT / GetInfo(actor->target)->mass;
+	actor->target->momz = 1000 * FRACUNIT / actor->target->Mass;
 		
 	an = actor->angle >> ANGLETOFINESHIFT;
 

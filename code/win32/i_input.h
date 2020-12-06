@@ -3,12 +3,11 @@
 
 #include "doomtype.h"
 
-extern int KeyRepeatRate;
-extern int KeyRepeatDelay;
-
 BOOL I_InitInput (void *hwnd);
-void STACK_ARGS I_ShutdownInput (void);
+void STACK_ARGS I_ShutdownInput ();
+void I_PutInClipboard (const char *str);
+char *I_GetFromClipboard ();
 
-void I_GetEvent (void);
+void I_GetEvent ();
 
 #endif

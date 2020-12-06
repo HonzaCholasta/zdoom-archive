@@ -16,7 +16,7 @@
 #include "i_system.h"
 
 #include "doomstat.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "s_sound.h"
 #include "g_game.h"
 #include "d_items.h"
@@ -31,19 +31,18 @@
 
 extern FILE *Logfile;
 
-CVAR (sv_cheats, "0", CVAR_SERVERINFO | CVAR_LATCH)
+CVAR (Bool, sv_cheats, false, CVAR_SERVERINFO | CVAR_LATCH)
 
-BEGIN_COMMAND (toggleconsole)
+CCMD (toggleconsole)
 {
 	C_ToggleConsole();
 }
-END_COMMAND (toggleconsole)
 
-BOOL CheckCheatmode (void)
+BOOL CheckCheatmode ()
 {
-	if (((gameskill.value == sk_nightmare) || netgame || deathmatch.value) && (sv_cheats.value == 0.0))
+	if (((*gameskill == sk_nightmare) || netgame || *deathmatch) && (*sv_cheats == 0.0))
 	{
-		Printf (PRINT_HIGH, "You must run the server with '+set sv_cheats 1' to enable this command.\n");
+		Printf ("You must run the server with '+set sv_cheats 1' to enable this command.\n");
 		return true;
 	}
 	else
@@ -52,20 +51,10 @@ BOOL CheckCheatmode (void)
 	}
 }
 
-BEGIN_COMMAND (quit)
+CCMD (quit)
 {
 	exit (0);
 }
-END_COMMAND (quit)
-
-BEGIN_COMMAND (changemus)
-{
-	if (argc > 1)
-	{
-		S_ChangeMusic (argv[1], 1);
-	}
-}
-END_COMMAND (changemus)
 
 /*
 ==================
@@ -76,7 +65,7 @@ Sets client to godmode
 argv(0) god
 ==================
 */
-BEGIN_COMMAND (god)
+CCMD (god)
 {
 	if (CheckCheatmode ())
 		return;
@@ -84,9 +73,8 @@ BEGIN_COMMAND (god)
 	Net_WriteByte (DEM_GENERICCHEAT);
 	Net_WriteByte (CHT_GOD);
 }
-END_COMMAND (god)
 
-BEGIN_COMMAND (iddqd)
+CCMD (iddqd)
 {
 	if (CheckCheatmode ())
 		return;
@@ -94,9 +82,8 @@ BEGIN_COMMAND (iddqd)
 	Net_WriteByte (DEM_GENERICCHEAT);
 	Net_WriteByte (CHT_IDDQD);
 }
-END_COMMAND (iddqd)
 
-BEGIN_COMMAND (notarget)
+CCMD (notarget)
 {
 	if (CheckCheatmode ())
 		return;
@@ -104,9 +91,8 @@ BEGIN_COMMAND (notarget)
 	Net_WriteByte (DEM_GENERICCHEAT);
 	Net_WriteByte (CHT_NOTARGET);
 }
-END_COMMAND (notarget)
 
-BEGIN_COMMAND (fly)
+CCMD (fly)
 {
 	if (CheckCheatmode ())
 		return;
@@ -114,7 +100,6 @@ BEGIN_COMMAND (fly)
 	Net_WriteByte (DEM_GENERICCHEAT);
 	Net_WriteByte (CHT_FLY);
 }
-END_COMMAND (fly)
 
 /*
 ==================
@@ -123,7 +108,7 @@ Cmd_Noclip
 argv(0) noclip
 ==================
 */
-BEGIN_COMMAND (noclip)
+CCMD (noclip)
 {
 	if (CheckCheatmode ())
 		return;
@@ -131,9 +116,8 @@ BEGIN_COMMAND (noclip)
 	Net_WriteByte (DEM_GENERICCHEAT);
 	Net_WriteByte (CHT_NOCLIP);
 }
-END_COMMAND (noclip)
 
-BEGIN_COMMAND (powerup)
+CCMD (powerup)
 {
 	if (CheckCheatmode ())
 		return;
@@ -141,9 +125,8 @@ BEGIN_COMMAND (powerup)
 	Net_WriteByte (DEM_GENERICCHEAT);
 	Net_WriteByte (CHT_POWER);
 }
-END_COMMAND (powerup)
 
-BEGIN_COMMAND (morphme)
+CCMD (morphme)
 {
 	if (CheckCheatmode ())
 		return;
@@ -151,41 +134,48 @@ BEGIN_COMMAND (morphme)
 	Net_WriteByte (DEM_GENERICCHEAT);
 	Net_WriteByte (CHT_MORPH);
 }
-END_COMMAND (morphme)
 
-EXTERN_CVAR (chasedemo)
+CCMD (anubis)
+{
+	if (CheckCheatmode ())
+		return;
 
-BEGIN_COMMAND (chase)
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_ANUBIS);
+}
+
+EXTERN_CVAR (Bool, chasedemo)
+
+CCMD (chase)
 {
 	if (demoplayback)
 	{
 		int i;
 
-		if (chasedemo.value)
+		if (*chasedemo)
 		{
-			chasedemo.Set (0.0f);
+			chasedemo = false;
 			for (i = 0; i < MAXPLAYERS; i++)
 				players[i].cheats &= ~CF_CHASECAM;
 		}
 		else
 		{
-			chasedemo.Set (1.0f);
+			chasedemo = true;
 			for (i = 0; i < MAXPLAYERS; i++)
 				players[i].cheats |= CF_CHASECAM;
 		}
 	}
 	else
 	{
-		if (deathmatch.value && CheckCheatmode ())
+		if (*deathmatch && CheckCheatmode ())
 			return;
 
 		Net_WriteByte (DEM_GENERICCHEAT);
 		Net_WriteByte (CHT_CHASECAM);
 	}
 }
-END_COMMAND (chase)
 
-BEGIN_COMMAND (idclev)
+CCMD (idclev)
 {
 	if (CheckCheatmode ())
 		return;
@@ -216,23 +206,22 @@ BEGIN_COMMAND (idclev)
 			return;
 
 		// So be it.
-		Printf (PRINT_HIGH, "%s\n", STSTR_CLEV);
+		Printf ("%s\n", GStrings(STSTR_CLEV));
       	G_DeferedInitNew (mapname);
 	}
 }
-END_COMMAND (idclev)
 
-BEGIN_COMMAND (changemap)
+CCMD (changemap)
 {
 	if (m_Instigator == NULL)
 	{
-		Printf (PRINT_HIGH, "Use the map command when not in a game.\n");
+		Printf ("Use the map command when not in a game.\n");
 		return;
 	}
 
 	if (m_Instigator->player - players != Net_Arbitrator && multiplayer)
 	{
-		Printf (PRINT_HIGH, "Only player %d can change the map.\n", Net_Arbitrator+1);
+		Printf ("Only player %d can change the map.\n", Net_Arbitrator+1);
 		return;
 	}
 
@@ -240,7 +229,7 @@ BEGIN_COMMAND (changemap)
 	{
 		if (W_CheckNumForName (argv[1]) == -1)
 		{
-			Printf (PRINT_HIGH, "No map %s\n", argv[1]);
+			Printf ("No map %s\n", argv[1]);
 		}
 		else
 		{
@@ -249,46 +238,8 @@ BEGIN_COMMAND (changemap)
 		}
 	}
 }
-END_COMMAND (changemap)
 
-BEGIN_COMMAND (idmus)
-{
-	level_info_t *info;
-	char *map;
-	int l;
-
-	if (argc > 1)
-	{
-		if (gameinfo.flags & GI_MAPxx)
-		{
-			l = atoi (argv[1]);
-			if (l <= 99)
-				map = CalcMapName (0, l);
-			else
-			{
-				Printf (PRINT_HIGH, "%s\n", STSTR_NOMUS);
-				return;
-			}
-		}
-		else
-		{
-			map = CalcMapName (argv[1][0] - '0', argv[1][1] - '0');
-		}
-
-		if ( (info = FindLevelInfo (map)) )
-		{
-			if (info->music)
-			{
-				S_ChangeMusic (info->music, 1);
-				Printf (PRINT_HIGH, "%s\n", STSTR_MUS);
-			}
-		} else
-			Printf (PRINT_HIGH, "%s\n", STSTR_NOMUS);
-	}
-}
-END_COMMAND (idmus)
-
-BEGIN_COMMAND (give)
+CCMD (give)
 {
 	char *name;
 
@@ -305,15 +256,13 @@ BEGIN_COMMAND (give)
 		delete[] name;
 	}
 }
-END_COMMAND (give)
 
-BEGIN_COMMAND (gameversion)
+CCMD (gameversion)
 {
-	Printf (PRINT_HIGH, "%d.%d : " __DATE__ "\n", VERSION / 100, VERSION % 100);
+	Printf ("%d.%d : " __DATE__ "\n", VERSION / 100, VERSION % 100);
 }
-END_COMMAND (gameversion)
 
-BEGIN_COMMAND (exec)
+CCMD (exec)
 {
 	FILE *f;
 	char cmd[4096];
@@ -321,7 +270,7 @@ BEGIN_COMMAND (exec)
 	if (argc < 2)
 		return;
 
-	if ( (f = fopen (argv[1], "rt")) )
+	if ( (f = fopen (argv[1], "r")) )
 	{
 		while (fgets (cmd, 4095, f))
 		{
@@ -336,15 +285,18 @@ BEGIN_COMMAND (exec)
 			AddCommandString (cmd);
 		}
 		if (!feof (f))
-			Printf (PRINT_HIGH, "Error parsing \"%s\"\n", argv[1]);
-
+		{
+			Printf ("Error parsing \"%s\"\n", argv[1]);
+		}
 		fclose (f);
-	} else
-		Printf (PRINT_HIGH, "Could not open \"%s\"\n", argv[1]);
+	}
+	else
+	{
+		Printf ("Could not open \"%s\"\n", argv[1]);
+	}
 }
-END_COMMAND (exec)
 
-BEGIN_COMMAND (dumpheap)
+CCMD (dumpheap)
 {
 	int lo = PU_STATIC, hi = PU_CACHE;
 
@@ -357,9 +309,8 @@ BEGIN_COMMAND (dumpheap)
 
 	Z_DumpHeap (lo, hi);
 }
-END_COMMAND (dumpheap)
 
-BEGIN_COMMAND (logfile)
+CCMD (logfile)
 {
 	time_t clock;
 	char *timestr;
@@ -369,7 +320,7 @@ BEGIN_COMMAND (logfile)
 
 	if (Logfile)
 	{
-		Printf (PRINT_HIGH, "Log stopped: %s\n", timestr);
+		Printf ("Log stopped: %s\n", timestr);
 		fclose (Logfile);
 		Logfile = NULL;
 	}
@@ -378,23 +329,22 @@ BEGIN_COMMAND (logfile)
 	{
 		if ( (Logfile = fopen (argv[1], "w")) )
 		{
-			Printf (PRINT_HIGH, "Log started: %s\n", timestr);
+			Printf ("Log started: %s\n", timestr);
 		}
 		else
 		{
-			Printf (PRINT_HIGH, "Could not start log\n");
+			Printf ("Could not start log\n");
 		}
 	}
 }
-END_COMMAND (logfile)
 
-BOOL P_StartScript (AActor *who, line_t *where, int script, char *map, int lineSide,
+bool P_StartScript (AActor *who, line_t *where, int script, char *map, int lineSide,
 					int arg0, int arg1, int arg2, int always);
 
-BEGIN_COMMAND (puke)
+CCMD (puke)
 {
 	if (argc < 2 || argc > 5) {
-		Printf (PRINT_HIGH, " puke <script> [arg1] [arg2] [arg3]\n");
+		Printf (" puke <script> [arg1] [arg2] [arg3]\n");
 	} else {
 		int script = atoi (argv[1]);
 		int arg0=0, arg1=0, arg2=0;
@@ -411,18 +361,16 @@ BEGIN_COMMAND (puke)
 		P_StartScript (m_Instigator, NULL, script, level.mapname, 0, arg0, arg1, arg2, false);
 	}
 }
-END_COMMAND (puke)
 
-BEGIN_COMMAND (error)
+CCMD (error)
 {
 	char *text = BuildString (argc - 1, argv + 1);
 	char *textcopy = copystring (text);
 	delete[] text;
 	I_Error (textcopy);
 }
-END_COMMAND (error)
 
-BEGIN_COMMAND (dir)
+CCMD (dir)
 {
 	char dir[256], curdir[256];
 	char *match;
@@ -431,7 +379,7 @@ BEGIN_COMMAND (dir)
 
 	if (!getcwd (curdir, 256))
 	{
-		Printf (PRINT_HIGH, "Current path too long\n");
+		Printf ("Current path too long\n");
 		return;
 	}
 
@@ -455,7 +403,7 @@ BEGIN_COMMAND (dir)
 
 		if (chdir (dir))
 		{
-			Printf (PRINT_HIGH, "%s not found\n", dir);
+			Printf ("%s not found\n", dir);
 			return;
 		}
 	}
@@ -468,32 +416,30 @@ BEGIN_COMMAND (dir)
 	}
 
 	if ( (file = I_FindFirst (match, &c_file)) == -1)
-		Printf (PRINT_HIGH, "Nothing matching %s%s\n", dir, match);
+		Printf ("Nothing matching %s%s\n", dir, match);
 	else
 	{
-		Printf (PRINT_HIGH, "Listing of %s%s:\n", dir, match);
+		Printf ("Listing of %s%s:\n", dir, match);
 		do
 		{
 			if (I_FindAttr (&c_file) & FA_DIREC)
 				Printf_Bold ("%s <dir>\n", I_FindName (&c_file));
 			else
-				Printf (PRINT_HIGH, "%s\n", I_FindName (&c_file));
+				Printf ("%s\n", I_FindName (&c_file));
 		} while (I_FindNext (file, &c_file) == 0);
 		I_FindClose (file);
 	}
 
 	chdir (curdir);
 }
-END_COMMAND (dir)
 
-BEGIN_COMMAND (fov)
+CCMD (fov)
 {
 	player_t *player = m_Instigator ? m_Instigator->player
 		: &players[consoleplayer];
 
 	if (argc != 2)
-		Printf (PRINT_HIGH, "fov is %g\n", player->fov);
+		Printf ("fov is %g\n", player->DesiredFOV);
 	else
-		player->fov = atof (argv[1]);
+		player->DesiredFOV = atof (argv[1]);
 }
-END_COMMAND (fov)

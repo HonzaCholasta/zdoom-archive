@@ -31,8 +31,19 @@
 //
 // POV related.
 //
+extern DCanvas			*RenderTarget;
+extern bool				bRenderingToCanvas;
 extern fixed_t			viewcos;
 extern fixed_t			viewsin;
+extern fixed_t			viewtancos;
+extern fixed_t			viewtansin;
+extern fixed_t			FocalTangent;
+extern fixed_t			FocalLengthX, FocalLengthY;
+extern float			FocalLengthXfloat;
+extern fixed_t			InvZtoScale;
+
+extern float			WallTMapScale;
+extern float			WallTMapScale2;
 
 extern int				viewwidth;
 extern int				viewheight;
@@ -41,12 +52,13 @@ extern int				viewwindowy;
 
 
 
-extern int				centerx;
+extern "C" int			centerx;
 extern "C" int			centery;
 
 extern fixed_t			centerxfrac;
 extern fixed_t			centeryfrac;
 extern fixed_t			yaspectmul;
+extern float			iyaspectmulfloat;
 
 extern byte*			basecolormap;	// [RH] Colormap for sector currently being drawn
 
@@ -55,46 +67,53 @@ extern int				validcount;
 extern int				linecount;
 extern int				loopcount;
 
+
 //
-// Lighting LUT.
-// Used for z-depth cuing per column/row,
-//	and other lighting effects (sector ambient, flash).
+// Lighting.
 //
-
-// Lighting constants.
-// Now why not 32 levels here?
-#define LIGHTLEVELS 			16
-#define LIGHTSEGSHIFT			 4
-
-#define MAXLIGHTSCALE			48
-#define LIGHTSCALEMULBITS		 8	// [RH] for hires lighting fix
-#define LIGHTSCALESHIFT 		(12+LIGHTSCALEMULBITS)
-#define MAXLIGHTZ			   128
-#define LIGHTZSHIFT 			20
-
-// [RH] Changed from lighttable_t* to int.
-extern int				scalelight[LIGHTLEVELS][MAXLIGHTSCALE];
-extern int				scalelightfixed[MAXLIGHTSCALE];
-extern int				zlight[LIGHTLEVELS][MAXLIGHTZ];
-
-extern int				extralight;
-extern BOOL				foggy;
-extern int				fixedlightlev;
-extern lighttable_t*	fixedcolormap;
-
-extern int				lightscalexmul;	// [RH] for hires lighting fix
-extern int				lightscaleymul;
-
+// [RH] This has changed significantly from Doom, which used lookup
+// tables based on 1/z for walls and z for flats and only recognized
+// 16 discrete light levels. The terminology I use is borrowed from Build.
+//
 
 // Number of diminishing brightness levels.
 // There a 0-31, i.e. 32 LUT in the COLORMAP lump.
 #define NUMCOLORMAPS			32
+
+// The size of a single colormap, in bits
+#define COLORMAPSHIFT			8
+
+// Convert a light level into an unbounded colormap index (shade). Result is
+// fixed point. Why the +12? I wish I knew, but experimentation indicates it
+// is necessary in order to best reproduce Doom's original lighting.
+#define LIGHT2SHADE(l)			((NUMCOLORMAPS*2*FRACUNIT)-(((l)+12)*FRACUNIT*NUMCOLORMAPS/128))
+
+// Convert a shade and visibility to a clamped colormap index.
+// Result is not fixed point.
+#define GETPALOOKUP(vis,shade)	(clamp<int> (((shade)-(vis))>>FRACBITS, 0, NUMCOLORMAPS-1))
+
+extern fixed_t			GlobVis;
+
+EXTERN_CVAR (Float, r_visibility)
+extern fixed_t			r_BaseVisibility;
+extern fixed_t			r_WallVisibility;
+extern fixed_t			r_FloorVisibility;
+extern float			r_TiltVisibility;
+extern fixed_t			r_SpriteVisibility;
+extern fixed_t			r_ParticleVisibility;
+extern fixed_t			r_SkyVisibility;
+
+extern int				extralight, r_actualextralight;
+extern bool				foggy;
+extern int				fixedlightlev;
+extern lighttable_t*	fixedcolormap;
 
 
 // [RH] New detail modes
 extern "C" int			detailxshift;
 extern "C" int			detailyshift;
 
+extern bool				r_MarkTrans;
 
 //
 // Function pointers to switch refresh/drawing functions.
@@ -103,9 +122,7 @@ extern "C" int			detailyshift;
 extern void 			(*colfunc) (void);
 extern void 			(*basecolfunc) (void);
 extern void 			(*fuzzcolfunc) (void);
-extern void				(*lucentcolfunc) (void);
 extern void				(*transcolfunc) (void);
-extern void				(*tlatedlucentcolfunc) (void);
 // No shadow effects on floors.
 extern void 			(*spanfunc) (void);
 
@@ -120,22 +137,26 @@ extern void (*hcolfunc_post4) (int sx, int yl, int yh);
 // Utility functions.
 int R_PointOnSide (fixed_t x, fixed_t y, node_t *node);
 int R_PointOnSegSide (fixed_t x, fixed_t y, seg_t *line);
+int R_PointOnSegSide2 (fixed_t x, fixed_t y, seg_t *line);
 angle_t R_PointToAngle2 (fixed_t x1, fixed_t y1, fixed_t x2, fixed_t y2);
 inline angle_t R_PointToAngle (fixed_t x, fixed_t y) { return R_PointToAngle2 (viewx, viewy, x, y); }
-fixed_t R_ScaleFromGlobalAngle (angle_t visangle);
 subsector_t *R_PointInSubsector (fixed_t x, fixed_t y);
 fixed_t R_PointToDist (fixed_t x, fixed_t y);
 fixed_t R_PointToDist2 (fixed_t dx, fixed_t dy);
+
 void R_SetFOV (float fov);
-
-
+float R_GetFOV ();
+void R_InitTextureMapping ();
 
 //
 // REFRESH - the actual rendering functions.
 //
 
 // Called by G_Drawer.
-void R_RenderPlayerView (player_t *player);
+void R_RenderPlayerView (player_t *player, void (*lengthyCallback)());
+void R_RefreshViewBorder ();
+
+void R_RenderViewToCanvas (player_t *player, DCanvas *canvas, int x, int y, int width, int height);
 
 // Called by startup code.
 void R_Init (void);

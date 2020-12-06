@@ -1,14 +1,15 @@
 #include "info.h"
 #include "a_pickups.h"
 #include "a_artifacts.h"
-#include "hstrings.h"
+#include "gstrings.h"
 #include "p_local.h"
 #include "p_enemy.h"
 #include "s_sound.h"
 
 // Invisibility -------------------------------------------------------------
 
-BASIC_ARTI (Invisibility, arti_invisibility, TXT_ARTIINVISIBILITY)
+BASIC_ARTI (Invisibility, arti_invisibility, GStrings(TXT_ARTIINVISIBILITY))
+	AT_GAME_SET_FRIEND (Invisibility)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
@@ -16,28 +17,30 @@ private:
 	}
 };
 
-ARTI_SETUP (Invisibility, Heretic);
-
 FState AArtiInvisibility::States[] =
 {
 	S_BRIGHT (INVS, 'A',  350, NULL, &States[0])
 };
 
-void AArtiInvisibility::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiInvisibility, Heretic, 75, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (Invisibility)
 {
-	INHERIT_DEFS;
-	info->doomednum = 75;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	info->translucency = HR_SHADOW;
-	ArtiDispatch[arti_invisibility] = ActivateArti;
+	ArtiDispatch[arti_invisibility] = AArtiInvisibility::ActivateArti;
 	ArtiPics[arti_invisibility] = "ARTIINVS";
 }
 
 // Tome of power ------------------------------------------------------------
 
-BASIC_ARTI (TomeOfPower, arti_tomeofpower, TXT_ARTITOMEOFPOWER)
+BASIC_ARTI (TomeOfPower, arti_tomeofpower, GStrings(TXT_ARTITOMEOFPOWER))
+	AT_GAME_SET_FRIEND (Tome)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
@@ -70,21 +73,21 @@ private:
 	}
 };
 
-ARTI_SETUP (TomeOfPower, Heretic);
-
 FState AArtiTomeOfPower::States[] =
 {
 	S_NORMAL (PWBK, 'A',  350, NULL, &States[0])
 };
 
-void AArtiTomeOfPower::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiTomeOfPower, Heretic, 86, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (Tome)
 {
-	INHERIT_DEFS;
-	info->doomednum = 86;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	ArtiDispatch[arti_tomeofpower] = ActivateArti;
+	ArtiDispatch[arti_tomeofpower] = AArtiTomeOfPower::ActivateArti;
 	ArtiPics[arti_tomeofpower] = "ARTIPWBK";
 }
 
@@ -92,17 +95,14 @@ void AArtiTomeOfPower::SetDefaults (FActorInfo *info)
 
 class AActivatedTimeBomb : public AActor
 {
-	DECLARE_ACTOR (AActivatedTimeBomb, AActor);
+	DECLARE_ACTOR (AActivatedTimeBomb, AActor)
 public:
 	void PreExplode ()
 	{
 		z += 32*FRACUNIT;
-		translucency = OPAQUE;
+		alpha = OPAQUE;
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AActivatedTimeBomb, AActor);
-REGISTER_ACTOR (AActivatedTimeBomb, Heretic);
 
 FState AActivatedTimeBomb::States[] =
 {
@@ -119,16 +119,18 @@ FState AActivatedTimeBomb::States[] =
 	S_BRIGHT (XPL1, 'F',	4, NULL 	, NULL)
 };
 
-void AActivatedTimeBomb::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->deathsound = "misc/timebomb";
-	info->flags = MF_NOGRAVITY;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_ACTOR (AActivatedTimeBomb, Heretic, -1, 0)
+	PROP_Flags (MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
 
-BASIC_ARTI (TimeBomb, arti_firebomb, TXT_ARTIFIREBOMB)
+	PROP_SpawnState (0)
+
+	PROP_DeathSound ("misc/timebomb")
+END_DEFAULTS
+
+BASIC_ARTI (TimeBomb, arti_firebomb, GStrings(TXT_ARTIFIREBOMB))
+	AT_GAME_SET_FRIEND (TimeBomb)
 private:
 	static bool ActivateArti (player_t *player, artitype_t arti)
 	{
@@ -142,20 +144,20 @@ private:
 	}
 };
 
-ARTI_SETUP (TimeBomb, Heretic);
-
 FState AArtiTimeBomb::States[] =
 {
 	S_NORMAL (FBMB, 'E',  350, NULL, &States[0]),
 };
 
-void AArtiTimeBomb::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AArtiTimeBomb, Heretic, 34, 0)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Flags2 (MF2_FLOATBOB)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (TimeBomb)
 {
-	INHERIT_DEFS;
-	info->doomednum = 34;
-	info->spawnstate = &States[0];
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-	info->flags2 = MF2_FLOATBOB;
-	ArtiDispatch[arti_firebomb] = &ActivateArti;
+	ArtiDispatch[arti_firebomb] = &AArtiTimeBomb::ActivateArti;
 	ArtiPics[arti_firebomb] = "ARTIFBMB";
 }

@@ -15,16 +15,13 @@ void A_CheckBurnGone (AActor *);
 
 class AFighterPlayer : public APlayerPawn
 {
-	DECLARE_ACTOR (AFighterPlayer, APlayerPawn);
+	DECLARE_ACTOR (AFighterPlayer, APlayerPawn)
 public:
 	void PlayAttacking2 ();
 	void GiveDefaultInventory ();
-	const char *BaseSoundName () { return "fighter"; }
+	const char *GetSoundClass ();
 	fixed_t GetJumpZ () { return 9*FRACUNIT; }
 };
-
-IMPLEMENT_DEF_SERIAL (AFighterPlayer, APlayerPawn);
-REGISTER_ACTOR (AFighterPlayer, Hexen);
 
 FState AFighterPlayer::States[] =
 {
@@ -69,23 +66,23 @@ FState AFighterPlayer::States[] =
 	S_NORMAL (PLAY, 'X',	1, A_FreezeDeathChunks		, &States[S_FPLAY_ICE+1]),
 
 #define S_PLAY_FDTH (S_FPLAY_ICE+2)
-	S_BRIGHT (FDTH, 'G',	5, NULL 					, &States[S_PLAY_FDTH+3]),
-	S_BRIGHT (FDTH, 'H',	4, A_PlayerScream 			, &States[S_PLAY_FDTH+4]),
-	S_BRIGHT (FDTH, 'I',	5, NULL 					, &States[S_PLAY_FDTH+5]),
-	S_BRIGHT (FDTH, 'J',	4, NULL 					, &States[S_PLAY_FDTH+6]),
-	S_BRIGHT (FDTH, 'K',	5, NULL 					, &States[S_PLAY_FDTH+7]),
-	S_BRIGHT (FDTH, 'L',	4, NULL 					, &States[S_PLAY_FDTH+8]),
-	S_BRIGHT (FDTH, 'M',	5, NULL 					, &States[S_PLAY_FDTH+9]),
-	S_BRIGHT (FDTH, 'N',	4, NULL 					, &States[S_PLAY_FDTH+10]),
-	S_BRIGHT (FDTH, 'O',	5, NULL 					, &States[S_PLAY_FDTH+11]),
-	S_BRIGHT (FDTH, 'P',	4, NULL 					, &States[S_PLAY_FDTH+12]),
-	S_BRIGHT (FDTH, 'Q',	5, NULL 					, &States[S_PLAY_FDTH+13]),
-	S_BRIGHT (FDTH, 'R',	4, NULL 					, &States[S_PLAY_FDTH+14]),
-	S_BRIGHT (FDTH, 'S',	5, A_NoBlocking 			, &States[S_PLAY_FDTH+15]),
-	S_BRIGHT (FDTH, 'T',	4, NULL 					, &States[S_PLAY_FDTH+16]),
-	S_BRIGHT (FDTH, 'U',	5, NULL 					, &States[S_PLAY_FDTH+17]),
-	S_BRIGHT (FDTH, 'V',	4, NULL 					, &States[S_PLAY_FDTH+18]),
-	S_NORMAL (ACLO, 'E',   35, A_CheckBurnGone			, &States[S_PLAY_FDTH+18]),
+	S_BRIGHT (FDTH, 'G',	5, NULL						, &States[S_PLAY_FDTH+1]),
+	S_BRIGHT (FDTH, 'H',	4, A_PlayerScream 			, &States[S_PLAY_FDTH+2]),
+	S_BRIGHT (FDTH, 'I',	5, NULL 					, &States[S_PLAY_FDTH+3]),
+	S_BRIGHT (FDTH, 'J',	4, NULL 					, &States[S_PLAY_FDTH+4]),
+	S_BRIGHT (FDTH, 'K',	5, NULL 					, &States[S_PLAY_FDTH+5]),
+	S_BRIGHT (FDTH, 'L',	4, NULL 					, &States[S_PLAY_FDTH+6]),
+	S_BRIGHT (FDTH, 'M',	5, NULL 					, &States[S_PLAY_FDTH+7]),
+	S_BRIGHT (FDTH, 'N',	4, NULL 					, &States[S_PLAY_FDTH+8]),
+	S_BRIGHT (FDTH, 'O',	5, NULL 					, &States[S_PLAY_FDTH+9]),
+	S_BRIGHT (FDTH, 'P',	4, NULL 					, &States[S_PLAY_FDTH+10]),
+	S_BRIGHT (FDTH, 'Q',	5, NULL 					, &States[S_PLAY_FDTH+11]),
+	S_BRIGHT (FDTH, 'R',	4, NULL 					, &States[S_PLAY_FDTH+12]),
+	S_BRIGHT (FDTH, 'S',	5, A_NoBlocking 			, &States[S_PLAY_FDTH+13]),
+	S_BRIGHT (FDTH, 'T',	4, NULL 					, &States[S_PLAY_FDTH+14]),
+	S_BRIGHT (FDTH, 'U',	5, NULL 					, &States[S_PLAY_FDTH+15]),
+	S_BRIGHT (FDTH, 'V',	4, NULL 					, &States[S_PLAY_FDTH+16]),
+	S_NORMAL (ACLO, 'E',   35, A_CheckBurnGone			, &States[S_PLAY_FDTH+17]),
 	S_NORMAL (ACLO, 'E',	8, NULL 					, NULL),
 
 #define S_PLAY_F_FDTH (S_PLAY_FDTH+18)
@@ -101,35 +98,43 @@ FState AFighterPlayer::States[] =
 	S_BRIGHT (FDTH, 'F',	4, NULL 					, &States[S_PLAY_FDTH+2])
 };
 
-void AFighterPlayer::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_FPLAY];
-	info->spawnhealth = 100;
-	info->seestate = &States[S_FPLAY_RUN];
-	info->painstate = &States[S_FPLAY_PAIN];
-	info->painchance = 255;
-	info->painsound = "PlayerFighterPain";
-	info->missilestate = &States[S_FPLAY_ATK];
-	info->deathstate = &States[S_FPLAY_DIE];
-	info->xdeathstate = &States[S_FPLAY_XDIE];
-	info->ideathstate = &States[S_FPLAY_ICE];
-	info->bdeathstate = &States[S_PLAY_F_FDTH];
-	info->radius = 16 * FRACUNIT;
-	info->height = 64 * FRACUNIT;
-	info->mass = 100;
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_PICKUP|MF_NOTDMATCH;
-	info->flags2 = MF2_WINDTHRUST|MF2_FLOORCLIP|MF2_SLIDE|MF2_PASSMOBJ|MF2_TELESTOMP|MF2_PUSHWALL;
-}
+IMPLEMENT_ACTOR (AFighterPlayer, Hexen, -1, 0)
+	PROP_SpawnHealth (100)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (64)
+	PROP_Mass (100)
+	PROP_PainChance (255)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_PICKUP|MF_NOTDMATCH)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_FLOORCLIP|MF2_SLIDE|MF2_PASSMOBJ|MF2_TELESTOMP|MF2_PUSHWALL)
 
+	PROP_SpawnState (S_FPLAY)
+	PROP_SeeState (S_FPLAY_RUN)
+	PROP_PainState (S_FPLAY_PAIN)
+	PROP_MissileState (S_FPLAY_ATK)
+	PROP_DeathState (S_FPLAY_DIE)
+	PROP_XDeathState (S_FPLAY_XDIE)
+	PROP_BDeathState (S_PLAY_F_FDTH)
+	PROP_IDeathState (S_FPLAY_ICE)
+
+	PROP_PainSound ("PlayerFighterPain")
+END_DEFAULTS
+
+const char *AFighterPlayer::GetSoundClass ()
+{
+	if (player == NULL || player->userinfo.skin == 0)
+	{
+		return "fighter";
+	}
+	return Super::GetSoundClass ();
+}
 void AFighterPlayer::PlayAttacking2 ()
 {
-	SetState (GetInfo (this)->missilestate);
+	SetState (MissileState);
 }
 
 void AFighterPlayer::GiveDefaultInventory ()
 {
-	player->health = GetInfo (this)->spawnhealth;
+	player->health = GetDefault()->health;
 	player->readyweapon = player->pendingweapon = wp_ffist;
 	player->weaponowned[wp_ffist] = true;
 }
@@ -167,13 +172,11 @@ void A_FPunchAttack (player_t *, pspdef_t *);
 
 class AFWeapFist : public AWeapon
 {
-	DECLARE_ACTOR (AFWeapFist, AWeapon);
+	DECLARE_ACTOR (AFWeapFist, AWeapon)
+	AT_GAME_SET_FRIEND (FWeapFist)
 private:
 	static FWeaponInfo WeaponInfo;
 };
-
-IMPLEMENT_DEF_SERIAL (AFWeapFist, AWeapon);
-REGISTER_ACTOR (AFWeapFist, Hexen);
 
 FState AFWeapFist::States[] =
 {
@@ -224,23 +227,22 @@ FWeaponInfo AFWeapFist::WeaponInfo =
 	NULL
 };
 
-void AFWeapFist::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AFWeapFist, Hexen, -1, 0)
+END_DEFAULTS
+
+AT_GAME_SET (FWeapFist)
 {
-	INHERIT_DEFS;
-	wpnlev1info[wp_ffist] = wpnlev2info[wp_ffist] = &WeaponInfo;
+	wpnlev1info[wp_ffist] = wpnlev2info[wp_ffist] = &AFWeapFist::WeaponInfo;
 }
 
 // Punch puff ---------------------------------------------------------------
 
 class APunchPuff : public AActor
 {
-	DECLARE_ACTOR (APunchPuff, AActor);
+	DECLARE_ACTOR (APunchPuff, AActor)
 public:
-	void PostBeginPlay ();
+	void BeginPlay ();
 };
-
-IMPLEMENT_DEF_SERIAL (APunchPuff, AActor);
-REGISTER_ACTOR (APunchPuff, Hexen);
 
 FState APunchPuff::States[] =
 {
@@ -251,20 +253,21 @@ FState APunchPuff::States[] =
 	S_NORMAL (FHFX, 'W',	4, NULL 					, NULL)
 };
 
-void APunchPuff::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->seesound = "FighterPunchHitThing";
-	info->attacksound = "FighterPunchHitWall";
-	info->activesound = "FighterPunchMiss";
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = HX_SHADOW;
-}
+IMPLEMENT_ACTOR (APunchPuff, Hexen, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HX_SHADOW)
 
-void APunchPuff::PostBeginPlay ()
+	PROP_SpawnState (0)
+
+	PROP_SeeSound ("FighterPunchHitThing")
+	PROP_AttackSound ("FighterPunchHitWall")
+	PROP_ActiveSound ("FighterPunchMiss")
+END_DEFAULTS
+
+void APunchPuff::BeginPlay ()
 {
-	Super::PostBeginPlay ();
+	Super::BeginPlay ();
 	momz = FRACUNIT;
 }
 
@@ -272,13 +275,10 @@ void APunchPuff::PostBeginPlay ()
 
 class AHammerPuff : public AActor
 {
-	DECLARE_ACTOR (AHammerPuff, AActor);
+	DECLARE_ACTOR (AHammerPuff, AActor)
 public:
-	void PostBeginPlay ();
+	void BeginPlay ();
 };
-
-IMPLEMENT_DEF_SERIAL (AHammerPuff, AActor);
-REGISTER_ACTOR (AHammerPuff, Hexen);
 
 FState AHammerPuff::States[] =
 {
@@ -289,19 +289,21 @@ FState AHammerPuff::States[] =
 	S_NORMAL (FHFX, 'W',	4, NULL 					, NULL),
 };
 
-void AHammerPuff::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->seesound = "FighterHammerHitThing";
-	info->attacksound = "FighterHammmerHitWall";
-	info->activesound = "FighterHammerMiss";
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_ACTOR (AHammerPuff, Hexen, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HX_SHADOW)
 
-void AHammerPuff::PostBeginPlay ()
+	PROP_SpawnState (0)
+
+	PROP_SeeSound ("FighterHammerHitThing")
+	PROP_AttackSound ("FighterHammmerHitWall")
+	PROP_ActiveSound ("FighterHammerMiss")
+END_DEFAULTS
+
+void AHammerPuff::BeginPlay ()
 {
+	Super::BeginPlay ();
 	momz = FRACUNIT*8/10;
 }
 
@@ -386,7 +388,7 @@ punchdone:
 #if 0
 class AFWeapAxe : public AWeapon
 {
-	DECLARE_ACTOR (AFWeapAxe, AWeapon);
+	DECLARE_ACTOR (AFWeapAxe, AWeapon)
 protected:
 	bool TryPickup (AActor *toucher)
 	{

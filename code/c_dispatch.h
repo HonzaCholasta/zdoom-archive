@@ -3,31 +3,35 @@
 
 #include "dobject.h"
 
+class FConfigFile;
+
 #define HASH_SIZE	251				// I think this is prime
 
-void C_ExecCmdLineParams (int onlyset);
+void C_ExecCmdLineParams ();
 
 // add commands to the console as if they were typed in
 // for map changing, etc
 void AddCommandString (char *text);
 
-// parse a command string
-char *ParseString (char *data);
-
 // Write out alias commands to a file for all current aliases.
-void C_ArchiveAliases (FILE *f);
+void C_ArchiveAliases (FConfigFile *f);
+
+void C_SetAlias (const char *name, const char *cmd);
 
 // build a single string out of multiple strings
 char *BuildString (int argc, char **argv);
 
+typedef void (*CCmdRun) (int argc, char **argv, const char *args, AActor *instigator);
+
 class FConsoleCommand
 {
 public:
-	FConsoleCommand (const char *name);
+	FConsoleCommand (const char *name, CCmdRun RunFunc);
 	virtual ~FConsoleCommand ();
-	virtual void Run () = 0;
-	virtual bool IsAlias () { return false; }
-	void PrintCommand () { Printf (PRINT_HIGH, "%s\n", m_Name); }
+	virtual bool IsAlias ();
+	void PrintCommand () { Printf ("%s\n", m_Name); }
+
+	virtual void Run (int argc, char **argv, const char *args, AActor *instigator);
 
 	FConsoleCommand *m_Next, **m_Prev;
 	char *m_Name;
@@ -36,32 +40,25 @@ protected:
 	FConsoleCommand ();
 	bool AddToHash (FConsoleCommand **table);
 
-	AActor *m_Instigator;
-	int argc;
-	char **argv;
-	char *args;
+	CCmdRun m_RunFunc;
 
 	friend void C_DoCommand (char *cmd);
 };
 
-#define BEGIN_COMMAND(n) \
-	static class Cmd_##n : public FConsoleCommand { \
-		public: \
-			Cmd_##n () : FConsoleCommand (#n) {} \
-			Cmd_##n (const char *name) : FConsoleCommand (name) {} \
-			void Run ()
-
-#define END_COMMAND(n)		} Istaticcmd##n;
+#define CCMD(n) \
+	void Cmd_##n (int, char **, const char *, AActor *); \
+	FConsoleCommand Cmd_##n##_ (#n, Cmd_##n); \
+	void Cmd_##n (int argc, char **argv, const char *args, AActor *m_Instigator)
 
 class FConsoleAlias : public FConsoleCommand
 {
 public:
 	FConsoleAlias (const char *name, const char *command);
 	~FConsoleAlias ();
-	void Run () { AddCommandString (m_Command); }
-	bool IsAlias () { return true; }
-	void PrintAlias () { Printf (PRINT_HIGH, "%s : %s\n", m_Name, m_Command); }
-	void Archive (FILE *f);
+	void Run (int argc, char **argv, const char *args, AActor *m_Instigator);
+	bool IsAlias ();
+	void PrintAlias () { Printf ("%s : %s\n", m_Name, m_Command); }
+	void Archive (FConfigFile *f);
 protected:
 	char *m_Command;
 };

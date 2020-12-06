@@ -3,7 +3,7 @@
 #include "d_player.h"
 #include "p_local.h"
 #include "gi.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "s_sound.h"
 #include "m_random.h"
 #include "p_local.h"
@@ -16,16 +16,13 @@
 
 class AInvulnerabilitySphere : public APowerup
 {
-	DECLARE_ACTOR (AInvulnerabilitySphere, APowerup);
+	DECLARE_ACTOR (AInvulnerabilitySphere, APowerup)
 protected:
 	bool TryPickup (AActor *toucher);
 	const char *PickupMessage ();
 public:
 	bool ShouldRespawn ();
 };
-
-IMPLEMENT_DEF_SERIAL (AInvulnerabilitySphere, APowerup);
-REGISTER_ACTOR (AInvulnerabilitySphere, Doom);
 
 FState AInvulnerabilitySphere::States[] =
 {
@@ -35,16 +32,10 @@ FState AInvulnerabilitySphere::States[] =
 	S_BRIGHT (PINV, 'D',	6, NULL 				, &States[0])
 };
 
-void AInvulnerabilitySphere::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2022;
-	info->spawnid = 133;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (AInvulnerabilitySphere, Doom, 2022, 133)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 bool AInvulnerabilitySphere::TryPickup (AActor *toucher)
 {
@@ -53,19 +44,19 @@ bool AInvulnerabilitySphere::TryPickup (AActor *toucher)
 
 const char *AInvulnerabilitySphere::PickupMessage ()
 {
-	return GOTINVUL;
+	return GStrings(GOTINVUL);
 }
 
 bool AInvulnerabilitySphere::ShouldRespawn ()
 {
-	return Super::ShouldRespawn () && (dmflags & DF_RESPAWN_SUPER);
+	return Super::ShouldRespawn () && (*dmflags & DF_RESPAWN_SUPER);
 }
 
 // Soulsphere --------------------------------------------------------------
 
 class ASoulsphere : public APowerup
 {
-	DECLARE_ACTOR (ASoulsphere, APowerup);
+	DECLARE_ACTOR (ASoulsphere, APowerup)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -78,12 +69,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTSUPER;
+		return GStrings(GOTSUPER);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ASoulsphere, APowerup);
-REGISTER_ACTOR (ASoulsphere, Doom);
 
 FState ASoulsphere::States[] =
 {
@@ -95,38 +83,35 @@ FState ASoulsphere::States[] =
 	S_BRIGHT (SOUL, 'B',	6, NULL 				, &States[0])
 };
 
-void ASoulsphere::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2013;
-	info->spawnid = 25;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (ASoulsphere, Doom, 2013, 25)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Mega sphere --------------------------------------------------------------
 
 class AMegasphere : public APowerup
 {
-	DECLARE_ACTOR (AMegasphere, APowerup);
+	DECLARE_ACTOR (AMegasphere, APowerup)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
+		bool gotarmor, gothealth;
 		player_t *player = toucher->player;
-		player->health = deh.MegasphereHealth;
-		player->mo->health = player->health;
-		return P_GiveArmor (player, (armortype_t)deh.BlueAC, 100*deh.BlueAC);
+
+		gotarmor = P_GiveArmor (player, (armortype_t)deh.BlueAC, 100*deh.BlueAC);
+		if ((gothealth = player->health < deh.MegasphereHealth))
+		{
+			player->health = deh.MegasphereHealth;
+			player->mo->health = deh.MegasphereHealth;
+		}
+		return gotarmor || gothealth;
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTMSPHERE;
+		return GStrings(GOTMSPHERE);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AMegasphere, APowerup);
-REGISTER_ACTOR (AMegasphere, Doom);
 
 FState AMegasphere::States[] =
 {
@@ -136,22 +121,16 @@ FState AMegasphere::States[] =
 	S_BRIGHT (MEGA, 'D',	6, NULL 				, &States[0])
 };
 
-void AMegasphere::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 83;
-	info->spawnid = 132;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (AMegasphere, Doom, 83, 132)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Berserk ------------------------------------------------------------------
 
 class ABerserk : public APowerup
 {
-	DECLARE_ACTOR (ABerserk, APowerup);
+	DECLARE_ACTOR (ABerserk, APowerup)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -165,44 +144,35 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTBERSERK;
+		return GStrings(GOTBERSERK);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ABerserk, APowerup);
-REGISTER_ACTOR (ABerserk, Doom);
 
 FState ABerserk::States[] =
 {
 	S_BRIGHT (PSTR, 'A',   -1, NULL 				, NULL)
 };
 
-void ABerserk::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2023;
-	info->spawnid = 134;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (ABerserk, Doom, 2023, 134)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Invisibility -------------------------------------------------------------
 
 class ABlurSphere : public APowerup
 {
-	DECLARE_ACTOR (ABlurSphere, APowerup);
+	DECLARE_ACTOR (ABlurSphere, APowerup)
 public:
 	virtual void PostBeginPlay ()
 	{
 		Super::PostBeginPlay ();
 		effects |= FX_VISIBILITYPULSE;
-		special2 = -1;
+		visdir = -1;
 	}
 	virtual bool ShouldRespawn ()
 	{
-		return Super::ShouldRespawn () && (dmflags & DF_RESPAWN_SUPER);
+		return Super::ShouldRespawn () && (*dmflags & DF_RESPAWN_SUPER);
 	}
 protected:
 	virtual bool TryPickup (AActor *toucher)
@@ -211,12 +181,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTINVIS;
+		return GStrings(GOTINVIS);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ABlurSphere, APowerup);
-REGISTER_ACTOR (ABlurSphere, Doom);
 
 FState ABlurSphere::States[] =
 {
@@ -226,22 +193,17 @@ FState ABlurSphere::States[] =
 	S_BRIGHT (PINS, 'D',	6, NULL 				, &States[0])
 };
 
-void ABlurSphere::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2024;
-	info->spawnid = 135;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (ABlurSphere, Doom, 2024, 135)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Radiation suit (aka iron feet) -------------------------------------------
 
 class ARadSuit : public APowerup
 {
-	DECLARE_ACTOR (ARadSuit, APowerup);
+	DECLARE_ACTOR (ARadSuit, APowerup)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -249,34 +211,26 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTSUIT;
+		return GStrings(GOTSUIT);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ARadSuit, APowerup);
-REGISTER_ACTOR (ARadSuit, Doom);
 
 FState ARadSuit::States[] =
 {
 	S_BRIGHT (SUIT, 'A',   -1, NULL 				, NULL)
 };
 
-void ARadSuit::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2025;
-	info->spawnid = 136;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 46 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (ARadSuit, Doom, 2025, 136)
+	PROP_HeightFixed (46)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // infrared -----------------------------------------------------------------
 
 class AInfrared : public APowerup
 {
-	DECLARE_ACTOR (AInfrared, APowerup);
+	DECLARE_ACTOR (AInfrared, APowerup)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -284,12 +238,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTVISOR;
+		return GStrings(GOTVISOR);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AInfrared, APowerup);
-REGISTER_ACTOR (AInfrared, Doom);
 
 FState AInfrared::States[] =
 {
@@ -297,25 +248,19 @@ FState AInfrared::States[] =
 	S_NORMAL (PVIS, 'B',	6, NULL 				, &States[0])
 };
 
-void AInfrared::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2045;
-	info->spawnid = 138;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (AInfrared, Doom, 2045, 138)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Allmap -------------------------------------------------------------------
 
 // Note that the allmap is a subclass of pickup, not powerup, because we
 // always want it to be activated immediately on pickup.
 
-class AAllmap : public APickup
+class AAllmap : public AInventory
 {
-	DECLARE_ACTOR (AAllmap, APickup);
+	DECLARE_ACTOR (AAllmap, AInventory)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -323,12 +268,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTMAP;
+		return GStrings(GOTMAP);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AAllmap, APickup);
-REGISTER_ACTOR (AAllmap, Doom);
 
 FState AAllmap::States[] =
 {
@@ -340,25 +282,22 @@ FState AAllmap::States[] =
 	S_BRIGHT (PMAP, 'B',	6, NULL 				, &States[0])
 };
 
-void AAllmap::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2026;
-	info->spawnid = 137;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (AAllmap, Doom, 2026, 137)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Backpack -----------------------------------------------------------------
 
 // The backpack is alsa pickup, because there's not much point to carrying
 // a backpack around unused.
+//
+// Okay, I have no idea what I meant when I wrote that. In particular,
+// what does "alsa" mean?
 
-class ABackpack : public APickup
+class ABackpack : public AInventory
 {
-	DECLARE_ACTOR (ABackpack, APickup);
+	DECLARE_ACTOR (ABackpack, AInventory)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -372,30 +311,22 @@ protected:
 			player->backpack = true;
 		}
 		for (i = 0; i < NUMAMMO; i++)
-			P_GiveAmmo (player, (ammotype_t)i, 1);
+			P_GiveAmmo (player, (ammotype_t)i, clipammo[i]);
 		return true;
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTBACKPACK;
+		return GStrings(GOTBACKPACK);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ABackpack, APickup);
-REGISTER_ACTOR (ABackpack, Doom);
 
 FState ABackpack::States[] =
 {
 	S_NORMAL (BPAK, 'A',   -1, NULL 						, NULL)
 };
 
-void ABackpack::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 8;
-	info->spawnid = 144;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 26 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-}
+IMPLEMENT_ACTOR (ABackpack, Doom, 8, 144)
+	PROP_HeightFixed (26)
+	PROP_Flags (MF_SPECIAL)
+	PROP_SpawnState (0)
+END_DEFAULTS

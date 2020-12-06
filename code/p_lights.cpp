@@ -22,7 +22,7 @@
 //-----------------------------------------------------------------------------
 
 
-
+#include "templates.h"
 #include "z_zone.h"
 #include "m_random.h"
 
@@ -34,18 +34,10 @@
 // State.
 #include "r_state.h"
 
-// [RH] Make sure the light level is in bounds.
-#define CLIPLIGHT(l)	(((l) < 0) ? 0 : (((l) > 255) ? 255 : (l)))
-
-IMPLEMENT_SERIAL (DLighting, DSectorEffect)
+IMPLEMENT_CLASS (DLighting)
 
 DLighting::DLighting ()
 {
-}
-
-void DLighting::Serialize (FArchive &arc)
-{
-	Super::Serialize (arc);
 }
 
 DLighting::DLighting (sector_t *sector)
@@ -57,7 +49,7 @@ DLighting::DLighting (sector_t *sector)
 // FIRELIGHT FLICKER
 //
 
-IMPLEMENT_SERIAL (DFireFlicker, DLighting)
+IMPLEMENT_CLASS (DFireFlicker)
 
 DFireFlicker::DFireFlicker ()
 {
@@ -76,11 +68,12 @@ void DFireFlicker::Serialize (FArchive &arc)
 void DFireFlicker::RunThink ()
 {
 	int amount;
-		
+
 	if (--m_Count == 0)
 	{
 		amount = (P_Random (pr_fireflicker) & 3) << 4;
-		
+
+		// [RH] Shouldn't this be (m_MaxLight - amount < m_MinLight)?
 		if (m_Sector->lightlevel - amount < m_MinLight)
 			m_Sector->lightlevel = m_MinLight;
 		else
@@ -97,22 +90,22 @@ DFireFlicker::DFireFlicker (sector_t *sector)
 	: DLighting (sector)
 {
 	m_MaxLight = sector->lightlevel;
-	m_MinLight = P_FindMinSurroundingLight(sector,sector->lightlevel)+16;
+	m_MinLight = MIN (sector->FindMinSurroundingLight (sector->lightlevel)+16, 255);
 	m_Count = 4;
 }
 
 DFireFlicker::DFireFlicker (sector_t *sector, int upper, int lower)
 	: DLighting (sector)
 {
-	m_MaxLight = CLIPLIGHT(upper);
-	m_MinLight = CLIPLIGHT(lower);
+	m_MaxLight = clamp (upper, 0, 255);
+	m_MinLight = clamp (lower, 0, 255);
 	m_Count = 4;
 }
 
 //
 // [RH] flickering light like Hexen's
 //
-IMPLEMENT_SERIAL (DFlicker, DLighting)
+IMPLEMENT_CLASS (DFlicker)
 
 DFlicker::DFlicker ()
 {
@@ -168,7 +161,7 @@ void EV_StartLightFlickering (int tag, int upper, int lower)
 // BROKEN LIGHT FLASHING
 //
 
-IMPLEMENT_SERIAL (DLightFlash, DLighting)
+IMPLEMENT_CLASS (DLightFlash)
 
 DLightFlash::DLightFlash ()
 {
@@ -209,7 +202,7 @@ DLightFlash::DLightFlash (sector_t *sector)
 {
 	// Find light levels like Doom.
 	m_MaxLight = sector->lightlevel;
-	m_MinLight = P_FindMinSurroundingLight (sector,sector->lightlevel);
+	m_MinLight = sector->FindMinSurroundingLight (sector->lightlevel);
 	m_MaxTime = 64;
 	m_MinTime = 7;
 	m_Count = (P_Random (pr_spawnlightflash) & m_MaxTime) + 1;
@@ -219,8 +212,8 @@ DLightFlash::DLightFlash (sector_t *sector, int min, int max)
 	: DLighting (sector)
 {
 	// Use specified light levels.
-	m_MaxLight = CLIPLIGHT(max);
-	m_MinLight = CLIPLIGHT(min);
+	m_MaxLight = clamp (max, 0, 255);
+	m_MinLight = clamp (min, 0, 255);
 	m_MaxTime = 64;
 	m_MinTime = 7;
 	m_Count = (P_Random (pr_spawnlightflash) & m_MaxTime) + 1;
@@ -231,7 +224,7 @@ DLightFlash::DLightFlash (sector_t *sector, int min, int max)
 // STROBE LIGHT FLASHING
 //
 
-IMPLEMENT_SERIAL (DStrobe, DLighting)
+IMPLEMENT_CLASS (DStrobe)
 
 DStrobe::DStrobe ()
 {
@@ -271,8 +264,8 @@ DStrobe::DStrobe (sector_t *sector, int upper, int lower, int utics, int ltics)
 {
 	m_DarkTime = ltics;
 	m_BrightTime = utics;
-	m_MaxLight = CLIPLIGHT(upper);
-	m_MinLight = CLIPLIGHT(lower);
+	m_MaxLight = clamp (upper, 0, 255);
+	m_MinLight = clamp (lower, 0, 255);
 	m_Count = 1;	// Hexen-style is always in sync
 }
 
@@ -286,7 +279,7 @@ DStrobe::DStrobe (sector_t *sector, int utics, int ltics, bool inSync)
 	m_BrightTime = utics;
 
 	m_MaxLight = sector->lightlevel;
-	m_MinLight = P_FindMinSurroundingLight (sector, sector->lightlevel);
+	m_MinLight = sector->FindMinSurroundingLight (sector->lightlevel);
 
 	if (m_MinLight == m_MaxLight)
 		m_MinLight = 0;
@@ -391,7 +384,7 @@ void EV_LightTurnOn (int tag, int bright)
 					bright = temp->lightlevel;
 			}
 		}
-		sector->lightlevel = CLIPLIGHT(bright);
+		sector->lightlevel = clamp (bright, 0, 255);
 	}
 }
 
@@ -407,7 +400,7 @@ void EV_LightChange (int tag, int value)
 
 	while ((secnum = P_FindSectorFromTag (tag, secnum)) >= 0) {
 		int newlight = sectors[secnum].lightlevel + value;
-		sectors[secnum].lightlevel = CLIPLIGHT(newlight);
+		sectors[secnum].lightlevel = clamp (newlight, 0, 255);
 	}
 }
 
@@ -415,7 +408,7 @@ void EV_LightChange (int tag, int value)
 //
 // Spawn glowing light
 //
-IMPLEMENT_SERIAL (DGlow, DLighting)
+IMPLEMENT_CLASS (DGlow)
 
 DGlow::DGlow ()
 {
@@ -429,35 +422,38 @@ void DGlow::Serialize (FArchive &arc)
 
 void DGlow::RunThink ()
 {
+	int newlight = m_Sector->lightlevel;
+
 	switch (m_Direction)
 	{
 	case -1:
 		// DOWN
-		m_Sector->lightlevel -= GLOWSPEED;
-		if (m_Sector->lightlevel <= m_MinLight)
+		newlight -= GLOWSPEED;
+		if (newlight <= m_MinLight)
 		{
-			m_Sector->lightlevel += GLOWSPEED;
+			newlight += GLOWSPEED;
 			m_Direction = 1;
 		}
 		break;
 		
 	case 1:
 		// UP
-		m_Sector->lightlevel += GLOWSPEED;
-		if (m_Sector->lightlevel >= m_MaxLight)
+		newlight += GLOWSPEED;
+		if (newlight >= m_MaxLight)
 		{
-			m_Sector->lightlevel -= GLOWSPEED;
+			newlight -= GLOWSPEED;
 			m_Direction = -1;
 		}
 		break;
 	}
+	m_Sector->lightlevel = newlight;
 }
 
 
 DGlow::DGlow (sector_t *sector)
 	: DLighting (sector)
 {
-	m_MinLight = P_FindMinSurroundingLight (sector, sector->lightlevel);
+	m_MinLight = sector->FindMinSurroundingLight (sector->lightlevel);
 	m_MaxLight = sector->lightlevel;
 	m_Direction = -1;
 }
@@ -466,7 +462,7 @@ DGlow::DGlow (sector_t *sector)
 // [RH] More glowing light, this time appropriate for Hexen-ish uses.
 //
 
-IMPLEMENT_SERIAL (DGlow2, DLighting)
+IMPLEMENT_CLASS (DGlow2)
 
 DGlow2::DGlow2 ()
 {
@@ -503,8 +499,8 @@ void DGlow2::RunThink ()
 DGlow2::DGlow2 (sector_t *sector, int start, int end, int tics, bool oneshot)
 	: DLighting (sector)
 {
-	m_Start = CLIPLIGHT(start);
-	m_End = CLIPLIGHT(end);
+	m_Start = clamp (start, 0, 255);
+	m_End = clamp (end, 0, 255);
 	m_MaxTics = tics;
 	m_Tics = -1;
 	m_OneShot = oneshot;
@@ -553,7 +549,7 @@ void EV_StartLightFading (int tag, int value, int tics)
 
 // [RH] Phased lighting ala Hexen
 
-IMPLEMENT_SERIAL (DPhased, DLighting)
+IMPLEMENT_CLASS (DPhased)
 
 DPhased::DPhased ()
 {
@@ -602,7 +598,7 @@ int DPhased::PhaseHelper (sector_t *sector, int index, int light, sector_t *prev
 		else
 			l = new DPhased (sector, baselevel);
 
-		int numsteps = PhaseHelper (P_NextSpecialSector (sector,
+		int numsteps = PhaseHelper (sector->NextSpecialSector (
 				(sector->special & 0x00ff) == LightSequenceSpecial1 ?
 					LightSequenceSpecial2 : LightSequenceSpecial1, prev),
 				index + 1, l->m_BaseLevel, sector);

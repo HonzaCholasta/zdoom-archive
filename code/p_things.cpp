@@ -15,9 +15,8 @@
 // List of spawnable things for the Thing_Spawn and Thing_Projectile specials.
 const TypeInfo *SpawnableThings[MAX_SPAWNABLES];
 
-BOOL P_Thing_Spawn (int tid, int type, angle_t angle, BOOL fog)
+bool P_Thing_Spawn (int tid, int type, angle_t angle, bool fog, int newtid)
 {
-	fixed_t z;
 	int rtn = 0;
 	const TypeInfo *kind;
 	AActor *spot, *mobj;
@@ -29,17 +28,12 @@ BOOL P_Thing_Spawn (int tid, int type, angle_t angle, BOOL fog)
 	if ( (kind = SpawnableThings[type]) == NULL)
 		return false;
 
-	if ((kind->ActorInfo->flags & MF_COUNTKILL) && (dmflags & DF_NO_MONSTERS))
+	if ((GetDefaultByType (kind)->flags & MF_COUNTKILL) && (*dmflags & DF_NO_MONSTERS))
 		return false;
 
 	while ( (spot = iterator.Next ()) )
 	{
-		if (kind->ActorInfo->flags2 & MF2_FLOATBOB)
-			z = spot->z - spot->floorz;
-		else
-			z = spot->z;
-
-		mobj = Spawn (kind, spot->x, spot->y, z);
+		mobj = Spawn (kind, spot->x, spot->y, spot->z);
 
 		if (mobj)
 		{
@@ -51,11 +45,10 @@ BOOL P_Thing_Spawn (int tid, int type, angle_t angle, BOOL fog)
 				{
 					Spawn<ATeleportFog> (spot->x, spot->y, spot->z);
 				}
-				mobj->flags |= MF_DROPPED;	// Don't respawn
-				if (mobj->flags2 & MF2_FLOATBOB)
-				{
-					mobj->special1 = mobj->z - mobj->floorz;
-				}
+				if (mobj->flags & MF_SPECIAL)
+					mobj->flags |= MF_DROPPED;	// Don't respawn
+				mobj->tid = newtid;
+				mobj->AddToHash ();
 			}
 			else
 			{
@@ -68,13 +61,49 @@ BOOL P_Thing_Spawn (int tid, int type, angle_t angle, BOOL fog)
 	return rtn != 0;
 }
 
-BOOL P_Thing_Projectile (int tid, int type, angle_t angle,
-						 fixed_t speed, fixed_t vspeed, BOOL gravity)
+// [BC] Added
+// [RH] Fixed
+
+bool P_Thing_Move (int tid, int mapspot)
+{
+	FActorIterator iterator1 (tid);
+	FActorIterator iterator2 (mapspot);
+	AActor *source, *target;
+
+	source = iterator1.Next ();
+	target = iterator2.Next ();
+
+	if (source != NULL && target != NULL)
+	{
+		fixed_t oldx, oldy, oldz;
+
+		oldx = source->x;
+		oldy = source->y;
+		oldz = source->z;
+
+		source->SetOrigin (target->x, target->y, target->z);
+		if (P_TestMobjLocation (source))
+		{
+			Spawn<ATeleportFog> (target->x, target->y, target->z);
+			Spawn<ATeleportFog> (oldx, oldy, oldz);
+			return true;
+		}
+		else
+		{
+			source->SetOrigin (oldx, oldy, oldz);
+			return false;
+		}
+	}
+	return false;
+}
+
+bool P_Thing_Projectile (int tid, int type, angle_t angle,
+	fixed_t speed, fixed_t vspeed, bool gravity)
 {
 	int rtn = 0;
 	const TypeInfo *kind;
 	AActor *spot, *mobj;
-	FActorIterator iterator (tid);
+	TActorIterator<AMapSpot> iterator (tid);
 
 	if (type >= MAX_SPAWNABLES)
 		return false;
@@ -82,20 +111,19 @@ BOOL P_Thing_Projectile (int tid, int type, angle_t angle,
 	if ((kind = SpawnableThings[type]) == NULL)
 		return false;
 
-	if ((kind->ActorInfo->flags & MF_COUNTKILL) && (dmflags & DF_NO_MONSTERS))
+	if ((GetDefaultByType (kind)->flags & MF_COUNTKILL) && (*dmflags & DF_NO_MONSTERS))
 		return false;
 
 	while ( (spot = iterator.Next ()) )
 	{
-		if (!spot->IsKindOf (RUNTIME_CLASS(AMapSpot)))
-			continue;
-
 		mobj = Spawn (kind, spot->x, spot->y, spot->z);
 
 		if (mobj)
 		{
-			if (GetInfo (mobj)->seesound)
-				S_Sound (mobj, CHAN_VOICE, GetInfo (mobj)->seesound, 1, ATTN_NORM);
+			if (mobj->SeeSound)
+			{
+				S_SoundID (mobj, CHAN_VOICE, mobj->SeeSound, 1, ATTN_NORM);
+			}
 			if (gravity)
 			{
 				mobj->flags &= ~MF_NOGRAVITY;
@@ -103,13 +131,16 @@ BOOL P_Thing_Projectile (int tid, int type, angle_t angle,
 					mobj->flags2 |= MF2_LOGRAV;
 			}
 			else
+			{
 				mobj->flags |= MF_NOGRAVITY;
+			}
 			mobj->target = spot;
 			mobj->angle = angle;
 			mobj->momx = FixedMul (speed, finecosine[angle>>ANGLETOFINESHIFT]);
 			mobj->momy = FixedMul (speed, finesine[angle>>ANGLETOFINESHIFT]);
 			mobj->momz = vspeed;
-			mobj->flags |= MF_DROPPED;
+			if (mobj->flags & MF_SPECIAL)
+				mobj->flags |= MF_DROPPED;
 			if (mobj->flags & MF_MISSILE)
 				rtn = P_CheckMissileSpawn (mobj);
 			else if (!P_TestMobjLocation (mobj))
@@ -117,10 +148,10 @@ BOOL P_Thing_Projectile (int tid, int type, angle_t angle,
 		} 
 	}
 
-	return rtn;
+	return rtn != 0;
 }
 
-BEGIN_COMMAND (dumpspawnables)
+CCMD (dumpspawnables)
 {
 	int i;
 
@@ -128,8 +159,7 @@ BEGIN_COMMAND (dumpspawnables)
 	{
 		if (SpawnableThings[i] != NULL)
 		{
-			Printf (PRINT_HIGH, "%d %s\n", i, SpawnableThings[i]->Name + 1);
+			Printf ("%d %s\n", i, SpawnableThings[i]->Name + 1);
 		}
 	}
 }
-END_COMMAND (dumpspawnables)

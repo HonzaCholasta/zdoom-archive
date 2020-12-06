@@ -1,3 +1,4 @@
+#include "templates.h"
 #include "doomtype.h"
 #include "doomstat.h"
 #include "p_local.h"
@@ -9,62 +10,65 @@
 
 class DEarthquake : public DThinker
 {
-	DECLARE_SERIAL (DEarthquake, DThinker);
+	DECLARE_CLASS (DEarthquake, DThinker)
+	HAS_OBJECT_POINTERS
 public:
 	DEarthquake (AActor *center, int intensity, int duration, int damrad, int tremrad);
 
+	void Serialize (FArchive &arc);
 	void RunThink ();
 
 	AActor *m_Spot;
-	fixed_t m_TremorBox[4];
-	fixed_t m_DamageBox[4];
+	fixed_t m_TremorRadius, m_DamageRadius;
 	int m_Intensity;
 	int m_Countdown;
+	int m_QuakeSFX;
 private:
 	DEarthquake () {}
 };
 
-IMPLEMENT_POINTY_SERIAL (DEarthquake, DThinker)
+IMPLEMENT_POINTY_CLASS (DEarthquake)
  DECLARE_POINTER (m_Spot)
 END_POINTERS
 
 void DEarthquake::Serialize (FArchive &arc)
 {
-	int i;
-
 	Super::Serialize (arc);
-	arc << m_Spot << m_Intensity << m_Countdown;
-	for (i = 0; i < 4; i++)
-		arc << m_TremorBox[i] << m_DamageBox[i];
+	arc << m_Spot << m_Intensity << m_Countdown
+		<< m_TremorRadius << m_DamageRadius;
+	m_QuakeSFX = S_FindSound ("world/quake");
 }
 
 void DEarthquake::RunThink ()
 {
 	int i;
 
-	if (level.time % 48 == 0)
-		S_Sound (m_Spot, CHAN_BODY, "world/quake", 1, ATTN_NORM);
+	if (!S_GetSoundPlayingInfo (m_Spot, m_QuakeSFX))
+		S_SoundID (m_Spot, CHAN_BODY, m_QuakeSFX, 1, ATTN_NORM);
 
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
 		if (playeringame[i] && !(players[i].cheats & CF_NOCLIP))
 		{
-			AActor *mo = players[i].mo;
+			AActor *victim = players[i].mo;
+			fixed_t dist;
 
-			if (!(level.time & 7) &&
-				 mo->x >= m_DamageBox[BOXLEFT] && mo->x < m_DamageBox[BOXRIGHT] &&
-				 mo->y >= m_DamageBox[BOXTOP] && mo->y < m_DamageBox[BOXBOTTOM])
-			{
-				int mult = 1024 * m_Intensity;
-				P_DamageMobj (mo, NULL, NULL, m_Intensity / 2, MOD_UNKNOWN);
-				mo->momx += (P_Random (pr_quake)-128) * mult;
-				mo->momy += (P_Random (pr_quake)-128) * mult;
-			}
-
-			if (mo->x >= m_TremorBox[BOXLEFT] && mo->x < m_TremorBox[BOXRIGHT] &&
-				 mo->y >= m_TremorBox[BOXTOP] && mo->y < m_TremorBox[BOXBOTTOM])
+			dist = P_AproxDistance (victim->x - m_Spot->x, victim->y - m_Spot->y);
+			// Tested in tile units (64 pixels)
+			if (dist < m_TremorRadius)
 			{
 				players[i].xviewshift = m_Intensity;
+			}
+			// Check if in damage radius
+			if (dist < m_DamageRadius && victim->z <= victim->floorz)
+			{
+				if (P_Random (pr_quake) < 50)
+				{
+					P_DamageMobj (victim, NULL, NULL, HITDICE(1), MOD_UNKNOWN);
+				}
+				// Thrust player around
+				angle_t an = victim->angle + ANGLE_1*P_Random(pr_quake);
+				P_ThrustMobj (victim, an, m_Intensity << (FRACBITS-1));
 			}
 		}
 	}
@@ -74,38 +78,24 @@ void DEarthquake::RunThink ()
 	}
 }
 
-static void setbox (fixed_t *box, AActor *c, fixed_t size)
-{
-	if (size)
-	{
-		box[BOXLEFT] = c->x - size + 1;
-		box[BOXRIGHT] = c->x + size;
-		box[BOXTOP] = c->y - size + 1;
-		box[BOXBOTTOM] = c->y + size;
-	} else
-		box[BOXLEFT] = box[BOXRIGHT] = box[BOXTOP] = box[BOXBOTTOM] = 0;
-}
-
 DEarthquake::DEarthquake (AActor *center, int intensity, int duration,
 						  int damrad, int tremrad)
 {
+	m_QuakeSFX = S_FindSound ("world/quake");
 	m_Spot = center;
-	setbox (m_TremorBox, center, tremrad * FRACUNIT * 64);
-	setbox (m_DamageBox, center, damrad * FRACUNIT * 64);
+	m_DamageRadius = damrad << (FRACBITS+6);
+	m_TremorRadius = tremrad << (FRACBITS+6);
 	m_Intensity = intensity;
 	m_Countdown = duration;
 }
 
-BOOL P_StartQuake (int tid, int intensity, int duration, int damrad, int tremrad)
+bool P_StartQuake (int tid, int intensity, int duration, int damrad, int tremrad)
 {
 	AActor *center;
 	FActorIterator iterator (tid);
-	BOOL res = false;
+	bool res = false;
 
-	if (intensity > 9)
-		intensity = 9;
-	else if (intensity < 1)
-		intensity = 1;
+	intensity = clamp (intensity, 1, 9);
 
 	while ( (center = iterator.Next ()) )
 	{

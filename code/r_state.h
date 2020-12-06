@@ -27,10 +27,6 @@
 #include "d_player.h"
 #include "r_data.h"
 
-#define WALLFRACBITS	4
-#define WALLFRACUNIT	(1<<WALLFRACBITS)
-
-
 //
 // Refresh internal data structures,
 //	for rendering.
@@ -61,7 +57,7 @@ extern int				lastspritelump;
 extern int				numspritelumps;
 
 extern size_t			numskins;	// [RH]
-extern playerskin_t*	skins;		// [RH]
+extern FPlayerSkin	*	skins;		// [RH]
 
 
 
@@ -101,6 +97,11 @@ inline FArchive &operator<< (FArchive &arc, line_t *&line)
 	return arc.SerializePointer (lines, (BYTE **)&line, sizeof(*lines));
 }
 
+inline FArchive &operator<< (FArchive &arc, vertex_t *&vert)
+{
+	return arc.SerializePointer (vertexes, (BYTE **)&vert, sizeof(*vertexes));
+}
+
 //
 // POV data.
 //
@@ -111,23 +112,7 @@ extern fixed_t			viewz;
 extern angle_t			viewangle;
 extern AActor*			camera;		// [RH] camera instead of viewplayer
 
-extern angle_t			clipangle;
-
-extern int				viewangletox[FINEANGLES/2];
-extern angle_t			*xtoviewangle;
-//extern fixed_t		finetangent[FINEANGLES/2];
-
-extern fixed_t			rw_distance;
-extern angle_t			rw_normalangle;
-
-
-
-// angle to line origin
-extern int				rw_angle1;
-
-
-extern visplane_t*		floorplane;
-extern visplane_t*		ceilingplane;
-
+extern angle_t			xtoviewangle[MAXWIDTH+1];
+extern int				FieldOfView;
 
 #endif // __R_STATE_H__

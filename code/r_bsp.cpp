@@ -14,17 +14,21 @@
 // FITNESS FOR A PARTICULAR PURPOSE. See the DOOM Source Code License
 // for more details.
 //
-// $Log:$
-//
 // DESCRIPTION:
 //		BSP traversal, handling of LineSegs for rendering.
+//
+// This file contains some code from the Build Engine.
+//
+// "Build Engine & Tools" Copyright (c) 1993-1997 Ken Silverman
+// Ken Silverman's official web site: "http://www.advsys.net/ken"
+// See the included license file "BUILDLIC.TXT" for license info.
 //
 //-----------------------------------------------------------------------------
 
 
 #include <stdlib.h>
-#include <search.h>
 
+#include "templates.h"
 #include "m_alloc.h"
 
 #include "doomdef.h"
@@ -41,11 +45,10 @@
 // State.
 #include "doomstat.h"
 #include "r_state.h"
+#include "r_bsp.h"
 #include "v_palette.h"
 
-//#include "r_local.h"
-
-
+int WallMost (short *mostbuf, const secplane_t &plane);
 
 seg_t*			curline;
 side_t* 		sidedef;
@@ -56,11 +59,46 @@ sector_t*		backsector;
 // killough 4/7/98: indicates doors closed wrt automap bugfix:
 int				doorclosed;
 
+extern bool		rw_prepped;
+extern bool		rw_havehigh, rw_havelow;
+extern int		rw_floorstat, rw_ceilstat;
+extern bool		rw_mustmarkfloor, rw_mustmarkceiling;
+extern short	walltop[MAXWIDTH];	// [RH] record max extents of wall
+extern short	wallbottom[MAXWIDTH];
+extern short	wallupper[MAXWIDTH];
+extern short	walllower[MAXWIDTH];
+
+fixed_t			rw_backcz1, rw_backcz2;
+fixed_t			rw_backfz1, rw_backfz2;
+fixed_t			rw_frontcz1, rw_frontcz2;
+fixed_t			rw_frontfz1, rw_frontfz2;
+
+
 int				MaxDrawSegs;
 drawseg_t		*drawsegs;
+drawseg_t*		firstdrawseg;
 drawseg_t*		ds_p;
 
-CVAR (r_drawflat, "0", 0)		// [RH] Don't texture segs?
+fixed_t			WallTX1, WallTX2;	// x coords at left, right of wall in view space
+fixed_t			WallTY1, WallTY2;	// y coords at left, right of wall in view space
+fixed_t			WallTZ1, WallTZ2;	// z coords at left, right of wall in view space
+
+fixed_t			WallCX1, WallCX2;	// x coords at left, right of wall in view space
+fixed_t			WallCY1, WallCY2;	// y coords at left, right of wall in view space
+
+int				WallSX1, WallSX2;	// x coords at left, right of wall in screen space
+fixed_t			WallSZ1, WallSZ2;	// depth at left, right of wall in screen space
+
+float			WallDepthOrg, WallDepthScale;
+float			WallUoverZorg, WallUoverZstep;
+float			WallInvZorg, WallInvZstep;
+
+int WindowLeft, WindowRight;
+WORD MirrorFlags;
+seg_t *ActiveWallMirror;
+TArray<ptrdiff_t> WallMirrors;
+
+CVAR (Bool, r_drawflat, false, 0)		// [RH] Don't texture segs?
 
 
 void R_StoreWallRange (int start, int stop);
@@ -70,10 +108,10 @@ void R_StoreWallRange (int start, int stop);
 //
 void R_ClearDrawSegs (void)
 {
-	if (!drawsegs)
+	if (drawsegs == NULL)
 	{
 		MaxDrawSegs = 256;		// [RH] Default. Increased as needed.
-		drawsegs = (drawseg_t *)Malloc (MaxDrawSegs * sizeof(drawseg_t));
+		firstdrawseg = drawsegs = (drawseg_t *)Malloc (MaxDrawSegs * sizeof(drawseg_t));
 	}
 	ds_p = drawsegs;
 }
@@ -95,143 +133,115 @@ typedef struct {
 } cliprange_t;
 
 
-int				MaxSegs;
-
 // newend is one past the last valid seg
-cliprange_t*	newend;
-cliprange_t		*solidsegs;
-cliprange_t		*lastsolidseg;
+static cliprange_t     *newend;
+static cliprange_t		solidsegs[MAXWIDTH/2+2];
 
 
 
+//==========================================================================
 //
-// R_ClipSolidWallSegment
-// Does handle solid walls,
-//	e.g. single sided LineDefs (middle texture)
-//	that entirely block the view.
-// 
-void R_ClipSolidWallSegment (int first, int last)
+// R_ClipWallSegment
+//
+// Clips the given range of columns, possibly including it in the clip list.
+// Handles both windows (e.g. LineDefs with upper and lower textures) and
+// solid walls (e.g. single sided LineDefs [middle texture]) that entirely
+// block the view.
+//
+//==========================================================================
+
+void R_ClipWallSegment (int first, int last, bool solid)
 {
 	cliprange_t *next, *start;
+	int i, j;
 
+	if (curline->linedef - lines == 2)
+		last=last;
 	// Find the first range that touches the range
-	//	(adjacent pixels are touching).
+	// (adjacent pixels are touching).
 	start = solidsegs;
-	while (start->last < first-1)
+	while (start->last < first)
 		start++;
 
 	if (first < start->first)
 	{
-		if (last < start->first-1)
+		if (last <= start->first)
 		{
-			// Post is entirely visible (above start), so insert a new clippost.
+			// Post is entirely visible (above start).
 			R_StoreWallRange (first, last);
 
-			// 1/11/98 killough: performance tuning using fast memmove
-			memmove (start+1, start, (++newend-start)*sizeof(*start));
-			start->first = first;
-			start->last = last;
+			// Insert a new clippost for solid walls.
+			if (solid)
+			{
+				if (last == start->first)
+				{
+					start->first = first;
+				}
+				else
+				{
+					next = newend;
+					newend++;
+					while (next != start)
+					{
+						*next = *(next-1);
+						next--;
+					}
+					next->first = first;
+					next->last = last;
+				}
+			}
 			return;
 		}
-				
-		// There is a fragment above *start.
-		R_StoreWallRange (first, start->first - 1);
 
-		// Now adjust the clip size.
-		start->first = first;	
+		// There is a fragment above *start.
+		R_StoreWallRange (first, start->first);
+
+		// Adjust the clip size for solid walls
+		if (solid)
+		{
+			start->first = first;
+		}
 	}
 
 	// Bottom contained in start?
 	if (last <= start->last)
-		return; 				
-				
+		return;
+
 	next = start;
-	while (last >= (next+1)->first-1)
+	while (last >= (next+1)->first)
 	{
 		// There is a fragment between two posts.
-		R_StoreWallRange (next->last + 1, (next+1)->first - 1);
+		R_StoreWallRange (next->last, (next+1)->first);
 		next++;
 		
 		if (last <= next->last)
 		{
-			// Bottom is contained in next. Adjust the clip size.
-			start->last = next->last;	
+			// Bottom is contained in next.
+			last = next->last;
 			goto crunch;
 		}
 	}
-		
+
 	// There is a fragment after *next.
-	R_StoreWallRange (next->last + 1, last);
-	// Adjust the clip size.
-	start->last = last;
-		
-	// Remove start+1 to next from the clip list,
-	// because start now covers their area.
-  crunch:
-	if (next == start)
+	R_StoreWallRange (next->last, last);
+
+crunch:
+	if (solid)
 	{
-		// Post just extended past the bottom of one post.
-		return;
-	}
-	
+		// Adjust the clip size.
+		start->last = last;
 
-	while (next++ != newend)
-	{
-		// Remove a post.
-		*++start = *next;
-	}
-
-	newend = start+1;
-}
-
-
-
-//
-// R_ClipPassWallSegment
-// Clips the given range of columns,
-//	but does not includes it in the clip list.
-// Does handle windows,
-//	e.g. LineDefs with upper and lower texture.
-//
-void R_ClipPassWallSegment (int first, int last)
-{
-	cliprange_t *start;
-
-	// Find the first range that touches the range
-	//	(adjacent pixels are touching).
-	start = solidsegs;
-	while (start->last < first-1)
-		start++;
-
-	if (first < start->first)
-	{
-		if (last < start->first-1)
+		if (next != start)
 		{
-			// Post is entirely visible (above start).
-			R_StoreWallRange (first, last);
-			return;
+			// Remove start+1 to next from the clip list,
+			// because start now covers their area.
+			for (i = 1, j = newend - next; j > 0; i++, j--)
+			{
+				start[i] = next[i];
+			}
+			newend = start+i;
 		}
-				
-		// There is a fragment above *start.
-		R_StoreWallRange (first, start->first - 1);
 	}
-
-	// Bottom contained in start?
-	if (last <= start->last)
-		return; 				
-				
-	while (last >= (start+1)->first-1)
-	{
-		// There is a fragment between two posts.
-		R_StoreWallRange (start->last + 1, (start+1)->first - 1);
-		start++;
-		
-		if (last <= start->last)
-			return;
-	}
-		
-	// There is a fragment after *next.
-	R_StoreWallRange (start->last + 1, last);
 }
 
 
@@ -239,44 +249,13 @@ void R_ClipPassWallSegment (int first, int last)
 //
 // R_ClearClipSegs
 //
-void R_ClearClipSegs (void)
+void R_ClearClipSegs (short left, short right)
 {
-	if (!solidsegs)
-	{
-		MaxSegs = 32;	// [RH] Default. Increased as needed.
-		solidsegs = (cliprange_t *)Malloc (MaxSegs * sizeof(cliprange_t));
-		lastsolidseg = &solidsegs[MaxSegs];
-	}
 	solidsegs[0].first = -0x7fff;	// new short limit --  killough
-	solidsegs[0].last = -1;
-	solidsegs[1].first = viewwidth;
+	solidsegs[0].last = left;
+	solidsegs[1].first = right;
 	solidsegs[1].last = 0x7fff;		// new short limit --  killough
 	newend = solidsegs+2;
-}
-
-// killough 1/18/98 -- This function is used to fix the automap bug which
-// showed lines behind closed doors simply because the door had a dropoff.
-//
-// It assumes that Doom has already ruled out a door being closed because
-// of front-back closure (e.g. front floor is taller than back ceiling).
-
-int R_DoorClosed (void)
-{
-	return
-
-		// if door is closed because back is shut:
-		backsector->ceilingheight <= backsector->floorheight
-
-		// preserve a kind of transparent door/lift special effect:
-		&& (backsector->ceilingheight >= frontsector->ceilingheight ||
-			curline->sidedef->toptexture)
-
-		&& (backsector->floorheight <= frontsector->floorheight ||
-			curline->sidedef->bottomtexture)
-
-		// properly render skies (consider door "open" if both ceilings are sky):
-		&& (backsector->ceilingpic !=skyflatnum ||
-			frontsector->ceilingpic!=skyflatnum);
 }
 
 //
@@ -296,56 +275,79 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec,
 					 int *floorlightlevel, int *ceilinglightlevel,
 					 BOOL back)
 {
-	if (floorlightlevel)
-		*floorlightlevel = sec->floorlightsec == NULL ?
-			sec->lightlevel : sec->floorlightsec->lightlevel;
+	// [RH] allow per-plane lighting
+	if (floorlightlevel != NULL)
+	{
+		if (sec->FloorFlags & SECF_ABSLIGHTING)
+		{
+			*floorlightlevel = sec->FloorLight;
+		}
+		else
+		{
+			*floorlightlevel = clamp (sec->lightlevel + (SBYTE)sec->FloorLight, 0, 255);
+		}
+	}
 
-	if (ceilinglightlevel)
-		*ceilinglightlevel = sec->ceilinglightsec == NULL ? // killough 4/11/98
-			sec->lightlevel : sec->ceilinglightsec->lightlevel;
+	if (ceilinglightlevel != NULL)
+	{
+		if (sec->CeilingFlags & SECF_ABSLIGHTING)
+		{
+			*ceilinglightlevel = sec->CeilingLight;
+		}
+		else
+		{
+			*ceilinglightlevel = clamp (sec->lightlevel + (SBYTE)sec->CeilingLight, 0, 255);
+		}
+	}
 
 	if (sec->heightsec)
 	{
 		const sector_t *s = sec->heightsec;
 		sector_t *heightsec = camera->subsector->sector->heightsec;
-		int underwater = heightsec && viewz <= heightsec->floorheight;
+		int underwater = heightsec && viewz <= heightsec->floorplane.ZatPoint (viewx, viewy);
 
 		// Replace sector being drawn, with a copy to be hacked
 		*tempsec = *sec;
 
 		// Replace floor and ceiling height with other sector's heights.
-		tempsec->floorheight   = s->floorheight;
-		tempsec->ceilingheight = s->ceilingheight;
+		tempsec->floorplane    = s->floorplane;
+		tempsec->ceilingplane  = s->ceilingplane;
+
+		fixed_t refflorz = s->floorplane.ZatPoint (viewx, viewy);
+		fixed_t refceilz = s->ceilingplane.ZatPoint (viewx, viewy);
+		fixed_t orgflorz = sec->floorplane.ZatPoint (viewx, viewy);
+		fixed_t orgceilz = sec->ceilingplane.ZatPoint (viewx, viewy);
 
 		if (sec->alwaysfake)
 		{
 		// Code for ZDoom. Allows the effect to be visible outside sectors with
 		// fake flat. The original is still around in case it turns out that this
 		// isn't always appropriate (which it isn't).
-			if (viewz <= s->floorheight && s->floorheight > sec->floorheight)
+			if (viewz <= refflorz && refflorz > orgflorz)
 			{
-				tempsec->floorheight = sec->floorheight;
-				tempsec->floorcolormap = s->floorcolormap;
-				tempsec->floorpic = s->floorpic;
-				tempsec->floor_xoffs = s->floor_xoffs;
-				tempsec->floor_yoffs = s->floor_yoffs;
-				tempsec->floor_xscale = s->floor_xscale;
-				tempsec->floor_yscale = s->floor_yscale;
-				tempsec->floor_angle = s->floor_angle;
-				tempsec->base_floor_angle = s->base_floor_angle;
-				tempsec->base_floor_yoffs = s->base_floor_yoffs;
+				tempsec->floorplane			= sec->floorplane;
+				tempsec->floorcolormap		= s->floorcolormap;
+				tempsec->floorpic			= s->floorpic;
+				tempsec->floor_xoffs		= s->floor_xoffs;
+				tempsec->floor_yoffs		= s->floor_yoffs;
+				tempsec->floor_xscale		= s->floor_xscale;
+				tempsec->floor_yscale		= s->floor_yscale;
+				tempsec->floor_angle		= s->floor_angle;
+				tempsec->base_floor_angle	= s->base_floor_angle;
+				tempsec->base_floor_yoffs	= s->base_floor_yoffs;
 
-				tempsec->ceilingheight = s->floorheight - 1;
+				tempsec->ceilingplane.ChangeHeight (-1);
 				tempsec->ceilingcolormap = s->ceilingcolormap;
 				if (s->ceilingpic == skyflatnum)
 				{
-					tempsec->floorheight   = tempsec->ceilingheight+1;
-					tempsec->ceilingpic    = tempsec->floorpic;
-					tempsec->ceiling_xoffs = tempsec->floor_xoffs;
-					tempsec->ceiling_yoffs = tempsec->floor_yoffs;
-					tempsec->ceiling_xscale = tempsec->floor_xscale;
-					tempsec->ceiling_yscale = tempsec->floor_yscale;
-					tempsec->ceiling_angle = tempsec->floor_angle;
+					tempsec->floorplane			= tempsec->ceilingplane;
+					tempsec->floorplane.ChangeHeight (+1);
+					tempsec->ceilingpic			= tempsec->floorpic;
+					tempsec->ceiling_xoffs		= tempsec->floor_xoffs;
+					tempsec->ceiling_yoffs		= tempsec->floor_yoffs;
+					tempsec->ceiling_xscale		= tempsec->floor_xscale;
+					tempsec->ceiling_yscale		= tempsec->floor_yscale;
+					tempsec->ceiling_angle		= tempsec->floor_angle;
 					tempsec->base_ceiling_angle = tempsec->base_floor_angle;
 					tempsec->base_ceiling_yoffs = tempsec->base_floor_yoffs;
 				}
@@ -362,150 +364,219 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec,
 				}
 				tempsec->lightlevel = s->lightlevel;
 
-				if (floorlightlevel)
-					*floorlightlevel = s->floorlightsec == NULL ? s->lightlevel :
-						s->floorlightsec->lightlevel; // killough 3/16/98
+				if (floorlightlevel != NULL)
+				{
+					if (s->FloorFlags & SECF_ABSLIGHTING)
+					{
+						*floorlightlevel = s->FloorLight;
+					}
+					else
+					{
+						*floorlightlevel = clamp (s->lightlevel + (SBYTE)s->FloorLight, 0, 255);
+					}
+				}
 
-				if (ceilinglightlevel)
-					*ceilinglightlevel = s->ceilinglightsec == NULL ? s->lightlevel :
-						s->ceilinglightsec->lightlevel; // killough 4/11/98
+				if (ceilinglightlevel != NULL)
+				{
+					if (s->FloorFlags & SECF_ABSLIGHTING)
+					{
+						*ceilinglightlevel = s->FloorLight;
+					}
+					else
+					{
+						*ceilinglightlevel = clamp (s->lightlevel + (SBYTE)s->CeilingLight, 0, 255);
+					}
+				}
 			}
-			else if (viewz > s->ceilingheight && s->ceilingheight < sec->ceilingheight)
+			else if (viewz > refceilz && refceilz < orgceilz)
 			{
-				tempsec->ceilingheight = s->ceilingheight;
-				tempsec->floorheight   = s->ceilingheight + 1;
-				tempsec->ceilingcolormap = s->ceilingcolormap;
-				tempsec->floorcolormap = s->floorcolormap;
+				tempsec->ceilingplane		= s->ceilingplane;
+				tempsec->floorplane			= s->ceilingplane;
+				tempsec->floorplane.ChangeHeight (+1);
+				tempsec->ceilingcolormap	= s->ceilingcolormap;
+				tempsec->floorcolormap		= s->floorcolormap;
 
-				tempsec->floorpic    = tempsec->ceilingpic    = s->ceilingpic;
-				tempsec->floor_xoffs = tempsec->ceiling_xoffs = s->ceiling_xoffs;
-				tempsec->floor_yoffs = tempsec->ceiling_yoffs = s->ceiling_yoffs;
-				tempsec->floor_xscale = tempsec->ceiling_xscale = s->ceiling_xscale;
-				tempsec->floor_yscale = tempsec->ceiling_yscale = s->ceiling_yscale;
-				tempsec->floor_angle = tempsec->ceiling_angle = s->ceiling_angle;
-				tempsec->base_floor_angle = tempsec->base_ceiling_angle = s->base_ceiling_angle;
-				tempsec->base_floor_yoffs = tempsec->base_ceiling_yoffs = s->base_ceiling_yoffs;
+				tempsec->floorpic			= tempsec->ceilingpic    = s->ceilingpic;
+				tempsec->floor_xoffs		= tempsec->ceiling_xoffs = s->ceiling_xoffs;
+				tempsec->floor_yoffs		= tempsec->ceiling_yoffs = s->ceiling_yoffs;
+				tempsec->floor_xscale		= tempsec->ceiling_xscale = s->ceiling_xscale;
+				tempsec->floor_yscale		= tempsec->ceiling_yscale = s->ceiling_yscale;
+				tempsec->floor_angle		= tempsec->ceiling_angle = s->ceiling_angle;
+				tempsec->base_floor_angle	= tempsec->base_ceiling_angle = s->base_ceiling_angle;
+				tempsec->base_floor_yoffs	= tempsec->base_ceiling_yoffs = s->base_ceiling_yoffs;
 
 				if (s->floorpic != skyflatnum)
 				{
-					tempsec->ceilingheight = sec->ceilingheight;
-					tempsec->floorpic      = s->floorpic;
-					tempsec->floor_xoffs   = s->floor_xoffs;
-					tempsec->floor_yoffs   = s->floor_yoffs;
-					tempsec->floor_xscale  = s->floor_xscale;
-					tempsec->floor_yscale  = s->floor_yscale;
-					tempsec->floor_angle   = s->floor_angle;
-					tempsec->base_floor_angle = s->base_floor_angle;
-					tempsec->base_floor_yoffs = s->base_floor_yoffs;
+					tempsec->ceilingplane		= sec->ceilingplane;
+					tempsec->floorpic			= s->floorpic;
+					tempsec->floor_xoffs		= s->floor_xoffs;
+					tempsec->floor_yoffs		= s->floor_yoffs;
+					tempsec->floor_xscale		= s->floor_xscale;
+					tempsec->floor_yscale		= s->floor_yscale;
+					tempsec->floor_angle		= s->floor_angle;
+					tempsec->base_floor_angle	= s->base_floor_angle;
+					tempsec->base_floor_yoffs	= s->base_floor_yoffs;
 				}
 
 				tempsec->lightlevel  = s->lightlevel;
 
-				if (floorlightlevel)
-					*floorlightlevel = s->floorlightsec == NULL ? s->lightlevel :
-						s->floorlightsec->lightlevel; // killough 3/16/98
+				if (floorlightlevel != NULL)
+				{
+					if (s->FloorFlags & SECF_ABSLIGHTING)
+					{
+						*floorlightlevel = s->FloorLight;
+					}
+					else
+					{
+						*floorlightlevel = clamp (s->lightlevel + (SBYTE)s->FloorLight, 0, 255);
+					}
+				}
 
-				if (ceilinglightlevel)
-					*ceilinglightlevel = s->ceilinglightsec == NULL ? s->lightlevel :
-						s->ceilinglightsec->lightlevel; // killough 4/11/98
+				if (ceilinglightlevel != NULL)
+				{
+					if (s->FloorFlags & SECF_ABSLIGHTING)
+					{
+						*ceilinglightlevel = s->FloorLight;
+					}
+					else
+					{
+						*ceilinglightlevel = clamp (s->lightlevel + (SBYTE)s->CeilingLight, 0, 255);
+					}
+				}
 			}
 		}
 		else
 		{
 		// Original BOOM code
-			if ((underwater && (tempsec->  floorheight = sec->floorheight,
-								tempsec->ceilingheight = s->floorheight-1,
-								!back)) || viewz <= s->floorheight)
+			if ((underwater && (tempsec->  floorplane = sec->floorplane,
+								tempsec->ceilingplane = s->floorplane,
+								tempsec->ceilingplane.ChangeHeight(-1),
+								!back)) || viewz <= refflorz)
 			{					// head-below-floor hack
-				tempsec->floorpic    = s->floorpic;
-				tempsec->floor_xoffs = s->floor_xoffs;
-				tempsec->floor_yoffs = s->floor_yoffs;
-				tempsec->floor_xscale = s->floor_xscale;
-				tempsec->floor_yscale = s->floor_yscale;
-				tempsec->floor_angle = s->floor_angle;
-				tempsec->base_floor_angle = s->base_floor_angle;
-				tempsec->base_floor_yoffs = s->base_floor_yoffs;
+				tempsec->floorpic			= s->floorpic;
+				tempsec->floor_xoffs		= s->floor_xoffs;
+				tempsec->floor_yoffs		= s->floor_yoffs;
+				tempsec->floor_xscale		= s->floor_xscale;
+				tempsec->floor_yscale		= s->floor_yscale;
+				tempsec->floor_angle		= s->floor_angle;
+				tempsec->base_floor_angle	= s->base_floor_angle;
+				tempsec->base_floor_yoffs	= s->base_floor_yoffs;
 
 				if (underwater)
 				{
-					tempsec->lightlevel  = s->lightlevel;
-					tempsec->floorcolormap = s->floorcolormap;
-					tempsec->ceilingheight = s->floorheight - 1;
-					tempsec->ceilingcolormap = s->ceilingcolormap;
+					tempsec->lightlevel			= s->lightlevel;
+					tempsec->floorcolormap		= s->floorcolormap;
+					tempsec->ceilingplane		= s->floorplane;
+					tempsec->ceilingplane.ChangeHeight (-1);
+					tempsec->ceilingcolormap	= s->ceilingcolormap;
 					if (s->ceilingpic == skyflatnum)
 					{
-						tempsec->floorheight   = tempsec->ceilingheight+1;
-						tempsec->ceilingpic    = tempsec->floorpic;
-						tempsec->ceiling_xoffs = tempsec->floor_xoffs;
-						tempsec->ceiling_yoffs = tempsec->floor_yoffs;
-						tempsec->ceiling_xscale = tempsec->floor_xscale;
-						tempsec->ceiling_yscale = tempsec->floor_yscale;
-						tempsec->ceiling_angle = tempsec->floor_angle;
-						tempsec->base_ceiling_angle = tempsec->base_floor_angle;
-						tempsec->base_ceiling_yoffs = tempsec->base_floor_yoffs;
+						tempsec->floorplane			= tempsec->ceilingplane;
+						tempsec->floorplane.ChangeHeight (+1);
+						tempsec->ceilingpic			= tempsec->floorpic;
+						tempsec->ceiling_xoffs		= tempsec->floor_xoffs;
+						tempsec->ceiling_yoffs		= tempsec->floor_yoffs;
+						tempsec->ceiling_xscale		= tempsec->floor_xscale;
+						tempsec->ceiling_yscale		= tempsec->floor_yscale;
+						tempsec->ceiling_angle		= tempsec->floor_angle;
+						tempsec->base_ceiling_angle	= tempsec->base_floor_angle;
+						tempsec->base_ceiling_yoffs	= tempsec->base_floor_yoffs;
 					}
 					else
 					{
-						tempsec->ceilingpic    = s->ceilingpic;
-						tempsec->ceiling_xoffs = s->ceiling_xoffs;
-						tempsec->ceiling_yoffs = s->ceiling_yoffs;
-						tempsec->ceiling_xscale = s->ceiling_xscale;
-						tempsec->ceiling_yscale = s->ceiling_yscale;
-						tempsec->ceiling_angle = s->ceiling_angle;
-						tempsec->base_ceiling_angle = s->base_ceiling_angle;
-						tempsec->base_ceiling_yoffs = s->base_ceiling_yoffs;
+						tempsec->ceilingpic			= s->ceilingpic;
+						tempsec->ceiling_xoffs		= s->ceiling_xoffs;
+						tempsec->ceiling_yoffs		= s->ceiling_yoffs;
+						tempsec->ceiling_xscale		= s->ceiling_xscale;
+						tempsec->ceiling_yscale		= s->ceiling_yscale;
+						tempsec->ceiling_angle		= s->ceiling_angle;
+						tempsec->base_ceiling_angle	= s->base_ceiling_angle;
+						tempsec->base_ceiling_yoffs	= s->base_ceiling_yoffs;
 					}
 				}
 				else
 				{
-					tempsec->floorheight = sec->floorheight;
+					tempsec->floorplane = sec->floorplane;
 				}
 
-				if (floorlightlevel)
-					*floorlightlevel = s->floorlightsec == NULL ? s->lightlevel :
-						s->floorlightsec->lightlevel; // killough 3/16/98
+				if (floorlightlevel != NULL)
+				{
+					if (s->FloorFlags & SECF_ABSLIGHTING)
+					{
+						*floorlightlevel = s->FloorLight;
+					}
+					else
+					{
+						*floorlightlevel = clamp (s->lightlevel + (SBYTE)s->FloorLight, 0, 255);
+					}
+				}
 
-				if (ceilinglightlevel)
-					*ceilinglightlevel = s->ceilinglightsec == NULL ? s->lightlevel :
-						s->ceilinglightsec->lightlevel; // killough 4/11/98
+				if (ceilinglightlevel != NULL)
+				{
+					if (s->FloorFlags & SECF_ABSLIGHTING)
+					{
+						*ceilinglightlevel = s->FloorLight;
+					}
+					else
+					{
+						*ceilinglightlevel = clamp (s->lightlevel + (SBYTE)s->CeilingLight, 0, 255);
+					}
+				}
 			}
-			else if (heightsec && viewz >= heightsec->ceilingheight &&
-					 sec->ceilingheight > s->ceilingheight)
+			else if (heightsec && viewz >= heightsec->ceilingplane.ZatPoint (viewx, viewy) &&
+					 orgceilz > refceilz)
 			{	// Above-ceiling hack
-				tempsec->ceilingheight = s->ceilingheight;
-				tempsec->floorheight   = s->ceilingheight + 1;
-				tempsec->ceilingcolormap = s->ceilingcolormap;
-				tempsec->floorcolormap = s->floorcolormap;
+				tempsec->ceilingplane		= s->ceilingplane;
+				tempsec->floorplane			= s->ceilingplane;
+				tempsec->floorplane.ChangeHeight (+1);
+				tempsec->ceilingcolormap	= s->ceilingcolormap;
+				tempsec->floorcolormap		= s->floorcolormap;
 
-				tempsec->floorpic    = tempsec->ceilingpic    = s->ceilingpic;
-				tempsec->floor_xoffs = tempsec->ceiling_xoffs = s->ceiling_xoffs;
-				tempsec->floor_yoffs = tempsec->ceiling_yoffs = s->ceiling_yoffs;
-				tempsec->floor_xscale = tempsec->ceiling_xscale = s->ceiling_xscale;
-				tempsec->floor_yscale = tempsec->ceiling_yscale = s->ceiling_yscale;
-				tempsec->floor_angle = tempsec->ceiling_angle = s->ceiling_angle;
-				tempsec->base_floor_angle = tempsec->base_ceiling_angle = s->base_ceiling_angle;
-				tempsec->base_floor_yoffs = tempsec->base_ceiling_yoffs = s->base_ceiling_yoffs;
+				tempsec->floorpic			= tempsec->ceilingpic			= s->ceilingpic;
+				tempsec->floor_xoffs		= tempsec->ceiling_xoffs		= s->ceiling_xoffs;
+				tempsec->floor_yoffs		= tempsec->ceiling_yoffs		= s->ceiling_yoffs;
+				tempsec->floor_xscale		= tempsec->ceiling_xscale		= s->ceiling_xscale;
+				tempsec->floor_yscale		= tempsec->ceiling_yscale		= s->ceiling_yscale;
+				tempsec->floor_angle		= tempsec->ceiling_angle		= s->ceiling_angle;
+				tempsec->base_floor_angle	= tempsec->base_ceiling_angle	= s->base_ceiling_angle;
+				tempsec->base_floor_yoffs	= tempsec->base_ceiling_yoffs	= s->base_ceiling_yoffs;
 
 				if (s->floorpic != skyflatnum)
 				{
-					tempsec->ceilingheight = sec->ceilingheight;
-					tempsec->floorpic      = s->floorpic;
-					tempsec->floor_xoffs   = s->floor_xoffs;
-					tempsec->floor_yoffs   = s->floor_yoffs;
-					tempsec->floor_xscale  = s->floor_xscale;
-					tempsec->floor_yscale  = s->floor_yscale;
-					tempsec->floor_angle   = s->floor_angle;
+					tempsec->ceilingplane	= sec->ceilingplane;
+					tempsec->floorpic		= s->floorpic;
+					tempsec->floor_xoffs	= s->floor_xoffs;
+					tempsec->floor_yoffs	= s->floor_yoffs;
+					tempsec->floor_xscale	= s->floor_xscale;
+					tempsec->floor_yscale	= s->floor_yscale;
+					tempsec->floor_angle	= s->floor_angle;
 				}
 
 				tempsec->lightlevel  = s->lightlevel;
 
-				if (floorlightlevel)
-					*floorlightlevel = s->floorlightsec == NULL ? s->lightlevel :
-						s->floorlightsec->lightlevel; // killough 3/16/98
+				if (floorlightlevel != NULL)
+				{
+					if (s->FloorFlags & SECF_ABSLIGHTING)
+					{
+						*floorlightlevel = s->FloorLight;
+					}
+					else
+					{
+						*floorlightlevel = clamp (s->lightlevel + (SBYTE)s->FloorLight, 0, 255);
+					}
+				}
 
-				if (ceilinglightlevel)
-					*ceilinglightlevel = s->ceilinglightsec == NULL ? s->lightlevel :
-						s->ceilinglightsec->lightlevel; // killough 4/11/98
+				if (ceilinglightlevel != NULL)
+				{
+					if (s->FloorFlags & SECF_ABSLIGHTING)
+					{
+						*ceilinglightlevel = s->FloorLight;
+					}
+					else
+					{
+						*ceilinglightlevel = clamp (s->lightlevel + (SBYTE)s->CeilingLight, 0, 255);
+					}
+				}
 			}
 		}
 		sec = tempsec;					// Use other sector
@@ -519,147 +590,284 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec,
 // Clips the given segment
 // and adds any visible pieces to the line list.
 //
+
 void R_AddLine (seg_t *line)
 {
-	int 			x1;
-	int 			x2;
-	angle_t 		angle1;
-	angle_t 		angle2;
-	angle_t 		span;
-	angle_t 		tspan;
 	static sector_t tempsec;	// killough 3/8/98: ceiling/water hack
-	
+	bool			solid;
+	fixed_t			tx1, tx2, ty1, ty2;
+
 	curline = line;
 
 	// [RH] Color if not texturing line
-	dc_color = ((line - segs) & 31) * 4;
+	dc_color = (((line - segs) * 8) + 4) & 255;
 
-	// OPTIMIZE: quickly reject orthogonal back sides.
-	angle1 = R_PointToAngle (line->v1->x, line->v1->y);
-	angle2 = R_PointToAngle (line->v2->x, line->v2->y);
-	
-	// Clip to view edges.
-	// OPTIMIZE: make constant out of 2*clipangle (FIELDOFVIEW).
-	span = angle1 - angle2;
-	
-	// Back side? I.e. backface culling?
-	if (span >= ANG180)
-		return; 		
+	tx1 = line->v1->x - viewx;
+	tx2 = line->v2->x - viewx;
+	ty1 = line->v1->y - viewy;
+	ty2 = line->v2->y - viewy;
 
-	// Global angle needed by segcalc.
-	rw_angle1 = angle1;
-	angle1 -= viewangle;
-	angle2 -= viewangle;
-		
-	tspan = angle1 + clipangle;
-	if (tspan > 2*clipangle)
-	{
-		// Totally off the left edge?
-		if (tspan - 2*clipangle >= span)
-			return;
-		
-		angle1 = clipangle;
-	}
-	tspan = clipangle - angle2;
-	if (tspan > 2*clipangle)
-	{
-		// Totally off the left edge?
-		if (tspan - 2*clipangle >= span)
-			return; 	
-		angle2 = (unsigned) (-(int)clipangle);
-	}
-	
-	// The seg is in the view range, but not necessarily visible.
-	angle1 = (angle1+ANG90)>>ANGLETOFINESHIFT;
-	angle2 = (angle2+ANG90)>>ANGLETOFINESHIFT;
-
-	// killough 1/31/98: Here is where "slime trails" can SOMETIMES occur:
-	x1 = viewangletox[angle1];
-	x2 = viewangletox[angle2];
-
-	// Does not cross a pixel?
-	if (x1 >= x2)	// killough 1/31/98 -- change == to >= for robustness
+	// Reject lines not facing viewer
+	if (DMulScale32 (ty1, tx1-tx2, tx1, ty2-ty1) >= 0)
 		return;
+
+	WallTX1 = DMulScale20 (tx1, viewsin, -ty1, viewcos);
+	WallTX2 = DMulScale20 (tx2, viewsin, -ty2, viewcos);
+
+	WallTY1 = DMulScale20 (tx1, viewtancos, ty1, viewtansin);
+	WallTY2 = DMulScale20 (tx2, viewtancos, ty2, viewtansin);
+
+	if (MirrorFlags & RF_XFLIP)
+	{
+		int t = 256-WallTX1;
+		WallTX1 = 256-WallTX2;
+		WallTX2 = t;
+		swap (WallTY1, WallTY2);
+	}
+
+	if (WallTX1 >= -WallTY1)
+	{
+		if (WallTX1 > WallTY1) return;	// left edge is off the right side
+		WallSX1 = (centerxfrac + Scale (WallTX1, centerxfrac, WallTY1)) >> FRACBITS;
+		if (WallTX1 >= 0) WallSX1 = MIN (viewwidth, WallSX1+1); // fix for signed divide
+		WallSZ1 = WallTY1;
+	}
+	else
+	{
+		if (WallTX2 < -WallTY2) return;	// wall is off the left side
+		fixed_t den = WallTX1 - WallTX2 - WallTY2 + WallTY1;	
+		if (den == 0) return;
+		WallSX1 = 0;
+		WallSZ1 = WallTY1 + Scale (WallTY2 - WallTY1, WallTX1 + WallTY1, den);
+	}
+
+	if (WallSZ1 < 32)
+		return;
+
+	if (WallTX2 <= WallTY2)
+	{
+		if (WallTX2 < -WallTY2) return;	// right edge is off the left side
+		WallSX2 = (centerxfrac + Scale (WallTX2, centerxfrac, WallTY2)) >> FRACBITS;
+		if (WallTX2 >= 0) WallSX2 = MIN (viewwidth, WallSX2+1);	// fix for signed divide
+		WallSZ2 = WallTY2;
+	}
+	else
+	{
+		if (WallTX1 > WallTY1) return;	// wall is off the right side
+		fixed_t den = WallTY2 - WallTY1 - WallTX2 + WallTX1;
+		if (den == 0) return;
+		WallSX2 = viewwidth;
+		WallSZ2 = WallTY1 + Scale (WallTY2 - WallTY1, WallTX1 - WallTY1, den);
+	}
+
+	if (WallSZ2 < 32 || WallSX2 <= WallSX1)
+		return;
+
+	if (WallSX1 > WindowRight || WallSX2 < WindowLeft)
+		return;
+
+	vertex_t *v1, *v2;
+
+	v1 = line->linedef->v1;
+	v2 = line->linedef->v2;
+
+	if ((v1 == line->v1 && v2 == line->v2) || (v2 == line->v1 && v1 == line->v2))
+	{
+		if (MirrorFlags & RF_XFLIP)
+		{
+			WallUoverZorg = (float)WallTX2 * WallTMapScale;
+			WallUoverZstep = (float)(-WallTY2) * 32.f;
+			WallInvZorg = (float)(WallTX2 - WallTX1) * WallTMapScale;
+			WallInvZstep = (float)(WallTY1 - WallTY2) * 32.f;
+		}
+		else
+		{
+			WallUoverZorg = (float)WallTX1 * WallTMapScale;
+			WallUoverZstep = (float)(-WallTY1) * 32.f;
+			WallInvZorg = (float)(WallTX1 - WallTX2) * WallTMapScale;
+			WallInvZstep = (float)(WallTY2 - WallTY1) * 32.f;
+		}
+	}
+	else
+	{
+		if (line->linedef->sidenum[0] != line->sidedef - sides)
+		{
+			swap (v1, v2);
+		}
+		tx1 = v1->x - viewx;
+		tx2 = v2->x - viewx;
+		ty1 = v1->y - viewy;
+		ty2 = v2->y - viewy;
+
+		fixed_t fullx1 = DMulScale20 (tx1, viewsin, -ty1, viewcos);
+		fixed_t fullx2 = DMulScale20 (tx2, viewsin, -ty2, viewcos);
+		fixed_t fully1 = DMulScale20 (tx1, viewtancos, ty1, viewtansin);
+		fixed_t fully2 = DMulScale20 (tx2, viewtancos, ty2, viewtansin);
+
+		if (MirrorFlags & RF_XFLIP)
+		{
+			fullx1 = -fullx1;
+			fullx2 = -fullx2;
+		}
+
+		WallUoverZorg = (float)fullx1 * WallTMapScale;
+		WallUoverZstep = (float)(-fully1) * 32.f;
+		WallInvZorg = (float)(fullx1 - fullx2) * WallTMapScale;
+		WallInvZstep = (float)(fully2 - fully1) * 32.f;
+	}
+	WallDepthScale = WallInvZstep * WallTMapScale2;
+	WallDepthOrg = -WallUoverZstep * WallTMapScale2;
 
 	backsector = line->backsector;
 
+	rw_frontcz1 = frontsector->ceilingplane.ZatPoint (line->v1->x, line->v1->y);
+	rw_frontfz1 = frontsector->floorplane.ZatPoint (line->v1->x, line->v1->y);
+	rw_frontcz2 = frontsector->ceilingplane.ZatPoint (line->v2->x, line->v2->y);
+	rw_frontfz2 = frontsector->floorplane.ZatPoint (line->v2->x, line->v2->y);
+
+	rw_mustmarkfloor = rw_mustmarkceiling = false;
+
 	// Single sided line?
-	if (!backsector)
-		goto clipsolid;
-
-	// killough 3/8/98, 4/4/98: hack for invisible ceilings / deep water
-	backsector = R_FakeFlat (backsector, &tempsec, NULL, NULL, true);
-
-	doorclosed = 0;		// killough 4/16/98
-
-	// Closed door.
-	if (backsector->ceilingheight <= frontsector->floorheight
-		|| backsector->floorheight >= frontsector->ceilingheight)
-		goto clipsolid;
-
-	// This fixes the automap floor height bug -- killough 1/18/98:
-	// killough 4/7/98: optimize: save result in doorclosed for use in r_segs.c
-	if ((doorclosed = R_DoorClosed()))
-		goto clipsolid;
-
-	// Window.
-	if (backsector->ceilingheight != frontsector->ceilingheight
-		|| backsector->floorheight != frontsector->floorheight)
-		goto clippass;	
-				
-	// Reject empty lines used for triggers
-	//	and special events.
-	// Identical floor and ceiling on both sides,
-	// identical light levels on both sides,
-	// and no middle texture.
-	if (backsector->lightlevel == frontsector->lightlevel
-		&& backsector->floorpic == frontsector->floorpic
-		&& backsector->ceilingpic == frontsector->ceilingpic
-		&& curline->sidedef->midtexture == 0
-
-		// killough 3/7/98: Take flats offsets into account:
-		&& backsector->floor_xoffs == frontsector->floor_xoffs
-		&& (backsector->floor_yoffs + backsector->base_floor_yoffs) == (frontsector->floor_yoffs + backsector->base_floor_yoffs)
-		&& backsector->ceiling_xoffs == frontsector->ceiling_xoffs
-		&& (backsector->ceiling_yoffs + backsector->base_ceiling_yoffs) == (frontsector->ceiling_yoffs + frontsector->base_ceiling_yoffs)
-
-		// killough 4/16/98: consider altered lighting
-		&& backsector->floorlightsec == frontsector->floorlightsec
-		&& backsector->ceilinglightsec == frontsector->ceilinglightsec
-
-		// [RH] Also consider colormaps
-		&& backsector->floorcolormap == frontsector->floorcolormap
-		&& backsector->ceilingcolormap == frontsector->ceilingcolormap
-
-		// [RH] and scaling
-		&& backsector->floor_xscale == frontsector->floor_xscale
-		&& backsector->floor_yscale == frontsector->floor_yscale
-		&& backsector->ceiling_xscale == frontsector->ceiling_xscale
-		&& backsector->ceiling_yscale == frontsector->ceiling_yscale
-
-		// [RH] and rotation
-		&& (backsector->floor_angle + backsector->base_floor_angle) == (frontsector->floor_angle + frontsector->base_floor_angle)
-		&& (backsector->ceiling_angle + backsector->base_ceiling_angle) == (frontsector->ceiling_angle + frontsector->base_ceiling_angle)
-		)
+	if (backsector == NULL)
 	{
-		return;
+		solid = true;
 	}
-	
-								
-  clippass:
-	R_ClipPassWallSegment (x1, x2-1);	
-	return;
-				
-  clipsolid:
-	R_ClipSolidWallSegment (x1, x2-1);
+	else
+	{
+		// killough 3/8/98, 4/4/98: hack for invisible ceilings / deep water
+		backsector = R_FakeFlat (backsector, &tempsec, NULL, NULL, true);
+
+		doorclosed = 0;		// killough 4/16/98
+
+		rw_backcz1 = backsector->ceilingplane.ZatPoint (line->v1->x, line->v1->y);
+		rw_backfz1 = backsector->floorplane.ZatPoint (line->v1->x, line->v1->y);
+		rw_backcz2 = backsector->ceilingplane.ZatPoint (line->v2->x, line->v2->y);
+		rw_backfz2 = backsector->floorplane.ZatPoint (line->v2->x, line->v2->y);
+
+		// Closed door.
+		if ((rw_backcz1 <= rw_frontfz1 && rw_backcz2 <= rw_frontfz2) ||
+			(rw_backfz1 >= rw_frontcz1 && rw_backfz2 >= rw_frontcz2))
+		{
+			solid = true;
+		}
+		else if (
+			(backsector->ceilingpic != skyflatnum ||
+			frontsector->ceilingpic != skyflatnum)
+
+		// if door is closed because back is shut:
+		&& rw_backcz1 <= rw_backfz1 && rw_backcz2 <= rw_backfz2
+
+		// preserve a kind of transparent door/lift special effect:
+		&& rw_backcz1 >= rw_frontcz1 && rw_backcz2 >= rw_frontcz2
+
+		&& ((rw_backfz1 <= rw_frontfz1 && rw_backfz2 <= rw_frontfz2) || line->sidedef->bottomtexture != 0))
+		{
+		// killough 1/18/98 -- This function is used to fix the automap bug which
+		// showed lines behind closed doors simply because the door had a dropoff.
+		//
+		// It assumes that Doom has already ruled out a door being closed because
+		// of front-back closure (e.g. front floor is taller than back ceiling).
+
+		// This fixes the automap floor height bug -- killough 1/18/98:
+		// killough 4/7/98: optimize: save result in doorclosed for use in r_segs.c
+			doorclosed = true;
+			solid = true;
+		}
+		else if (frontsector->ceilingplane != backsector->ceilingplane ||
+			frontsector->floorplane != backsector->floorplane)
+		{
+		// Window.
+			solid = false;
+		}
+		else if (backsector->lightlevel != frontsector->lightlevel
+			|| backsector->floorpic != frontsector->floorpic
+			|| backsector->ceilingpic != frontsector->ceilingpic
+			|| curline->sidedef->midtexture != 0
+
+			// killough 3/7/98: Take flats offsets into account:
+			|| backsector->floor_xoffs != frontsector->floor_xoffs
+			|| (backsector->floor_yoffs + backsector->base_floor_yoffs) != (frontsector->floor_yoffs + backsector->base_floor_yoffs)
+			|| backsector->ceiling_xoffs != frontsector->ceiling_xoffs
+			|| (backsector->ceiling_yoffs + backsector->base_ceiling_yoffs) != (frontsector->ceiling_yoffs + frontsector->base_ceiling_yoffs)
+
+			|| backsector->FloorLight != frontsector->FloorLight
+			|| backsector->CeilingLight != frontsector->CeilingLight
+			|| backsector->FloorFlags != frontsector->FloorFlags
+			|| backsector->CeilingFlags != frontsector->CeilingFlags
+
+			// [RH] Also consider colormaps
+			|| backsector->floorcolormap != frontsector->floorcolormap
+			|| backsector->ceilingcolormap != frontsector->ceilingcolormap
+
+			// [RH] and scaling
+			|| backsector->floor_xscale != frontsector->floor_xscale
+			|| backsector->floor_yscale != frontsector->floor_yscale
+			|| backsector->ceiling_xscale != frontsector->ceiling_xscale
+			|| backsector->ceiling_yscale != frontsector->ceiling_yscale
+
+			// [RH] and rotation
+			|| (backsector->floor_angle + backsector->base_floor_angle) != (frontsector->floor_angle + frontsector->base_floor_angle)
+			|| (backsector->ceiling_angle + backsector->base_ceiling_angle) != (frontsector->ceiling_angle + frontsector->base_ceiling_angle)
+			)
+		{
+			solid = false;
+		}
+		else
+		{
+			// Reject empty lines used for triggers and special events.
+			// Identical floor and ceiling on both sides, identical light levels
+			// on both sides, and no middle texture.
+			return;
+		}
+	}
+
+	rw_prepped = false;
+	rw_ceilstat = WallMost (walltop, frontsector->ceilingplane);
+	rw_floorstat = WallMost (wallbottom, frontsector->floorplane);
+
+	// [RH] treat off-screen walls as solid
+#if 0	// Maybe later...
+	if (!solid)
+	{
+		if (rw_ceilstat == 12 && line->sidedef->toptexture != 0)
+		{
+			rw_mustmarkceiling = true;
+			solid = true;
+		}
+		if (rw_floorstat == 3 && line->sidedef->bottomtexture != 0)
+		{
+			rw_mustmarkfloor = true;
+			solid = true;
+		}
+	}
+#endif
+
+	rw_havehigh = rw_havelow = false;
+	if (backsector != NULL)
+	{
+		if (rw_frontcz1 > rw_backcz1 || rw_frontcz2 > rw_backcz2)
+		{
+			rw_havehigh = true;
+			WallMost (wallupper, backsector->ceilingplane);
+		}
+		if (rw_frontfz1 < rw_backfz1 || rw_frontfz2 < rw_backfz2)
+		{
+			rw_havelow = true;
+			WallMost (walllower, backsector->floorplane);
+		}
+
+		// Cannot make these walls solid, because it can result in
+		// sprite clipping problems for sprites near the wall
+	}
+
+	R_ClipWallSegment (WallSX1, WallSX2, solid);
 }
 
 
 //
 // R_CheckBBox
 // Checks BSP node/subtree bounding box.
-// Returns true
-//	if some part of the bbox might be visible.
+// Returns true if some part of the bbox might be visible.
 //
 static const int checkcoord[12][4] = // killough -- static const
 {
@@ -683,21 +891,12 @@ static BOOL R_CheckBBox (fixed_t *bspcoord)	// killough 1/28/98: static
 	int 				boxy;
 	int 				boxpos;
 
-	fixed_t 			x1;
-	fixed_t 			y1;
-	fixed_t 			x2;
-	fixed_t 			y2;
-	
-	angle_t 			angle1;
-	angle_t 			angle2;
-	angle_t 			span;
-	angle_t 			tspan;
+	fixed_t 			x1, y1, x2, y2;
+	fixed_t				rx1, ry1, rx2, ry2;
+	fixed_t				sx1, sx2;
 	
 	cliprange_t*		start;
 
-	int 				sx1;
-	int 				sx2;
-	
 	// Find the corners of the box
 	// that define the edges from current viewpoint.
 	if (viewx <= bspcoord[BOXLEFT])
@@ -706,75 +905,79 @@ static BOOL R_CheckBBox (fixed_t *bspcoord)	// killough 1/28/98: static
 		boxx = 1;
 	else
 		boxx = 2;
-				
+
 	if (viewy >= bspcoord[BOXTOP])
 		boxy = 0;
 	else if (viewy > bspcoord[BOXBOTTOM])
 		boxy = 1;
 	else
 		boxy = 2;
-				
+
 	boxpos = (boxy<<2)+boxx;
 	if (boxpos == 5)
 		return true;
-		
-	x1 = bspcoord[checkcoord[boxpos][0]];
-	y1 = bspcoord[checkcoord[boxpos][1]];
-	x2 = bspcoord[checkcoord[boxpos][2]];
-	y2 = bspcoord[checkcoord[boxpos][3]];
-	
+
+	x1 = bspcoord[checkcoord[boxpos][0]] - viewx;
+	y1 = bspcoord[checkcoord[boxpos][1]] - viewy;
+	x2 = bspcoord[checkcoord[boxpos][2]] - viewx;
+	y2 = bspcoord[checkcoord[boxpos][3]] - viewy;
+
 	// check clip list for an open space
-	angle1 = R_PointToAngle (x1, y1) - viewangle;
-	angle2 = R_PointToAngle (x2, y2) - viewangle;
-		
-	span = angle1 - angle2;
 
 	// Sitting on a line?
-	if (span >= ANG180)
+	if (DMulScale32 (y1, x1-x2, x1, y2-y1) >= 0)
 		return true;
-	
-	tspan = angle1 + clipangle;
 
-	if (tspan > 2*clipangle)
+	rx1 = DMulScale20 (x1, viewsin, -y1, viewcos);
+	rx2 = DMulScale20 (x2, viewsin, -y2, viewcos);
+	ry1 = DMulScale20 (x1, viewtancos, y1, viewtansin);
+	ry2 = DMulScale20 (x2, viewtancos, y2, viewtansin);
+
+	if (MirrorFlags & RF_XFLIP)
 	{
-		tspan -= 2*clipangle;
-
-		// Totally off the left edge?
-		if (tspan >= span)
-			return false;		
-
-		angle1 = clipangle;
-	}
-	tspan = clipangle - angle2;
-	if (tspan > 2*clipangle)
-	{
-		tspan -= 2*clipangle;
-
-		// Totally off the left edge?
-		if (tspan >= span)
-			return false;
-		
-		angle2 = (unsigned)(-(int)clipangle);
+		int t = 256-rx1;
+		rx1 = 256-rx2;
+		rx2 = t;
+		swap (ry1, ry2);
 	}
 
+	if (rx1 >= -ry1)
+	{
+		if (rx1 > ry1) return false;	// left edge is off the right side
+		sx1 = (centerxfrac + Scale (rx1, centerxfrac, ry1)) >> FRACBITS;
+		if (rx1 >= 0) sx1 = MIN (viewwidth, sx1+1);	// fix for signed divide
+	}
+	else
+	{
+		if (rx2 < -ry2) return false;	// wall is off the left side
+		if (rx1 - rx2 - ry2 + ry1 == 0) return false;	// wall does not intersect view volume
+		sx1 = 0;
+	}
 
-	// Find the first clippost
-	//	that touches the source post
+	if (rx2 <= ry2)
+	{
+		if (rx2 < -ry2) return false;	// right edge is off the left side
+		sx2 = (centerxfrac + Scale (rx2, centerxfrac, ry2)) >> FRACBITS;
+		if (rx2 >= 0) sx2 = MIN (viewwidth, sx2+1); // fix for signed divide
+	}
+	else
+	{
+		if (rx1 > ry1) return false;	// wall is off the right side
+		if (ry2 - ry1 - rx2 + rx1 == 0) return false;	// wall does not intersect view volume
+		sx2 = viewwidth;
+	}
+
+	// Find the first clippost that touches the source post
 	//	(adjacent pixels are touching).
-	angle1 = (angle1+ANG90)>>ANGLETOFINESHIFT;
-	angle2 = (angle2+ANG90)>>ANGLETOFINESHIFT;
-	sx1 = viewangletox[angle1];
-	sx2 = viewangletox[angle2];
 
 	// Does not cross a pixel.
-	if (sx1 == sx2)
-		return false;					
-	sx2--;
-		
+	if (sx2 <= sx1)
+		return false;
+
 	start = solidsegs;
 	while (start->last < sx2)
 		start++;
-	
+
 	if (sx1 >= start->first && sx2 <= start->last)
 	{
 		// The clippost contains the new span.
@@ -813,12 +1016,12 @@ void R_Subsector (int num)
 	frontsector = R_FakeFlat(frontsector, &tempsec, &floorlightlevel,
 						   &ceilinglightlevel, false);	// killough 4/11/98
 
-	basecolormap = frontsector->ceilingcolormap->maps;
+	basecolormap = frontsector->ceilingcolormap->Maps;
 
-	ceilingplane = frontsector->ceilingheight > viewz ||
+	ceilingplane = frontsector->ceilingplane.ZatPoint (viewx, viewy) > viewz ||
 		frontsector->ceilingpic == skyflatnum ||
 		(frontsector->heightsec && frontsector->heightsec->floorpic == skyflatnum) ?
-		R_FindPlane(frontsector->ceilingheight,		// killough 3/8/98
+		R_FindPlane(frontsector->ceilingplane,		// killough 3/8/98
 					frontsector->ceilingpic == skyflatnum &&  // killough 10/98
 						frontsector->sky & PL_SKYFLAT ? frontsector->sky :
 						frontsector->ceilingpic,
@@ -827,17 +1030,18 @@ void R_Subsector (int num)
 					frontsector->ceiling_yoffs + frontsector->base_ceiling_yoffs,
 					frontsector->ceiling_xscale,
 					frontsector->ceiling_yscale,
-					frontsector->ceiling_angle + frontsector->base_ceiling_angle
+					frontsector->ceiling_angle + frontsector->base_ceiling_angle,
+					frontsector->SkyBox
 					) : NULL;
 
-	basecolormap = frontsector->floorcolormap->maps;	// [RH] set basecolormap
+	basecolormap = frontsector->floorcolormap->Maps;	// [RH] set basecolormap
 
 	// killough 3/7/98: Add (x,y) offsets to flats, add deep water check
 	// killough 3/16/98: add floorlightlevel
 	// killough 10/98: add support for skies transferred from sidedefs
-	floorplane = frontsector->floorheight < viewz || // killough 3/7/98
+	floorplane = frontsector->floorplane.ZatPoint (viewx, viewy) < viewz || // killough 3/7/98
 		(frontsector->heightsec && frontsector->heightsec->ceilingpic == skyflatnum) ?
-		R_FindPlane(frontsector->floorheight,
+		R_FindPlane(frontsector->floorplane,
 					frontsector->floorpic == skyflatnum &&  // killough 10/98
 						frontsector->sky & PL_SKYFLAT ? frontsector->sky :
 						frontsector->floorpic,
@@ -846,12 +1050,14 @@ void R_Subsector (int num)
 					frontsector->floor_yoffs + frontsector->base_floor_yoffs,
 					frontsector->floor_xscale,
 					frontsector->floor_yscale,
-					frontsector->floor_angle + frontsector->base_floor_angle
+					frontsector->floor_angle + frontsector->base_floor_angle,
+					frontsector->SkyBox
 					) : NULL;
 
 	// [RH] set foggy flag
-	foggy = level.fadeto || frontsector->floorcolormap->fade
-						 || frontsector->ceilingcolormap->fade;
+	foggy = level.fadeto || frontsector->floorcolormap->Fade
+						 || frontsector->ceilingcolormap->Fade;
+	r_actualextralight = foggy ? 0 : extralight << 4;
 
 	// killough 9/18/98: Fix underwater slowdown, by passing real sector 
 	// instead of fake one. Improve sprite lighting by basing sprite
@@ -874,13 +1080,9 @@ void R_Subsector (int num)
 	}
 }
 
-
-
-
 //
 // RenderBSPNode
-// Renders all subsectors below a given node,
-//	traversing subtree recursively.
+// Renders all subsectors below a given node, traversing subtree recursively.
 // Just call with BSP root.
 // killough 5/2/98: reformatted, removed tail recursion
 
@@ -891,16 +1093,17 @@ void R_RenderBSPNode (int bspnum)
 		node_t *bsp = &nodes[bspnum];
 
 		// Decide which side the view point is on.
-		int side = R_PointOnSide(viewx, viewy, bsp);
+		int side = R_PointOnSide (viewx, viewy, bsp);
 
-		// Recursively divide front space.
-		R_RenderBSPNode(bsp->children[side]);
+		// Recursively divide front space (toward the viewer).
+		if (R_CheckBBox (bsp->bbox[side]))
+			R_RenderBSPNode (bsp->children[side]);
 
-		// Possibly divide back space.
-		if (!R_CheckBBox(bsp->bbox[side^1]))
+		// Possibly divide back space (away from the viewer).
+		if (!R_CheckBBox (bsp->bbox[side^1]))
 			return;
 
 		bspnum = bsp->children[side^1];
 	}
-	R_Subsector(bspnum == -1 ? 0 : bspnum & ~NF_SUBSECTOR);
+	R_Subsector (bspnum == -1 ? 0 : bspnum & ~NF_SUBSECTOR);
 }

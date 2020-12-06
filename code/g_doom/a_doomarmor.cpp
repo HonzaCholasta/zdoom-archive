@@ -1,14 +1,15 @@
 #include "info.h"
 #include "a_pickups.h"
 #include "d_player.h"
-#include "dstrings.h"
 #include "p_local.h"
+#include "gstrings.h"
+#include "gi.h"
 
 // Armor bonus --------------------------------------------------------------
 
 class AArmorBonus : public AArmor
 {
-	DECLARE_ACTOR (AArmorBonus, AArmor);
+	DECLARE_ACTOR (AArmorBonus, AArmor)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -22,12 +23,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTARMBONUS;
+		return GStrings(GOTARMBONUS);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AArmorBonus, AArmor);
-REGISTER_ACTOR (AArmorBonus, Doom);
 
 FState AArmorBonus::States[] =
 {
@@ -39,37 +37,29 @@ FState AArmorBonus::States[] =
 	S_NORMAL (BON2, 'B',	6, NULL 				, &States[0])
 };
 
-void AArmorBonus::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 2015;
-	info->spawnid = 22;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL|MF_COUNTITEM;
-}
+IMPLEMENT_ACTOR (AArmorBonus, Doom, 2015, 22)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Green armor --------------------------------------------------------------
 
-IMPLEMENT_DEF_SERIAL (AArmor, APickup);
-
 class AGreenArmor : public AArmor
 {
-	DECLARE_ACTOR (AGreenArmor, AArmor);
+	DECLARE_ACTOR (AGreenArmor, AArmor)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
 		return P_GiveArmor (toucher->player, (armortype_t)deh.GreenAC, 100*deh.GreenAC);
 	}
-	virtual const char *PickupMesage ()
+	virtual const char *PickupMessage ()
 	{
-		return GOTARMOR;
+		return GStrings(GOTARMOR);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (AGreenArmor, AArmor);
-REGISTER_ACTOR (AGreenArmor, Doom);
 
 FState AGreenArmor::States[] =
 {
@@ -77,23 +67,27 @@ FState AGreenArmor::States[] =
 	S_BRIGHT (ARM1, 'B',	7, NULL 				, &States[0])
 };
 
-void AGreenArmor::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AGreenArmor, Doom, 2018, 68)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (GreenArmor)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2018;
-	info->spawnid = 68;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	ArmorPics[0] = "ARM1A0";
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		ArmorPics[0] = "ARM1A0";
+	}
 }
 
 // Blue armor ---------------------------------------------------------------
 
 class ABlueArmor : public AArmor
 {
-	DECLARE_ACTOR (ABlueArmor, AArmor);
+	DECLARE_ACTOR (ABlueArmor, AArmor)
 protected:
 	virtual bool TryPickup (AActor *toucher)
 	{
@@ -101,12 +95,9 @@ protected:
 	}
 	virtual const char *PickupMessage ()
 	{
-		return GOTMEGA;
+		return GStrings(GOTMEGA);
 	}
 };
-
-IMPLEMENT_DEF_SERIAL (ABlueArmor, AArmor);
-REGISTER_ACTOR (ABlueArmor, Doom);
 
 FState ABlueArmor::States[] =
 {
@@ -114,14 +105,18 @@ FState ABlueArmor::States[] =
 	S_BRIGHT (ARM2, 'B',	6, NULL 				, &States[0])
 };
 
-void ABlueArmor::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ABlueArmor, Doom, 2019, 69)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
+
+AT_GAME_SET (BlueArmor)
 {
-	INHERIT_DEFS;
-	info->doomednum = 2019;
-	info->spawnid = 69;
-	info->spawnstate = &States[0];
-	info->radius = 20 * FRACUNIT;
-	info->height = 16 * FRACUNIT;
-	info->flags = MF_SPECIAL;
-	ArmorPics[1] = "ARM2A0";
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		ArmorPics[1] = "ARM2A0";
+	}
 }

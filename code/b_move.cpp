@@ -151,7 +151,7 @@ void DCajunMaster::NewChaseDir (AActor *actor, ticcmd_t *cmd)
     if (!actor->player->dest)
 	{
 #ifndef BOT_RELEASE_COMPILE
-        Printf (PRINT_HIGH, "Bot tried move without destination\n");
+        Printf ("Bot tried move without destination\n");
 #endif
 		return;
 	}
@@ -277,19 +277,19 @@ bool DCajunMaster::CleanAhead (AActor *thing, fixed_t x, fixed_t y, ticcmd_t *cm
     if (!SafeCheckPosition (thing, x, y))
         return false;           // solid wall or thing
 
-    if ( !(thing->flags & MF_NOCLIP) )
+    if (!(thing->flags & MF_NOCLIP) )
     {
         fixed_t maxstep = 24*FRACUNIT /*MAXSTEPMOVE*/;
         if (tmceilingz - tmfloorz < thing->height)
             return false;       // doesn't fit
 
-		if(!(thing->flags&MF_MISSILE))
+		if (!(thing->flags&MF_MISSILE))
 		{
-			if(tmfloorz>(thing->subsector->sector->floorheight+MAXMOVEHEIGHT)) //Too high wall
+			if(tmfloorz > (thing->subsector->sector->floorplane.ZatPoint (x, y)+MAXMOVEHEIGHT)) //Too high wall
 				return false;
 
 			//Jumpable
-			if(tmfloorz>(thing->subsector->sector->floorheight+24*FRACUNIT /*MAXSTEPMOVE*/))
+			if(tmfloorz>(thing->subsector->sector->floorplane.ZatPoint (x, y)+24*FRACUNIT /*MAXSTEPMOVE*/))
 				cmd->ucmd.buttons |= BT_JUMP;
 
 

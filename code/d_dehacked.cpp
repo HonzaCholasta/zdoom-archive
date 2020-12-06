@@ -5,23 +5,28 @@
 #include <stddef.h>
 
 #include "doomtype.h"
+#include "templates.h"
 #include "doomstat.h"
 #include "info.h"
 #include "d_dehacked.h"
 #include "s_sound.h"
 #include "d_items.h"
 #include "g_level.h"
-#include "m_cheat.h"
 #include "cmdlib.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "m_alloc.h"
 #include "m_misc.h"
 #include "w_wad.h"
 #include "d_player.h"
 #include "r_state.h"
 #include "gi.h"
+#include "c_dispatch.h"
+#include "z_zone.h"
 
 extern int clipammo[NUMAMMO];
+
+static bool LoadDehSupp ();
+static void UnloadDehSupp ();
 
 // Available action functions
 void A_FireRailgun(player_s*, pspdef_t*);
@@ -107,8 +112,105 @@ void A_Detonate(AActor*);
 void A_Mushroom(AActor*);
 void A_MonsterRail(AActor*);
 
+// Action functions available to patches
+struct CodePtrMap
+{
+	short name;
+	WORD num;
+};
+
+static CodePtrMap *CodePtrNames;
+static int NumCodePtrs;
+static const actionf_t CodePtrs[] =
+{
+	{(actionf_p1)NULL},
+	{(actionf_p1)A_MonsterRail},
+	{(actionf_p1)A_FireRailgun},
+	{(actionf_p1)A_FireRailgunLeft},
+	{(actionf_p1)A_FireRailgunRight},
+	{(actionf_p1)A_RailWait},
+	{(actionf_p1)A_Light0},
+	{(actionf_p1)A_WeaponReady},
+	{(actionf_p1)A_Lower},
+	{(actionf_p1)A_Raise},
+	{(actionf_p1)A_Punch},
+	{(actionf_p1)A_ReFire},
+	{(actionf_p1)A_FirePistol},
+	{(actionf_p1)A_Light1},
+	{(actionf_p1)A_FireShotgun},
+	{(actionf_p1)A_Light2},
+	{(actionf_p1)A_FireShotgun2},
+	{(actionf_p1)A_CheckReload},
+	{(actionf_p1)A_OpenShotgun2},
+	{(actionf_p1)A_LoadShotgun2},
+	{(actionf_p1)A_CloseShotgun2},
+	{(actionf_p1)A_FireCGun},
+	{(actionf_p1)A_GunFlash},
+	{(actionf_p1)A_FireMissile},
+	{(actionf_p1)A_Saw},
+	{(actionf_p1)A_FirePlasma},
+	{(actionf_p1)A_BFGsound},
+	{(actionf_p1)A_FireBFG},
+	{(actionf_p1)A_BFGSpray},
+	{(actionf_p1)A_Explode},
+	{(actionf_p1)A_Pain},
+	{(actionf_p1)A_PlayerScream},
+	{(actionf_p1)A_NoBlocking},
+	{(actionf_p1)A_XScream},
+	{(actionf_p1)A_Look},
+	{(actionf_p1)A_Chase},
+	{(actionf_p1)A_FaceTarget},
+	{(actionf_p1)A_PosAttack},
+	{(actionf_p1)A_Scream},
+	{(actionf_p1)A_SPosAttack},
+	{(actionf_p1)A_VileChase},
+	{(actionf_p1)A_VileStart},
+	{(actionf_p1)A_VileTarget},
+	{(actionf_p1)A_VileAttack},
+	{(actionf_p1)A_StartFire},
+	{(actionf_p1)A_Fire},
+	{(actionf_p1)A_FireCrackle},
+	{(actionf_p1)A_Tracer},
+	{(actionf_p1)A_SkelWhoosh},
+	{(actionf_p1)A_SkelFist},
+	{(actionf_p1)A_SkelMissile},
+	{(actionf_p1)A_FatRaise},
+	{(actionf_p1)A_FatAttack1},
+	{(actionf_p1)A_FatAttack2},
+	{(actionf_p1)A_FatAttack3},
+	{(actionf_p1)A_BossDeath},
+	{(actionf_p1)A_CPosAttack},
+	{(actionf_p1)A_CPosRefire},
+	{(actionf_p1)A_TroopAttack},
+	{(actionf_p1)A_SargAttack},
+	{(actionf_p1)A_HeadAttack},
+	{(actionf_p1)A_BruisAttack},
+	{(actionf_p1)A_SkullAttack},
+	{(actionf_p1)A_Metal},
+	{(actionf_p1)A_SpidRefire},
+	{(actionf_p1)A_BabyMetal},
+	{(actionf_p1)A_BspiAttack},
+	{(actionf_p1)A_Hoof},
+	{(actionf_p1)A_CyberAttack},
+	{(actionf_p1)A_PainAttack},
+	{(actionf_p1)A_PainDie},
+	{(actionf_p1)A_KeenDie},
+	{(actionf_p1)A_BrainPain},
+	{(actionf_p1)A_BrainScream},
+	{(actionf_p1)A_BrainDie},
+	{(actionf_p1)A_BrainAwake},
+	{(actionf_p1)A_BrainSpit},
+	{(actionf_p1)A_SpawnSound},
+	{(actionf_p1)A_SpawnFly},
+	{(actionf_p1)A_BrainExplode},
+	{(actionf_p1)A_Die},
+	{(actionf_p1)A_Detonate},
+	{(actionf_p1)A_Mushroom},
+};
+
 // Miscellaneous info that used to be constant
-struct DehInfo deh = {
+DehInfo deh =
+{
 	100,	// .StartHealth
 	 50,	// .StartBullets
 	100,	// .MaxHealth
@@ -124,27 +226,7 @@ struct DehInfo deh = {
 	200,	// .KFAArmor
 	  2,	// .KFAAC
 	  0,	// .Infight
-};
-
-// These are the original heights of every Doom 2 thing. They are used if a patch
-// specifies that a thing should be hanging from the ceiling but doesn't specify
-// a height for the thing, since these are the heights it probably wants.
-
-static const byte OrgHeights[] = {
-	56, 56, 56, 56, 16, 56, 8, 16, 64, 8, 56, 56,
-	56, 56, 56, 64, 8, 64, 56, 100, 64, 110, 56, 56,
-	72, 16, 32, 32, 32, 16, 42, 8, 8, 8,
-	8, 8, 8, 16, 16, 16, 16, 16, 16, 16,
-	16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-	16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-	16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-	16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-	16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-	16, 16, 16, 16, 16, 16, 16, 68, 84, 84,
-	68, 52, 84, 68, 52, 52, 68, 16, 16, 16,
-	16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
-	16, 16, 16, 16, 88, 88, 64, 64, 64, 64,
-	16, 16, 16
+	"PLAY",	// Name of player sprite
 };
 
 #define LINESIZE 2048
@@ -163,136 +245,21 @@ static const char *unknown_str = "Unknown key %s encountered in %s %d.\n";
 // Written by Greg Lewis, gregl@umich.edu.
 static int toff[] = {129044, 129044, 129044, 129284, 129380};
 
+// Every string in DEHSUPP appears in the name table. The name table
+// is always in sorted order.
+static WORD *NameOffs;
+static char *NameBase;
+static int NumNames;
+
+// These are the original heights of every Doom 2 thing. They are used if a patch
+// specifies that a thing should be hanging from the ceiling but doesn't specify
+// a height for the thing, since these are the heights it probably wants.
+static byte *OrgHeights;
+static int NumOrgHeights;
+
 // This is a list of all the action functions used by each of Doom's states.
-#define NUMACTIONS 812
-static actionf_t Actions[NUMACTIONS] =
-{
-	{NULL}, {A_Light0}, {A_WeaponReady}, {A_Lower}, {A_Raise}, {NULL},
-	{A_Punch}, {NULL}, {NULL}, {A_ReFire}, {A_WeaponReady}, {A_Lower},
-	{A_Raise}, {NULL}, {A_FirePistol}, {NULL}, {A_ReFire}, {A_Light1},
-	{A_WeaponReady}, {A_Lower}, {A_Raise}, {NULL}, {A_FireShotgun}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_ReFire}, {A_Light1},
-	{A_Light2}, {A_WeaponReady}, {A_Lower}, {A_Raise}, {NULL},
-	{A_FireShotgun2}, {NULL}, {A_CheckReload}, {A_OpenShotgun2}, {NULL},
-	{A_LoadShotgun2}, {NULL}, {A_CloseShotgun2}, {A_ReFire}, {NULL}, {NULL},
-	{A_Light1}, {A_Light2}, {A_WeaponReady}, {A_Lower}, {A_Raise},
-	{A_FireCGun}, {A_FireCGun}, {A_ReFire}, {A_Light1}, {A_Light2},
-	{A_WeaponReady}, {A_Lower}, {A_Raise}, {A_GunFlash}, {A_FireMissile},
-	{A_ReFire}, {A_Light1}, {NULL}, {A_Light2}, {A_Light2}, {A_WeaponReady},
-	{A_WeaponReady}, {A_Lower}, {A_Raise}, {A_Saw}, {A_Saw}, {A_ReFire},
-	{A_WeaponReady}, {A_Lower}, {A_Raise}, {A_FirePlasma}, {A_ReFire},
-	{A_Light1}, {A_Light1}, {A_WeaponReady}, {A_Lower}, {A_Raise},
-	{A_BFGsound}, {A_GunFlash}, {A_FireBFG}, {A_ReFire}, {A_Light1},
-	{A_Light2}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {A_BFGSpray}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {A_Explode}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{A_Pain}, {NULL}, {A_PlayerScream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {A_XScream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {A_Look}, {A_Look}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_FaceTarget},
-	{A_PosAttack}, {NULL}, {NULL}, {A_Pain}, {NULL}, {A_Scream}, {A_NoBlocking},
-	{NULL}, {NULL}, {NULL}, {A_XScream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_Look},
-	{A_Look}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_FaceTarget}, {A_SPosAttack}, {NULL},
-	{NULL}, {A_Pain}, {NULL}, {A_Scream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL},
-	{A_XScream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_Look}, {A_Look},
-	{A_VileChase}, {A_VileChase}, {A_VileChase}, {A_VileChase},
-	{A_VileChase}, {A_VileChase}, {A_VileChase}, {A_VileChase},
-	{A_VileChase}, {A_VileChase}, {A_VileChase}, {A_VileChase},
-	{A_VileStart}, {A_FaceTarget}, {A_VileTarget}, {A_FaceTarget},
-	{A_FaceTarget}, {A_FaceTarget}, {A_FaceTarget}, {A_FaceTarget},
-	{A_FaceTarget}, {A_VileAttack}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{A_Pain}, {NULL}, {A_Scream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {A_StartFire}, {A_Fire}, {A_Fire}, {A_Fire},
-	{A_FireCrackle}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire},
-	{A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire},
-	{A_Fire}, {A_FireCrackle}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire},
-	{A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_Tracer}, {A_Tracer}, {NULL},
-	{NULL}, {NULL}, {A_Look}, {A_Look}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_FaceTarget}, {A_SkelWhoosh},
-	{A_FaceTarget}, {A_SkelFist}, {A_FaceTarget}, {A_FaceTarget},
-	{A_SkelMissile}, {A_FaceTarget}, {NULL}, {A_Pain}, {NULL}, {NULL},
-	{A_Scream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_Look},
-	{A_Look}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_FatRaise}, {A_FatAttack1}, {A_FaceTarget}, {A_FaceTarget},
-	{A_FatAttack2}, {A_FaceTarget}, {A_FaceTarget}, {A_FatAttack3},
-	{A_FaceTarget}, {A_FaceTarget}, {NULL}, {A_Pain}, {NULL}, {A_Scream},
-	{A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_BossDeath},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{A_Look}, {A_Look}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_FaceTarget},
-	{A_CPosAttack}, {A_CPosAttack}, {A_CPosRefire}, {NULL}, {A_Pain},
-	{NULL}, {A_Scream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{A_XScream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {A_Look}, {A_Look}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_FaceTarget}, {A_FaceTarget}, {A_TroopAttack}, {NULL},
-	{A_Pain}, {NULL}, {A_Scream}, {NULL}, {A_NoBlocking}, {NULL}, {NULL},
-	{A_XScream}, {NULL}, {A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {A_Look}, {A_Look}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_FaceTarget}, {A_FaceTarget}, {A_SargAttack}, {NULL},
-	{A_Pain}, {NULL}, {A_Scream}, {NULL}, {A_NoBlocking}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_Look}, {A_Chase},
-	{A_FaceTarget}, {A_FaceTarget}, {A_HeadAttack}, {NULL}, {A_Pain},
-	{NULL}, {NULL}, {A_Scream}, {NULL}, {NULL}, {A_NoBlocking}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {A_Look}, {A_Look}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_FaceTarget},
-	{A_FaceTarget}, {A_BruisAttack}, {NULL}, {A_Pain}, {NULL}, {A_Scream},
-	{NULL}, {A_NoBlocking}, {NULL}, {NULL}, {A_BossDeath}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {A_Look}, {A_Look}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_FaceTarget}, {A_FaceTarget}, {A_BruisAttack}, {NULL},
-	{A_Pain}, {NULL}, {A_Scream}, {NULL}, {A_NoBlocking}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_Look},
-	{A_Look}, {A_Chase}, {A_Chase}, {A_FaceTarget}, {A_SkullAttack}, {NULL},
-	{NULL}, {NULL}, {A_Pain}, {NULL}, {A_Scream}, {NULL}, {A_NoBlocking}, {NULL},
-	{NULL}, {A_Look}, {A_Look}, {A_Metal}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Metal}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Metal}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_FaceTarget}, {A_SPosAttack}, {A_SPosAttack},
-	{A_SpidRefire}, {NULL}, {A_Pain}, {A_Scream}, {A_NoBlocking}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_BossDeath}, {A_Look},
-	{A_Look}, {NULL}, {A_BabyMetal}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_BabyMetal}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_FaceTarget}, {A_BspiAttack}, {NULL},
-	{A_SpidRefire}, {NULL}, {A_Pain}, {A_Scream}, {A_NoBlocking}, {NULL}, {NULL},
-	{NULL}, {NULL}, {A_BossDeath}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{A_Look}, {A_Look}, {A_Hoof}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Metal}, {A_Chase}, {A_FaceTarget},
-	{A_CyberAttack}, {A_FaceTarget}, {A_CyberAttack}, {A_FaceTarget},
-	{A_CyberAttack}, {A_Pain}, {NULL}, {A_Scream}, {NULL}, {NULL}, {NULL},
-	{A_NoBlocking}, {NULL}, {NULL}, {NULL}, {A_BossDeath}, {A_Look}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_FaceTarget},
-	{A_FaceTarget}, {A_FaceTarget}, {A_PainAttack}, {NULL}, {A_Pain},
-	{NULL}, {A_Scream}, {NULL}, {NULL}, {A_PainDie}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {A_Look}, {A_Look}, {A_Chase},
-	{A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase}, {A_Chase},
-	{A_Chase}, {A_FaceTarget}, {A_FaceTarget}, {A_CPosAttack},
-	{A_FaceTarget}, {A_CPosAttack}, {A_CPosRefire}, {NULL}, {A_Pain},
-	{NULL}, {A_Scream}, {A_NoBlocking}, {NULL}, {NULL}, {NULL}, {A_XScream},
-	{A_NoBlocking}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_Scream},
-	{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {A_KeenDie},
-	{NULL}, {NULL}, {A_Pain}, {NULL}, {A_BrainPain}, {A_BrainScream},
-	{NULL}, {NULL}, {A_BrainDie}, {A_Look}, {A_BrainAwake}, {A_BrainSpit},
-	{A_SpawnSound}, {A_SpawnFly}, {A_SpawnFly}, {A_SpawnFly}, {A_Fire},
-	{A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire}, {A_Fire},
-	{NULL}, {NULL}, {A_BrainExplode}, {NULL}, {NULL}, {NULL}, {NULL},
-	{NULL}, {NULL}, {NULL}, {A_Scream}, {NULL}, {A_Explode}
-};
+static BYTE *ActionList;
+static int NumActions;
 
 // DeHackEd made the erroneous assumption that if a state didn't appear in
 // Doom with an action function, then it was incorrect to assign it one.
@@ -302,79 +269,14 @@ static actionf_t Actions[NUMACTIONS] =
 // versions, because states could move around, but actions would never
 // disappear, but that doesn't explain why frame patches specify an exact
 // state rather than a code pointer.)
-#define NUMCODEP 448
-static short CodePConv[NUMCODEP] =
-{
-	  1,   2,   3,   4,   6,   9,  10,  11,  12,  14,
-	 16,  17,  18,  19,  20,  22,  29,  30,  31,  32,
-	 33,  34,  36,  38,  39,  41,  43,  44,  47,  48,
-	 49,  50,  51,  52,  53,  54,  55,  56,  57,  58,
-	 59,  60,  61,  62,  63,  65,  66,  67,  68,  69,
-	 70,  71,  72,  73,  74,  75,  76,  77,  78,  79,
-	 80,  81,  82,  83,  84,  85,  86,  87,  88,  89,
-	119, 127, 157, 159, 160, 166, 167, 174, 175, 176,
-	177, 178, 179, 180, 181, 182, 183, 184, 185, 188,
-	190, 191, 195, 196, 207, 208, 209, 210, 211, 212,
-	213, 214, 215, 216, 217, 218, 221, 223, 224, 228,
-	229, 241, 242, 243, 244, 245, 246, 247, 248, 249,
-	250, 251, 252, 253, 254, 255, 256, 257, 258, 259,
-	260, 261, 262, 263, 264, 270, 272, 273, 281, 282,
-	283, 284, 285, 286, 287, 288, 289, 290, 291, 292,
-	293, 294, 295, 296, 297, 298, 299, 300, 301, 302,
-	303, 304, 305, 306, 307, 308, 309, 310, 316, 317,
-	321, 322, 323, 324, 325, 326, 327, 328, 329, 330,
-	331, 332, 333, 334, 335, 336, 337, 338, 339, 340,
-	341, 342, 344, 347, 348, 362, 363, 364, 365, 366,
-	367, 368, 369, 370, 371, 372, 373, 374, 375, 376,
-	377, 378, 379, 380, 381, 382, 383, 384, 385, 387,
-	389, 390, 397, 406, 407, 408, 409, 410, 411, 412,
-	413, 414, 415, 416, 417, 418, 419, 421, 423, 424,
-	430, 431, 442, 443, 444, 445, 446, 447, 448, 449,
-	450, 451, 452, 453, 454, 456, 458, 460, 463, 465,
-	475, 476, 477, 478, 479, 480, 481, 482, 483, 484,
-	485, 486, 487, 489, 491, 493, 502, 503, 504, 505,
-	506, 508, 511, 514, 527, 528, 529, 530, 531, 532,
-	533, 534, 535, 536, 537, 538, 539, 541, 543, 545,
-	548, 556, 557, 558, 559, 560, 561, 562, 563, 564,
-	565, 566, 567, 568, 570, 572, 574, 585, 586, 587,
-	588, 589, 590, 594, 596, 598, 601, 602, 603, 604,
-	605, 606, 607, 608, 609, 610, 611, 612, 613, 614,
-	615, 616, 617, 618, 620, 621, 622, 631, 632, 633,
-	635, 636, 637, 638, 639, 640, 641, 642, 643, 644,
-	645, 646, 647, 648, 650, 652, 653, 654, 659, 674,
-	675, 676, 677, 678, 679, 680, 681, 682, 683, 684,
-	685, 686, 687, 688, 689, 690, 692, 696, 700, 701,
-	702, 703, 704, 705, 706, 707, 708, 709, 710, 711,
-	713, 715, 718, 726, 727, 728, 729, 730, 731, 732,
-	733, 734, 735, 736, 737, 738, 739, 740, 741, 743,
-	745, 746, 750, 751, 766, 774, 777, 779, 780, 783,
-	784, 785, 786, 787, 788, 789, 790, 791, 792, 793,
-	794, 795, 796, 797, 798, 801, 809, 811
-};
+static short *CodePConv;
+static int NumCodeP;
 
 // Sprite names in the order Doom originally had them.
-#define NUMSPRITES 138
-static const char *OrgSprNames[NUMSPRITES] =
-{
-	"TROO","SHTG","PUNG","PISG","PISF","SHTF","SHT2","CHGG","CHGF","MISG",
-	"MISF","SAWG","PLSG","PLSF","BFGG","BFGF","BLUD","PUFF","BAL1","BAL2",
-	"PLSS","PLSE","MISL","BFS1","BFE1","BFE2","TFOG","IFOG","PLAY","POSS",
-	"SPOS","VILE","FIRE","FATB","FBXP","SKEL","MANF","FATT","CPOS","SARG",
-	"HEAD","BAL7","BOSS","BOS2","SKUL","SPID","BSPI","APLS","APBX","CYBR",
-	"PAIN","SSWV","KEEN","BBRN","BOSF","ARM1","ARM2","BAR1","BEXP","FCAN",
-	"BON1","BON2","BKEY","RKEY","YKEY","BSKU","RSKU","YSKU","STIM","MEDI",
-	"SOUL","PINV","PSTR","PINS","MEGA","SUIT","PMAP","PVIS","CLIP","AMMO",
-	"ROCK","BROK","CELL","CELP","SHEL","SBOX","BPAK","BFUG","MGUN","CSAW",
-	"LAUN","PLAS","SHOT","SGN2","COLU","SMT2","GOR1","POL2","POL5","POL4",
-	"POL3","POL1","POL6","GOR2","GOR3","GOR4","GOR5","SMIT","COL1","COL2",
-	"COL3","COL4","CAND","CBRA","COL6","TRE1","TRE2","ELEC","CEYE","FSKU",
-	"COL5","TBLU","TGRN","TRED","SMBT","SMGT","SMRT","HDB1","HDB2","HDB3",
-	"HDB4","HDB5","HDB6","POB1","POB2","BRS1","TLMP","TLP2"
-};
+static char **OrgSprNames;
+static int NumSprites;
 
 // Map to where the orginal Doom states have moved to
-#define NUMSTATEMAPS 134
-
 enum EStateBase
 {
 	FirstState,
@@ -382,518 +284,49 @@ enum EStateBase
 	DeathState
 };
 
-static struct
+struct StateMapper
 {
-	union {
-		const char *name;
-		FState *state;
-	} o;
-	enum EStateBase basestate;
-	int statespan;
-} StateMap[] = {
-	// S_NULL is implicit
-	{{"Weapon"}, FirstState, 1},			// S_LIGHTDONE
-	{{"Fist"}, FirstState, 8},				// S_PUNCH - S_PUNCH5
-	{{"Pistol"}, FirstState, 8},			// S_PISTOL - S_PISTOLFLASH
-	{{"Shotgun"}, FirstState, 14},			// S_SGUN - S_SGUNFLASH2
-	{{"SuperShotgun"}, FirstState, 17},		// S_DSGUN - S_DSGUNFLASH2
-	{{"Chaingun"}, FirstState, 8},			// S_CHAIN - S_CHAINFLASH2
-	{{"RocketLauncher"}, FirstState, 10},	// S_MISSILE - S_MISSILEFLASH4
-	{{"Chainsaw"}, FirstState, 7},			// S_SAW - S_SAW3
-	{{"PlasmaRifle"}, FirstState, 7},		// S_PLASMA - S_PLASMAFLASH2
-	{{"BFG9000"}, FirstState, 9},			// S_BFG - S_BFGFLASH2
-	{{"Blood"}, FirstState, 3},				// S_BLOOD1 - S_BLOOD3
-	{{"BulletPuff"}, FirstState, 4},		// S_PUFF1 - S_PUFF4
-	{{"DoomImpBall"}, FirstState, 5},		// S_TBALL1 - S_TBALLX3
-	{{"CacodemonBall"}, FirstState, 5},		// S_RBALL1 - S_RBALLX3
-	{{"PlasmaBall"}, FirstState, 7},		// S_PLASBALL - S_PLASEXP5
-	{{"Rocket"}, SpawnState, 1},			// S_ROCKET
-	{{"BFGBall"}, SpawnState, 8},			// S_BFGSHOT - S_BFGLAND6
-	{{"BFGExtra"}, SpawnState, 4},			// S_BFGEXP - S_BFGEXP4
-	{{"Rocket"}, DeathState, 3},			// S_EXPLODE1 - S_EXPLODE3
-	{{"TeleportFog"}, SpawnState, 12},		// S_TFOG - S_TFOG10
-	{{"ItemFog"}, SpawnState, 7},			// S_IFOG - S_IFOG5
-	{{"DoomPlayer"}, FirstState, 25},		// S_PLAY - S_PLAY_XDIE9
-	{{"ZombieMan"}, FirstState, 33},		// S_POSS_STND - S_POSS_RAISE4
-	{{"ShotgunGuy"}, FirstState, 34},		// S_SPOS_STND - S_SPOS_RAISE5
-	{{"Archvile"}, FirstState, 40},			// S_VILE_STND - S_VILE_DIE10
-	{{"ArchvileFire"}, FirstState, 30},		// S_FIRE1 - S_FIRE30
-	{{"RevenantTracerSmoke"}, FirstState, 5}, // S_SMOKE1 - S_SMOKE5
-	{{"RevenantTracer"}, FirstState, 5},	// S_TRACER - S_TRACEEXP3
-	{{"Revenant"}, FirstState, 36},			// S_SKEL_STND - S_SKEL_RAISE6
-	{{"FatShot"}, FirstState, 5},			// S_FATSHOT1 - S_FATSHOTX3
-	{{"Fatso"}, FirstState, 44},			// S_FATT_STND - S_FATT_RAISE8
-	{{"ChaingunGuy"}, FirstState, 36},		// S_CPOS_STND - S_CPOS_RAISE7
-	{{"DoomImp"}, FirstState, 33},			// S_TROO_STND - S_TROO_RAISE5
-	{{"Demon"}, FirstState, 27},			// S_SARG_STND - S_SARG_RAISE6
-	{{"Cacodemon"}, FirstState, 20},		// S_HEAD_STND - S_HEAD_RAISE6
-	{{"BaronBall"}, FirstState, 5},			// S_BRBALL1 - S_BRBALLX3
-	{{"BaronOfHell"}, FirstState, 29},		// S_BOSS_STND - S_BOSS_RAISE7
-	{{"HellKnight"}, FirstState, 29},		// S_BOS2_STND - S_BOS2_RAISE7
-	{{"LostSoul"}, FirstState, 16},			// S_SKULL_STND - S_SKULL_DIE6
-	{{"SpiderMastermind"}, FirstState, 31}, // S_SPID_STND - S_SPID_DIE11
-	{{"Arachnotron"}, FirstState, 35},		// S_BSPI_STND - S_BSPI_RAISE7
-	{{"ArachnotronPlasma"}, FirstState, 7}, // S_ARACH_PLAZ - S_ARACH_PLEX5
-	{{"Cyberdemon"}, FirstState, 27},		// S_CYBER_STND - S_CYBER_DIE10
-	{{"PainElemental"}, FirstState, 25},	// S_PAIN_STND - S_PAIN_RAISE6
-	{{"WolfensteinSS"}, FirstState, 37},	// S_SSWV_STND - S_SSWV_RAISE5
-	{{"CommanderKeen"}, FirstState, 15},	// S_KEENSTND - S_KEENPAIN2
-	{{"BossBrain"}, SpawnState, 6},			// S_BRAIN - S_BRAIN_DIE4
-	{{"BossEye"}, FirstState, 3},			// S_BRAINEYE - S_BRAINEYE1
-	{{"SpawnShot"}, FirstState, 4},			// S_SPAWN1 - S_SPAWN4
-	{{"SpawnFire"}, FirstState, 8},			// S_SPAWNFIRE1 - S_SPAWNFIRE8
-	{{"BossBrain"}, FirstState, 3},			// S_BRAINEXPLODE1 - S_BRAINEXPLODE3
-	{{"GreenArmor"}, FirstState, 2},		// S_ARM1 - S_ARM1A
-	{{"BlueArmor"}, FirstState, 2},			// S_ARM2 - S_ARM2A
-	{{"ExplosiveBarrel"}, FirstState, 7},	// S_BAR1 - S_BEXP5
-	{{"BurningBarrel"}, FirstState, 3},		// S_BBAR1 - S_BBAR3
-	{{"HealthBonus"}, FirstState, 6},		// S_BON1 - S_BON1E
-	{{"ArmorBonus"}, FirstState, 6},		// S_BON2 - S_BON2E
-	{{"BlueCard"}, FirstState, 2},			// S_BKEY - S_BKEY2
-	{{"RedCard"}, FirstState, 2},			// S_RKEY - S_RKEY2
-	{{"YellowCard"}, FirstState, 2},		// S_YKEY - S_YKEY2
-	{{"BlueSkull"}, FirstState, 2},			// S_BSKULL - S_BSKULL2
-	{{"RedSkull"}, FirstState, 2},			// S_RSKULL - S_RSKULL2
-	{{"YellowSkull"}, FirstState, 2},		// S_YSKULL - S_YSKULL2
-	{{"Stimpack"}, FirstState, 1},			// S_STIM
-	{{"Medikit"}, FirstState, 1},			// S_MEDI
-	{{"Soulsphere"}, FirstState, 6},		// S_SOUL - S_SOUL6
-	{{"InvulnerabilitySphere"}, FirstState, 4}, // S_PINV - S_PINV4
-	{{"Berserk"}, FirstState, 1},			// S_PSTR
-	{{"BlurSphere"}, FirstState, 4},		// S_PINS - P_PINS4
-	{{"Megasphere"}, FirstState, 4},		// S_MEGA - S_MEGA4
-	{{"RadSuit"}, FirstState, 1},			// S_SUIT
-	{{"Allmap"}, FirstState, 6},			// S_PMAP - S_PMAP6
-	{{"Infrared"}, FirstState, 2},			// S_PVIS - S_PVIS2
-	{{"Clip"}, FirstState, 1},				// S_CLIP
-	{{"ClipBox"}, FirstState, 1},			// S_AMMO
-	{{"RocketAmmo"}, FirstState, 1},		// S_ROCK
-	{{"RocketBox"}, FirstState, 1},			// S_BROK
-	{{"Cell"}, FirstState, 1},				// S_CELL
-	{{"CellPack"}, FirstState, 1},			// S_CELP
-	{{"Shell"}, FirstState, 1},				// S_SHEL
-	{{"ShellBox"}, FirstState, 1},			// S_SBOX
-	{{"Backpack"}, FirstState, 1},			// S_BPAK
-	{{"BFG9000"}, SpawnState, 1},			// S_BFUG
-	{{"Chaingun"}, SpawnState, 1},			// S_MGUN
-	{{"Chainsaw"}, SpawnState, 1},			// S_CSAW
-	{{"RocketLauncher"}, SpawnState, 1},	// S_LAUN
-	{{"PlasmaRifle"}, SpawnState, 1},		// S_PLAS
-	{{"Shotgun"}, SpawnState, 1},			// S_SHOT
-	{{"SuperShotgun"}, SpawnState, 1},		// S_SHOT2
-	{{"Column"}, FirstState, 1},			// S_COLU
-	{{"DoomUnusedStates"}, FirstState, 1},	// S_STALAG
-	{{"BloodyTwitch"}, FirstState, 4},		// S_BLOODYTWITCH - S_BLOODYTWITCH4
-	{{"DoomUnusedStates"}, DeathState, 2},	// S_DEADTORSO - S_DEADBOTTOM
-	{{"HeadsOnAStick"}, FirstState, 1},		// S_HEADSONSTICK
-	{{"Gibs"}, FirstState, 1},				// S_GIBS
-	{{"HeadOnAStick"}, FirstState, 1},		// S_HEADONASTICK
-	{{"HeadCandles"}, FirstState, 2},		// S_HEADCANDLES - S_HEADCANDLES2
-	{{"DeadStick"}, FirstState, 1},			// S_DEADSTICK
-	{{"LiveStick"}, FirstState, 2},			// S_LIVESTICK
-	{{"Meat2"}, FirstState, 1},				// S_MEAT2
-	{{"Meat3"}, FirstState, 1},				// S_MEAT3
-	{{"Meat4"}, FirstState, 1},				// S_MEAT4
-	{{"Meat5"}, FirstState, 1},				// S_MEAT5
-	{{"Stalagtite"}, FirstState, 1},		// S_STALAGTITE
-	{{"TallGreenColumn"}, FirstState, 1},	// S_TALLGRNCOL
-	{{"ShortGreenColumn"}, FirstState, 1},	// S_SHRTGRNCOL
-	{{"TallRedColumn"}, FirstState, 1},		// S_TALLREDCOL
-	{{"ShortRedColumn"}, FirstState, 1},	// S_SHRTREDCOL
-	{{"Candlestick"}, FirstState, 1},		// S_CANDLESTIK
-	{{"Candelabra"}, FirstState, 1},		// S_CANDELABRA
-	{{"SkullColumn"}, FirstState, 1},		// S_SKULLCOL
-	{{"TorchTree"}, FirstState, 1},			// S_TORCHTREE
-	{{"BigTree"}, FirstState, 1},			// S_BIGTREE
-	{{"TechPillar"}, FirstState, 1},		// S_TECHPILLAR
-	{{"EvilEye"}, FirstState, 4},			// S_EVILEYE - S_EVILEYE4
-	{{"FloatingSkull"}, FirstState, 3},		// S_FLOATSKULL - S_FLOATSKULL3
-	{{"HeartColumn"}, FirstState, 2},		// S_HEARTCOL - S_HEARTCOL2
-	{{"BlueTorch"}, FirstState, 4},			// S_BLUETORCH - S_BLUETORCH4
-	{{"GreenTorch"}, FirstState, 4},		// S_GREENTORCH - S_GREENTORCH4
-	{{"RedTorch"}, FirstState, 4},			// S_REDTORCH - S_REDTORCH4
-	{{"ShortBlueTorch"}, FirstState, 4},	// S_BTORCHSHRT - S_BTORCHSHRT4
-	{{"ShortGreenTorch"}, FirstState, 4},	// S_GTORCHSHRT - S_GTORCHSHRT4
-	{{"ShortRedTorch"}, FirstState, 4},		// S_RTORCHSHRT - S_RTORCHSHRT4
-	{{"HangNoGuts"}, FirstState, 1},		// S_HANGNOGUTS
-	{{"HangBNoBrain"}, FirstState, 1},		// S_HANGBNOBRAIN
-	{{"HangTLookingDown"}, FirstState, 1},	// S_HANGTLOOKDN
-	{{"HangTSkull"}, FirstState, 1},		// S_HANGTSKULL
-	{{"HangTLookingUp"}, FirstState, 1},	// S_HANGTLOOKUP
-	{{"HangTNoBrain"}, FirstState, 1},		// S_HANGTNOBRAIN
-	{{"ColonGibs"}, FirstState, 1},			// S_COLONGIBS
-	{{"SmallBloodPool"}, FirstState, 1},	// S_SMALLPOOL
-	{{"BrainStem"}, FirstState, 1},			// S_BRAINSTEM
-	{{"TechLamp"}, FirstState, 4},			// S_TECHLAMP - S_TECHLAMP4
-	{{"TechLamp2"}, FirstState, 4}			// S_TECH2LAMP - S_TECH2LAMP4
+	FState *State;
+	int StateSpan;
 };
+
+static StateMapper *StateMap;
+static int NumStateMaps;
+
+// Render styles
+struct StyleName
+{
+	short Name;
+	BYTE Num;
+};
+
+static StyleName *StyleNames;
+static int NumStyleNames;
 
 // Sound equivalences. When a patch tries to change a sound,
 // use these sound names.
-char *SoundMap[] = {
-	NULL,
-	"weapons/pistol",
-	"weapons/shotgf",
-	"weapons/shotgr",
-	"weapons/sshotf",
-	"weapons/sshoto",
-	"weapons/sshotc",
-	"weapons/sshotl",
-	"weapons/plasmaf",
-	"weapons/bfgf",
-	"weapons/sawup",
-	"weapons/sawidle",
-	"weapons/sawfull",
-	"weapons/sawhit",
-	"weapons/rocklf",
-	"weapons/bfgx",
-	"imp/attack",
-	"imp/shotx",
-	"plats/pt1_strt",
-	"plats/pt1_stop",
-	"doors/dr1_open",
-	"doors/dr1_clos",
-	"plats/pt1_mid",
-	"switches/normbutn",
-	"switches/exitbutn",
-	"*pain100_1",
-	"demon/pain",
-	"grunt/pain",
-	"vile/pain",
-	"fatso/pain",
-	"pain/pain",
-	"misc/gibbed",
-	"misc/i_pkup",
-	"misc/w_pkup",
-	"*land1",
-	"misc/teleport",
-	"grunt/sight1",
-	"grunt/sight2",
-	"grunt/sight3",
-	"imp/sight1",
-	"imp/sight2",
-	"demon/sight",
-	"caco/sight",
-	"baron/sight",
-	"cyber/sight",
-	"spider/sight",
-	"baby/sight",
-	"knight/sight",
-	"vile/sight",
-	"fatso/sight",
-	"pain/sight",
-	"skull/melee",
-	"demon/melee",
-	"skeleton/melee",
-	"vile/start",
-	"imp/melee",
-	"skeleton/swing",
-	"*death1",
-	"*xdeath1",
-	"grunt/death1",
-	"grunt/death2",
-	"grunt/death3",
-	"imp/death1",
-	"imp/death2",
-	"demon/death",
-	"caco/death",
-	"misc/unused",
-	"baron/death",
-	"cyber/death",
-	"spider/death",
-	"baby/death",
-	"vile/death",
-	"knight/death",
-	"pain/death",
-	"skeleton/death",
-	"grunt/active",
-	"imp/active",
-	"demon/active",
-	"baby/active",
-	"baby/walk",
-	"vile/active",
-	"*grunt1",
-	"world/barrelx",
-	"*fist",
-	"cyber/hoof",
-	"spider/walk",
-	"weapons/chngun",
-	"misc/chat2",
-	"doors/dr2_open",
-	"doors/dr2_clos",
-	"misc/spawn",
-	"vile/firecrkl",
-	"vile/firestrt",
-	"misc/p_pkup",
-	"brain/spit",
-	"brain/cube",
-	"brain/sight",
-	"brain/pain",
-	"brain/death",
-	"fatso/attack",
-	"gatso/death",
-	"wolfss/sight",
-	"wolfss/death",
-	"keen/pain",
-	"keen/death",
-	"skeleton/active",
-	"skeleton/sight",
-	"skeleton/attack",
-	"misc/chat"
-};
+static short *SoundMap;
+static int NumSounds;
 
 // Names of different actor types, in original Doom 2 order
-const char *InfoNames[] =
+static short *InfoNames;
+static int NumInfos;
+
+// bit flags for PatchThing (a .bex extension):
+struct BitName
 {
-	"DoomPlayer",
-	"ZombieMan",
-	"ShotgunGuy",
-	"Archvile",
-	"ArchvileFire",
-	"Revenant",
-	"RevenantTracer",
-	"RevenantTracerSmoke",
-	"Fatso",
-	"FatShot",
-	"ChaingunGuy",
-	"DoomImp",
-	"Demon",
-	"Spectre",
-	"Cacodemon",
-	"BaronOfHell",
-	"BaronBall",
-	"HellKnight",
-	"LostSoul",
-	"SpiderMastermind",
-	"Arachnotron",
-	"Cyberdemon",
-	"PainElemental",
-	"WolfensteinSS",
-	"CommanderKeen",
-	"BossBrain",
-	"BossEye",
-	"BossTarget",
-	"SpawnShot",
-	"SpawnFire",
-	"ExplosiveBarrel",
-	"DoomImpBall",
-	"CacodemonBall",
-	"Rocket",
-	"PlasmaBall",
-	"BFGBall",
-	"ArachnotronPlasma",
-	"BulletPuff",
-	"Blood",
-	"TeleportFog",
-	"ItemFog",
-	"TeleportDest",
-	"BFGExtra",
-	"GreenArmor",
-	"BlueArmor",
-	"HealthBonus",
-	"ArmorBonus",
-	"BlueCard",
-	"RedCard",
-	"YellowCard",
-	"YellowSkull",
-	"RedSkull",
-	"BlueSkull",
-	"Stimpack",
-	"Medikit",
-	"Soulsphere",
-	"InvulnerabilitySphere",
-	"Berserk",
-	"BlurSphere",
-	"RadSuit",
-	"Allmap",
-	"Infrared",
-	"Megasphere",
-	"Clip",
-	"ClipBox",
-	"RocketAmmo",
-	"RocketBox",
-	"Cell",
-	"CellPack",
-	"Shell",
-	"ShellBox",
-	"Backpack",
-	"BFG9000",
-	"Chaingun",
-	"Chainsaw",
-	"RocketLauncher",
-	"PlasmaRifle",
-	"Shotgun",
-	"SuperShotgun",
-	"TechLamp",
-	"TechLamp2",
-	"Column",
-	"TallGreenColumn",
-	"ShortGreenColumn",
-	"TallRedColumn",
-	"ShortRedColumn",
-	"SkullColumn",
-	"HeartColumn",
-	"EvilEye",
-	"FloatingSkull",
-	"TorchTree",
-	"BlueTorch",
-	"GreenTorch",
-	"RedTorch",
-	"ShortBlueTorch",
-	"ShortGreenTorch",
-	"ShortRedTorch",
-	"Stalagtite",
-	"TechPillar",
-	"Candlestick",
-	"Candelabra",
-	"BloodyTwitch",
-	"Meat2",
-	"Meat3",
-	"Meat4",
-	"Meat5",
-	"NonsolidMeat2",
-	"NonsolidMeat4",
-	"NonsolidMeat3",
-	"NonsolidMeat5",
-	"NonsolidTwitch",
-	"DeadCacodemon",
-	"DeadMarine",
-	"DeadZombieMan",
-	"DeadDemon",
-	"DeadLostSoul",
-	"DeadDoomImp",
-	"DeadShotgunGuy",
-	"GibbedMarine",
-	"GibbedMarineExtra",
-	"HeadsOnAStick",
-	"Gibs",
-	"HeadOnAStick",
-	"HeadCandles",
-	"DeadStick",
-	"LiveStick",
-	"BigTree",
-	"BurningBarrel",
-	"HangNoGuts",
-	"HangBNoBrain",
-	"HangTLookingDown",
-	"HangTSkull",
-	"HangTLookingUp",
-	"HangTNoBrain",
-	"ColonGibs",
-	"SmallBloodPool",
-	"BrainStem"
+	short Name;
+	BYTE Bit;
+	BYTE WhichFlags;
 };
 
-#define NUMINFOS (sizeof(InfoNames)/sizeof(const char *))
-
-struct CodePtr {
-	char *name;
-	actionf_t func;
-};
-
-static const struct CodePtr CodePtrs[] = {
-	{ "NULL",			{(actionf_p1)NULL} },
-	{ "MonsterRail",	{(actionf_p1)A_MonsterRail} },
-	{ "FireRailgun",	{(actionf_p1)A_FireRailgun} },
-	{ "FireRailgunLeft",{(actionf_p1)A_FireRailgunLeft} },
-	{ "FireRailgunRight",{(actionf_p1)A_FireRailgunRight} },
-	{ "RailWait",		{(actionf_p1)A_RailWait} },
-	{ "Light0",			{(actionf_p1)A_Light0} },
-	{ "WeaponReady",	{(actionf_p1)A_WeaponReady} },
-	{ "Lower",			{(actionf_p1)A_Lower} },
-	{ "Raise",			{(actionf_p1)A_Raise} },
-	{ "Punch",			{(actionf_p1)A_Punch} },
-	{ "ReFire",			{(actionf_p1)A_ReFire} },
-	{ "FirePistol",		{(actionf_p1)A_FirePistol} },
-	{ "Light1",			{(actionf_p1)A_Light1} },
-	{ "FireShotgun",	{(actionf_p1)A_FireShotgun} },
-	{ "Light2",			{(actionf_p1)A_Light2} },
-	{ "FireShotgun2",	{(actionf_p1)A_FireShotgun2} },
-	{ "CheckReload",	{(actionf_p1)A_CheckReload} },
-	{ "OpenShotgun2",	{(actionf_p1)A_OpenShotgun2} },
-	{ "LoadShotgun2",	{(actionf_p1)A_LoadShotgun2} },
-	{ "CloseShotgun2",	{(actionf_p1)A_CloseShotgun2} },
-	{ "FireCGun",		{(actionf_p1)A_FireCGun} },
-	{ "A_GunFlash",		{(actionf_p1)A_GunFlash} },
-	{ "FireMissile",	{(actionf_p1)A_FireMissile} },
-	{ "Saw",			{(actionf_p1)A_Saw} },
-	{ "FirePlasma",		{(actionf_p1)A_FirePlasma} },
-	{ "BFGsound",		{(actionf_p1)A_BFGsound} },
-	{ "FireBFG",		{(actionf_p1)A_FireBFG} },
-	{ "BFGSpray",		{(actionf_p1)A_BFGSpray} },
-	{ "Explode",		{(actionf_p1)A_Explode} },
-	{ "Pain",			{(actionf_p1)A_Pain} },
-	{ "PlayerScream",	{(actionf_p1)A_PlayerScream} },
-	{ "Fall",			{(actionf_p1)A_NoBlocking} },
-	{ "XScream",		{(actionf_p1)A_XScream} },
-	{ "Look",			{(actionf_p1)A_Look} },
-	{ "Chase",			{(actionf_p1)A_Chase} },
-	{ "FaceTarget",		{(actionf_p1)A_FaceTarget} },
-	{ "PosAttack",		{(actionf_p1)A_PosAttack} },
-	{ "Scream",			{(actionf_p1)A_Scream} },
-	{ "SPosAttack",		{(actionf_p1)A_SPosAttack} },
-	{ "VileChase",		{(actionf_p1)A_VileChase} },
-	{ "VileStart",		{(actionf_p1)A_VileStart} },
-	{ "VileTarget",		{(actionf_p1)A_VileTarget} },
-	{ "VileAttack",		{(actionf_p1)A_VileAttack} },
-	{ "StartFire",		{(actionf_p1)A_StartFire} },
-	{ "Fire",			{(actionf_p1)A_Fire} },
-	{ "FireCrackle",	{(actionf_p1)A_FireCrackle} },
-	{ "Tracer",			{(actionf_p1)A_Tracer} },
-	{ "SkelWhoosh",		{(actionf_p1)A_SkelWhoosh} },
-	{ "SkelFist",		{(actionf_p1)A_SkelFist} },
-	{ "SkelMissile",	{(actionf_p1)A_SkelMissile} },
-	{ "FatRaise",		{(actionf_p1)A_FatRaise} },
-	{ "FatAttack1",		{(actionf_p1)A_FatAttack1} },
-	{ "FatAttack2",		{(actionf_p1)A_FatAttack2} },
-	{ "FatAttack3",		{(actionf_p1)A_FatAttack3} },
-	{ "BossDeath",		{(actionf_p1)A_BossDeath} },
-	{ "CPosAttack",		{(actionf_p1)A_CPosAttack} },
-	{ "CPosRefire",		{(actionf_p1)A_CPosRefire} },
-	{ "TroopAttack",	{(actionf_p1)A_TroopAttack} },
-	{ "SargAttack",		{(actionf_p1)A_SargAttack} },
-	{ "HeadAttack",		{(actionf_p1)A_HeadAttack} },
-	{ "BruisAttack",	{(actionf_p1)A_BruisAttack} },
-	{ "SkullAttack",	{(actionf_p1)A_SkullAttack} },
-	{ "Metal",			{(actionf_p1)A_Metal} },
-	{ "SpidRefire",		{(actionf_p1)A_SpidRefire} },
-	{ "BabyMetal",		{(actionf_p1)A_BabyMetal} },
-	{ "BspiAttack",		{(actionf_p1)A_BspiAttack} },
-	{ "Hoof",			{(actionf_p1)A_Hoof} },
-	{ "CyberAttack",	{(actionf_p1)A_CyberAttack} },
-	{ "PainAttack",		{(actionf_p1)A_PainAttack} },
-	{ "PainDie",		{(actionf_p1)A_PainDie} },
-	{ "KeenDie",		{(actionf_p1)A_KeenDie} },
-	{ "BrainPain",		{(actionf_p1)A_BrainPain} },
-	{ "BrainScream",	{(actionf_p1)A_BrainScream} },
-	{ "BrainDie",		{(actionf_p1)A_BrainDie} },
-	{ "BrainAwake",		{(actionf_p1)A_BrainAwake} },
-	{ "BrainSpit",		{(actionf_p1)A_BrainSpit} },
-	{ "SpawnSound",		{(actionf_p1)A_SpawnSound} },
-	{ "SpawnFly",		{(actionf_p1)A_SpawnFly} },
-	{ "BrainExplode",	{(actionf_p1)A_BrainExplode} },
-	{ "Die",			{(actionf_p1)A_Die} },
-	{ "Detonate",		{(actionf_p1)A_Detonate} },
-	{ "Mushroom",		{(actionf_p1)A_Mushroom} },
-	{ NULL, }
-};
+static BitName *BitNames;
+static int NumBitNames;
 
 struct Key {
 	char *name;
 	ptrdiff_t offset;
 };
-
-extern byte cheat_mus_seq[9];
-extern byte cheat_choppers_seq[11];
-extern byte cheat_god_seq[6];
-extern byte cheat_ammo_seq[6];
-extern byte cheat_ammonokey_seq[5];
-extern byte cheat_noclip_seq[11];
-extern byte cheat_noclip_seq2[7];
-extern byte cheat_powerup_seq[7][10];
-extern byte cheat_clev_seq[10];
-extern byte cheat_mypos_seq[8];
-extern byte cheat_amap_seq[5];
 
 static int PatchThing (int);
 static int PatchSound (int);
@@ -935,11 +368,40 @@ static const struct {
 
 static int HandleMode (const char *mode, int num);
 static BOOL HandleKey (const struct Key *keys, void *structure, const char *key, int value);
-static void ChangeCheat (char *newcheat, byte *cheatseq, BOOL needsval);
 static BOOL ReadChars (char **stuff, int size);
 static char *igets (void);
 static int GetLine (void);
 
+inline const char *GetName (int name)
+{
+	return NameBase + NameOffs[name];
+}
+
+// Names are conveniently stored in sorted order
+int FindName (const char *name)
+{
+	int min = 0;
+	int max = NumNames - 1;
+
+	while (min <= max)
+	{
+		int mid = (min + max) / 2;
+		int lexx = stricmp (GetName (mid), name);
+		if (lexx == 0)
+		{
+			return mid;
+		}
+		else if (lexx < 0)
+		{
+			min = mid + 1;
+		}
+		else
+		{
+			max = mid - 1;
+		}
+	}
+	return -1;
+}
 
 static int HandleMode (const char *mode, int num)
 {
@@ -952,7 +414,7 @@ static int HandleMode (const char *mode, int num)
 		return Modes[i].func (num);
 
 	// Handle unknown or unimplemented data
-	Printf (PRINT_HIGH, "Unknown chunk %s encountered. Skipping.\n", mode);
+	Printf ("Unknown chunk %s encountered. Skipping.\n", mode);
 	do
 		i = GetLine ();
 	while (i == 1);
@@ -976,10 +438,11 @@ static BOOL HandleKey (const struct Key *keys, void *structure, const char *key,
 static int FindSprite (const char *sprname)
 {
 	size_t i;
+	DWORD nameint = *((DWORD *)sprname);
 
 	for (i = 0; i < sprites.Size (); i++)
 	{
-		if (strcmp (sprites[i].name, sprname) == 0)
+		if (*((DWORD *)&sprites[i].name) == nameint)
 		{
 			return i;
 		}
@@ -995,79 +458,15 @@ static FState *FindState (int statenum)
 	if (statenum == 0)
 		return NULL;
 
-	for (i = 0, stateacc = 1; i < NUMSTATEMAPS; i++)
+	for (i = 0, stateacc = 1; i < NumStateMaps; i++)
 	{
-		if (stateacc <= statenum && stateacc + StateMap[i].statespan > statenum)
+		if (stateacc <= statenum && stateacc + StateMap[i].StateSpan > statenum)
 		{
-			return StateMap[i].o.state + statenum - stateacc;
+			return StateMap[i].State + statenum - stateacc;
 		}
-		stateacc += StateMap[i].statespan;
+		stateacc += StateMap[i].StateSpan;
 	}
 	return NULL;
-}
-
-static bool PrepStateMap ()
-{
-	static bool alreadyprepped = false;
-	static int errs = 0;
-	int i;
-
-	if (alreadyprepped)
-		return errs > 0;
-
-	alreadyprepped = true;
-	for (i = 0; i < NUMSTATEMAPS; i++)
-	{
-		const TypeInfo *type = TypeInfo::FindType (StateMap[i].o.name);
-		if (type == NULL)
-		{
-			Printf (PRINT_HIGH, "Can't find type %s\n", StateMap[i].o.name);
-			errs++;
-		}
-		else if (type->ActorInfo == NULL)
-		{
-			Printf (PRINT_HIGH, "%s has no ActorInfo\n", StateMap[i].o.name);
-			errs++;
-		}
-		else
-		{
-			switch (StateMap[i].basestate)
-			{
-			case FirstState:
-				StateMap[i].o.state = type->ActorInfo->OwnedStates;
-				break;
-			case SpawnState:
-				StateMap[i].o.state = type->ActorInfo->spawnstate;
-				break;
-			case DeathState:
-				StateMap[i].o.state = type->ActorInfo->deathstate;
-				break;
-			}
-		}
-	}
-
-	if (errs > 0)
-	{
-		Printf (PRINT_HIGH, "%d errors trying to prep statemap\n");
-		return true;
-	}
-	return false;
-}
-
-static void ChangeCheat (char *newcheat, byte *cheatseq, BOOL needsval)
-{
-	while (*cheatseq != 0xff && *cheatseq != 1 && *newcheat)
-	{
-		*cheatseq++ = *newcheat++;
-	}
-
-	if (needsval)
-	{
-		*cheatseq++ = 0;
-		*cheatseq++ = 0;
-	}
-
-	*cheatseq = 0xff;
 }
 
 static BOOL ReadChars (char **stuff, int size)
@@ -1258,235 +657,291 @@ static int GetLine (void)
 static int PatchThing (int thingy)
 {
 	static const struct Key keys[] = {
-		{ "ID #",				myoffsetof(FActorInfo,doomednum) },
-		{ "Hit points",			myoffsetof(FActorInfo,spawnhealth) },
-		{ "Reaction time",		myoffsetof(FActorInfo,reactiontime) },
-		{ "Pain chance",		myoffsetof(FActorInfo,painchance) },
-		{ "Speed",				myoffsetof(FActorInfo,speed) },
-		{ "Width",				myoffsetof(FActorInfo,radius) },
-		{ "Height",				myoffsetof(FActorInfo,height) },
-		{ "Mass",				myoffsetof(FActorInfo,mass) },
-		{ "Missile damage",		myoffsetof(FActorInfo,damage) },
-		{ "Translucency",		myoffsetof(FActorInfo,translucency) },
+		{ "Hit points",			myoffsetof(AActor,health) },
+		{ "Reaction time",		myoffsetof(AActor,reactiontime) },
+		{ "Speed",				myoffsetof(AActor,Speed) },
+		{ "Width",				myoffsetof(AActor,radius) },
+		{ "Height",				myoffsetof(AActor,height) },
+		{ "Mass",				myoffsetof(AActor,Mass) },
+		{ "Missile damage",		myoffsetof(AActor,damage) },
 		{ NULL, }
 	};
 
-	// flags can be specified by name (a .bex extension):
-	static const struct {
-		short bit;
-		short whichflags;
-		const char *name;
-	} bitnames[] = {
-		{ 0, 0, "SPECIAL"},
-		{ 1, 0, "SOLID"},
-		{ 2, 0, "SHOOTABLE"},
-		{ 3, 0, "NOSECTOR"},
-		{ 4, 0, "NOBLOCKMAP"},
-		{ 5, 0, "AMBUSH"},
-		{ 6, 0, "JUSTHIT"},
-		{ 7, 0, "JUSTATTACKED"},
-		{ 8, 0, "SPAWNCEILING"},
-		{ 9, 0, "NOGRAVITY"},
-		{10, 0, "DROPOFF"},
-		{11, 0, "PICKUP"},
-		{12, 0, "NOCLIP"},
-		{14, 0, "FLOAT"},
-		{15, 0, "TELEPORT"},
-		{16, 0, "MISSILE"},
-		{17, 0, "DROPPED"},
-		{18, 0, "SHADOW"},
-		{19, 0, "NOBLOOD"},
-		{20, 0, "CORPSE"},
-		{21, 0, "INFLOAT"},
-		{22, 0, "COUNTKILL"},
-		{23, 0, "COUNTITEM"},
-		{24, 0, "SKULLFLY"},
-		{25, 0, "NOTDMATCH"},
-		{26, 0, "TRANSLATION1"},
-		{26, 0, "TRANSLATION"},		// BOOM compatibility
-		{27, 0, "TRANSLATION2"},
-		{27, 0, "UNUSED1"},			// BOOM compatibility
-		{28, 0, "UNUSED2"},			// BOOM compatibility
-		{29, 0, "UNUSED3"},			// BOOM compatibility
-		{30, 0, "UNUSED4"},			// BOOM compatibility
-		{30, 0, "TRANSLUCENT"},		// BOOM compatibility?
-		{30, 0, "STEALTH"},
-		{ 1, 2, "TRANSLUC25"},
-		{ 2, 2, "TRANSLUC50"},
-		{ 3, 2, "TRANSLUC75"},
-
-		// Names for flags2
-		{ 0, 1, "LOGRAV"},
-		{ 1, 1, "WINDTHRUST"},
-		{ 2, 1, "FLOORBOUNCE"},
-		{ 3, 1, "BLASTED"},
-		{ 4, 1, "FLY"},
-		{ 5, 1, "FLOORCLIP"},
-		{ 6, 1, "SPAWNFLOAT"},
-		{ 7, 1, "NOTELEPORT"},
-		{ 8, 1, "RIP"},
-		{ 9, 1, "PUSHABLE"},
-		{10, 1, "CANSLIDE"},			// Avoid conflict with SLIDE from BOOM
-		{11, 1, "ONMOBJ"},
-		{12, 1, "PASSMOBJ"},
-		{13, 1, "CANNOTPUSH"},
-		{14, 1, "DROPPED"},
-		{15, 1, "BOSS"},
-		{16, 1, "FIREDAMAGE"},
-		{17, 1, "NODMGTHRUST"},
-		{18, 1, "TELESTOMP"},
-		{19, 1, "FLOATBOB"},
-		{20, 1, "DONTDRAW"},
-		{21, 1, "IMPACT"},
-		{22, 1, "PUSHWALL"},
-		{23, 1, "MCROSS"},
-		{24, 1, "PCROSS"},
-		{25, 1, "CANTLEAVEFLOORPIC"},
-		{26, 1, "NONSHOOTABLE"},
-		{27, 1, "INVULNERABLE"},
-		{28, 1, "DORMANT"},
-		{29, 1, "ICEDAMAGE"},
-		{30, 1, "SEEKERMISSILE"},
-		{31, 1, "REFLECTIVE"}
-	};
 	int result;
-	FActorInfo *info, dummy;
-	BOOL hadHeight = false;
+	AActor *info, dummy;
+	bool hadHeight = false;
+	bool hadTranslucency = false;
+	bool hadStyle = false;
+	int oldflags;
+	const TypeInfo *type;
+	SWORD *ednum, dummyed;
 
-	if (thingy > NUMINFOS || thingy <= 0)
+	if (thingy > NumInfos || thingy <= 0)
 	{
 		info = &dummy;
-		Printf (PRINT_HIGH, "Thing %d out of range.\n", thingy);
+		Printf ("Thing %d out of range.\n", thingy);
 	}
 	else
 	{
 		DPrintf ("Thing %d\n", thingy);
 		if (thingy > 0)
 		{
-			const TypeInfo *type = TypeInfo::FindType (InfoNames[thingy - 1]);
+			type = TypeInfo::FindType (GetName (InfoNames[thingy - 1]));
 			if (type == NULL)
 			{
 				info = &dummy;
-				Printf (PRINT_HIGH, "Could not find thing %s (index %d)\n", InfoNames[thingy - 1], thingy);
+				ednum = &dummyed;
+				Printf ("Could not find thing %s (index %d)\n",
+					GetName (InfoNames[thingy - 1]), thingy);
 			}
 			else
 			{
-				info = type->ActorInfo;
+				info = GetDefaultByType (type);
+				ednum = &type->ActorInfo->DoomEdNum;
 			}
 		}
 	}
 
+	oldflags = info->flags;
+
 	while ((result = GetLine ()) == 1)
 	{
-		size_t val = atoi (Line2);
+		char *endptr;
+		unsigned long val = strtoul (Line2, &endptr, 10);
 
 		if (HandleKey (keys, info, Line1, val))
 		{
-			if (strlen (Line1) > 6)
+			int linelen = strlen (Line1);
+
+			if (linelen == 11 && stricmp (Line1, "Pain chance") == 0)
 			{
-				if (!stricmp (Line1 + strlen (Line1) - 6, " frame"))
+				info->PainChance = val;
+			}
+			else if (linelen == 12 && stricmp (Line1, "Translucency") == 0)
+			{
+				info->alpha = val;
+				info->RenderStyle = STYLE_Translucent;
+				hadTranslucency = true;
+				hadStyle = true;
+			}
+			else if (linelen == 5 && stricmp (Line1, "Alpha") == 0)
+			{
+				info->alpha = (fixed_t)(atof (Line2) * FRACUNIT);
+				hadTranslucency = true;
+			}
+			else if (linelen == 12 && stricmp (Line1, "Render Style") == 0)
+			{
+				stripwhite (Line2);
+				int min = 0;
+				int max = NumStyleNames - 1;
+				int name = FindName (Line2);
+				while (min <= max)
+				{
+					int mid = (min + max) / 2;
+					if (StyleNames[mid].Name == name)
+					{
+						info->RenderStyle = StyleNames[mid].Num;
+						hadStyle = true;
+						break;
+					}
+					else if (StyleNames[mid].Name < name)
+					{
+						min = mid + 1;
+					}
+					else
+					{
+						max = mid - 1;
+					}
+				}
+				if (min > max)
+				{
+					DPrintf("Unknown render style %s\n", Line2);
+				}
+			}
+			else if (linelen > 6)
+			{
+				if (stricmp (Line1 + linelen - 6, " frame") == 0)
 				{
 					FState *state = FindState (val);
 
 					if (!strnicmp (Line1, "Initial", 7))
-						info->spawnstate = state ? state : RUNTIME_CLASS(AActor)->ActorInfo->spawnstate;
+						info->SpawnState = state ? state : GetDefault<AActor>()->SpawnState;
 					else if (!strnicmp (Line1, "First moving", 12))
-						info->seestate = state;
+						info->SeeState = state;
 					else if (!strnicmp (Line1, "Injury", 6))
-						info->painstate = state;
+						info->PainState = state;
 					else if (!strnicmp (Line1, "Close attack", 12))
-						info->meleestate = state;
+						info->MeleeState = state;
 					else if (!strnicmp (Line1, "Far attack", 10))
-						info->missilestate = state;
+						info->MissileState = state;
 					else if (!strnicmp (Line1, "Death", 5))
-						info->deathstate = state;
+						info->DeathState = state;
 					else if (!strnicmp (Line1, "Exploding", 9))
-						info->xdeathstate = state;
+						info->XDeathState = state;
 					else if (!strnicmp (Line1, "Respawn", 7))
-						info->raisestate = state;
+						info->RaiseState = state;
 				}
-				else if (!stricmp (Line1 + strlen (Line1) - 6, " sound"))
+				else if (stricmp (Line1 + linelen - 6, " sound") == 0)
 				{
-					char *snd = val >= sizeof(SoundMap) ?
-						SoundMap[0] : SoundMap[val];
-
-					if (!strnicmp (Line1, "Alert", 5))
-						info->seesound = snd;
-					else if (!strnicmp (Line1, "Attack", 6))
-						info->attacksound = snd;
-					else if (!strnicmp (Line1, "Pain", 4))
-						info->painsound = snd;
-					else if (!strnicmp (Line1, "Death", 5))
-						info->deathsound = snd;
-					else if (!strnicmp (Line1, "Action", 6))
-						info->activesound = snd;
-				}
-			}
-			else if (!stricmp (Line1, "Bits"))
-			{
-				int value = 0, value2 = 0;
-				BOOL vchanged = false, v2changed = false;
-				char *strval;
-
-				for (strval = Line2; (strval = strtok (strval, ",+| \t\f\r")); strval = NULL)
-				{
-					size_t iy;
-
-					if (IsNum (strval))
+					int snd;
+					
+					if (val == 0 || val >= (unsigned long)NumSounds)
 					{
-						// Force the top 4 bits to 0 so that the user is forced
-						// to use the mnemonics to change them.
-						value |= (atoi(strval) & 0x0fffffff);
-						vchanged = true;
+						if (endptr == Line2)
+						{ // Sound was not a number, so treat it as an actual sound name
+							stripwhite (Line2);
+							snd = S_FindSound (Line2);
+						}
+						else
+						{
+							snd = 0;
+						}
 					}
 					else
 					{
-						for (iy = 0; iy < sizeof(bitnames)/sizeof(bitnames[0]); iy++)
+						snd = S_FindSound (GetName (SoundMap[val-1]));
+					}
+
+					if (!strnicmp (Line1, "Alert", 5))
+						info->SeeSound = snd;
+					else if (!strnicmp (Line1, "Attack", 6))
+						info->AttackSound = snd;
+					else if (!strnicmp (Line1, "Pain", 4))
+						info->PainSound = snd;
+					else if (!strnicmp (Line1, "Death", 5))
+						info->DeathSound = snd;
+					else if (!strnicmp (Line1, "Action", 6))
+						info->ActiveSound = snd;
+				}
+			}
+			else if (linelen == 4)
+			{
+				if (stricmp (Line1, "Bits") == 0)
+				{
+					DWORD value[4] = { 0, 0, 0 };
+					bool vchanged[4] = { false, false, false };
+					char *strval;
+
+					for (strval = Line2; (strval = strtok (strval, ",+| \t\f\r")); strval = NULL)
+					{
+						if (IsNum (strval))
 						{
-							if (!stricmp (strval, bitnames[iy].name))
+							// Force the top 4 bits to 0 so that the user is forced
+							// to use the mnemonics to change them.
+							value[0] |= atoi(strval) & 0x0fffffff;
+							vchanged[0] = true;
+						}
+						else
+						{
+							int min, max;
+							int name = FindName (strval);
+
+							if (name == -1)
 							{
-								if (bitnames[iy].whichflags)
+								DPrintf ("Unknown bit mnemonic %s\n", strval);
+							}
+							else
+							{
+								min = 0;
+								max = NumBitNames - 1;
+								while (min <= max)
 								{
-									v2changed = true;
-									if (bitnames[iy].bit & 0xff00)
-										value2 |= 1 << (bitnames[iy].bit >> 8);
-									value2 |= 1 << (bitnames[iy].bit & 0xff);
+									int mid = (min + max) / 2;
+									if (BitNames[mid].Name == name)
+									{
+										vchanged[BitNames[mid].WhichFlags] = true;
+										value[BitNames[mid].WhichFlags] |= 1 << BitNames[mid].Bit;
+										break;
+									}
+									else if (BitNames[mid].Name < name)
+									{
+										min = mid + 1;
+									}
+									else
+									{
+										max = mid - 1;
+									}
 								}
-								else
+								if (min > max)
 								{
-									vchanged = true;
-									if (bitnames[iy].bit & 0xff00)
-										value |= 1 << (bitnames[iy].bit >> 8);
-									value |= 1 << (bitnames[iy].bit & 0xff);
+									DPrintf("Unknown bit mnemonic %s\n", strval);
 								}
-								break;
 							}
 						}
-						if (iy >= sizeof(bitnames)/sizeof(bitnames[0]))
-							DPrintf("Unknown bit mnemonic %s\n", strval);
 					}
+					if (vchanged[0])
+					{
+						info->flags = value[0];
+					}
+					if (vchanged[1])
+						info->flags2 = value[1];
+					if (vchanged[2])
+					{
+						if (value[2] & 7)
+						{
+							hadTranslucency = true;
+							if (value[2] & 1)
+								info->alpha = TRANSLUC25;
+							else if (value[2] & 2)
+								info->alpha = TRANSLUC50;
+							else if (value[2] & 4)
+								info->alpha = TRANSLUC75;
+							info->RenderStyle = STYLE_Translucent;
+						}
+						if (value[2] & 8)
+							info->renderflags |= RF_INVISIBLE;
+						else
+							info->renderflags &= ~RF_INVISIBLE;
+					}
+					DPrintf ("Bits: %d,%d (0x%08x,0x%08x)\n", info->flags, info->flags2,
+															  info->flags, info->flags2);
 				}
-				if (vchanged)
+				else if (stricmp (Line1, "ID #") == 0)
 				{
-					info->flags = value;
-					// Bit flags are no longer used to specify translucency.
-					// This is just a temporary hack.
-					if (info->flags & 0x60000000)
-						info->translucency = (info->flags & 0x60000000) >> 15;
+					*ednum = val;
 				}
-				if (v2changed)
-					info->flags2 = value2;
-				DPrintf ("Bits: %d,%d (0x%08x,0x%08x)\n", info->flags, info->flags2,
-														  info->flags, info->flags2);
 			}
-			else Printf (PRINT_HIGH, unknown_str, Line1, "Thing", thingy);
-		} else if (!stricmp (Line1, "Height")) {
+			else Printf (unknown_str, Line1, "Thing", thingy);
+		}
+		else if (!stricmp (Line1, "Height"))
+		{
 			hadHeight = true;
 		}
 	}
 
-	if (info->flags & MF_SPAWNCEILING && !hadHeight && thingy <= sizeof(OrgHeights) && thingy > 0)
-		info->height = OrgHeights[thingy - 1] * FRACUNIT;
+	if (info != &dummy)
+	{
+		// Reset heights for things hanging from the ceiling that
+		// don't specify a new height.
+		if (info->flags & MF_SPAWNCEILING &&
+			!hadHeight &&
+			thingy <= NumOrgHeights && thingy > 0)
+		{
+			info->height = OrgHeights[thingy - 1] * FRACUNIT;
+		}
+		// If the thing's shadow changed, change its fuzziness if not already specified
+		if ((info->flags ^ oldflags) & MF_SHADOW)
+		{
+			if (info->flags & MF_SHADOW)
+			{ // changed to shadow
+				if (!hadStyle)
+					info->RenderStyle = STYLE_OptFuzzy;
+				if (!hadTranslucency)
+					info->alpha = FRACUNIT/5;
+			}
+			else
+			{ // changed from shadow
+				if (!hadStyle)
+					info->RenderStyle = STYLE_Normal;
+			}
+		}
+		// If this thing's speed is really low (i.e. meant to be a monster),
+		// bump it up.
+		if (info->Speed < 256)
+		{
+			info->Speed <<= FRACBITS;
+		}
+	}
 
 	return result;
 }
@@ -1545,67 +1000,110 @@ static int PatchSound (int soundNum)
 
 static int PatchFrame (int frameNum)
 {
-	static const struct Key keys[] =
-	{
-		{ "Sprite subnumber",	myoffsetof(FState,frame) },
-		{ "Duration",			myoffsetof(FState,tics) },
-		{ "Unknown 1",			myoffsetof(FState,misc1) },
-		{ "Unknown 2",			myoffsetof(FState,misc2) },
-		{ NULL, }
-	};
 	int result;
+	int tics, misc1, frame;
 	FState *info, dummy;
 
 	info = FindState (frameNum);
 	if (info)
 	{
 		DPrintf ("Frame %d\n", frameNum);
-	} else
+		tics = info->GetTics ();
+		misc1 = info->GetMisc1 ();
+		frame = info->GetFrame () | (info->GetFullbright() ? 0x8000 : 0);
+	}
+	else
 	{
 		info = &dummy;
-		Printf (PRINT_HIGH, "Frame %d out of range\n", frameNum);
+		Printf ("Frame %d out of range\n", frameNum);
 	}
 
 	while ((result = GetLine ()) == 1)
 	{
 		int val = atoi (Line2);
+		int keylen = strlen (Line1);
 
-		if (HandleKey (keys, info, Line1, val))
+		if (keylen == 8 && stricmp (Line1, "Duration") == 0)
 		{
-			if (stricmp (Line1, "Sprite number") == 0)
+			tics = clamp (val, -1, 65534);
+		}
+		else if (keylen == 9 && stricmp (Line1, "Unknown 1") == 0)
+		{
+			if (val < -128 || val > 127)
 			{
-				int i;
-
-				if (val < NUMSPRITES)
-				{
-					for (i = 0; i < sprites.Size(); i++)
-					{
-						if (memcmp (OrgSprNames[val], sprites[i].name, 4) == 0)
-						{
-							info->sprite.index = i;
-							break;
-						}
-					}
-					if (i == sprites.Size ())
-					{
-						Printf (PRINT_HIGH, "Frame %d: Sprite %d (%s) is undefined\n",
-							frameNum, val, OrgSprNames[val]);
-					}
-				}
-				else
-				{
-					Printf (PRINT_HIGH, "Frame %d: Sprite %d out of range\n", frameNum, val);
-				}
-			}
-			else if (stricmp (Line1, "Next frame") == 0)
-			{
-				info->nextstate = FindState (val);
+				Printf ("Frame %d: misc1 is out of range\n", frameNum);
 			}
 			else
 			{
-				Printf (PRINT_HIGH, unknown_str, Line1, "Frame", frameNum);
+				misc1 = val;
 			}
 		}
+		else if (keylen == 9 && stricmp (Line1, "Unknown 2") == 0)
+		{
+			if (val < 0 || val > 255)
+			{
+				Printf ("Frame %d: misc2 is out of range\n", frameNum);
+			}
+			else
+			{
+				info->Misc2 = val;
+			}
+		}
+		else if (keylen == 13 && stricmp (Line1, "Sprite number") == 0)
+		{
+			size_t i;
+
+			if (val < NumSprites)
+			{
+				for (i = 0; i < sprites.Size(); i++)
+				{
+					if (memcmp (OrgSprNames[val], sprites[i].name, 4) == 0)
+					{
+						info->sprite.index = i;
+						break;
+					}
+				}
+				if (i == sprites.Size ())
+				{
+					Printf ("Frame %d: Sprite %d (%s) is undefined\n",
+						frameNum, val, OrgSprNames[val]);
+				}
+			}
+			else
+			{
+				Printf ("Frame %d: Sprite %d out of range\n", frameNum, val);
+			}
+		}
+		else if (keylen == 10 && stricmp (Line1, "Next frame") == 0)
+		{
+			info->NextState = FindState (val);
+		}
+		else if (keylen == 16 && stricmp (Line1, "Sprite subnumber") == 0)
+		{
+			frame = val;
+		}
+		else
+		{
+			Printf (unknown_str, Line1, "Frame", frameNum);
+		}
+	}
+
+	if (info != &dummy)
+	{
+		if (misc1 != 0 && tics > 254)
+		{
+			Printf ("Frame %d: Misc1 must be 0 if tics >254\n", frameNum);
+			misc1 = 0;
+		}
+		if ((unsigned)(frame & 0x7fff) > 63)
+		{
+			Printf ("Frame %d: Subnumber must be in range [0,63]\n", frameNum);
+		}
+		info->Tics = (tics+1) & 255;
+		info->Misc1 = ((tics+1)>>8) | misc1;
+		info->Frame = (frame & 0x3f) |
+			(frame & 0x8000 ? SF_FULLBRIGHT : 0) |
+			(tics > 254 ? SF_BIGTIC : 0);
 	}
 
 	return result;
@@ -1616,13 +1114,13 @@ static int PatchSprite (int sprNum)
 	int result;
 	int offset = 0;
 
-	if (sprNum >= 0 && sprNum < NUMSPRITES)
+	if (sprNum >= 0 && sprNum < NumSprites)
 	{
 		DPrintf ("Sprite %d\n", sprNum);
 	}
 	else
 	{
-		Printf (PRINT_HIGH, "Sprite %d out of range.\n", sprNum);
+		Printf ("Sprite %d out of range.\n", sprNum);
 		sprNum = -1;
 	}
 
@@ -1630,7 +1128,7 @@ static int PatchSprite (int sprNum)
 	{
 		if (!stricmp ("Offset", Line1))
 			offset = atoi (Line2);
-		else Printf (PRINT_HIGH, unknown_str, Line1, "Sprite", sprNum);
+		else Printf (unknown_str, Line1, "Sprite", sprNum);
 	}
 
 	if (offset > 0 && sprNum != -1)
@@ -1638,7 +1136,7 @@ static int PatchSprite (int sprNum)
 		// Calculate offset from beginning of sprite names.
 		offset = (offset - toff[dversion] - 22044) / 8;
 
-		if (offset >= 0 && offset < NUMSPRITES)
+		if (offset >= 0 && offset < NumSprites)
 		{
 			sprNum = FindSprite (OrgSprNames[sprNum]);
 			if (sprNum != -1)
@@ -1646,7 +1144,7 @@ static int PatchSprite (int sprNum)
 		}
 		else
 		{
-			Printf (PRINT_HIGH, "Sprite name %d out of range.\n", offset);
+			Printf ("Sprite name %d out of range.\n", offset);
 		}
 	}
 
@@ -1669,7 +1167,7 @@ static int PatchAmmo (int ammoNum)
 	}
 	else
 	{
-		Printf (PRINT_HIGH, "Ammo %d out of range.\n", ammoNum);
+		Printf ("Ammo %d out of range.\n", ammoNum);
 		max = per = &dummy;
 	}
 
@@ -1679,7 +1177,7 @@ static int PatchAmmo (int ammoNum)
 	{
 			 CHECKKEY ("Max ammo", *max)
 		else CHECKKEY ("Per ammo", *per)
-		else Printf (PRINT_HIGH, unknown_str, Line1, "Ammo", ammoNum);
+		else Printf (unknown_str, Line1, "Ammo", ammoNum);
 	}
 
 	if (oldclip != *per)
@@ -1710,7 +1208,7 @@ static int PatchWeapon (int weapNum)
 	else
 	{
 		info = &dummy;
-		Printf (PRINT_HIGH, "Weapon %d out of range.\n", weapNum);
+		Printf ("Weapon %d out of range.\n", weapNum);
 	}
 
 	while ((result = GetLine ()) == 1)
@@ -1741,8 +1239,12 @@ static int PatchWeapon (int weapNum)
 			}
 			else
 			{
-				Printf (PRINT_HIGH, unknown_str, Line1, "Weapon", weapNum);
+				Printf (unknown_str, Line1, "Weapon", weapNum);
 			}
+		}
+		else
+		{
+			Printf (unknown_str, Line1, "Weapon", weapNum);
 		}
 	}
 
@@ -1756,71 +1258,40 @@ static int PatchPointer (int ptrNum)
 	if (ptrNum >= 0 && ptrNum < 448) {
 		DPrintf ("Pointer %d\n", ptrNum);
 	} else {
-		Printf (PRINT_HIGH, "Pointer %d out of range.\n", ptrNum);
+		Printf ("Pointer %d out of range.\n", ptrNum);
 		ptrNum = -1;
 	}
 
-	while ((result = GetLine ()) == 1) {
-		if ((unsigned)ptrNum < NUMCODEP && (!stricmp (Line1, "Codep Frame")))
+	while ((result = GetLine ()) == 1)
+	{
+		if ((unsigned)ptrNum < (unsigned)NumCodeP && (!stricmp (Line1, "Codep Frame")))
 		{
 			FState *state = FindState (CodePConv[ptrNum]);
 			if (state)
 			{
-				if ((unsigned)(atoi (Line2)) >= NUMACTIONS)
-					state->action.acvoid = NULL;
+				if ((unsigned)(atoi (Line2)) >= (unsigned)NumActions)
+					state->Action.acvoid = NULL;
 				else
-					state->action = Actions[atoi (Line2)];
+					state->Action = CodePtrs[ActionList[atoi (Line2)]];
 			}
 			else
 			{
-				Printf (PRINT_HIGH, "Bad code pointer %d\n", ptrNum);
+				Printf ("Bad code pointer %d\n", ptrNum);
 			}
 		}
-		else Printf (PRINT_HIGH, unknown_str, Line1, "Pointer", ptrNum);
+		else Printf (unknown_str, Line1, "Pointer", ptrNum);
 	}
 	return result;
 }
 
 static int PatchCheats (int dummy)
 {
-	static const struct {
-		char *name;
-		byte *cheatseq;
-		BOOL needsval;
-	} keys[] = {
-		{ "Change music",		cheat_mus_seq,				 true },
-		{ "Chainsaw",			cheat_choppers_seq,			 false },
-		{ "God mode",			cheat_god_seq,				 false },
-		{ "Ammo & Keys",		cheat_ammo_seq,				 false },
-		{ "Ammo",				cheat_ammonokey_seq,		 false },
-		{ "No Clipping 1",		cheat_noclip_seq,			 false },
-		{ "No Clipping 2",		cheat_noclip_seq2,			 false },
-		{ "Invincibility",		cheat_powerup_seq[0],		 false },
-		{ "Berserk",			cheat_powerup_seq[1],		 false },
-		{ "Invisibility",		cheat_powerup_seq[2],		 false },
-		{ "Radiation Suit",		cheat_powerup_seq[3],		 false },
-		{ "Auto-map",			cheat_powerup_seq[4],		 false },
-		{ "Lite-Amp Goggles",	cheat_powerup_seq[5],		 false },
-		{ "BEHOLD menu",		cheat_powerup_seq[6],		 false },
-		{ "Level Warp",			cheat_clev_seq,				 true },
-		{ "Player Position",	cheat_mypos_seq,			 false },
-		{ "Map cheat",			cheat_amap_seq,				 false },
-		{ NULL, }
-	};
 	int result;
 
-	DPrintf ("Cheats\n");
+	DPrintf ("Cheats (support removed by request)\n");
 
 	while ((result = GetLine ()) == 1)
 	{
-		int i = 0;
-		while (keys[i].name && stricmp (keys[i].name, Line1))
-			i++;
-
-		if (!keys[i].name)
-			Printf (PRINT_HIGH, "Unknown cheat %s.\n", Line2);
-		else
-			ChangeCheat (Line2, keys[i].cheatseq, keys[i].needsval);
 	}
 	return result;
 }
@@ -1861,7 +1332,7 @@ static int PatchMisc (int dummy)
 			}
 			else
 			{
-				Printf (PRINT_HIGH, "Unknown miscellaneous info %s.\n", Line2);
+				Printf ("Unknown miscellaneous info %s.\n", Line2);
 			}
 		}
 	}
@@ -1872,7 +1343,7 @@ static int PatchMisc (int dummy)
 	if ( (item = FindItem ("Mega Armor")) )
 		item->offset = deh.BlueAC;
 
-	// 0xDD == enable infighting
+	// 0xDD means "enable infighting"
 	deh.Infight = deh.Infight == 0xDD ? 1 : 0;
 
 	return result;
@@ -1889,7 +1360,7 @@ static int PatchPars (int dummy)
 	while ( (result = GetLine()) ) {
 		// Argh! .bex doesn't follow the same rules as .deh
 		if (result == 1) {
-			Printf (PRINT_HIGH, "Unknown key in [PARS] section: %s\n", Line1);
+			Printf ("Unknown key in [PARS] section: %s\n", Line1);
 			continue;
 		}
 		if (stricmp ("par", Line1))
@@ -1898,7 +1369,7 @@ static int PatchPars (int dummy)
 		space = strchr (Line2, ' ');
 
 		if (!space) {
-			Printf (PRINT_HIGH, "Need data after par.\n");
+			Printf ("Need data after par.\n");
 			continue;
 		}
 
@@ -1920,7 +1391,7 @@ static int PatchPars (int dummy)
 		}
 
 		if (!(info = FindLevelInfo (mapname)) ) {
-			Printf (PRINT_HIGH, "No map %s\n", mapname);
+			Printf ("No map %s\n", mapname);
 			continue;
 		}
 
@@ -1945,32 +1416,50 @@ static int PatchCodePtrs (int dummy)
 
 			if (state == NULL)
 			{
-				Printf (PRINT_HIGH, "Frame %d out of range\n", frame);
+				Printf ("Frame %d out of range\n", frame);
 			}
 			else
 			{
-				int i = 0;
-				char *data;
+				int name;
 
-				COM_Parse (Line2);
+				stripwhite (Line2);
 
-				if ((com_token[0] == 'A' || com_token[0] == 'a') && com_token[1] == '_')
-					data = com_token + 2;
+				if ((Line2[0] == 'A' || Line2[0] == 'a') && Line2[1] == '_')
+					name = FindName (Line2 + 2);
 				else
-					data = com_token;
+					name = FindName (Line2);
 
-				while (CodePtrs[i].name && stricmp (CodePtrs[i].name, data))
-					i++;
-
-				if (CodePtrs[i].name)
+				if (name == -1)
 				{
-					state->action.acp1 = CodePtrs[i].func.acp1;
-					DPrintf ("Frame %d set to %s\n", frame, CodePtrs[i].name);
+					state->Action.acp1 = NULL;
+					Printf ("Frame %d: Unknown code pointer: %s\n", frame, Line2);
 				}
 				else
 				{
-					state->action.acp1 = NULL;
-					DPrintf ("Unknown code pointer: %s\n", com_token);
+					int min, max, mid;
+
+					min = 0;
+					max = NumCodePtrs - 1;
+					while (min <= max)
+					{
+						mid = (min + max) / 2;
+						if (CodePtrNames[mid].name == name)
+							break;
+						else if (CodePtrNames[mid].name < name)
+							min = mid + 1;
+						else
+							max = mid - 1;
+					}
+					if (min > max)
+					{
+						state->Action.acp1 = NULL;
+						Printf ("Frame %d: Unknown code pointer: %s\n", frame, Line2);
+					}
+					else
+					{
+						state->Action.acp1 = CodePtrs[CodePtrNames[mid].num].acp1;
+						DPrintf ("Frame %d set to %s\n", frame, GetName (CodePtrNames[mid].name));
+					}
 				}
 			}
 		}
@@ -1988,20 +1477,26 @@ static int PatchText (int oldSize)
 	int result;
 	int i;
 
-	temp = COM_Parse (Line2);		// Skip old size, since we already have it
-	if (!COM_Parse (temp))
+	// Skip old size, since we already know it
+	temp = Line2;
+	while (*temp > ' ')
+		temp++;
+	while (*temp && *temp <= ' ')
+		temp++;
+
+	if (*temp == 0)
 	{
-		Printf (PRINT_HIGH, "Text chunk is missing size of new string.\n");
+		Printf ("Text chunk is missing size of new string.\n");
 		return 2;
 	}
-	newSize = atoi (com_token);
+	newSize = atoi (temp);
 
 	oldStr = new char[oldSize + 1];
 	newStr = new char[newSize + 1];
 
 	if (!oldStr || !newStr)
 	{
-		Printf (PRINT_HIGH, "Out of memory.\n");
+		Printf ("Out of memory.\n");
 		goto donewithtext;
 	}
 
@@ -2012,73 +1507,59 @@ static int PatchText (int oldSize)
 	{
 		delete[] newStr;
 		delete[] oldStr;
-		Printf (PRINT_HIGH, "Unexpected end-of-file.\n");
+		Printf ("Unexpected end-of-file.\n");
 		return 0;
 	}
 
 	if (includenotext)
 	{
-		Printf (PRINT_HIGH, "Skipping text chunk in included patch.\n");
+		Printf ("Skipping text chunk in included patch.\n");
 		goto donewithtext;
 	}
 
 	DPrintf ("Searching for text:\n%s\n", oldStr);
 	good = false;
 
-	// Search through sprite names
-	for (i = 0; i < NUMSPRITES; i++)
+	// Search through sprite names, they are always 4 chars
+	if (oldSize == 4)
 	{
-		int j = FindSprite (oldStr);
-		if (j != -1)
+		i = FindSprite (oldStr);
+		if (i != -1)
 		{
-			strncpy (sprites[j].name, newStr, 4);
-			good = true;
-			// See above.
+			strncpy (sprites[i].name, newStr, 4);
+			if (strncmp (deh.PlayerSprite, oldStr, 4) == 0)
+				strncpy (deh.PlayerSprite, newStr, 4);
+			goto donewithtext;
 		}
 	}
-
-	if (good)
-		goto donewithtext;
-
 
 	// Search through music names.
-	// This is something of an even bigger hack
-	// since I changed the way music is handled.
 	if (oldSize < 7)
 	{		// Music names are never >6 chars
-		if ( (temp = new char[oldSize + 3]) )
+		char musname[9];
+		level_info_t *info = LevelInfos;
+		sprintf (musname, "d_%s", oldStr);
+
+		while (info->level_name)
 		{
-			level_info_t *info = LevelInfos;
-			sprintf (temp, "d_%s", oldStr);
-
-			while (info->level_name)
+			if (stricmp (info->music, musname) == 0)
 			{
-				if (!stricmp (info->music, temp))
-				{
-					good = true;
-					strcpy (info->music, temp);
-				}
-				info++;
+				good = true;
+				strcpy (info->music, musname);
 			}
-
-			delete[] temp;
+			info++;
 		}
 	}
 
 	if (good)
 		goto donewithtext;
-
 	
 	// Search through most other texts
-	for (i = 0; i < NUMSTRINGS; i++)
+	i = GStrings.MatchString (oldStr);
+	if (i != -1)
 	{
-		if (!stricmp (Strings[i].builtin, oldStr))
-		{
-			ReplaceString (&Strings[i].string, newStr);
-			Strings[i].type = str_patched;
-			good = true;
-			break;
-		}
+		GStrings.SetString (i, newStr);
+		good = true;
 	}
 
 	if (!good)
@@ -2115,7 +1596,7 @@ static int PatchStrings (int dummy)
 		*holdstring = '\0';
 		do
 		{
-			while (maxstrlen < strlen (holdstring) + strlen (Line2))
+			while (maxstrlen < strlen (holdstring) + strlen (Line2) + 8)
 			{
 				maxstrlen += 128;
 				holdstring = (char *)Realloc (holdstring, maxstrlen);
@@ -2130,20 +1611,38 @@ static int PatchStrings (int dummy)
 				Line2 = NULL;
 		} while (Line2 && *Line2);
 
-		for (i = 0; i < NUMSTRINGS; i++)
-			if (!stricmp (Strings[i].name, Line1))
-				break;
+		i = GStrings.FindString (Line1);
 
-		if (i == NUMSTRINGS)
+		if (i == -1)
 		{
-			Printf (PRINT_HIGH, "Unknown string: %s\n", Line1);
+			Printf ("Unknown string: %s\n", Line1);
 		}
 		else
 		{
 			ReplaceSpecialChars (holdstring);
-			ReplaceString (&Strings[i].string, copystring (holdstring));
-			Strings[i].type = str_patched;
-			Printf (PRINT_HIGH, "%s set to:\n%s\n", Line1, holdstring);
+			if ((i >= OB_SUICIDE && i <= OB_DEFAULT &&
+				strstr (holdstring, "%o") == NULL) ||
+				(i >= OB_FRIENDLY1 && i <= OB_FRIENDLY4 &&
+				strstr (holdstring, "%k") == NULL))
+			{
+				int len = strlen (holdstring);
+				memmove (holdstring+3, holdstring, len);
+				holdstring[0] = '%';
+				holdstring[1] = i <= OB_DEFAULT ? 'o' : 'k';
+				holdstring[2] = ' ';
+				holdstring[3+len] = '.';
+				holdstring[4+len] = 0;
+				if (i >= OB_MPFIST && i <= OB_RAILGUN)
+				{
+					char *spot = strstr (holdstring, "%s");
+					if (spot != NULL)
+					{
+						spot[1] = 'k';
+					}
+				}
+			}
+			GStrings.SetString (i, holdstring);
+			DPrintf ("%s set to:\n%s\n", Line1, holdstring);
 		}
 	}
 
@@ -2158,40 +1657,65 @@ static int DoInclude (int dummy)
 
 	if (including)
 	{
-		Printf (PRINT_HIGH, "Sorry, can't nest includes\n");
-		goto endinclude;
+		Printf ("Sorry, can't nest includes\n");
+		return GetLine();
 	}
 
-	data = COM_Parse (Line2);
-	if (!stricmp (com_token, "notext"))
+	data = Line2;
+	while (*data > ' ')
+		++data;
+
+	if (*data != 0)
 	{
-		includenotext = true;
-		data = COM_Parse (data);
-	}
+		const char save = *data;
+		char *const savepos = data;
 
-	if (!com_token[0])
+		*data++ = 0;
+		while (*data && *data <= ' ')
+			++data;
+		if (stricmp (Line2, "notext") == 0)
+		{
+			includenotext = true;
+		}
+		*savepos = save;
+	}
+	else
 	{
-		includenotext = false;
-		Printf (PRINT_HIGH, "Include directive is missing filename\n");
-		goto endinclude;
+		data = Line2;
 	}
 
-	DPrintf ("Including %s\n", com_token);
-	savepatchfile = PatchFile;
-	savepatchpt = PatchPt;
-	savedversion = dversion;
-	savepversion = pversion;
-	including = true;
+	if (*data == 0)
+	{
+		Printf ("Include directive is missing filename\n");
+	}
+	else
+	{
+		stripwhite (data);
+		if (*data == '\"')
+		{
+			data++;
+			int len = strlen(data);
+			if (data[len-1] == '\"')
+			{
+				data[len-1] = 0;
+			}
+		}
+		DPrintf ("Including %s\n", data);
+		savepatchfile = PatchFile;
+		savepatchpt = PatchPt;
+		savedversion = dversion;
+		savepversion = pversion;
+		including = true;
 
-	DoDehPatch (com_token, false);
+		DoDehPatch (data, false);
 
-	DPrintf ("Done with include\n");
-	PatchFile = savepatchfile;
-	PatchPt = savepatchpt;
-	dversion = savedversion;
-	pversion = savepversion;
+		DPrintf ("Done with include\n");
+		PatchFile = savepatchfile;
+		PatchPt = savepatchpt;
+		dversion = savedversion;
+		pversion = savepversion;
+	}
 
-endinclude:
 	including = false;
 	includenotext = false;
 	return GetLine();
@@ -2211,6 +1735,7 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 	if (lump >= 0 && autoloading)
 	{
 		// Execute the DEHACKED lump as a patch.
+		strcpy (file, "DEHACKED lump");
 		filelen = W_LumpLength (lump);
 		if ( (PatchFile = new char[filelen + 1]) )
 		{
@@ -2218,7 +1743,7 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 		}
 		else
 		{
-			Printf (PRINT_HIGH, "Not enough memory to apply patch\n");
+			Printf ("Not enough memory to apply patch\n");
 			return;
 		}
 	}
@@ -2266,7 +1791,7 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 				}
 				else
 				{
-					Printf (PRINT_HIGH, "Not enough memory to apply patch\n");
+					Printf ("Not enough memory to apply patch\n");
 					return;
 				}
 			}
@@ -2274,7 +1799,7 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 
 		if (!PatchFile)
 		{
-			Printf (PRINT_HIGH, "Could not open DeHackEd patch \"%s\"\n", file);
+			Printf ("Could not open DeHackEd patch \"%s\"\n", file);
 			return;
 		}
 	}
@@ -2291,13 +1816,7 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 
 	if (gameinfo.gametype != GAME_Doom)
 	{
-		Printf (PRINT_HIGH, "DeHackEd/BEX patches are only supported for DOOM mode\n");
-		delete[] PatchFile;
-		return;
-	}
-
-	if (PrepStateMap ())
-	{
+		Printf ("DeHackEd/BEX patches are only supported for DOOM mode\n");
 		delete[] PatchFile;
 		return;
 	}
@@ -2314,7 +1833,7 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 		if (!cont || dversion == -1 || pversion == -1)
 		{
 			delete[] PatchFile;
-			Printf (PRINT_HIGH, "\"%s\" is not a DeHackEd patch file\n");
+			Printf ("\"%s\" is not a DeHackEd patch file\n", file);
 			return;
 		}
 	}
@@ -2330,7 +1849,7 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 
 	if (pversion != 6)
 	{
-		Printf (PRINT_HIGH, "DeHackEd patch version is %d.\nUnexpected results may occur.\n", pversion);
+		Printf ("DeHackEd patch version is %d.\nUnexpected results may occur.\n", pversion);
 	}
 
 	if (dversion == 16)
@@ -2345,15 +1864,23 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 		dversion = 4;
 	else
 	{
-		Printf (PRINT_HIGH, "Patch created with unknown DOOM version.\nAssuming version 1.9.\n");
+		Printf ("Patch created with unknown DOOM version.\nAssuming version 1.9.\n");
 		dversion = 3;
+	}
+
+	if (!LoadDehSupp ())
+	{
+		Printf ("Could not load DEH support data\n");
+		delete[] PatchFile;
+		UnloadDehSupp ();
+		return;
 	}
 
 	do
 	{
 		if (cont == 1)
 		{
-			Printf (PRINT_HIGH, "Key %s encountered out of context\n", Line1);
+			Printf ("Key %s encountered out of context\n", Line1);
 			cont = 0;
 		}
 		else if (cont == 2)
@@ -2362,7 +1889,221 @@ void DoDehPatch (const char *patchfile, BOOL autoloading)
 		}
 	} while (cont);
 
+	UnloadDehSupp ();
 	delete[] PatchFile;
-	Printf (PRINT_HIGH, "Patch installed\n");
+	Printf ("Patch installed\n");
 
+}
+
+static bool CompareLabel (const char *want, const BYTE *have)
+{
+	return want[0] == have[0] && want[1] == have[1] &&
+		   want[2] == have[2] && want[3] == have[3];
+}
+
+static inline short GetWord (const BYTE *in)
+{
+	return (in[0] << 8) | (in[1]);
+}
+
+static short *GetWordSpace (void *in, size_t size)
+{
+	short *ptr;
+	size_t i;
+
+	if ((size_t)in & 1)
+	{
+		ptr = (short *)Z_Malloc (size, PU_DEHACKED, NULL);
+	}
+	else
+	{
+		ptr = (short *)in;
+	}
+
+	for (i = 0; i < size; i++)
+	{
+		ptr[i] = GetWord ((BYTE *)in + i*2);
+	}
+	return ptr;
+}
+
+static int DehUseCount;
+
+static void UnloadDehSupp ()
+{
+	if (--DehUseCount <= 0)
+	{
+		DehUseCount = 0;
+		Z_FreeTags (PU_DEHACKED, PU_DEHACKED);
+		GStrings.FlushNames ();
+		GStrings.Compact ();
+	}
+}
+
+static bool LoadDehSupp ()
+{
+	int lump = W_CheckNumForName ("DEHSUPP");
+	bool gotnames = false;
+	int i;
+	BYTE *supp;
+
+	if (lump == -1)
+	{
+		return false;
+	}
+
+	++DehUseCount;
+	supp = (BYTE *)W_CacheLumpNum (lump, PU_DEHACKED);
+
+	for (;;)
+	{
+		if (CompareLabel ("NAME", supp))
+		{
+			gotnames = true;
+			NumNames = GetWord (supp + 6);
+			NameBase = (char *)(supp + 8 + NumNames * 2);
+			NameOffs = (WORD *)GetWordSpace (supp + 8, NumNames);
+			supp += GetWord (supp + 4) + 6;
+		}
+		else if (CompareLabel ("HIGH", supp))
+		{
+			NumOrgHeights = GetWord (supp + 4);
+			OrgHeights = supp + 6;
+			supp += NumOrgHeights + 6;
+		}
+		else if (CompareLabel ("ACTF", supp))
+		{
+			NumCodePtrs = GetWord (supp + 4);
+			if ((unsigned)NumCodePtrs > sizeof(CodePtrs)/sizeof(CodePtrs[0]))
+			{
+				Printf ("DEHSUPP defines %d code pointers, but there are only %d\n",
+					NumCodePtrs, sizeof(CodePtrs)/sizeof(CodePtrs[0]));
+				return false;
+			}
+			CodePtrNames = (CodePtrMap *)GetWordSpace (supp + 6, NumCodePtrs*2);
+			supp += 6 + NumCodePtrs * 4;
+		}
+		else if (CompareLabel ("ACTM", supp))
+		{
+			NumActions = GetWord (supp + 4);
+			ActionList = supp + 6;
+			supp += NumActions + 6;
+		}
+		else if (CompareLabel ("CODP", supp))
+		{
+			NumCodeP = GetWord (supp + 4);
+			CodePConv = GetWordSpace (supp + 6, NumCodeP);
+			supp += 6 + NumCodeP * 2;
+		}
+		else if (CompareLabel ("SPRN", supp))
+		{
+			char *sprites;
+
+			NumSprites = GetWord (supp + 4);
+			Z_Malloc (NumSprites*sizeof(char*), PU_DEHACKED, &OrgSprNames);
+			sprites = (char *)Z_Malloc (NumSprites*8, PU_DEHACKED, NULL);
+			for (i = 0; i < NumSprites; i++)
+			{
+				sprites[i*4+0] = supp[6+i*4+0];
+				sprites[i*4+1] = supp[6+i*4+1];
+				sprites[i*4+2] = supp[6+i*4+2];
+				sprites[i*4+3] = supp[6+i*4+3];
+				sprites[i*4+4] = 0;
+				sprites[i*4+5] = 0;
+				sprites[i*4+6] = 0;
+				sprites[i*4+7] = 0;
+				OrgSprNames[i] = sprites + i*4;
+			}
+			supp += 6 + NumSprites * 4;
+		}
+		else if (CompareLabel ("STAT", supp))
+		{
+			if (!gotnames)
+			{
+				Printf ("Names must come before state map\n");
+				return false;
+			}
+			NumStateMaps = GetWord (supp + 4);
+			Z_Malloc (NumStateMaps*sizeof(*StateMap), PU_DEHACKED, &StateMap);
+			for (i = 0; i < NumStateMaps; i++)
+			{
+				const char *name = GetName (GetWord (supp + 6 + i*4));
+				const TypeInfo *type = TypeInfo::FindType (name);
+				if (type == NULL)
+				{
+					Printf ("Can't find type %s\n", name);
+					return false;
+				}
+				else if (type->ActorInfo == NULL)
+				{
+					Printf ("%s has no ActorInfo\n", name);
+					return false;
+				}
+				else
+				{
+					AActor *def = GetDefaultByType (type);
+
+					switch (supp[6 + i*4 + 2])
+					{
+					case FirstState:
+						StateMap[i].State = type->ActorInfo->OwnedStates;
+						break;
+					case SpawnState:
+						StateMap[i].State = def->SpawnState;
+						break;
+					case DeathState:
+						StateMap[i].State = def->DeathState;
+						break;
+					}
+					StateMap[i].StateSpan = supp[6+i*4+3];
+				}
+			}
+			supp += 6 + NumStateMaps * 4;
+		}
+		else if (CompareLabel ("SND ", supp))
+		{
+			NumSounds = GetWord (supp + 4);
+			SoundMap = GetWordSpace (supp + 6, NumSounds);
+			supp += 6 + NumSounds * 2;
+		}
+		else if (CompareLabel ("INFN", supp))
+		{
+			NumInfos = GetWord (supp + 4);
+			InfoNames = GetWordSpace (supp + 6, NumInfos);
+			supp += 6 + NumInfos * 2;
+		}
+		else if (CompareLabel ("TBIT", supp))
+		{
+			NumBitNames = GetWord (supp + 4);
+			Z_Malloc (sizeof(BitName)*NumBitNames, PU_DEHACKED, &BitNames);
+			for (i = 0; i < NumBitNames; i++)
+			{
+				BitNames[i].Name = GetWord (supp + 6 + i*3);
+				BitNames[i].Bit = supp[6+i*3+2] & 0x1f;
+				BitNames[i].WhichFlags = clamp (supp[6+i*3+2] >> 5, 0, 3);
+			}
+			supp += 6 + NumBitNames * 3;
+		}
+		else if (CompareLabel ("REND", supp))
+		{
+			NumStyleNames = GetWord (supp + 4);
+			Z_Malloc (sizeof(StyleName)*NumStyleNames, PU_DEHACKED, &StyleNames);
+			for (i = 0; i < NumStyleNames; i++)
+			{
+				StyleNames[i].Name = GetWord (supp + 6 + i*3);
+				StyleNames[i].Num = supp[6+i*3+2];
+			}
+			supp += 6 + NumStyleNames * 3;
+		}
+		else if (CompareLabel ("END ", supp))
+		{
+			return true;
+		}
+		else
+		{
+			Printf ("Unknown block %c%c%c%c in DEHSUPP\n",
+				supp[0], supp[1], supp[2], supp[3]);
+			return false;
+		}
+	}
 }

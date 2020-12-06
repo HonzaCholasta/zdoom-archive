@@ -21,27 +21,29 @@
 //-----------------------------------------------------------------------------
 
 
-
+#include "templates.h"
 #include "i_system.h"
 #include "doomdef.h"
 #include "p_local.h"
 #include "p_lnspec.h"
+#include "m_random.h"
 #include "g_game.h"
 #include "s_sound.h"
 #include "doomstat.h"
 #include "r_state.h"
 #include "z_zone.h"
 #include "w_wad.h"
+#include "tarray.h"
+#include "cmdlib.h"
+#include "sc_man.h"
 
 #include "gi.h"
 
-//
-// CHANGE THE TEXTURE OF A WALL SWITCH TO ITS OPPOSITE
-//
+#define MAX_FRAMES 128
 
 class DActiveButton : public DThinker
 {
-	DECLARE_SERIAL (DActiveButton, DThinker);
+	DECLARE_CLASS (DActiveButton, DThinker)
 public:
 	enum EWhere
 	{
@@ -52,15 +54,22 @@ public:
 	};
 
 	DActiveButton ();
-	DActiveButton (line_t *, EWhere, SWORD tex, SDWORD time, fixed_t x, fixed_t y);
+	DActiveButton (side_t *, EWhere, WORD switchnum, fixed_t x, fixed_t y, bool flippable);
 
+	void Serialize (FArchive &arc);
 	void RunThink ();
 
-	line_t	*m_Line;
+	side_t	*m_Side;
 	EWhere	m_Where;
-	SWORD	m_Texture;
-	SDWORD	m_Timer;
+	WORD	m_SwitchDef;
+	WORD	m_Frame;
+	WORD	m_Timer;
+	bool	bFlippable;
 	fixed_t	m_X, m_Y;	// Location of timer sound
+
+protected:
+	bool AdvanceFrame ();
+	void StoreTexture (short tex) const;
 
 	friend FArchive &operator<< (FArchive &arc, EWhere &where)
 	{
@@ -71,8 +80,28 @@ public:
 	}
 };
 
-static int *switchlist;
-static int  numswitches;
+struct FSwitchDef
+{
+	SWORD PreTexture;	// texture to switch from
+	WORD PairIndex;		// switch def to use to return to PreTexture
+	SWORD Sound;		// sound to play at start of animation
+	WORD NumFrames;		// # of animation frames
+	union				// Array of times followed by array of textures
+	{					//   actual length of each array is <NumFrames>
+		DWORD Times[1];
+		SWORD Textures[3];
+	} u;
+};
+
+static int STACK_ARGS SortSwitchDefs (const void *a, const void *b);
+static FSwitchDef *ParseSwitchDef ();
+static WORD AddSwitchDef (FSwitchDef *def);
+
+//
+// CHANGE THE TEXTURE OF A WALL SWITCH TO ITS OPPOSITE
+//
+
+static TArray<FSwitchDef *> SwitchList;
 
 //
 // P_InitSwitchList
@@ -82,49 +111,267 @@ static int  numswitches;
 //		MAXSWITCHES limit.
 void P_InitSwitchList ()
 {
-	byte *alphSwitchList = (byte *)W_CacheLumpName ("SWITCHES", PU_STATIC);
-	byte *list_p;
-	int i;
+	int lump = W_CheckNumForName ("SWITCHES");
+	FSwitchDef **origMap;
+	int i, j;
 
-	for (i = 0, list_p = alphSwitchList; list_p[18] || list_p[19]; list_p += 20, i++)
-		;
-
-	if (i == 0)
+	if (lump != -1)
 	{
-		switchlist = (int *)Z_Malloc (sizeof(*switchlist), PU_STATIC, 0);
-		*switchlist = -1;
-		numswitches = 0;
+		byte *alphSwitchList = (byte *)W_CacheLumpNum (lump, PU_STATIC);
+		byte *list_p;
+		FSwitchDef *def1, *def2;
+
+		for (list_p = alphSwitchList; list_p[18] || list_p[19]; list_p += 20)
+		{
+			// [RH] Skip this switch if its texture can't be found.
+			if (((gameinfo.maxSwitch & 15) >= (list_p[18] & 15)) &&
+				((gameinfo.maxSwitch & ~15) == (list_p[18] & ~15)) &&
+				R_CheckTextureNumForName (list_p /* .name1 */) >= 0)
+			{
+				def1 = (FSwitchDef *)Z_Malloc (sizeof(FSwitchDef), PU_STATIC, 0);
+				def2 = (FSwitchDef *)Z_Malloc (sizeof(FSwitchDef), PU_STATIC, 0);
+				def1->PreTexture = def2->u.Textures[2] = R_CheckTextureNumForName (list_p /* .name1 */);
+				def2->PreTexture = def1->u.Textures[2] = R_CheckTextureNumForName (list_p + 9);
+				def1->Sound = def2->Sound = 0;
+				def1->NumFrames = def2->NumFrames = 1;
+				def1->u.Times[0] = def2->u.Times[0] = 0;
+				def2->PairIndex = AddSwitchDef (def1);
+				def1->PairIndex = AddSwitchDef (def2);
+			}
+		}
+
+		Z_Free (alphSwitchList);
+	}
+
+	SwitchList.ShrinkToFit ();
+
+	// Sort SwitchList for quick searching
+	origMap = new FSwitchDef *[SwitchList.Size ()];
+	for (i = 0; i < (int)SwitchList.Size (); i++)
+	{
+		origMap[i] = SwitchList[i];
+	}
+
+	qsort (&SwitchList[0], i, sizeof(FSwitchDef *), SortSwitchDefs);
+
+	// Correct the PairIndex of each switch def, since the sorting broke them
+	for (i = SwitchList.Size () - 1; i >= 0; i--)
+	{
+		FSwitchDef *def = SwitchList[i];
+		if (def->PairIndex != 65535)
+		{
+			for (j = SwitchList.Size () - 1; j >= 0; j--)
+			{
+				if (SwitchList[j] == origMap[def->PairIndex])
+				{
+					def->PairIndex = (WORD)j;
+					break;
+				}
+			}
+		}
+	}
+
+	delete[] origMap;
+}
+
+static int STACK_ARGS SortSwitchDefs (const void *a, const void *b)
+{
+	return (*(FSwitchDef **)a)->PreTexture - (*(FSwitchDef **)b)->PreTexture;
+}
+
+// Parse a switch block in ANIMDEFS and add the definitions to SwitchList
+void P_ProcessSwitchDef ()
+{
+	FSwitchDef *def1, *def2;
+	SWORD picnum;
+	byte max;
+
+	def1 = def2 = NULL;
+	SC_MustGetString ();
+	if (SC_Compare ("doom"))
+	{
+		max = 0;
+	}
+	else if (SC_Compare ("heretic"))
+	{
+		max = 17;
+	}
+	else if (SC_Compare ("hexen"))
+	{
+		max = 33;
+	}
+	else if (SC_Compare ("any"))
+	{
+		max = 240;
 	}
 	else
 	{
-		switchlist = (int *)Z_Malloc (sizeof(*switchlist)*(i*2+1), PU_STATIC, 0);
-
-		for (i = 0, list_p = alphSwitchList; list_p[18] || list_p[19]; list_p += 20)
+		//SC_ScriptError ("Unknown game");
+		// There is no game specified; just treat as any
+		max = 240;
+		SC_UnGet ();
+	}
+	if (max == 0)
+	{
+		SC_MustGetNumber ();
+		max |= sc_Number & 15;
+	}
+	SC_MustGetString ();
+	picnum = R_CheckTextureNumForName (sc_String);
+	while (SC_GetString ())
+	{
+		if (SC_Compare ("on"))
 		{
-			if (((gameinfo.maxSwitch & 15) >= (list_p[18] & 15)) &&
-				((gameinfo.maxSwitch & ~15) == (list_p[18] & ~15)))
+			if (def1 != NULL)
 			{
-				// [RH] Skip this switch if it can't be found.
-				if (R_CheckTextureNumForName (list_p /* .name1 */) < 0)
-					continue;
-
-				switchlist[i++] = R_TextureNumForName(list_p /* .name1 */);
-				switchlist[i++] = R_TextureNumForName(list_p + 9 /* .name2 */);
+				SC_ScriptError ("Switch already has an on state");
 			}
+			def1 = ParseSwitchDef ();
 		}
-		numswitches = i/2;
-		switchlist[i] = -1;
+		else if (SC_Compare ("off"))
+		{
+			if (def2 != NULL)
+			{
+				SC_ScriptError ("Switch already has an off state");
+			}
+			def2 = ParseSwitchDef ();
+		}
+		else
+		{
+			SC_UnGet ();
+			break;
+		}
 	}
 
-	Z_Free (alphSwitchList);
+	if (def1 == NULL)
+	{
+		SC_ScriptError ("Switch must have an on state");
+	}
+
+	if (picnum == -1 ||
+		((max & 240) != 240 &&
+		 ((gameinfo.maxSwitch & 240) != (max & 240) ||
+		  (gameinfo.maxSwitch & 15) < (max & 15))))
+	{
+		if (def2 != NULL)
+		{
+			Z_Free (def2);
+		}
+		Z_Free (def1);
+		return;
+	}
+
+	// If the switch did not have an off state, create one that just returns
+	// it to the original texture without doing anything interesting
+	if (def2 == NULL)
+	{
+		def2 = (FSwitchDef *)Z_Malloc (sizeof(FSwitchDef), PU_STATIC, 0);
+		def2->Sound = def1->Sound;
+		def2->NumFrames = 1;
+		def2->u.Times[0] = 0;
+		def2->u.Textures[2] = picnum;
+	}
+
+	def1->PreTexture = picnum;
+	def2->PreTexture = def1->u.Textures[def1->NumFrames*2+def1->NumFrames-1];
+	def2->PairIndex = AddSwitchDef (def1);
+	def1->PairIndex = AddSwitchDef (def2);
+}
+
+FSwitchDef *ParseSwitchDef ()
+{
+	FSwitchDef *def;
+	SWORD pics[MAX_FRAMES];
+	DWORD times[MAX_FRAMES];
+	int numframes;
+	SWORD sound;
+
+	numframes = 0;
+	sound = 0;
+
+	while (SC_GetString ())
+	{
+		if (SC_Compare ("sound"))
+		{
+			SC_MustGetString ();
+			sound = S_FindSound (sc_String);
+		}
+		else if (SC_Compare ("pic"))
+		{
+			if (numframes == MAX_FRAMES)
+			{
+				SC_ScriptError ("Switch has too many frames");
+			}
+			SC_MustGetString ();
+			pics[numframes] = R_CheckTextureNumForName (sc_String);
+			SC_MustGetString ();
+			if (SC_Compare ("tics"))
+			{
+				SC_MustGetNumber ();
+				times[numframes] = sc_Number & 65535;
+			}
+			else if (SC_Compare ("rand"))
+			{
+				int min, max;
+
+				SC_MustGetNumber ();
+				min = sc_Number & 65535;
+				SC_MustGetNumber ();
+				max = sc_Number & 65535;
+				if (min > max)
+				{
+					swap (min, max);
+				}
+				times[numframes] = ((max - min + 1) << 16) | min;
+			}
+			else
+			{
+				SC_ScriptError ("Must specify a duration for switch frame");
+			}
+			numframes++;
+		}
+		else
+		{
+			SC_UnGet ();
+			break;
+		}
+	}
+	if (numframes == 0)
+	{
+		SC_ScriptError ("Switch state needs at least one frame");
+	}
+	def = (FSwitchDef *)Z_Malloc (
+		myoffsetof (FSwitchDef, u.Times[0]) + numframes * 6, PU_STATIC, 0);
+	def->Sound = sound;
+	def->NumFrames = numframes;
+	memcpy (&def->u.Times[0], times, numframes * 4);
+	memcpy (&def->u.Textures[numframes*2], pics, numframes * 2);
+	def->PairIndex = 65535;
+	return def;
+}
+
+static WORD AddSwitchDef (FSwitchDef *def)
+{
+	int i;
+
+	for (i = SwitchList.Size () - 1; i >= 0; i--)
+	{
+		if (SwitchList[i]->PreTexture == def->PreTexture)
+		{
+			Z_Free (SwitchList[i]);
+			SwitchList[i] = def;
+			return (WORD)i;
+		}
+	}
+	return SwitchList.Push (def);
 }
 
 //
 // Start a button counting down till it turns off.
 // [RH] Rewritten to remove MAXBUTTONS limit.
 //
-static void P_StartButton (line_t *line, DActiveButton::EWhere w, int texture,
-						   int time, fixed_t x, fixed_t y)
+static void P_StartButton (side_t *side, DActiveButton::EWhere w, int switchnum,
+						   fixed_t x, fixed_t y, bool useagain)
 {
 	DActiveButton *button;
 	TThinkerIterator<DActiveButton> iterator;
@@ -132,130 +379,231 @@ static void P_StartButton (line_t *line, DActiveButton::EWhere w, int texture,
 	// See if button is already pressed
 	while ( (button = iterator.Next ()) )
 	{
-		if (button->m_Line == line)
+		if (button->m_Side == side)
 			return;
 	}
 
-	new DActiveButton (line, w, texture, time, x, y);
+	new DActiveButton (side, w, switchnum, x, y, useagain);
+}
+
+static int TryFindSwitch (SWORD texture)
+{
+	int mid, low, high;
+
+	high = SwitchList.Size () - 1;
+	if (high >= 0)
+	{
+		low = 0;
+		do
+		{
+			mid = (high + low) / 2;
+			if (SwitchList[mid]->PreTexture == texture)
+			{
+				return mid;
+			}
+			else if (texture < SwitchList[mid]->PreTexture)
+			{
+				high = mid - 1;
+			}
+			else
+			{
+				low = mid + 1;
+			}
+		} while (low <= high);
+	}
+	return -1;
 }
 
 //
 // Function that changes wall texture.
 // Tell it if switch is ok to use again (1=yes, it's a button).
 //
-void P_ChangeSwitchTexture (line_t *line, int useAgain)
+void P_ChangeSwitchTexture (side_t *side, int useAgain, byte special)
 {
-	int texTop;
-	int texMid;
-	int texBot;
-	int i;
-	char *sound;
+	DActiveButton::EWhere where;
+	short *texture;
+	int i, sound;
 
-	if (!useAgain)
-		line->special = 0;
-
-	texTop = sides[line->sidenum[0]].toptexture;
-	texMid = sides[line->sidenum[0]].midtexture;
-	texBot = sides[line->sidenum[0]].bottomtexture;
+	if ((i = TryFindSwitch (side->toptexture)) != -1)
+	{
+		texture = &side->toptexture;
+		where = DActiveButton::BUTTON_Top;
+	}
+	else if ((i = TryFindSwitch (side->bottomtexture)) != -1)
+	{
+		texture = &side->bottomtexture;
+		where = DActiveButton::BUTTON_Bottom;
+	}
+	else if ((i = TryFindSwitch (side->midtexture)) != -1)
+	{
+		texture = &side->midtexture;
+		where = DActiveButton::BUTTON_Middle;
+	}
+	else
+	{
+		return;
+	}
 
 	// EXIT SWITCH?
-	if (line->special == Exit_Normal ||
-		line->special == Exit_Secret ||
-		line->special == Teleport_NewMap ||
-		line->special == Teleport_EndGame)
-		sound = "switches/exitbutn";
-	else
-		sound = "switches/normbutn";
-
-	for (i = 0; i < numswitches*2; i++)
+	if (SwitchList[i]->Sound != 0)
 	{
-		short *texture = NULL;
-		DActiveButton::EWhere where;
-
-		if (switchlist[i] == texTop)
-		{
-			texture = &sides[line->sidenum[0]].toptexture;
-			where = DActiveButton::BUTTON_Top;
-		}
-		else if (switchlist[i] == texBot)
-		{
-			texture = &sides[line->sidenum[0]].bottomtexture;
-			where = DActiveButton::BUTTON_Bottom;
-		}
-		else if (switchlist[i] == texMid)
-		{
-			texture = &sides[line->sidenum[0]].midtexture;
-			where = DActiveButton::BUTTON_Middle;
-		}
-
-		if (texture)
-		{
-			// [RH] The original code played the sound at buttonlist->soundorg,
-			//		which wasn't necessarily anywhere near the switch if it was
-			//		facing a big sector (and which wasn't necessarily for the
-			//		button just activated, either).
-			fixed_t x = line->v1->x + (line->dx >> 1);
-			fixed_t y = line->v1->y + (line->dy >> 1);
-			S_Sound (x, y, CHAN_VOICE, sound, 1, ATTN_STATIC);
-			*texture = (short)switchlist[i^1];
-			if (useAgain)
-				P_StartButton (line, where, switchlist[i], BUTTONTIME, x, y);
-			break;
-		}
+		sound = SwitchList[i]->Sound;
 	}
+	else
+	{
+		sound = S_FindSound (
+			special == Exit_Normal ||
+			special == Exit_Secret ||
+			special == Teleport_NewMap ||
+			special == Teleport_EndGame
+		   ? "switches/exitbutn" : "switches/normbutn");
+	}
+
+	// [RH] The original code played the sound at buttonlist->soundorg,
+	//		which wasn't necessarily anywhere near the switch if it was
+	//		facing a big sector (and which wasn't necessarily for the
+	//		button just activated, either).
+	fixed_t pt[3];
+	line_t *line = &lines[side->linenum];
+
+	pt[0] = line->v1->x + (line->dx >> 1);
+	pt[1] = line->v1->y + (line->dy >> 1);
+	S_SoundID (pt, CHAN_VOICE|CHAN_LISTENERZ|CHAN_IMMOBILE, sound, 1, ATTN_STATIC);
+	*texture = SwitchList[i]->u.Textures[SwitchList[i]->NumFrames*2];
+	if (useAgain || SwitchList[i]->NumFrames > 1)
+		P_StartButton (side, where, i, pt[0], pt[1], !!useAgain);
 }
 
-IMPLEMENT_SERIAL (DActiveButton, DThinker)
+IMPLEMENT_CLASS (DActiveButton)
 
 DActiveButton::DActiveButton ()
 {
-	m_Line = NULL;
+	m_Side = NULL;
 	m_Where = BUTTON_Nowhere;
-	m_Texture = 0;
+	m_SwitchDef = 0;
 	m_Timer = 0;
 	m_X = 0;
 	m_Y = 0;
+	bFlippable = false;
 }
 
-DActiveButton::DActiveButton (line_t *line, EWhere where, SWORD texture,
-							  SDWORD time, fixed_t x, fixed_t y)
+DActiveButton::DActiveButton (side_t *side, EWhere where, WORD switchnum,
+							  fixed_t x, fixed_t y, bool useagain)
 {
-	m_Line = line;
+	m_Side = side;
 	m_Where = where;
-	m_Texture = texture;
-	m_Timer = time;
 	m_X = x;
 	m_Y = y;
+	bFlippable = useagain;
+
+	m_SwitchDef = switchnum;
+	m_Frame = 65535;
+	AdvanceFrame ();
 }
 
 void DActiveButton::Serialize (FArchive &arc)
 {
+	short sidenum;
+
 	Super::Serialize (arc);
-	arc << m_Line << m_Where << m_Texture << m_Timer << m_X << m_Y;
+	if (arc.IsStoring ())
+	{
+		sidenum = m_Side ? m_Side - sides : -1;
+	}
+	arc << sidenum << m_Where << m_SwitchDef << m_Frame << m_Timer << bFlippable << m_X << m_Y;
+	if (arc.IsLoading ())
+	{
+		m_Side = sidenum >= 0 ? sides + sidenum : NULL;
+	}
 }
 
 void DActiveButton::RunThink ()
 {
-	if (0 >= --m_Timer)
+	if (--m_Timer == 0)
 	{
-		switch (m_Where)
+		FSwitchDef *def = SwitchList[m_SwitchDef];
+		if (m_Frame == def->NumFrames - 1)
 		{
-		case BUTTON_Top:
-			sides[m_Line->sidenum[0]].toptexture = m_Texture;
-			break;
-			
-		case BUTTON_Middle:
-			sides[m_Line->sidenum[0]].midtexture = m_Texture;
-			break;
-			
-		case BUTTON_Bottom:
-			sides[m_Line->sidenum[0]].bottomtexture = m_Texture;
-			break;
+			fixed_t pt[3];
 
-		default:
-			break;
+			m_SwitchDef = def->PairIndex;
+			if (m_SwitchDef != 65535)
+			{
+				def = SwitchList[def->PairIndex];
+				m_Frame = 65535;
+				pt[0] = m_X;
+				pt[1] = m_Y;
+				S_SoundID (pt, CHAN_VOICE|CHAN_LISTENERZ|CHAN_IMMOBILE,
+					def->Sound != 0 ? def->Sound
+					: S_FindSound ("switches/normbutn"), 1, ATTN_STATIC);
+				bFlippable = false;
+			}
+			else
+			{
+				Destroy ();
+				return;
+			}
 		}
-		S_Sound (m_X, m_Y, CHAN_VOICE, "switches/normbutn", 1, ATTN_STATIC);
-		Destroy ();
+		bool killme = AdvanceFrame ();
+
+		StoreTexture (def->u.Textures[def->NumFrames*2+m_Frame]);
+
+		if (killme)
+		{
+			Destroy ();
+		}
+	}
+}
+
+bool DActiveButton::AdvanceFrame ()
+{
+	bool ret = false;
+	FSwitchDef *def = SwitchList[m_SwitchDef];
+
+	if (++m_Frame == def->NumFrames - 1)
+	{
+		if (bFlippable == true)
+		{
+			m_Timer = BUTTONTIME;
+		}
+		else
+		{
+			ret = true;
+		}
+	}
+	else
+	{
+		if (def->u.Times[m_Frame] & 0xffff0000)
+		{
+			m_Timer = (WORD)((((P_Random (pr_switchanim) | (P_Random (pr_switchanim) << 8))
+				% def->u.Times[m_Frame]) >> 16)
+				+ (def->u.Times[m_Frame] & 0xffff));
+		}
+		else
+		{
+			m_Timer = (WORD)def->u.Times[m_Frame];
+		}
+	}
+	return ret;
+}
+
+void DActiveButton::StoreTexture (short tex) const
+{
+	switch (m_Where)
+	{
+	case BUTTON_Middle:
+		m_Side->midtexture = tex;
+		break;
+
+	case BUTTON_Bottom:
+		m_Side->bottomtexture = tex;
+		break;
+
+	case BUTTON_Top:
+		m_Side->toptexture = tex;
+		break;
+
+	default:
+		return;
 	}
 }

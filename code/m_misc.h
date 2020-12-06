@@ -23,8 +23,11 @@
 #ifndef __M_MISC__
 #define __M_MISC__
 
-
 #include "doomtype.h"
+
+class FGameConfigFile;
+
+extern FGameConfigFile *GameConfig;
 
 BOOL M_WriteFile (char const *name, void *source, int length);
 int M_ReadFile (char const *name, byte **buffer);
@@ -34,16 +37,12 @@ void M_FindResponseFile (void);
 //		Pass a NULL to get the original behavior.
 void M_ScreenShot (char *filename);
 
-void M_LoadDefaults (void);
+void M_LoadDefaults ();
 
-void STACK_ARGS M_SaveDefaults (void);
-
-char *GetConfigPath (void);
-
-char *GetAutoexecPath (void);
+void STACK_ARGS M_SaveDefaults ();
 
 #ifdef UNIX
-char *GetUserFile (const char *path);
+char *GetUserFile (const char *path, bool nodir=false);
 #endif
 
 #endif

@@ -5,6 +5,7 @@
 #include "p_local.h"
 #include "p_enemy.h"
 #include "a_action.h"
+#include "gstrings.h"
 
 void A_SnakeAttack (AActor *);
 void A_SnakeAttack2 (AActor *);
@@ -13,13 +14,11 @@ void A_SnakeAttack2 (AActor *);
 
 class ASnake : public AActor
 {
-	DECLARE_ACTOR (ASnake, AActor);
+	DECLARE_ACTOR (ASnake, AActor)
 public:
 	void NoBlockingSet ();
+	const char *GetObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (ASnake, AActor);
-REGISTER_ACTOR (ASnake, Heretic);
 
 FState ASnake::States[] =
 {
@@ -61,37 +60,38 @@ FState ASnake::States[] =
 	S_NORMAL (SNKE, 'P',   -1, NULL 					, NULL)
 };
 
-void ASnake::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASnake, Heretic, 92, 0)
+	PROP_SpawnHealth (280)
+	PROP_RadiusFixed (22)
+	PROP_HeightFixed (70)
+	PROP_SpeedFixed (10)
+	PROP_PainChance (48)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PASSMOBJ)
+
+	PROP_SpawnState (S_SNAKE_LOOK)
+	PROP_SeeState (S_SNAKE_WALK)
+	PROP_PainState (S_SNAKE_PAIN)
+	PROP_MissileState (S_SNAKE_ATK)
+	PROP_DeathState (S_SNAKE_DIE)
+
+	PROP_SeeSound ("snake/sight")
+	PROP_PainSound ("snake/pain")
+	PROP_DeathSound ("snake/death")
+	PROP_ActiveSound ("snake/active")
+END_DEFAULTS
+
+const char *ASnake::GetObituary ()
 {
-	INHERIT_DEFS;
-	info->doomednum = 92;
-	info->spawnstate = &States[S_SNAKE_LOOK];
-	info->spawnhealth = 280;
-	info->seestate = &States[S_SNAKE_WALK];
-	info->seesound = "snake/sight";
-	info->painstate = &States[S_SNAKE_PAIN];
-	info->painchance = 48;
-	info->painsound = "snake/pain";
-	info->missilestate = &States[S_SNAKE_ATK];
-	info->deathstate = &States[S_SNAKE_DIE];
-	info->deathsound = "snake/death";
-	info->speed = 10;
-	info->radius = 22 * FRACUNIT;
-	info->height = 70 * FRACUNIT;
-	info->activesound = "snake/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_FLOORCLIP|MF2_PASSMOBJ;
+	return GStrings(OB_SNAKE);
 }
 
 // Snake projectile A -------------------------------------------------------
 
 class ASnakeProjA : public AActor
 {
-	DECLARE_ACTOR (ASnakeProjA, AActor);
+	DECLARE_ACTOR (ASnakeProjA, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ASnakeProjA, AActor);
-REGISTER_ACTOR (ASnakeProjA, Heretic);
 
 FState ASnakeProjA::States[] =
 {
@@ -109,33 +109,34 @@ FState ASnakeProjA::States[] =
 	S_BRIGHT (SNFX, 'I',	3, NULL 					, NULL)
 };
 
-void ASnakeProjA::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASnakeProjA, Heretic, -1, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (14)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_WINDTHRUST|MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_SNAKEPRO_A)
+	PROP_DeathState (S_SNAKEPRO_AX)
+END_DEFAULTS
+
+AT_SPEED_SET (SnakeProjA, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SNAKEPRO_A];
-	info->deathstate = &States[S_SNAKEPRO_AX];
-	info->speed = GameSpeed != SPEED_Fast ? 14 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 12 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_WINDTHRUST|MF2_NOTELEPORT;
+	SimpleSpeedSetter (ASnakeProjA, 14*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 void ASnake::NoBlockingSet ()
 {
-	P_DropItem (this, "PhoenixRodWimpy", 5, 84);
+	P_DropItem (this, "PhoenixRodAmmo", 5, 84);
 }
 
 // Snake projectile B -------------------------------------------------------
 
 class ASnakeProjB : public ASnakeProjA
 {
-	DECLARE_ACTOR (ASnakeProjB, ASnakeProjA);
+	DECLARE_ACTOR (ASnakeProjB, ASnakeProjA)
 };
-
-IMPLEMENT_DEF_SERIAL (ASnakeProjB, ASnakeProjA);
-REGISTER_ACTOR (ASnakeProjB, Heretic);
 
 FState ASnakeProjB::States[] =
 {
@@ -150,17 +151,20 @@ FState ASnakeProjB::States[] =
 	S_BRIGHT (SNFX, 'O',	3, NULL 					, NULL)
 };
 
-void ASnakeProjB::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ASnakeProjB, Heretic, -1, 0)
+	PROP_RadiusFixed (12)
+	PROP_HeightFixed (8)
+	PROP_Damage (3)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_SNAKEPRO_B)
+	PROP_DeathState (S_SNAKEPRO_BX)
+END_DEFAULTS
+
+AT_SPEED_SET (SnakeProjB, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_SNAKEPRO_B];
-	info->deathstate = &States[S_SNAKEPRO_BX];
-	info->speed = GameSpeed != SPEED_Fast ? 14 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 12 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 3;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
+	SimpleSpeedSetter (ASnakeProjB, 14*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 //----------------------------------------------------------------------------
@@ -173,10 +177,10 @@ void A_SnakeAttack (AActor *actor)
 {
 	if (!actor->target)
 	{
-		actor->SetState (GetInfo (actor)->seestate);
+		actor->SetState (actor->SeeState);
 		return;
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->AttackSound, 1, ATTN_NORM);
 	A_FaceTarget (actor);
 	P_SpawnMissile (actor, actor->target, RUNTIME_CLASS(ASnakeProjA));
 }
@@ -191,10 +195,10 @@ void A_SnakeAttack2 (AActor *actor)
 {
 	if (!actor->target)
 	{
-		actor->SetState (GetInfo (actor)->seestate);
+		actor->SetState (actor->SeeState);
 		return;
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->AttackSound, 1, ATTN_NORM);
 	A_FaceTarget (actor);
 	P_SpawnMissile (actor, actor->target, RUNTIME_CLASS(ASnakeProjB));
 }

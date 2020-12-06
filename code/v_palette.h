@@ -2,6 +2,7 @@
 #define __V_PALETTE_H__
 
 #include "doomtype.h"
+#include "r_main.h"
 
 #define MAKERGB(r,g,b)		(((r)<<16)|((g)<<8)|(b))
 #define MAKEARGB(a,r,g,b)	(((a)<<24)|((r)<<16)|((g)<<8)|(b))
@@ -11,132 +12,64 @@
 #define GPART(c)			(((c)>>8)&0xff)
 #define BPART(c)			((c)&0xff)
 
-struct palette_s {
-	struct palette_s *next, *prev;
+struct PalEntry
+{
+	PalEntry () {}
+	PalEntry (DWORD argb) { *(DWORD *)this = argb; }
+	operator DWORD () { return *(DWORD *)this; }
+	PalEntry &operator= (DWORD other) { *(DWORD *)this = other; return *this; }
 
-	union {
-		// Which of these is used is determined by screen.is8bit
-
-		byte		*colormaps;		// Colormaps for 8-bit graphics
-		DWORD		*shades;		// ARGB8888 values for 32-bit graphics
-	} maps;
-	byte			*colormapsbase;
-	union {
-		char		name[8];
-		int			nameint[2];
-	} name;
-	DWORD			*colors;		// gamma corrected colors
-	DWORD			*basecolors;	// non-gamma corrected colors
-	unsigned		numcolors;
-	unsigned		flags;
-	unsigned		shadeshift;
-	int				usecount;
+#ifdef __BIG_ENDIAN__
+	PalEntry (BYTE ir, BYTE ig, BYTE ib) : a(0), r(ir), g(ig), b(ib) {}
+	PalEntry (BYTE ia, BYTE ir, BYTE ig, BYTE ib) : a(ia), r(ir), g(ig), b(ib) {}
+	BYTE a,r,g,b;
+#else
+	PalEntry (BYTE ir, BYTE ig, BYTE ib) : b(ib), g(ig), r(ir), a(0) {}
+	PalEntry (BYTE ia, BYTE ir, BYTE ig, BYTE ib) : b(ib), g(ig), r(ir), a(ia) {}
+	BYTE b,g,r,a;
+#endif
 };
-typedef struct palette_s palette_t;
 
-// Generate shading ramps for lighting
-#define PALETTEB_SHADE		(0)
-#define PALETTEF_SHADE		(1<<PALETTEB_SHADE)
+inline FArchive &operator<< (FArchive &arc, PalEntry &p)
+{
+	return arc << p.a << p.r << p.g << p.b;
+}
 
-// Apply blend color specified in V_SetBlend()
-#define PALETTEB_BLEND		(1)
-#define PALETTEF_BLEND		(1<<PALETTEB_SHADE)
+struct FPalette
+{
+	FPalette ();
+	FPalette (BYTE *colors);
 
-// Default palette when none is specified (Do not set directly!)
-#define PALETTEB_DEFAULT	(30)
-#define PALETTEF_DEFAULT	(1<<PALETTEB_DEFAULT)
+	void SetPalette (BYTE *colors);
+	void GammaAdjust ();
 
-
-
-// Type values for LoadAttachedPalette():
-#define LAP_PALETTE			(~0)	// Just pass thru to LoadPalette()
-#define LAP_PATCH			(0)
-#define LAP_SPRITE			(1)
-#define LAP_FLAT			(2)
-#define LAP_TEXTURE			(3)
-
-
-struct dyncolormap_s {
-	byte *maps;
-	unsigned int color;
-	unsigned int fade;
-	struct dyncolormap_s *next;
+	PalEntry	Colors[256];		// gamma corrected palette
+	PalEntry	BaseColors[256];	// non-gamma corrected palette
 };
-typedef struct dyncolormap_s dyncolormap_t;
 
+struct FDynamicColormap
+{
+	void ChangeFade (PalEntry fadecolor);
+	void ChangeColor (PalEntry lightcolor);
+	void ChangeColorFade (PalEntry lightcolor, PalEntry fadecolor);
+	void BuildLights ();
 
-// InitPalettes()
-//	input: name:  the name of the default palette lump
-//				  (normally GAMEPAL)
-//
-// Returns a pointer to the default palette.
-palette_t *InitPalettes (char *name);
+	BYTE *Maps;
+	PalEntry Color;
+	PalEntry Fade;
+	FDynamicColormap *Next;
+};
 
-// GetDefaultPalette()
-//
-//	Returns the palette created through InitPalettes()
-palette_t *GetDefaultPalette (void);
+extern BYTE *InvulnerabilityColormap;
+extern FPalette GPalette;
+extern "C" {
+extern FDynamicColormap NormalLight;
+}
+extern int Near0;		// A color near 0 in appearance, but not 0
 
-// MakePalette()
-//	input: colors: ptr to 256 3-byte RGB values
-//		   name:   the palette's name (not checked for duplicates)
-//		   flags:  the flags for the new palette
-//
-palette_t *MakePalette (byte *colors, char *name, unsigned flags);
+int BestColor (const DWORD *pal, int r, int g, int b, int first = 0);
 
-// LoadPalette()
-//	input: name:  the name of the palette lump
-//		   flags: the flags for the palette
-//
-//	This function will try and find an already loaded
-//	palette and return that if possible.
-palette_t *LoadPalette (char *name, unsigned flags);
-
-// LoadAttachedPalette()
-//	input: name:  the name of a graphic whose palette should be loaded
-//		   type:  the type of graphic whose palette is being requested
-//		   flags: the flags for the palette
-//
-//	This function looks through the PALETTES lump for a palette
-//	associated with the given graphic and returns that if possible.
-palette_t *LoadAttachedPalette (char *name, int type, unsigned flags);
-
-// FreePalette()
-//	input: palette: the palette to free
-//
-//	This function decrements the palette's usecount and frees it
-//	when it hits zero.
-void FreePalette (palette_t *palette);
-
-// FindPalette()
-//	input: name:  the name of the palette
-//		   flags: the flags to match on (~0 if it doesn't matter)
-//
-palette_t *FindPalette (char *name, unsigned flags);
-
-// RefreshPalette()
-//	input: pal: the palette to refresh
-//
-// Generates all colormaps or shadings for the specified palette
-// with the current blending levels.
-void RefreshPalette (palette_t *pal);
-
-// RefreshPalettes()
-//
-// Calls RefreshPalette() for all palettes.
-void RefreshPalettes (void);
-
-// GammaAdjustPalette()
-//
-// Builds the colors table for the specified palette based
-// on the current gamma correction setting. It will not rebuild
-// the shading table if the palette has one.
-void GammaAdjustPalette (palette_t *pal);
-
-// GammaAdjustPalettes()
-//
-// Calls GammaAdjustPalette() for all palettes.
-void GammaAdjustPalettes (void);
+void InitPalette ();
 
 // V_SetBlend()
 //	input: blendr: red component of blend
@@ -159,6 +92,6 @@ void V_ForceBlend (int blendr, int blendg, int blendb, int blenda);
 void RGBtoHSV (float r, float g, float b, float *h, float *s, float *v);
 void HSVtoRGB (float *r, float *g, float *b, float h, float s, float v);
 
-dyncolormap_t *GetSpecialLights (int lr, int lg, int lb, int fr, int fg, int fb);
+FDynamicColormap *GetSpecialLights (PalEntry lightcolor, PalEntry fadecolor);
 
 #endif //__V_PALETTE_H__

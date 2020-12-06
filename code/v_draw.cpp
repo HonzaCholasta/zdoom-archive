@@ -37,26 +37,6 @@ DCanvas::vdrawsfunc DCanvas::Psfuncs[6] =
 	DCanvas::DrawColorLucentPatchSP
 };
 
-// Direct (true-color) versions of the column drawers
-DCanvas::vdrawfunc DCanvas::Dfuncs[6] =
-{
-	DCanvas::DrawPatchD,
-	DCanvas::DrawLucentPatchD,
-	DCanvas::DrawTranslatedPatchD,
-	DCanvas::DrawTlatedLucentPatchD,
-	DCanvas::DrawColoredPatchD,
-	DCanvas::DrawColorLucentPatchD,
-};
-DCanvas::vdrawsfunc DCanvas::Dsfuncs[6] =
-{
-	DCanvas::DrawPatchSD,
-	DCanvas::DrawLucentPatchSD,
-	DCanvas::DrawTranslatedPatchSD,
-	DCanvas::DrawTlatedLucentPatchSD,
-	(vdrawsfunc)DCanvas::DrawColoredPatchD,
-	(vdrawsfunc)DCanvas::DrawColorLucentPatchD
-};
-
 byte *V_ColorMap;
 int V_ColorFill;
 
@@ -96,8 +76,9 @@ void DCanvas::DrawPatchSP (const byte *source, byte *dest, int count, int pitch,
 // Translucent patch drawers (amount is in V_Fade)
 void DCanvas::DrawLucentPatchP (const byte *source, byte *dest, int count, int pitch)
 {
-	unsigned int *fg2rgb, *bg2rgb;
+	DWORD *fg2rgb, *bg2rgb;
 
+	TransArea += count + 1;
 	{
 		fixed_t fglevel, bglevel;
 
@@ -109,8 +90,8 @@ void DCanvas::DrawLucentPatchP (const byte *source, byte *dest, int count, int p
 
 	do
 	{
-		unsigned int fg = *source++;
-		unsigned int bg = *dest;
+		DWORD fg = *source++;
+		DWORD bg = *dest;
 
 		fg = fg2rgb[fg];
 		bg = bg2rgb[bg];
@@ -122,9 +103,10 @@ void DCanvas::DrawLucentPatchP (const byte *source, byte *dest, int count, int p
 
 void DCanvas::DrawLucentPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc)
 {
-	unsigned int *fg2rgb, *bg2rgb;
+	DWORD *fg2rgb, *bg2rgb;
 	int c = 0;
 
+	TransArea += count + 1;
 	{
 		fixed_t fglevel, bglevel;
 
@@ -136,8 +118,8 @@ void DCanvas::DrawLucentPatchSP (const byte *source, byte *dest, int count, int 
 
 	do
 	{
-		unsigned int fg = source[c >> 16];
-		unsigned int bg = *dest;
+		DWORD fg = source[c >> 16];
+		DWORD bg = *dest;
 
 		fg = fg2rgb[fg];
 		bg = bg2rgb[bg];
@@ -175,9 +157,10 @@ void DCanvas::DrawTranslatedPatchSP (const byte *source, byte *dest, int count, 
 // Translated, translucent patch drawers
 void DCanvas::DrawTlatedLucentPatchP (const byte *source, byte *dest, int count, int pitch)
 {
-	unsigned int *fg2rgb, *bg2rgb;
+	DWORD *fg2rgb, *bg2rgb;
 	byte *colormap = V_ColorMap;
 
+	TransArea += count + 1;
 	{
 		fixed_t fglevel, bglevel;
 
@@ -189,8 +172,8 @@ void DCanvas::DrawTlatedLucentPatchP (const byte *source, byte *dest, int count,
 
 	do
 	{
-		unsigned int fg = colormap[*source++];
-		unsigned int bg = *dest;
+		DWORD fg = colormap[*source++];
+		DWORD bg = *dest;
 
 		fg = fg2rgb[fg];
 		bg = bg2rgb[bg];
@@ -203,9 +186,10 @@ void DCanvas::DrawTlatedLucentPatchP (const byte *source, byte *dest, int count,
 void DCanvas::DrawTlatedLucentPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc)
 {
 	int c = 0;
-	unsigned int *fg2rgb, *bg2rgb;
+	DWORD *fg2rgb, *bg2rgb;
 	byte *colormap = V_ColorMap;
 
+	TransArea += count + 1;
 	{
 		fixed_t fglevel, bglevel;
 
@@ -217,8 +201,8 @@ void DCanvas::DrawTlatedLucentPatchSP (const byte *source, byte *dest, int count
 
 	do
 	{
-		unsigned int fg = colormap[source[c >> 16]];
-		unsigned int bg = *dest;
+		DWORD fg = colormap[source[c >> 16]];
+		DWORD bg = *dest;
 
 		fg = fg2rgb[fg];
 		bg = bg2rgb[bg];
@@ -259,9 +243,10 @@ void DCanvas::DrawColoredPatchSP (const byte *source, byte *dest, int count, int
 //
 void DCanvas::DrawColorLucentPatchP (const byte *source, byte *dest, int count, int pitch)
 {
-	unsigned int *bg2rgb;
-	unsigned int fg;
+	DWORD *bg2rgb;
+	DWORD fg;
 
+	TransArea += count + 1;
 	{
 		fixed_t fglevel;
 
@@ -281,9 +266,10 @@ void DCanvas::DrawColorLucentPatchP (const byte *source, byte *dest, int count, 
 
 void DCanvas::DrawColorLucentPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc)
 {
-	unsigned int *bg2rgb;
-	unsigned int fg;
+	DWORD *bg2rgb;
+	DWORD fg;
 
+	TransArea += count + 1;
 	{
 		fixed_t fglevel;
 
@@ -294,145 +280,12 @@ void DCanvas::DrawColorLucentPatchSP (const byte *source, byte *dest, int count,
 
 	do
 	{
-		unsigned int bg;
+		DWORD bg;
 		bg = (fg + bg2rgb[*dest]) | 0x1f07c1f;
 		*dest = RGB32k[0][0][bg & (bg>>15)];
 		dest += pitch; 
 	} while (--count);
 }
-
-
-/**************************/
-/*						  */
-/* The RGB column drawers */
-/*						  */
-/**************************/
-
-// Normal patch drawers
-void DCanvas::DrawPatchD (const byte *source, byte *dest, int count, int pitch)
-{
-	do
-	{
-		*((unsigned int *)dest) = V_Palette[*source++];
-		dest += pitch;
-	} while (--count);
-}
-
-void DCanvas::DrawPatchSD (const byte *source, byte *dest, int count, int pitch, int yinc)
-{
-	int c = 0;
-
-	do
-	{
-		*((unsigned int *)dest) = V_Palette[source[c >> 16]];
-		dest += pitch;
-		c += yinc;
-	} while (--count);
-}
-
-
-// Translucent patch drawers (always 50%)
-void DCanvas::DrawLucentPatchD (const byte *source, byte *dest, int count, int pitch)
-{
-	do
-	{
-		*((unsigned int *)dest) = ((V_Palette[*source++] & 0xfefefe) >> 1) +
-						 ((*((int *)dest) & 0xfefefe) >> 1);
-		dest += pitch; 
-	} while (--count);
-}
-
-void DCanvas::DrawLucentPatchSD (const byte *source, byte *dest, int count, int pitch, int yinc)
-{
-	int c = 0;
-
-	do
-	{
-		*((unsigned int *)dest) = ((V_Palette[source[c >> 16]] & 0xfefefe) >> 1) +
-						 ((*((int *)dest) & 0xfefefe) >> 1);
-		dest += pitch;
-		c += yinc;
-	} while (--count);
-}
-
-
-// Translated patch drawers
-void DCanvas::DrawTranslatedPatchD (const byte *source, byte *dest, int count, int pitch)
-{
-	do
-	{
-		*((unsigned int *)dest) = V_Palette[V_ColorMap[*source++]];
-		dest += pitch; 
-	} while (--count);
-}
-
-void DCanvas::DrawTranslatedPatchSD (const byte *source, byte *dest, int count, int pitch, int yinc)
-{
-	int c = 0;
-
-	do
-	{
-		*((unsigned int *)dest) = V_Palette[V_ColorMap[source[c >> 16]]];
-		dest += pitch;
-		c += yinc;
-	} while (--count);
-}
-
-
-// Translated, translucent patch drawers
-void DCanvas::DrawTlatedLucentPatchD (const byte *source, byte *dest, int count, int pitch)
-{
-	do
-	{
-		*((unsigned int *)dest) = ((V_Palette[V_ColorMap[*source++]] & 0xfefefe) >> 1) +
-						 ((*((int *)dest) & 0xfefefe) >> 1);
-		dest += pitch; 
-	} while (--count);
-}
-
-void DCanvas::DrawTlatedLucentPatchSD (const byte *source, byte *dest, int count, int pitch, int yinc)
-{
-	int c = 0;
-
-	do
-	{
-		*((unsigned int *)dest) = ((V_Palette[V_ColorMap[source[c >> 16]]] & 0xfefefe) >> 1) +
-						 ((*((int *)dest) & 0xfefefe) >> 1);
-		dest += pitch;
-		c += yinc;
-	} while (--count);
-}
-
-
-// Colored patch drawer
-//
-// This routine is the same for the stretched version since we don't
-// care about the patch's actual contents, just it's outline.
-void DCanvas::DrawColoredPatchD (const byte *source, byte *dest, int count, int pitch)
-{
-	do
-	{
-		*((int *)dest) = V_ColorFill;
-		dest += pitch; 
-	} while (--count);
-}
-
-
-// Colored, translucent patch drawer
-//
-// This routine is the same for the stretched version since we don't
-// care about the patch's actual contents, just it's outline.
-void DCanvas::DrawColorLucentPatchD (const byte *source, byte *dest, int count, int pitch)
-{
-	int fill = (V_ColorFill & 0xfefefe) >> 1;
-
-	do
-	{
-		*((int *)dest) = fill + ((*((int *)dest) & 0xfefefe) >> 1);
-		dest += pitch; 
-	} while (--count);
-}
-
 
 
 /******************************/
@@ -458,30 +311,22 @@ void DCanvas::DrawWrapper (EWrapperCode drawer, const patch_t *patch, int x, int
 	x -= SHORT(patch->leftoffset);
 #ifdef RANGECHECK 
 	if (x<0
-		||x+SHORT(patch->width) > width
+		||x+SHORT(patch->width) > Width
 		|| y<0
-		|| y+SHORT(patch->height)>height)
+		|| y+SHORT(patch->height)>Height)
 	{
-	  // Printf (PRINT_HIGH, "Patch at %d,%d exceeds LFB\n", x,y );
+	  // Printf ("Patch at %d,%d exceeds LFB\n", x,y );
 	  // No I_Error abort - what is up with TNT.WAD?
 	  DPrintf ("DCanvas::DrawWrapper: bad patch (ignored)\n");
 	  return;
 	}
 #endif
 
-	if (is8bit)
-	{
-		drawfunc = Pfuncs[drawer];
-		colstep = 1;
-	}
-	else
-	{
-		drawfunc = Dfuncs[drawer];
-		colstep = 4;
-	}
+	drawfunc = Pfuncs[drawer];
+	colstep = 1;
 
 	col = 0;
-	desttop = buffer + y*pitch + x * colstep;
+	desttop = Buffer + y*Pitch + x * colstep;
 
 	w = SHORT(patch->width);
 
@@ -492,13 +337,14 @@ void DCanvas::DrawWrapper (EWrapperCode drawer, const patch_t *patch, int x, int
 		// step through the posts in a column
 		while (column->topdelta != 0xff )
 		{
-			drawfunc ((byte *)column + 3,
-					  desttop + column->topdelta * pitch,
-					  column->length,
-					  pitch);
-
-			column = (column_t *)(	(byte *)column + column->length
-									+ 4 );
+			if (column->length != 0)
+			{
+				drawfunc ((byte *)column + 3,
+						  desttop + column->topdelta * Pitch,
+						  column->length,
+						  Pitch);
+			}
+			column = (column_t *)((byte *)column + column->length + 4);
 		}
 	}
 }
@@ -525,7 +371,7 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 		return;
 	}
 
-	if (destwidth == width && destheight == height &&
+	if (destwidth == Width && destheight == Height &&
 		SHORT(patch->width) == 320 && SHORT(patch->height) == 200
 		&& drawer == EWrapper_Normal)
 	{
@@ -546,9 +392,9 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 
 #ifdef RANGECHECK 
 	if (x0<0
-		|| x0+destwidth > width
+		|| x0+destwidth > Width
 		|| y0<0
-		|| y0+destheight> height)
+		|| y0+destheight> Height)
 	{
 		//Printf ("Patch at %d,%d exceeds LFB\n", x0,y0 );
 		DPrintf ("DCanvas::DrawSWrapper: bad patch (ignored)\n");
@@ -556,16 +402,11 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 	}
 #endif
 
-	if (is8bit) {
-		drawfunc = Psfuncs[drawer];
-		colstep = 1;
-	} else {
-		drawfunc = Dsfuncs[drawer];
-		colstep = 4;
-	}
+	drawfunc = Psfuncs[drawer];
+	colstep = 1;
 
 	col = 0;
-	desttop = buffer + y0*pitch + x0 * colstep;
+	desttop = Buffer + y0*Pitch + x0 * colstep;
 
 	w = destwidth * xinc;
 
@@ -576,15 +417,22 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 		// step through the posts in a column
 		while (column->topdelta != 0xff)
 		{
-			int top = column->topdelta * ymul;
-			int bot = top + column->length * ymul;
-			bot = (bot - top + 0x8000) >> 16;
-			if (bot > 0)
+			if (column->length != 0)
 			{
-				top = (top) >> 16;
-				drawfunc ((byte *)column + 3, desttop + top * pitch,
-					bot, pitch, yinc);
-				column = (column_t *)((byte *)column + column->length + 4);
+				int top = column->topdelta * ymul;
+				int bot = top + column->length * ymul;
+				bot = (bot - top + 0x8000) >> 16;
+				if (bot > 0)
+				{
+					top = (top) >> 16;
+					drawfunc ((byte *)column + 3, desttop + top * Pitch,
+						bot, Pitch, yinc);
+					column = (column_t *)((byte *)column + column->length + 4);
+				}
+			}
+			else
+			{
+				column = (column_t *)((byte *)column + 4);
 			}
 		}
 	}
@@ -597,12 +445,12 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 //
 void DCanvas::DrawIWrapper (EWrapperCode drawer, const patch_t *patch, int x0, int y0) const
 {
-	if (width == 320 && height == 200)
+	if (Width == 320 && Height == 200)
 		DrawWrapper (drawer, patch, x0, y0);
 	else
 		DrawSWrapper (drawer, patch,
-			 (width * x0) / 320, (height * y0) / 200,
-			 (width * SHORT(patch->width)) / 320, (height * SHORT(patch->height)) / 200);
+			 (Width * x0) / 320, (Height * y0) / 200,
+			 (Width * SHORT(patch->width)) / 320, (Height * SHORT(patch->height)) / 200);
 }
 
 //
@@ -612,10 +460,10 @@ void DCanvas::DrawIWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 void DCanvas::DrawCWrapper (EWrapperCode drawer, const patch_t *patch, int x0, int y0) const
 {
 	if (CleanXfac == 1 && CleanYfac == 1)
-		DrawWrapper (drawer, patch, (x0-160) + (width/2), (y0-100) + (height/2));
+		DrawWrapper (drawer, patch, (x0-160) + (Width/2), (y0-100) + (Height/2));
 	else
 		DrawSWrapper (drawer, patch,
-			(x0-160)*CleanXfac+(width/2), (y0-100)*CleanYfac+(height/2),
+			(x0-160)*CleanXfac+(Width/2), (y0-100)*CleanYfac+(Height/2),
 			SHORT(patch->width) * CleanXfac, SHORT(patch->height) * CleanYfac);
 }
 
@@ -641,28 +489,6 @@ void DCanvas::DrawCNMWrapper (EWrapperCode drawer, const patch_t *patch, int x0,
 /********************************/
 
 //
-// V_CopyRect 
-// 
-void DCanvas::CopyRect (int srcx, int srcy, int _width, int _height,
-						int destx, int desty, DCanvas *destscrn)
-{
-#ifdef RANGECHECK
-	if (srcx<0
-		||srcx+_width > width
-		|| srcy<0
-		|| srcy+_height> height
-		||destx<0||destx+_width > destscrn->width
-		|| desty<0
-		|| desty+_height > destscrn->height)
-	{
-		I_Error ("Bad DCanvas::CopyRect");
-	}
-#endif
-
-	Blit (srcx, srcy, _width, _height, destscrn, destx, desty, _width, _height);
-}
-
-//
 // V_DrawPatchFlipped
 // Masks a column based masked pic to the screen.
 // Flips horizontally, e.g. to mirror face.
@@ -680,10 +506,10 @@ void DCanvas::DrawPatchFlipped (const patch_t *patch, int x0, int y0) const
 
 	int			xinc, yinc, col, w, ymul, xmul;
 
-	x0 = (width * x0) / 320;
-	y0 = (height * y0) / 200;
-	destwidth = (width * SHORT(patch->width)) / 320;
-	destheight = (height * SHORT(patch->height)) / 200;
+	x0 = (Width * x0) / 320;
+	y0 = (Height * y0) / 200;
+	destwidth = (Width * SHORT(patch->width)) / 320;
+	destheight = (Height * SHORT(patch->height)) / 200;
 
 	xinc = (SHORT(patch->width) << 16) / destwidth;
 	yinc = (SHORT(patch->height) << 16) / destheight;
@@ -695,9 +521,9 @@ void DCanvas::DrawPatchFlipped (const patch_t *patch, int x0, int y0) const
 
 #ifdef RANGECHECK 
 	if (x0<0
-		|| x0+destwidth > width
+		|| x0+destwidth > Width
 		|| y0<0
-		|| y0+destheight> height)
+		|| y0+destheight> Height)
 	{
 		//Printf ("Patch at %d,%d exceeds LFB\n", x0,y0 );
 		DPrintf ("DCanvas::DrawPatchFlipped: bad patch (ignored)\n");
@@ -705,17 +531,12 @@ void DCanvas::DrawPatchFlipped (const patch_t *patch, int x0, int y0) const
 	}
 #endif
 
-	if (is8bit) {
-		drawfunc = Psfuncs[EWrapper_Normal];
-		colstep = 1;
-	} else {
-		drawfunc = Dsfuncs[EWrapper_Normal];
-		colstep = 4;
-	}
+	drawfunc = Psfuncs[EWrapper_Normal];
+	colstep = 1;
 
 	w = destwidth * xinc;
 	col = w - xinc;
-	desttop = buffer + y0*pitch + x0 * colstep;
+	desttop = Buffer + y0*Pitch + x0 * colstep;
 
 	for ( ; col >= 0 ; col -= xinc, desttop += colstep)
 	{
@@ -724,13 +545,15 @@ void DCanvas::DrawPatchFlipped (const patch_t *patch, int x0, int y0) const
 		// step through the posts in a column
 		while (column->topdelta != 0xff )
 		{
-			drawfunc ((byte *)column + 3,
-					  desttop + (((column->topdelta * ymul)) >> 16) * pitch,
-					  (column->length * ymul) >> 16,
-					  pitch,
-					  yinc);
-			column = (column_t *)(	(byte *)column + column->length
-									+ 4 );
+			if (column->length != 0)
+			{
+				drawfunc ((byte *)column + 3,
+						  desttop + (((column->topdelta * ymul)) >> 16) * Pitch,
+						  (column->length * ymul) >> 16,
+						  Pitch,
+						  yinc);
+			}
+			column = (column_t *)((byte *)column + column->length + 4);
 		}
 	}
 }
@@ -742,34 +565,29 @@ void DCanvas::DrawPatchFlipped (const patch_t *patch, int x0, int y0) const
 //
 void DCanvas::DrawBlock (int x, int y, int _width, int _height, const byte *src) const
 {
+	int srcpitch = _width;
+	int destpitch;
 	byte *dest;
 
-#ifdef RANGECHECK
-	if (x<0
-		||x+_width > width
-		|| y<0
-		|| y+_height>height)
+	if (ClipBox (x, y, _width, _height, src, srcpitch))
 	{
-		I_Error ("Bad DCanvas::DrawBlock");
+		return;		// Nothing to draw
 	}
-#endif
 
-	x <<= (is8bit) ? 0 : 2;
-	_width <<= (is8bit) ? 0 : 2;
-
-	dest = buffer + y*pitch + x;
+	destpitch = Pitch;
+	dest = Buffer + y*Pitch + x;
 
 	do
 	{
 		memcpy (dest, src, _width);
-		src += _width;
-		dest += pitch;
+		src += srcpitch;
+		dest += destpitch;
 	} while (--_height);
 }
 
 void DCanvas::DrawPageBlock (const byte *src) const
 {
-	if (width == 320 && height == 200)
+	if (Width == 320 && Height == 200)
 	{
 		DrawBlock (0, 0, 320, 200, src);
 		return;
@@ -780,11 +598,11 @@ void DCanvas::DrawPageBlock (const byte *src) const
 	fixed_t xinc, yinc;
 	int h;
 
-	dest = buffer;
-	xinc = 320 * FRACUNIT / width;
-	yinc = 200 * FRACUNIT / height;
+	dest = Buffer;
+	xinc = 320 * FRACUNIT / Width;
+	yinc = 200 * FRACUNIT / Height;
 	acc = 0;
-	h = height;
+	h = Height;
 
 	const byte *copysrc = NULL;
 
@@ -792,19 +610,19 @@ void DCanvas::DrawPageBlock (const byte *src) const
 	{
 		if (copysrc)
 		{
-			memcpy (dest, copysrc, width);
-			dest += pitch;
+			memcpy (dest, copysrc, Width);
+			dest += Pitch;
 		}
 		else
 		{
-			int w = width;
+			int w = Width;
 			fixed_t xfrac = 0;
 			do
 			{
 				*dest++ = src[xfrac >> FRACBITS];
 				xfrac += xinc;
 			} while (--w);
-			dest += pitch - width;
+			dest += Pitch - Width;
 		}
 		acc += yinc;
 		if (acc >= FRACUNIT)
@@ -815,7 +633,7 @@ void DCanvas::DrawPageBlock (const byte *src) const
 		}
 		else
 		{
-			copysrc = dest - pitch;
+			copysrc = dest - Pitch;
 		}
 	} while (--h);
 }
@@ -830,81 +648,136 @@ void DCanvas::GetBlock (int x, int y, int _width, int _height, byte *dest) const
 
 #ifdef RANGECHECK 
 	if (x<0
-		||x+_width > width
+		||x+_width > Width
 		|| y<0
-		|| y+_height>height)
+		|| y+_height>Height)
 	{
 		I_Error ("Bad V_GetBlock");
 	}
 #endif
 
-	x <<= (is8bit) ? 0 : 2;
-	_width <<= (is8bit) ? 0 : 2;
-
-	src = buffer + y*pitch + x;
+	src = Buffer + y*Pitch + x;
 
 	while (_height--)
 	{
 		memcpy (dest, src, _width);
-		src += pitch;
+		src += Pitch;
 		dest += _width;
 	}
 }
+
+typedef void (STACK_ARGS *DrawRemapFn)   (const byte *src, byte *dest, const byte *remap, int srcpitch, int destpitch, int w, int h);
+typedef void (STACK_ARGS *DrawNomapFn)	 (const byte *src, byte *dest, int srcpitch, int destpitch, int w, int h);
+typedef void (STACK_ARGS *DrawTRemapFn)  (const byte *src, byte *dest, const byte *remap, int srcpitch, int destpitch, int w, int h, DWORD *fg2rgb, DWORD *bg2rgb);
+typedef void (STACK_ARGS *DrawTNomapFn)  (const byte *src, byte *dest, int srcpitch, int destpitch, int w, int h, DWORD *fg2rgb, DWORD *bg2rgb);
+typedef void (STACK_ARGS *DrawSRemapFn)  (const byte *src, byte *dest, const byte *remap, int srcpitch, int destpitch, int w, int h, DWORD fg, DWORD *bg2rgb);
+typedef void (STACK_ARGS *DrawSNomapFn)  (const byte *src, byte *dest, int srcpitch, int destpitch, int w, int h, DWORD fg, DWORD *bg2rgb);
+typedef void (STACK_ARGS *DrawAlphaFn)   (const byte *src, byte *dest, int srcpitch, int destpitch, int w, int h, DWORD *fgstart);
+
+typedef void (STACK_ARGS *ScaleRemapFn)  (const byte *src, byte *dest, const byte *remap, int srcpitch, int destpitch, fixed_t xinc, fixed_t yinc, fixed_t xstart, fixed_t err, int w, int h);
+typedef void (STACK_ARGS *ScaleNomapFn)  (const byte *src, byte *dest, int srcpitch, int destpitch, fixed_t xinc, fixed_t yinc, fixed_t xstart, fixed_t err, int w, int h);
+typedef void (STACK_ARGS *ScaleTRemapFn) (const byte *src, byte *dest, const byte *remap, int srcpitch, int destpitch, fixed_t xinc, fixed_t yinc, fixed_t xstart, fixed_t err, int w, int h, DWORD *fg2rgb, DWORD *bg2rgb);
+typedef void (STACK_ARGS *ScaleTNomapFn) (const byte *src, byte *dest, int srcpitch, int destpitch, fixed_t xinc, fixed_t yinc, fixed_t xstart, fixed_t err, int w, int h, DWORD *fg2rgb, DWORD *bg2rgb);
+typedef void (STACK_ARGS *ScaleSRemapFn) (const byte *src, byte *dest, const byte *remap, int srcpitch, int destpitch, fixed_t xinc, fixed_t yinc, fixed_t xstart, fixed_t err, int w, int h, DWORD fg, DWORD *bg2rgb);
+typedef void (STACK_ARGS *ScaleSNomapFn) (const byte *src, byte *dest, int srcpitch, int destpitch, fixed_t xinc, fixed_t yinc, fixed_t xstart, fixed_t err, int w, int h, DWORD fg, DWORD *bg2rgb);
+typedef void (STACK_ARGS *ScaleAlphaFn)  (const byte *src, byte *dest, int srcpitch, int destpitch, fixed_t xinc, fixed_t yinc, fixed_t xstart, fixed_t err, int w, int h, DWORD *fgstart);
+
+// Key to naming (because this fixed linker probs at first):
+// 1st char: D = Draw, S = Scale
+// 2nd char: M = Masked
+// 3rd char: P = Plain, T = Translucent, S = Shadowed, A = Alpha
+// 4th char: R = Remapped, U = Unmapped
+// 5th char: P = Palettized output
+
+extern "C" struct
+{
+	DrawRemapFn DMPRP;
+	DrawNomapFn DMPUP;
+	ScaleRemapFn SMPRP;
+	ScaleNomapFn SMPUP;
+
+	DrawTRemapFn DMTRP;
+	DrawTNomapFn DMTUP;
+	ScaleTRemapFn SMTRP;
+	ScaleTNomapFn SMTUP;
+
+	DrawSRemapFn DMSRP;
+	DrawSNomapFn DMSUP;
+	ScaleSRemapFn SMSRP;
+	ScaleSNomapFn SMSUP;
+
+	DrawAlphaFn DMAUP;
+	ScaleAlphaFn SMAUP;
+} MaskedBlockFunctions;
 
 //
 // 
 void DCanvas::DrawMaskedBlock (int x, int y, int _width, int _height,
 	const byte *src, const byte *colors) const
 {
+	int srcpitch = _width;
+	int destpitch;
 	byte *dest;
-	int span;
 
-#ifdef RANGECHECK
-	if ( x < 0 || x + _width > width
-		|| y<0 || y+_height>height)
+	if (ClipBox (x, y, _width, _height, src, srcpitch))
 	{
-		return;
+		return;		// Nothing to draw
 	}
-#endif
 
-	dest = buffer + y*pitch + x;
-	span = pitch - _width;
+	destpitch = Pitch;
+	dest = Buffer + y*destpitch + x;
 
 	if (colors != NULL)
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.DMPRP (src, dest, colors, srcpitch, destpitch, _width, _height);
+#else
 		do
 		{
-			int i;
+			int i, j;
 
-			for (i = _width; i > 0; i--, dest++)
+			i = _width;
+			j = 0;
+
+			do
 			{
-				byte val = *src++;
-				if (val != 255)
+				byte val = src[j];
+				if (val != 0)
 				{
-					*dest = colors[val];
+					dest[j] = colors[val];
 				}
-			}
-			dest += span;
+			} while (++j, --i);
+			dest += destpitch;
+			src += srcpitch;
 		}
 		while (--_height);
+#endif
 	}
 	else
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.DMPUP (src, dest, srcpitch, destpitch, _width, _height);
+#else
 		do
 		{
-			int i;
+			int i, j;
 
-			for (i = _width; i > 0; i--, dest++)
+			i = _width;
+			j = 0;
+
+			do
 			{
-				byte val = *src++;
-				if (val != 255)
+				byte val = src[j];
+				if (val != 0)
 				{
-					*dest = val;
+					dest[j] = val;
 				}
-			}
-			dest += span;
+			} while (++j, --i);
+			dest += destpitch;
+			src += srcpitch;
 		}
 		while (--_height);
+#endif
 	}
 }
 
@@ -912,9 +785,11 @@ void DCanvas::ScaleMaskedBlock (int x, int y, int _width, int _height,
 	int dwidth, int dheight, const byte *src, const byte *colors) const
 {
 	byte *dest;
-	int span;
+	int srcpitch;
+	int destpitch;
 	fixed_t err;
 	fixed_t xinc, yinc;
+	fixed_t xstart;
 
 	if (dwidth == _width && dheight == _height)
 	{
@@ -922,85 +797,95 @@ void DCanvas::ScaleMaskedBlock (int x, int y, int _width, int _height,
 		return;
 	}
 
-#ifdef RANGECHECK
-	if ( x < 0 || x + dwidth > width
-		|| y<0 || y+dheight>height)
-	{
-		I_Error ("Bad DCanvas::ScaleMaskedBlock");
-	}
-#endif
+	srcpitch = _width;
 
-	dest = buffer + y*pitch + x;
-	span = pitch - dwidth;
-	err = 0;
-	xinc = (_width << FRACBITS) / dwidth;
-	yinc = (_height << FRACBITS) / dheight;
+	if (ClipScaleBox (x, y, _width, _height, dwidth, dheight, src, srcpitch, xinc, yinc, xstart, err))
+	{
+		return;		// Nothing to draw
+	}
+
+	destpitch = Pitch;
+	dest = Buffer + y*destpitch + x;
 
 	if (colors != NULL)
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.SMPRP (src, dest, colors, srcpitch, destpitch, xinc, yinc, xstart, err, dwidth, dheight);
+#else
 		do
 		{
 			int i, x;
 
-			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			i = 0;
+			x = xstart;
+
+			do
 			{
 				byte in = src[x >> FRACBITS];
-				if (in != 255)
+				if (in)
 				{
-					*dest = colors[in];
+					dest[i] = colors[in];
 				}
-			}
-			dest += span;
+				x += xinc;
+			} while (++i < dwidth);
+			dest += destpitch;
 			err += yinc;
 			while (err >= FRACUNIT)
 			{
-				src += _width;
+				src += srcpitch;
 				err -= FRACUNIT;
 			}
 		}
 		while (--dheight);
+#endif
 	}
 	else
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.SMPUP (src, dest, srcpitch, destpitch, xinc, yinc, xstart, err, dwidth, dheight);
+#else
 		do
 		{
 			int i, x;
 
-			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			i = 0;
+			x = xstart;
+
+			do
 			{
 				byte in = src[x >> FRACBITS];
-				if (in != 255)
+				if (in)
 				{
-					*dest = in;
+					dest[i] = in;
 				}
-			}
-			dest += span;
+				x += xinc;
+			} while (++i < dwidth);
+			dest += destpitch;
 			err += yinc;
 			while (err >= FRACUNIT)
 			{
-				src += _width;
+				src += srcpitch;
 				err -= FRACUNIT;
 			}
 		}
 		while (--dheight);
+#endif
 	}
 }
 
 void DCanvas::DrawTranslucentMaskedBlock (int x, int y, int _width, int _height,
 	const byte *src, const byte *colors, fixed_t fade) const
 {
+	int srcpitch = _width;
+	int destpitch;
 	byte *dest;
-	int span;
 
-#ifdef RANGECHECK
-	if ( x < 0 || x + _width > width
-		|| y<0 || y+_height>height)
+	if (ClipBox (x, y, _width, _height, src, srcpitch))
 	{
-		return;
+		return;		// Nothing to draw
 	}
-#endif
 
-	unsigned int *fg2rgb, *bg2rgb;
+	DWORD *fg2rgb, *bg2rgb;
 
 	{
 		fixed_t fglevel, bglevel;
@@ -1011,48 +896,66 @@ void DCanvas::DrawTranslucentMaskedBlock (int x, int y, int _width, int _height,
 		bg2rgb = Col2RGB8[bglevel>>10];
 	}
 
-	dest = buffer + y*pitch + x;
-	span = pitch - _width;
+	destpitch = Pitch;
+	dest = Buffer + y*destpitch + x;
+	if (this == screen)
+		TransArea += _width * _height;
 
 	if (colors != NULL)
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.DMTRP (src, dest, colors, srcpitch, destpitch, _width, _height, fg2rgb, bg2rgb);
+#else
 		do
 		{
-			int i;
+			int i, j;
 
-			for (i = _width; i > 0; i--, dest++)
+			i = _width;
+			j = 0;
+
+			do
 			{
-				byte val = *src++;
-				if (val != 255)
+				byte val = src[j];
+				if (val)
 				{
-					unsigned int fg;
-					fg = (fg2rgb[colors[val]] + bg2rgb[*dest]) | 0x1f07c1f;
-					*dest = RGB32k[0][0][fg & (fg>>15)];
+					DWORD fg;
+					fg = (fg2rgb[colors[val]] + bg2rgb[dest[j]]) | 0x1f07c1f;
+					dest[j] = RGB32k[0][0][fg & (fg>>15)];
 				}
-			}
-			dest += span;
+			} while (++j, --i);
+			dest += destpitch;
+			src += srcpitch;
 		}
 		while (--_height);
+#endif
 	}
 	else
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.DMTUP (src, dest, srcpitch, destpitch, _width, _height, fg2rgb, bg2rgb);
+#else
 		do
 		{
-			int i;
+			int i, j;
 
-			for (i = _width; i > 0; i--, dest++)
+			i = _width;
+			j = 0;
+
+			do
 			{
-				byte val = *src++;
-				if (val != 255)
+				byte val = src[j];
+				if (val)
 				{
-					unsigned int fg;
-					fg = (fg2rgb[val] + bg2rgb[*dest]) | 0x1f07c1f;
-					*dest = RGB32k[0][0][fg & (fg>>15)];
+					DWORD fg;
+					fg = (fg2rgb[val] + bg2rgb[dest[j]]) | 0x1f07c1f;
+					dest[j] = RGB32k[0][0][fg & (fg>>15)];
 				}
-			}
-			dest += span;
+			} while (++j, --i);
+			dest += destpitch;
+			src += srcpitch;
 		}
 		while (--_height);
+#endif
 	}
 }
 
@@ -1060,9 +963,11 @@ void DCanvas::ScaleTranslucentMaskedBlock (int x, int y, int _width, int _height
 	int dwidth, int dheight, const byte *src, const byte *colors, fixed_t fade) const
 {
 	byte *dest;
-	int span;
+	int srcpitch;
+	int destpitch;
 	fixed_t err;
 	fixed_t xinc, yinc;
+	fixed_t xstart;
 
 	if (dwidth == _width && dheight == _height)
 	{
@@ -1070,15 +975,14 @@ void DCanvas::ScaleTranslucentMaskedBlock (int x, int y, int _width, int _height
 		return;
 	}
 
-#ifdef RANGECHECK
-	if ( x < 0 || x + dwidth > width
-		|| y<0 || y+dheight>height)
-	{
-		return;
-	}
-#endif
+	srcpitch = _width;
 
-	unsigned int *fg2rgb, *bg2rgb;
+	if (ClipScaleBox (x, y, _width, _height, dwidth, dheight, src, srcpitch, xinc, yinc, xstart, err))
+	{
+		return;		// Nothing to draw
+	}
+
+	DWORD *fg2rgb, *bg2rgb;
 
 	{
 		fixed_t fglevel, bglevel;
@@ -1089,81 +993,94 @@ void DCanvas::ScaleTranslucentMaskedBlock (int x, int y, int _width, int _height
 		bg2rgb = Col2RGB8[bglevel>>10];
 	}
 
-	dest = buffer + y*pitch + x;
-	span = pitch - dwidth;
-	err = 0;
-	xinc = (_width << FRACBITS) / dwidth;
-	yinc = (_height << FRACBITS) / dheight;
+	destpitch = Pitch;
+	dest = Buffer + y*destpitch + x;
+	if (this == screen)
+		TransArea += dwidth * dheight;
 
 	if (colors != NULL)
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.SMTRP (src, dest, colors, srcpitch, destpitch, xinc, yinc, xstart, err, dwidth, dheight, fg2rgb, bg2rgb);
+#else
 		do
 		{
 			int i, x;
 
-			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			i = 0;
+			x = xstart;
+
+			do
 			{
 				byte in = src[x >> FRACBITS];
-				if (in != 255)
+				if (in)
 				{
-					unsigned int fg;
-					fg = (fg2rgb[colors[in]] + bg2rgb[*dest]) | 0x1f07c1f;
-					*dest = RGB32k[0][0][fg & (fg>>15)];
+					DWORD fg;
+					fg = (fg2rgb[colors[in]] + bg2rgb[dest[i]]) | 0x1f07c1f;
+					dest[i] = RGB32k[0][0][fg & (fg>>15)];
 				}
-			}
-			dest += span;
+				x += xinc;
+			} while (++i < dwidth);
+			dest += destpitch;
 			err += yinc;
 			while (err >= FRACUNIT)
 			{
-				src += _width;
+				src += srcpitch;
 				err -= FRACUNIT;
 			}
 		}
 		while (--dheight);
+#endif
 	}
 	else
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.SMTUP (src, dest, srcpitch, destpitch, xinc, yinc, xstart, err, dwidth, dheight, fg2rgb, bg2rgb);
+#else
 		do
 		{
 			int i, x;
 
-			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			i = 0;
+			x = xstart;
+
+			do
 			{
 				byte in = src[x >> FRACBITS];
-				if (in != 255)
+				if (in)
 				{
-					unsigned int fg;
-					fg = (fg2rgb[in] + bg2rgb[*dest]) | 0x1f07c1f;
-					*dest = RGB32k[0][0][fg & (fg>>15)];
+					DWORD fg;
+					fg = (fg2rgb[in] + bg2rgb[dest[i]]) | 0x1f07c1f;
+					dest[i] = RGB32k[0][0][fg & (fg>>15)];
 				}
-			}
-			dest += span;
+				x += xinc;
+			} while (++i < dwidth);
+			dest += destpitch;
 			err += yinc;
 			while (err >= FRACUNIT)
 			{
-				src += _width;
+				src += srcpitch;
 				err -= FRACUNIT;
 			}
 		}
 		while (--dheight);
+#endif
 	}
 }
 
 void DCanvas::DrawShadowedMaskedBlock (int x, int y, int _width, int _height,
 	const byte *src, const byte *colors, fixed_t shade) const
 {
+	int srcpitch = _width;
+	int destpitch;
 	byte *dest;
-	int span;
 
-#ifdef RANGECHECK
-	if ( x < 0 || x + _width > width
-		|| y<0 || y+_height>height)
+	if (ClipBox (x, y, _width, _height, src, srcpitch))
 	{
-		return;
+		return;		// Nothing to draw
 	}
-#endif
 
-	unsigned int fg, *bg2rgb;
+	DWORD fg, *bg2rgb;
 
 	{
 		fixed_t fglevel, bglevel;
@@ -1174,50 +1091,68 @@ void DCanvas::DrawShadowedMaskedBlock (int x, int y, int _width, int _height,
 		bg2rgb = Col2RGB8[bglevel>>10];
 	}
 
-	dest = buffer + y*pitch + x;
-	span = pitch - _width;
+	destpitch = Pitch;
+	dest = Buffer + y*Pitch + x;
+	if (this == screen)
+		TransArea += _width * _height;
 
 	if (colors != NULL)
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.DMSRP (src, dest, colors, srcpitch, destpitch, _width, _height, fg, bg2rgb);
+#else
 		do
 		{
-			int i;
+			int i, j;
 
-			for (i = _width; i > 0; i--, dest++)
+			i = _width;
+			j = 0;
+
+			do
 			{
-				byte val = *src++;
-				if (val != 255)
+				byte val = src[j];
+				if (val)
 				{
-					unsigned int bg = bg2rgb[*(dest+pitch*2+2)];
+					DWORD bg = bg2rgb[dest[j+destpitch*2+2]];
 					bg = (fg + bg) | 0x1f07c1f;
-					*(dest+pitch*2+2) = RGB32k[0][0][bg & (bg>>15)];
-					*dest = colors[val];
+					dest[j+destpitch*2+2] = RGB32k[0][0][bg & (bg>>15)];
+					dest[j] = colors[val];
 				}
-			}
-			dest += span;
+			} while (++j, --i);
+			dest += destpitch;
+			src += srcpitch;
 		}
 		while (--_height);
+#endif
 	}
 	else
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.DMSUP (src, dest, srcpitch, destpitch, _width, _height, fg, bg2rgb);
+#else
 		do
 		{
-			int i;
+			int i, j;
 
-			for (i = _width; i > 0; i--, dest++)
+			i = _width;
+			j = 0;
+
+			do
 			{
-				byte val = *src++;
-				if (val != 255)
+				byte val = src[j];
+				if (val)
 				{
-					unsigned int bg = bg2rgb[*(dest+pitch*2+2)];
+					DWORD bg = bg2rgb[dest[j+destpitch*2+2]];
 					bg = (fg + bg) | 0x1f07c1f;
-					*(dest+pitch*2+2) = RGB32k[0][0][bg & (bg>>15)];
-					*dest = val;
+					dest[j+destpitch*2+2] = RGB32k[0][0][bg & (bg>>15)];
+					dest[j] = val;
 				}
-			}
-			dest += span;
+			} while (++j, --i);
+			dest += destpitch;
+			src += srcpitch;
 		}
 		while (--_height);
+#endif
 	}
 }
 
@@ -1225,9 +1160,11 @@ void DCanvas::ScaleShadowedMaskedBlock (int x, int y, int _width, int _height,
 	int dwidth, int dheight, const byte *src, const byte *colors, fixed_t shade) const
 {
 	byte *dest;
-	int span;
+	int srcpitch;
+	int destpitch;
 	fixed_t err;
 	fixed_t xinc, yinc;
+	fixed_t xstart;
 
 	if (dwidth == _width && dheight == _height)
 	{
@@ -1235,15 +1172,14 @@ void DCanvas::ScaleShadowedMaskedBlock (int x, int y, int _width, int _height,
 		return;
 	}
 
-#ifdef RANGECHECK
-	if ( x < 0 || x + dwidth > width
-		|| y<0 || y+dheight>height)
-	{
-		return;
-	}
-#endif
+	srcpitch = _width;
 
-	unsigned int fg, *bg2rgb;
+	if (ClipScaleBox (x, y, _width, _height, dwidth, dheight, src, srcpitch, xinc, yinc, xstart, err))
+	{
+		return;		// Nothing to draw
+	}
+
+	DWORD fg, *bg2rgb;
 
 	{
 		fixed_t fglevel, bglevel;
@@ -1254,30 +1190,36 @@ void DCanvas::ScaleShadowedMaskedBlock (int x, int y, int _width, int _height,
 		bg2rgb = Col2RGB8[bglevel>>10];
 	}
 
-	dest = buffer + y*pitch + x;
-	span = pitch - dwidth;
-	err = 0;
-	xinc = (_width << FRACBITS) / dwidth;
-	yinc = (_height << FRACBITS) / dheight;
+	destpitch = Pitch;
+	dest = Buffer + y*destpitch + x;
+	if (this == screen)
+		TransArea += dwidth * dheight;
 
 	if (colors != NULL)
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.SMSRP (src, dest, colors, srcpitch, destpitch, xinc, yinc, xstart, err, dwidth, dheight, fg, bg2rgb);
+#else
 		do
 		{
 			int i, x;
 
-			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			i = 0;
+			x = xstart;
+
+			do
 			{
 				byte in = src[x >> FRACBITS];
-				if (in != 255)
+				if (in)
 				{
-					unsigned int bg;
-					bg = (fg + bg2rgb[*(dest+pitch*2+2)]) | 0x1f07c1f;
-					*(dest+pitch*2+2) = RGB32k[0][0][bg & (bg>>15)];
-					*dest = colors[in];
+					DWORD bg;
+					bg = (fg + bg2rgb[dest[i+destpitch*2+2]]) | 0x1f07c1f;
+					dest[i+destpitch*2+2] = RGB32k[0][0][bg & (bg>>15)];
+					dest[i] = colors[in];
 				}
-			}
-			dest += span;
+				x += xinc;
+			} while (++i < dwidth);
+			dest += destpitch;
 			err += yinc;
 			while (err >= FRACUNIT)
 			{
@@ -1286,25 +1228,33 @@ void DCanvas::ScaleShadowedMaskedBlock (int x, int y, int _width, int _height,
 			}
 		}
 		while (--dheight);
+#endif
 	}
 	else
 	{
+#ifdef USEASM
+		MaskedBlockFunctions.SMSUP (src, dest, srcpitch, destpitch, xinc, yinc, xstart, err, dwidth, dheight, fg, bg2rgb);
+#else
 		do
 		{
 			int i, x;
 
-			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			i = 0;
+			x = xstart;
+
+			do
 			{
 				byte in = src[x >> FRACBITS];
-				if (in != 255)
+				if (in)
 				{
-					unsigned int bg;
-					bg = (fg + bg2rgb[*(dest+pitch*2+2)]) | 0x1f07c1f;
-					*(dest+pitch*2+2) = RGB32k[0][0][bg & (bg>>15)];
-					*dest = in;
+					DWORD bg;
+					bg = (fg + bg2rgb[dest[i+destpitch*2+2]]) | 0x1f07c1f;
+					dest[i+destpitch*2+2] = RGB32k[0][0][bg & (bg>>15)];
+					dest[i] = in;
 				}
-			}
-			dest += span;
+				x += xinc;
+			} while (++i < dwidth);
+			dest += destpitch;
 			err += yinc;
 			while (err >= FRACUNIT)
 			{
@@ -1313,48 +1263,66 @@ void DCanvas::ScaleShadowedMaskedBlock (int x, int y, int _width, int _height,
 			}
 		}
 		while (--dheight);
+#endif
 	}
 }
 
 void DCanvas::DrawAlphaMaskedBlock (int x, int y, int _width, int _height,
 	const byte *src, int color) const
 {
-#ifdef RANGECHECK
-	if ( x < 0 || x + _width > width
-		|| y<0 || y+_height>height)
+	int srcpitch = _width;
+	int destpitch;
+	byte *dest;
+
+	if (ClipBox (x, y, _width, _height, src, srcpitch))
 	{
-		return;
+		return;		// Nothing to draw
 	}
-#endif
 
-	unsigned int *fgstart = &Col2RGB8[0][color];
-	byte *dest = buffer + y*pitch + x;
-	int span = pitch - _width;
+	destpitch = Pitch;
+	dest = Buffer + y*destpitch + x;
+	DWORD *fgstart = &Col2RGB8[0][color];
+	if (this == screen)
+		TransArea += _width * _height;
 
+#ifdef USEASM
+	MaskedBlockFunctions.DMAUP (src, dest, srcpitch, destpitch, _width, _height, fgstart);
+#else
 	do
 	{
-		int i;
+		int i, j;
 
-		for (i = _width; i > 0; i--, dest++)
+		i = _width;
+		j = 0;
+
+		do
 		{
-			unsigned int val = *src++;
-			if (val != 255)
+			DWORD val = src[j];
+			if (val)
 			{
-				val = (val + 2) >> 2;
-				unsigned int fg = fgstart[val<<8];
-				val = Col2RGB8[64-val][*dest];
+				val = (val + 1) >> 2;
+				DWORD fg = fgstart[val<<8];
+				val = Col2RGB8[64-val][dest[j]];
 				val = (val + fg) | 0x1f07c1f;
-				*dest = RGB32k[0][0][val & (val>>15)];
+				dest[j] = RGB32k[0][0][val & (val>>15)];
 			}
-		}
-		dest += span;
+		} while (++j, --i);
+		src += srcpitch;
+		dest += destpitch;
 	}
 	while (--_height);
+#endif
 }
 
 void DCanvas::ScaleAlphaMaskedBlock (int x, int y, int _width, int _height,
 	int dwidth, int dheight, const byte *src, int color) const
 {
+	byte *dest;
+	int srcpitch;
+	int destpitch;
+	fixed_t err;
+	fixed_t xinc, yinc;
+	fixed_t xstart;
 
 	if (dwidth == _width && dheight == _height)
 	{
@@ -1362,49 +1330,123 @@ void DCanvas::ScaleAlphaMaskedBlock (int x, int y, int _width, int _height,
 		return;
 	}
 
-#ifdef RANGECHECK
-	if ( x < 0 || x + dwidth > width
-		|| y<0 || y+dheight>height)
+	srcpitch = _width;
+
+	if (ClipScaleBox (x, y, _width, _height, dwidth, dheight, src, srcpitch, xinc, yinc, xstart, err))
 	{
-		return;
+		return;		// Nothing to draw
 	}
-#endif
 
-	unsigned int *fgstart = &Col2RGB8[0][color];
-	byte *dest = buffer + y*pitch + x;
-	int span = pitch - _width;
-	fixed_t err;
-	fixed_t xinc, yinc;
+	destpitch = Pitch;
+	dest = Buffer + y*destpitch + x;
+	if (this == screen)
+		TransArea += dwidth * dheight;
 
-	dest = buffer + y*pitch + x;
-	span = pitch - dwidth;
-	err = 0;
-	xinc = (_width << FRACBITS) / dwidth;
-	yinc = (_height << FRACBITS) / dheight;
+	DWORD *fgstart = &Col2RGB8[0][color];
 
+#ifdef USEASM
+	MaskedBlockFunctions.SMAUP (src, dest, srcpitch, destpitch, xinc, yinc, xstart, err, dwidth, dheight, fgstart);
+#else
 	do
 	{
 		int i, x;
 
-		for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+		i = 0;
+		x = xstart;
+
+		do
 		{
-			unsigned int val = src[x >> FRACBITS];
-			if (val != 255)
+			DWORD val = src[x >> FRACBITS];
+			if (val)
 			{
 				val = (val + 2) >> 2;
-				unsigned int fg = fgstart[val<<8];
-				val = Col2RGB8[64-val][*dest];
+				DWORD fg = fgstart[val<<8];
+				val = Col2RGB8[64-val][dest[i]];
 				val = (fg + val) | 0x1f07c1f;
-				*dest = RGB32k[0][0][val & (val>>15)];
+				dest[i] = RGB32k[0][0][val & (val>>15)];
 			}
-		}
-		dest += span;
+			x += xinc;
+		} while (++i < dwidth);
+		dest += destpitch;
 		err += yinc;
 		while (err >= FRACUNIT)
 		{
-			src += _width;
+			src += srcpitch;
 			err -= FRACUNIT;
 		}
 	}
 	while (--dheight);
+#endif
+}
+
+// Returns true if the box was completely clipped. False otherwise.
+bool DCanvas::ClipBox (int &x, int &y, int &w, int &h, const byte *&src, const int srcpitch) const
+{
+	if (x >= Width || y >= Height || x+w <= 0 || y+h <= 0)
+	{ // Completely clipped off screen
+		return true;
+	}
+	if (x < 0)				// clip left edge
+	{
+		src -= x;
+		w += x;
+		x = 0;
+	}
+	if (x+w > Width)		// clip right edge
+	{
+		w = Width - x;
+	}
+	if (y < 0)				// clip top edge
+	{
+		src -= y*srcpitch;
+		h += y;
+		y = 0;
+	}
+	if (y+h > Height)		// clip bottom edge
+	{
+		h = Height - y;
+	}
+	return false;
+}
+
+bool DCanvas::ClipScaleBox (
+	int &x, int &y,
+	int &w, int &h,
+	int &dw, int &dh,
+	const byte *&src, const int srcpitch,
+	fixed_t &xinc, fixed_t &yinc,
+	fixed_t &xstart, fixed_t &ystart) const
+{
+	if (x >= Width || y >= Height || x+dw <= 0 || y+dh <= 0)
+	{ // Completely clipped off screen
+		return true;
+	}
+
+	xinc = (w << FRACBITS) / dw;
+	yinc = (h << FRACBITS) / dh;
+	xstart = ystart = 0;
+
+	if (x < 0)				// clip left edge
+	{
+		dw += x;
+		xstart = -x*xinc;
+		x = 0;
+	}
+	if (x+dw > Width)		// clip right edge
+	{
+		dw = Width - x;
+	}
+	if (y < 0)				// clip top edge
+	{
+		dh += y;
+		ystart = -y*yinc;
+		src += (ystart>>FRACBITS)*srcpitch;
+		ystart &= FRACUNIT-1;
+		y = 0;
+	}
+	if (y+dh > Height)		// clip bottom edge
+	{
+		dh = Height - y;
+	}
+	return false;
 }

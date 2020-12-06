@@ -1,3 +1,4 @@
+#include "templates.h"
 #include "actor.h"
 #include "info.h"
 #include "m_random.h"
@@ -5,7 +6,7 @@
 #include "s_sound.h"
 #include "p_enemy.h"
 #include "a_doomglobal.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_CyberAttack (AActor *);
@@ -14,14 +15,11 @@ void A_Metal (AActor *);
 
 class ACyberdemon : public AActor
 {
-	DECLARE_ACTOR (ACyberdemon, AActor);
+	DECLARE_ACTOR (ACyberdemon, AActor)
 public:
 	bool SuggestMissileAttack (fixed_t dist);
-	const char *GetObituary () { return OB_CYBORG; }
+	const char *GetObituary () { return GStrings(OB_CYBORG); }
 };
-
-IMPLEMENT_DEF_SERIAL (ACyberdemon, AActor);
-REGISTER_ACTOR (ACyberdemon, Doom);
 
 FState ACyberdemon::States[] =
 {
@@ -63,45 +61,41 @@ FState ACyberdemon::States[] =
 	S_NORMAL (CYBR, 'P',   -1, A_BossDeath					, NULL)
 };
 
-void ACyberdemon::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 16;
-	info->spawnid = 114;
-	info->spawnstate = &States[S_CYBER_STND];
-	info->spawnhealth = 4000;
-	info->seestate = &States[S_CYBER_RUN];
-	info->seesound = "cyber/sight";
-	info->painstate = &States[S_CYBER_PAIN];
-	info->painchance = 20;
-	info->painsound = "cyber/pain";
-	info->missilestate = &States[S_CYBER_ATK];
-	info->deathstate = &States[S_CYBER_DIE];
-	info->deathsound = "cyber/death";
-	info->speed = 16;
-	info->radius = 40 * FRACUNIT;
-	info->height = 110 * FRACUNIT;
-	info->mass = 1000;
-	info->activesound = "cyber/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL|MF2_BOSS;
-	info->flags3 = MF3_NORADIUSDMG;
-}
+IMPLEMENT_ACTOR (ACyberdemon, Doom, 16, 114)
+	PROP_SpawnHealth (4000)
+	PROP_RadiusFixed (40)
+	PROP_HeightFixed (110)
+	PROP_Mass (1000)
+	PROP_SpeedFixed (16)
+	PROP_PainChance (20)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL|MF2_BOSS)
+	PROP_Flags3 (MF3_NORADIUSDMG)
+
+	PROP_SpawnState (S_CYBER_STND)
+	PROP_SeeState (S_CYBER_RUN)
+	PROP_PainState (S_CYBER_PAIN)
+	PROP_MissileState (S_CYBER_ATK)
+	PROP_DeathState (S_CYBER_DIE)
+
+	PROP_SeeSound ("cyber/sight")
+	PROP_PainSound ("cyber/pain")
+	PROP_DeathSound ("cyber/death")
+	PROP_ActiveSound ("cyber/active")
+END_DEFAULTS
 
 bool ACyberdemon::SuggestMissileAttack (fixed_t dist)
 {
-	return P_Random (pr_checkmissilerange) >= MIN (dist >> (FRACBITS + 1), 160);
+	return P_Random (pr_checkmissilerange) >= MIN<int> (dist >> (FRACBITS + 1), 160);
 }
 
 void A_CyberAttack (AActor *self)
 {
-	AActor *rocket;
-
 	if (!self->target)
 		return;
 				
 	A_FaceTarget (self);
-	rocket = P_SpawnMissile (self, self->target, RUNTIME_CLASS(ARocket));
+	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ARocket));
 }
 
 void A_Hoof (AActor *self)

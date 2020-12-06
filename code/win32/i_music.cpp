@@ -1,7 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <mmsystem.h>
-#include <stdexcpt.h>
+#include <ctype.h>
+#include <assert.h>
 
 #include "doomtype.h"
 #include "m_argv.h"
@@ -14,10 +15,11 @@
 #include "mus2strm.h"
 #include "i_system.h"
 #include "i_sound.h"
+#include "i_cd.h"
 
 #include <fmod.h>
 
-EXTERN_CVAR (snd_musicvolume)
+EXTERN_CVAR (Int, snd_musicvolume)
 extern int _nosound;
 
 class MusInfo
@@ -33,6 +35,7 @@ public:
 	virtual bool IsPlaying () = 0;
 	virtual bool IsMIDI () = 0;
 	virtual bool IsValid () = 0;
+	virtual bool SetPosition (int order) { return false; }
 
 	enum EState
 	{
@@ -65,7 +68,8 @@ protected:
 	bool PrepareHeaders ();
 	void SubmitBuffer ();
 	void AllChannelsOff ();
-	virtual bool IsMUS () { return false; }
+
+	bool m_IsMUS;
 
 	enum
 	{
@@ -82,8 +86,6 @@ class MUSSong : public MIDISong
 {
 public:
 	MUSSong (int handle, int pos, int len);
-protected:
-	bool IsMUS () { return true; }
 };
 
 class MODSong : public MusInfo
@@ -99,6 +101,7 @@ public:
 	bool IsPlaying ();
 	bool IsMIDI () { return false; }
 	bool IsValid () { return m_Module != NULL; }
+	bool SetPosition (int order);
 
 protected:
 	FMUSIC_MODULE *m_Module;
@@ -120,11 +123,41 @@ public:
 
 protected:
 	FSOUND_STREAM *m_Stream;
-	long m_Channel;
-	static long m_Volume;
+	int m_Channel;
+	int m_Length;
+	int m_LastPos;
+
+	static int m_Volume;
 };
 
-long StreamSong::m_Volume = 255;
+int StreamSong::m_Volume = 255;
+
+class CDSong : public MusInfo
+{
+public:
+	CDSong (int track, int id);
+	~CDSong ();
+	void SetVolume (float volume) {}
+	void Play (bool looping);
+	void Pause ();
+	void Resume ();
+	void Stop ();
+	bool IsPlaying ();
+	bool IsMIDI () { return false; }
+	bool IsValid () { return m_Inited; }
+
+protected:
+	CDSong () { m_Inited = false; }
+
+	int m_Track;
+	bool m_Inited;
+};
+
+class CDDAFile : public CDSong
+{
+public:
+	CDDAFile (int handle, int pos, int len);
+};
 
 static MusInfo *currSong;
 static HANDLE	BufferReturnEvent;
@@ -135,37 +168,36 @@ static DWORD	nummididevices;
 static bool		nummididevicesset;
 static UINT		mididevice;
 
-BEGIN_CUSTOM_CVAR (snd_mididevice, "-1", CVAR_ARCHIVE)
+CUSTOM_CVAR (Int, snd_mididevice, -1, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
 	UINT oldmididev = mididevice;
 
 	if (!nummididevicesset)
 		return;
 
-	if (((int)var.value >= (signed)nummididevices) || (var.value < -1.0f))
+	if ((*var >= (signed)nummididevices) || (*var < -1.0f))
 	{
-		Printf (PRINT_HIGH, "ID out of range. Using MIDI mapper.\n");
-		var.Set (-1.0f);
+		Printf ("ID out of range. Using MIDI mapper.\n");
+		var = -1;
 		return;
 	}
-	else if (var.value < 0)
+	else if (*var < 0)
 	{
 		mididevice = MIDI_MAPPER;
 	}
 	else
 	{
-		mididevice = (int)var.value;
+		mididevice = *var;
 	}
 
 	// If a song is playing, move it to the new device.
 	if (oldmididev != mididevice && currSong)
 	{
 		MusInfo *song = currSong;
-		I_StopSong ((int)song);
-		I_PlaySong ((int)song, song->m_Looping);
+		I_StopSong ((long)song);
+		I_PlaySong ((long)song, song->m_Looping);
 	}
 }
-END_CUSTOM_CVAR (snd_mididevice)
 
 void I_SetMIDIVolume (float volume)
 {
@@ -213,7 +245,7 @@ void StreamSong::SetVolume (float volume)
 	}
 }
 
-BEGIN_COMMAND (snd_listmididevices)
+CCMD (snd_listmididevices)
 {
 	UINT id;
 	MIDIOUTCAPS caps;
@@ -221,11 +253,11 @@ BEGIN_COMMAND (snd_listmididevices)
 
 	if (nummididevices)
 	{
-		Printf (PRINT_HIGH, "-1. MIDI Mapper\n");
+		Printf ("-1. MIDI Mapper\n");
 	}
 	else
 	{
-		Printf (PRINT_HIGH, "No MIDI devices installed.\n");
+		Printf ("No MIDI devices installed.\n");
 		return;
 	}
 
@@ -239,16 +271,15 @@ BEGIN_COMMAND (snd_listmididevices)
 		else if (res != MMSYSERR_NOERROR)
 			continue;
 
-		Printf (PRINT_HIGH, "% 2d. %s\n", id, caps.szPname);
+		Printf ("% 2d. %s\n", id, caps.szPname);
 	}
 }
-END_COMMAND (snd_listmididevices)
 
 void I_InitMusic (void)
 {
 	static bool setatterm = false;
 
-	Printf (PRINT_HIGH, "I_InitMusic\n");
+	Printf ("I_InitMusic\n");
 	
 	nummididevices = midiOutGetNumDevs ();
 	nummididevicesset = true;
@@ -261,7 +292,7 @@ void I_InitMusic (void)
 	{
 		if ((BufferReturnEvent = CreateEvent (NULL, FALSE, FALSE, NULL)) == NULL)
 		{
-			Printf (PRINT_HIGH, "Could not create MIDI callback event.\nMIDI music will be disabled.\n");
+			Printf ("Could not create MIDI callback event.\nMIDI music will be disabled.\n");
 			nomusic = true;
 		}
 	}
@@ -278,8 +309,12 @@ void STACK_ARGS I_ShutdownMusic(void)
 {
 	if (currSong)
 	{
-		I_UnRegisterSong ((int)currSong);
+		S_StopMusic (true);
+		/*
+		I_UnRegisterSong ((long)currSong);
 		currSong = NULL;
+		*/
+		assert (currSong == NULL);
 	}
 	if (BufferReturnEvent)
 	{
@@ -295,7 +330,7 @@ void MIDISong::MCIError (MMRESULT res, const char *descr)
 
 	mciGetErrorString (res, errorStr, 255);
 	Printf_Bold ("An error occured while %s:\n", descr);
-	Printf (PRINT_HIGH, "%s\n", errorStr);
+	Printf ("%s\n", errorStr);
 }
 
 void MIDISong::UnprepareHeaders ()
@@ -408,7 +443,7 @@ void MIDISong::MidiProc (UINT uMsg)
 	}
 }
 
-void I_PlaySong (int handle, int _looping)
+void I_PlaySong (long handle, int _looping)
 {
 	MusInfo *info = (MusInfo *)handle;
 
@@ -534,10 +569,10 @@ void MIDISong::Play (bool looping)
 	else
 	{
 		MCIError (res, "opening MIDI stream");
-		if (snd_mididevice.value != -1)
+		if (*snd_mididevice != -1)
 		{
-			Printf (PRINT_HIGH, "Trying again with MIDI mapper\n");
-			snd_mididevice.Set (-1.0f);
+			Printf ("Trying again with MIDI mapper\n");
+			snd_mididevice = -1;
 		}
 		else
 		{
@@ -560,25 +595,30 @@ void MODSong::Play (bool looping)
 
 void StreamSong::Play (bool looping)
 {
-	long i;
-
 	m_Status = STATE_Stopped;
 	m_Looping = looping;
 
-	for (i = FSOUND_GetMaxChannels() - 1; i > 0; i++)
+	m_Channel = FSOUND_Stream_Play (FSOUND_FREE, m_Stream);
+	if (m_Channel != -1)
 	{
-		m_Channel = FSOUND_Stream_Play (i, m_Stream);
-		if (m_Channel != -1)
-		{
-			FSOUND_SetVolumeAbsolute (m_Channel, m_Volume);
-			FSOUND_SetPan (m_Channel, FSOUND_STEREOPAN);
-			m_Status = STATE_Playing;
-			break;
-		}
+		FSOUND_SetVolumeAbsolute (m_Channel, m_Volume);
+		FSOUND_SetPan (m_Channel, FSOUND_STEREOPAN);
+		m_Status = STATE_Playing;
+		m_LastPos = 0;
 	}
 }
 
-void I_PauseSong (int handle)
+void CDSong::Play (bool looping)
+{
+	m_Status = STATE_Stopped;
+	m_Looping = looping;
+	if (m_Track != 0 ? CD_Play (m_Track, looping) : CD_PlayCD (looping))
+	{
+		m_Status = STATE_Playing;
+	}
+}
+
+void I_PauseSong (long handle)
 {
 	MusInfo *info = (MusInfo *)handle;
 
@@ -614,7 +654,16 @@ void StreamSong::Pause ()
 	}
 }
 
-void I_ResumeSong (int handle)
+void CDSong::Pause ()
+{
+	if (m_Status == STATE_Playing)
+	{
+		CD_Pause ();
+		m_Status = STATE_Paused;
+	}
+}
+
+void I_ResumeSong (long handle)
 {
 	MusInfo *info = (MusInfo *)handle;
 
@@ -641,6 +690,15 @@ void MODSong::Resume ()
 	}
 }
 
+void CDSong::Resume ()
+{
+	if (m_Status == STATE_Paused)
+	{
+		if (CD_Resume ())
+			m_Status = STATE_Playing;
+	}
+}
+
 void StreamSong::Resume ()
 {
 	if (m_Status == STATE_Paused)
@@ -650,7 +708,7 @@ void StreamSong::Resume ()
 	}
 }
 
-void I_StopSong (int handle)
+void I_StopSong (long handle)
 {
 	MusInfo *info = (MusInfo *)handle;
 	
@@ -665,7 +723,6 @@ void MIDISong::Stop ()
 {
 	if (m_Status != STATE_Stopped && m_MidiStream)
 	{
-		m_Status = STATE_Stopped;
 		if (m_CallbackStatus != cb_dead)
 			m_CallbackStatus = cb_die;
 		midiStreamStop (m_MidiStream);
@@ -675,28 +732,38 @@ void MIDISong::Stop ()
 		midiStreamClose (m_MidiStream);
 		m_MidiStream = NULL;
 	}
+	m_Status = STATE_Stopped;
 }
 
 void MODSong::Stop ()
 {
-	if (m_Status != STATE_Stopped)
+	if (m_Status != STATE_Stopped && m_Module)
 	{
-		m_Status = STATE_Stopped;
 		FMUSIC_StopSong (m_Module);
 	}
+	m_Status = STATE_Stopped;
 }
 
 void StreamSong::Stop ()
 {
-	if (m_Status != STATE_Stopped)
+	if (m_Status != STATE_Stopped && m_Stream)
 	{
-		m_Status = STATE_Stopped;
 		FSOUND_Stream_Stop (m_Stream);
 		m_Channel = -1;
 	}
+	m_Status = STATE_Stopped;
 }
 
-void I_UnRegisterSong (int handle)
+void CDSong::Stop ()
+{
+	if (m_Status != STATE_Stopped)
+	{
+		m_Status = STATE_Stopped;
+		CD_Stop ();
+	}
+}
+
+void I_UnRegisterSong (long handle)
 {
 	MusInfo *info = (MusInfo *)handle;
 
@@ -709,7 +776,7 @@ void I_UnRegisterSong (int handle)
 MIDISong::~MIDISong ()
 {
 	Stop ();
-	if (IsMUS ())
+	if (m_IsMUS)
 		mus2strmCleanup ();
 	else
 		mid2strmCleanup ();
@@ -730,10 +797,21 @@ StreamSong::~StreamSong ()
 	m_Stream = NULL;
 }
 
-int I_RegisterSong (int handle, int pos, int len)
+CDSong::~CDSong ()
+{
+	Stop ();
+	m_Inited = false;
+}
+
+long I_RegisterSong (int handle, int pos, int len)
 {
 	MusInfo *info = NULL;
 	DWORD id;
+
+	if (nomusic)
+	{
+		return 0;
+	}
 
 	lseek (handle, pos, SEEK_SET);
 	read (handle, &id, 4);
@@ -747,6 +825,17 @@ int I_RegisterSong (int handle, int pos, int len)
 	{
 		// This is a midi file
 		info = new MIDISong (handle, pos, len);
+	}
+	else if (id == (('R')|(('I')<<8)|(('F')<<16)|(('F')<<24)))
+	{
+		DWORD subid = 0;
+		lseek (handle, pos+8, SEEK_SET);
+		read (handle, &subid, 4);
+		if (subid == (('C')|(('D')<<8)|(('D')<<16)|(('A')<<24)))
+		{
+			// This is a CDDA file
+			info = new CDDAFile (handle, pos, len);
+		}
 	}
 	else if (!_nosound)	// no FSOUND => no modules/mp3s
 	{
@@ -765,17 +854,32 @@ int I_RegisterSong (int handle, int pos, int len)
 		info = NULL;
 	}
 
-	return info ? (int)info : 0;
+	return info ? (long)info : 0;
+}
+
+long I_RegisterCDSong (int track, int id)
+{
+	MusInfo *info = new CDSong (track, id);
+
+	if (info && !info->IsValid ())
+	{
+		delete info;
+		info = NULL;
+	}
+
+	return info ? (long)info : 0;
 }
 
 MIDISong::MIDISong ()
 {
 	m_Buffers = NULL;
+	m_IsMUS = false;
 }
 
 MIDISong::MIDISong (int handle, int pos, int len)
 {
 	m_Buffers = NULL;
+	m_IsMUS = false;
 	if (nummididevices > 0 && lseek (handle, pos, SEEK_SET) != -1)
 	{
 		byte *data = new byte[len];
@@ -790,6 +894,7 @@ MIDISong::MIDISong (int handle, int pos, int len)
 MUSSong::MUSSong (int handle, int pos, int len) : MIDISong ()
 {
 	m_Buffers = NULL;
+	m_IsMUS = true;
 	if (nummididevices > 0 && lseek (handle, pos, SEEK_SET) != -1)
 	{
 		byte *data = new byte[len];
@@ -809,12 +914,83 @@ MODSong::MODSong (int handle, int pos, int len)
 StreamSong::StreamSong (int handle, int pos, int len)
 {
 	m_Channel = -1;
-	m_Stream = FSOUND_Stream_OpenMpeg ((char *)new FileHandle (handle, pos, len),
-		FSOUND_LOOP_NORMAL|FSOUND_NORMAL);
+	m_Stream = FSOUND_Stream_OpenFile ((char *)new FileHandle (handle, pos, len),
+		FSOUND_LOOP_NORMAL|FSOUND_NORMAL, 0);
+	if (m_Stream != NULL)
+	{
+		m_Length = FSOUND_Stream_GetLength (m_Stream);
+	}
+}
+
+CDSong::CDSong (int track, int id)
+{
+	bool success;
+
+	m_Inited = false;
+
+	if (id != 0)
+	{
+		success = CD_InitID (id);
+	}
+	else
+	{
+		success = CD_Init ();
+	}
+
+	if (success && track == 0 || CD_CheckTrack (track))
+	{
+		m_Inited = true;
+		m_Track = track;
+	}
+}
+
+CDDAFile::CDDAFile (int handle, int pos, int len)
+	: CDSong ()
+{
+	DWORD chunk;
+	WORD track;
+	DWORD discid;
+	int cursor = 12;
+
+	// I_RegisterSong already identified this as a CDDA file, so we
+	// just need to check the contents we're interested in.
+
+	while (cursor < len - 8)
+	{
+		if (lseek (handle, pos+cursor, SEEK_SET) == -1)
+			return;
+		if (read (handle, &chunk, 4) != 4)
+			return;
+		if (chunk != (('f')|(('m')<<8)|(('t')<<16)|((' ')<<24)))
+		{
+			if (read (handle, &chunk, 4) != 4)
+				return;
+			cursor += LONG(chunk) + 8;
+		}
+		else
+		{
+			if (lseek (handle, pos+cursor+10, SEEK_SET) != -1)
+			{
+				if (read (handle, &track, 2) == 2 &&
+					read (handle, &discid, 4) == 4)
+				{
+					track = SHORT(track);
+					discid = LONG(discid);
+
+					if (CD_InitID (discid) && CD_CheckTrack (track))
+					{
+						m_Inited = true;
+						m_Track = track;
+					}
+				}
+			}
+			return;
+		}
+	}
 }
 
 // Is the song playing?
-bool I_QrySongPlaying (int handle)
+bool I_QrySongPlaying (long handle)
 {
 	MusInfo *info = (MusInfo *)handle;
 
@@ -828,10 +1004,59 @@ bool MIDISong::IsPlaying ()
 
 bool MODSong::IsPlaying ()
 {
-	return !!FMUSIC_IsPlaying (m_Module);
+	if (m_Status != STATE_Stopped && FMUSIC_IsPlaying (m_Module))
+	{
+		if (!m_Looping && FMUSIC_IsFinished (m_Module))
+		{
+			Stop();
+			return false;
+		}
+		return true;
+	}
+	return false;
 }
 
 bool StreamSong::IsPlaying ()
 {
-	return m_Channel != -1;
+	if (m_Channel != -1)
+	{
+		if (m_Looping)
+			return true;
+
+		int pos = FSOUND_Stream_GetPosition (m_Stream);
+
+		if (pos < m_LastPos)
+		{
+			Stop ();
+			return false;
+		}
+
+		m_LastPos = pos;
+		return true;
+	}
+	return false;
+}
+
+bool CDSong::IsPlaying ()
+{
+	if (m_Status == STATE_Playing)
+	{
+		if (CD_GetMode () != CDMode_Play)
+		{
+			Stop ();
+		}
+	}
+	return m_Status != STATE_Stopped;
+}
+
+// Change to a different part of the song
+bool I_SetSongPosition (long handle, int order)
+{
+	MusInfo *info = (MusInfo *)handle;
+	return info ? info->SetPosition (order) : false;
+}
+
+bool MODSong::SetPosition (int order)
+{
+	return !!FMUSIC_SetOrder (m_Module, order);
 }

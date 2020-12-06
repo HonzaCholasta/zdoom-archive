@@ -18,7 +18,7 @@ BITS 32
 %define SPACEFILLER4 (0x44444444)
 
 ; If you change this in r_draw.c, be sure to change it here, too!
-FUZZTABLE	equ	64
+FUZZTABLE	equ	50
 
 %ifdef M_TARGET_LINUX
 
@@ -27,7 +27,7 @@ EXTERN ylookup
 EXTERN centery
 EXTERN fuzzpos
 EXTERN fuzzoffset
-EXTERN DefaultPalette
+EXTERN NormalLight
 EXTERN realviewheight
 
 EXTERN dc_pitch
@@ -64,7 +64,7 @@ EXTERN _ylookup
 EXTERN _centery
 EXTERN _fuzzpos
 EXTERN _fuzzoffset
-EXTERN _DefaultPalette
+EXTERN _NormalLight
 EXTERN _realviewheight
 
 EXTERN _dc_pitch
@@ -99,7 +99,7 @@ GLOBAL _ds_curcolormap
 %define centery		_centery
 %define fuzzpos		_fuzzpos
 %define fuzzoffset	_fuzzoffset
-%define DefaultPalette	_DefaultPalette
+%define NormalLight	_NormalLight
 %define realviewheight	_realviewheight
 
 %define dc_pitch	_dc_pitch
@@ -127,9 +127,6 @@ GLOBAL _ds_curcolormap
 %define ds_y		_ds_y
 
 %endif
-
-
-EXTERN	PatchUnrolled
 
 
 _ds_cursource:
@@ -233,36 +230,36 @@ R_DrawSpanP_ASM:
 	mov	eax,[ds_x2]
 	 mov	ecx,[ds_x1]
 	sub	eax,ecx
-	 mov	edx,[columnofs]
-
-	jl	aret		; count < 0: nothing to do, so leave
+	 jl	aret		; count < 0: nothing to do, so leave
 
 	push	ebx
 	push	edi
 	push	ebp
 	push	esi
 
-	mov	edi,[edx+ecx*4]
-	 mov	edx,[ylookup]
-	mov	ecx,[ds_y]
-	 add	edi,[edx+ecx*4]
-
-	mov	edx,[ds_ystep]
-	 xor	ebx,ebx
+	mov	edi,[columnofs+ecx*4]
+	 mov	ecx,[ds_y]
+	add	edi,[ylookup+ecx*4]
+	 mov	edx,[ds_ystep]
 	shl	edx,6
-	 mov	ecx,[ds_ystep]
-	shr	ecx,26
-	 lea	esi,[eax+1]
-	or	ecx,[ds_xstep]
+	 mov	ebp,[ds_ystep]
+	shr	ebp,26
+	 xor	ebx,ebx
+	lea	esi,[eax+1]
 	 mov	[ds_ystep],edx
-	mov	[ds_xstep],ecx
+	mov	edx,[ds_xstep]
 	 mov	ecx,[ds_yfrac]
 	shr	ecx,26
+	 and	edx,0xffffffc0
+	or	ebp,edx
+	 mov	[ds_xstep],ebp
+	mov	ebp,[ds_xfrac]
 	 mov	edx,[ds_yfrac]
 	shl	edx,6
-	 or	ecx,[ds_xfrac]
-	shr	esi,1
-	 jnc	dseven1
+	 and	ebp,0xffffffc0
+	or	ecx,ebp
+	 shr	esi,1
+	jnc	dseven1
 
 ; do odd pixel
 
@@ -363,24 +360,17 @@ _ASM_PatchPitch:
 
 	; 1 * dc_pitch
 	mov	[rdcp1+2],edx
-	mov	[f1a+3],edx
-	mov	[f1b+2],edx
 
 	; 2 * dc_pitch
 	add	edx,[dc_pitch]
-	mov	[f2a+3],edx
-	mov	[f2b+2],edx
 
 	; 3 * dc_pitch
 	add	edx,[dc_pitch]
-	mov	[f3a+3],edx
-	mov	[f3b+2],edx
 
 	; 4 * dc_pitch
 	add	edx,[dc_pitch]
-	mov	[f4+2],edx
 
-	jmp	PatchUnrolled
+	ret
 
 
 ;*----------------------------------------------------------------------
@@ -404,9 +394,7 @@ _R_DrawColumnP_ASM:
 	mov	eax,[dc_yh]
 	 mov	ecx,[dc_yl]
 	sub	eax,ecx
-	 mov	edx,[ylookup]
-
-	jl	near rdcpret		; count < 0: nothing to do, so leave
+	 jl	near rdcpret		; count < 0: nothing to do, so leave
 
 	push	ebp			; save registers
 	 push	ebx
@@ -415,13 +403,11 @@ _R_DrawColumnP_ASM:
 
 ; dest = ylookup[dc_yl] + columnofs[dc_x];
 
-	mov	edi,[edx+ecx*4]
-	 mov	edx,[columnofs]
-	mov	ebx,[dc_x]
-	 inc	eax			; make 0 count mean 0 pixels
-
+	inc	eax			; make 0 count mean 0 pixels
+	 mov	ebx,[dc_x]
 	imul	eax,[dc_pitch]		; Start turning the counter into an index
-	 add	edi,[edx+ebx*4]		; edi = top of destination column
+	mov	edi,[ylookup+ecx*4]
+	add	edi,[columnofs+ebx*4]	; edi = top of destination column
 	add	edi,eax			; Point edi to the bottom of the destination column
 	 mov	edx,[dc_iscale]
 	shr	edx,16
@@ -480,9 +466,6 @@ rdcpret:
 ;*
 ;* R_DrawFuzzColumnP
 ;*
-;* This code assumes that the fuzztable is some 2^n size, which it is
-;* not in the original DOOM.
-;*
 ;*----------------------------------------------------------------------
 
 GLOBAL	@R_DrawFuzzColumnP_ASM@0
@@ -500,124 +483,118 @@ _R_DrawFuzzColumnP_ASM:
 	 push	ebx
 	push	esi
 	 push	edi
+	push	ebp
 
-	cmp	eax,0
-	 jg	.ylok
+	 cmp	eax,0
+	jg	.ylok
 
 	mov	eax,1
+	nop
 
 ; ...and high.
 .ylok	mov	edx,[realviewheight]
 	 mov	esi,[dc_yh]
-	lea	ecx,[edx-1]
+	lea	ecx,[edx-2]
 	cmp	esi,ecx
-	 jl	.yhok
+	 jle	.yhok
 
-	lea	esi,[edx-2]
+	mov	esi,ecx
+	nop
 
-.yhok	sub	esi,eax			; esi = count
-	js	near dfcdone		; Zero length (or less)
+.yhok	mov	edx,[dc_x]
+	 sub	esi,eax			; esi = count
+	js	near .dfcdone		; Zero length (or less)
 
-	mov	ecx,[ylookup]
-	 mov	edx,[dc_x]
-	; AGI stall
-	mov	edi,[ecx+eax*4]
-	 mov	ecx,[columnofs]
-	; AGI stall
-	mov	ebx,[ecx+edx*4]
-	 mov	eax,[DefaultPalette]
-	mov	ecx,[fuzzpos]
-	 add	edi,ebx
+	mov	edi,[ylookup+eax*4]
+	 mov	ebx,[columnofs+edx*4]
+	mov	eax,[NormalLight]
+	 mov	ecx,[fuzzpos]
+	add	edi,ebx
+	 add	eax,256*6
 	inc	esi
-	 mov	eax,[eax+8]
+	 mov	ebp,[dc_pitch]
+	mov	edx,FUZZTABLE
+	 test	ecx,ecx
+	je	.fuzz0
 
-	mov	ebx,esi
-	 add	eax,6*256
-	shr	esi,2
-	 shl	ebx,8
-	test	bh,3
-	 jz	fquadloop
 ;
 ; esi = count
 ; edi = dest
 ; ecx = fuzzpos
-; eax = colormap 6 (256-byte aligned)
+; eax = colormap 6
 ;
 
-; do odd pixel (if any)
-	test	bh,1
-	 jz	.oddid
+; first loop: end with fuzzpos or count 0, whichever happens first
 
+	sub	edx,ecx			; edx = # of entries left in fuzzoffset
+	 mov	ebx,esi
+	cmp	esi,edx
+	 jle	.enuf
+	mov	esi,edx
+.enuf	sub	ebx,esi
+	 mov	edx,[fuzzoffset+ecx*4]
+	push	ebx
+	 xor	ebx,ebx
+
+.loop1	inc	ecx
+	 mov	bl,[edi+edx]
+	dec	esi
+	 mov	bl,[eax+ebx]
+	mov	[edi],bl
+	 lea	edi,[edi+ebp]
 	mov	edx,[fuzzoffset+ecx*4]
-	 inc	ecx
-	mov	al,[edi+edx]
-	 and	ecx,FUZZTABLE-1
-	mov	bl,[eax]
+	 jnz	.loop1
+
+; second loop: Chunk it into groups of FUZZTABLE-sized spans and do those
+
+	pop	esi
+	 cmp	ecx,FUZZTABLE
+	jl	.savefuzzpos
+	xor	ecx,ecx
+	 nop
+.fuzz0	cmp	esi,FUZZTABLE
+	 jl	.chunked
+
+.oloop	lea	edx,[esi-FUZZTABLE]
+	 mov	esi,FUZZTABLE
+	push	edx
+	 mov	edx,[fuzzoffset+ecx*4]
+
+.iloop	inc	ecx
+	 mov	bl,[edi+edx]
+	dec	esi
+	 mov	bl,[eax+ebx]
 	mov	[edi],bl
-	 add	edi,[dc_pitch]
-
-; do two non-dword aligned pixels (if any)
-.oddid	test	bh,2
-	 jz	.undid
-
+	 lea	edi,[edi+ebp]
 	mov	edx,[fuzzoffset+ecx*4]
-	 inc	ecx
-	mov	al,[edi+edx]
-	 and	ecx,FUZZTABLE-1
-	mov	bl,[eax]
-	 mov	edx,[fuzzoffset+ecx*4]
-	mov	[edi],bl
-	 add	edi,[dc_pitch]
+	 jnz	.iloop
 
-	inc	ecx
-	 mov	al,[edi+edx]
-	and	ecx,FUZZTABLE-1
-	 mov	bl,[eax]
-	mov	[edi],bl
-	 add	edi,[dc_pitch]
+	pop	esi
+	 xor	ecx,ecx
+	cmp	esi,FUZZTABLE
+	 jge	.oloop
 
-; make sure we still have some pixels left to do
-.undid	test	esi,esi
-	 jz	savefuzzpos
+; third loop: Do whatever is left
 
-fquadloop:
+.chunked
+	test	esi,esi
+	 jle	.savefuzzpos
 	mov	edx,[fuzzoffset+ecx*4]
-	 inc	ecx
-	mov	al,[edi+edx]		; AGI stall
-	 and	ecx,FUZZTABLE-1
-	mov	bl,[eax]		; AGI stall
-	 mov	edx,[fuzzoffset+ecx*4]
+	 nop
+
+.loop3	inc	ecx
+	 mov	bl,[edi+edx]
+	dec	esi
+	 mov	bl,[eax+ebx]
 	mov	[edi],bl
+	 lea	edi,[edi+ebp]
+	mov	edx,[fuzzoffset+ecx*4]
+	 jnz	.loop3
 
-	 inc	ecx
-f1a:	mov	al,[edi+edx+SPACEFILLER4]
-	 and	ecx,FUZZTABLE-1
-	mov	bl,[eax]
-	 mov	edx,[fuzzoffset+ecx*4]
-f1b:	mov	[edi+SPACEFILLER4],bl
-
-	 inc	ecx
-f2a:	mov	al,[edi+edx+2*SPACEFILLER4]
-	 and	ecx,FUZZTABLE-1
-	mov	bl,[eax]
-	 mov	edx,[fuzzoffset+ecx*4]
-f2b:	mov	[edi+2*SPACEFILLER4],bl
-
-	 inc	ecx
-f3a:	mov	al,[edi+edx+3*SPACEFILLER4]
-	 and	ecx,FUZZTABLE-1
-	mov	bl,[eax]
-	 dec	esi
-f3b:	mov	[edi+3*SPACEFILLER4],bl
-
-f4:	 lea	edi,[edi+4*SPACEFILLER4]
-	jnz	fquadloop
-
-savefuzzpos:
-	add	ecx,3
-	and	ecx,FUZZTABLE-1
+.savefuzzpos:
 	mov	[fuzzpos],ecx
-dfcdone:
+.dfcdone:
+	pop	ebp
 	pop	edi
 	pop	esi
 	pop	ebx
@@ -911,12 +888,10 @@ _rt_copy1col_asm:
 	js	.done
 
 	lea	esi,[eax*4]
-	mov	eax,[columnofs]
 	inc	ebx			; ebx = count
-	mov	eax,[eax+edx*4]
-	mov	edx,[ylookup]
+	mov	eax,[columnofs+edx*4]
 	lea	ecx,[dc_temp+ecx+esi]	; ecx = source
-	mov	edi,[edx+esi]
+	mov	edi,[ylookup+esi]
 	mov	esi,[dc_pitch]		; esi = pitch
 	add	eax,edi			; eax = dest
 
@@ -983,12 +958,10 @@ rt_copy2cols_asm:
 	js	.done
 
 	lea	esi,[eax*4]
-	mov	eax,[columnofs]
 	inc	ebx			; ebx = count
-	mov	eax,[eax+edx*4]
-	mov	edx,[ylookup]
+	mov	eax,[columnofs+edx*4]
 	lea	ecx,[dc_temp+ecx+esi]	; ecx = source
-	mov	edi,[edx+esi]
+	mov	edi,[ylookup+esi]
 	mov	edx,[dc_pitch]		; edx = pitch
 	add	eax,edi			; eax = dest
 
@@ -1050,11 +1023,9 @@ _rt_copy4cols_asm:
 	push	edi
 	js	.done
 
-	mov	eax,[columnofs]
 	inc	ebx			; ebx = count
-	mov	eax,[eax+ecx*4]
-	mov	ecx,[ylookup]
-	mov	esi,[ecx+edx*4]
+	mov	eax,[columnofs+ecx*4]
+	mov	esi,[ylookup+edx*4]
 	lea	ecx,[dc_temp+edx*4]	; ecx = source
 	mov	edx,[dc_pitch]		; edx = pitch
 	add	eax,esi			; eax = dest
@@ -1123,13 +1094,11 @@ _rt_map1col_asm:
 	js	.done
 
 	lea	edi,[eax*4]
-	mov	eax,[columnofs]
 	mov	esi,[dc_colormap]		; esi = colormap
 	inc	ebx				; ebx = count
-	mov	eax,[eax+edx*4]
-	mov	edx,[ylookup]
+	mov	eax,[columnofs+edx*4]
 	lea	ebp,[dc_temp+ecx+edi]		; ebp = source
-	mov	ecx,[edx+edi]
+	mov	ecx,[ylookup+edi]
 	mov	edi,[dc_pitch]			; edi = pitch
 	add	eax,ecx				; eax = dest
 	xor	ecx,ecx
@@ -1203,13 +1172,11 @@ _rt_map2cols_asm:
 	js	near .done
 
 	lea	edi,[eax*4]
-	mov	eax,[columnofs]
 	mov	esi,[dc_colormap]		; esi = colormap
 	inc	ebx				; ebx = count
-	mov	eax,[eax+edx*4]
-	mov	edx,[ylookup]
+	mov	eax,[columnofs+edx*4]
 	lea	ebp,[dc_temp+ecx+edi]		; ebp = source
-	mov	ecx,[edx+edi]
+	mov	ecx,[ylookup+edi]
 	mov	edi,[dc_pitch]			; edi = pitch
 	add	eax,ecx				; eax = dest
 	xor	ecx,ecx
@@ -1287,13 +1254,11 @@ _rt_map4cols_asm1:
 	push	edi
 	js	near .done
 
-	mov	eax,[columnofs]
 	mov	esi,[dc_colormap]	; esi = colormap
 	shl	edx,2
-	mov	eax,[eax+ecx*4]
-	mov	ecx,[ylookup]
+	mov	eax,[columnofs+ecx*4]
 	inc	ebx			; ebx = count
-	mov	edi,[ecx+edx]
+	mov	edi,[ylookup+edx]
 	lea	ebp,[dc_temp+edx]	; ebp = source
 	add	eax,edi			; eax = dest
 	mov	edi,[dc_pitch]		; edi = pitch
@@ -1310,8 +1275,8 @@ _rt_map4cols_asm1:
 	mov	cl,[esi+ecx]
 	 mov	[eax],dl
 	mov	[eax+1],cl
-	 mov	dl,[ebp-1]
-	mov	cl,[ebp-2]
+	 mov	dl,[ebp-2]
+	mov	cl,[ebp-1]
 	 mov	dl,[esi+edx]
 	mov	cl,[esi+ecx]
 	 mov	[eax+2],dl
@@ -1382,13 +1347,11 @@ _rt_map4cols_asm2:
 	push	edi
 	js	near .done
 
-	mov	eax,[columnofs]
 	mov	esi,[dc_colormap]	; esi = colormap
 	shl	edx,2
-	mov	eax,[eax+ecx*4]
-	mov	ecx,[ylookup]
+	mov	eax,[columnofs+ecx*4]
 	inc	ebx			; ebx = count
-	mov	edi,[ecx+edx]
+	mov	edi,[ylookup+edx]
 	lea	ebp,[dc_temp+edx]	; ebp = source
 	add	eax,edi			; eax = dest
 	mov	edi,[dc_pitch]		; edi = pitch
@@ -1405,8 +1368,8 @@ _rt_map4cols_asm2:
 	mov	cl,[esi+ecx]
 	 mov	[eax],dl
 	mov	[eax+1],cl
-	 mov	dl,[ebp-1]
-	mov	cl,[ebp-2]
+	 mov	dl,[ebp-2]
+	mov	cl,[ebp-1]
 	 mov	dl,[esi+edx]
 	mov	cl,[esi+ecx]
 	 mov	[eax+2],dl
@@ -1450,4 +1413,3 @@ _rt_map4cols_asm2:
 	pop	ebp
 	pop	ebx
 	ret	4
-

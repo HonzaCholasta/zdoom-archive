@@ -1,3 +1,8 @@
+This file is sorely outdated in regards to DObject usage. You can still use
+it as a baseline, but see the source for actual implementation details, since
+many of them have changed.
+
+
 ZDoom 1.19 offers a partial conversion of the Doom code to C++. As such, some
 functions and classes have been encapsulated in classes. This document tries
 to give an overview of those classes and how to use them.

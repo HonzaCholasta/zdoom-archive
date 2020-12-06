@@ -12,16 +12,13 @@
 
 class AIceChunk : public APlayerPawn
 {
-	DECLARE_ACTOR (AIceChunk, APlayerPawn);
+	DECLARE_ACTOR (AIceChunk, APlayerPawn)
 public:
 	void PlayIdle () {}
 	void PlayRunning () {}
 	void PlayAttacking () {}
 	void PlayAttacking2 () {}
 };
-
-IMPLEMENT_DEF_SERIAL (AIceChunk, APlayerPawn);
-REGISTER_ACTOR (AIceChunk, Any);
 
 FState AIceChunk::States[] =
 {
@@ -38,15 +35,14 @@ FState AIceChunk::States[] =
 	S_NORMAL (ICEC, 'A', 1050, NULL 					, NULL)
 };
 
-void AIceChunk::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_ICECHUNK];
-	info->radius = 3 * FRACUNIT;
-	info->height = 4 * FRACUNIT;
-	info->flags = MF_NOBLOCKMAP|MF_DROPOFF;
-	info->flags2 = MF2_LOGRAV|MF2_CANNOTPUSH|MF2_FLOORCLIP;
-}
+IMPLEMENT_ACTOR (AIceChunk, Any, -1, 0)
+	PROP_RadiusFixed (3)
+	PROP_HeightFixed (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_DROPOFF)
+	PROP_Flags2 (MF2_LOGRAV|MF2_CANNOTPUSH|MF2_FLOORCLIP)
+
+	PROP_SpawnState (S_ICECHUNK)
+END_DEFAULTS
 
 /***************************************************************************/
 
@@ -61,7 +57,7 @@ void A_NoBlocking (AActor *actor)
 	// [RH] Andy Baker's stealth monsters
 	if (actor->flags & MF_STEALTH)
 	{
-		actor->translucency = OPAQUE;
+		actor->alpha = OPAQUE;
 		actor->visdir = 0;
 	}
 
@@ -77,7 +73,7 @@ void A_NoBlocking (AActor *actor)
 
 void A_HideThing (AActor *actor)
 {
-	actor->flags2 |= MF2_DONTDRAW;
+	actor->renderflags |= RF_INVISIBLE;
 }
 
 //==========================================================================
@@ -88,7 +84,7 @@ void A_HideThing (AActor *actor)
 
 void A_UnHideThing (AActor *actor)
 {
-	actor->flags2 &= ~MF2_DONTDRAW;
+	actor->renderflags &= ~RF_INVISIBLE;
 }
 
 //===========================================================================
@@ -103,7 +99,7 @@ void A_CheckFloor (AActor *actor)
 	{
 		actor->z = actor->floorz;
 		actor->flags2 &= ~MF2_LOGRAV;
-		actor->SetState (GetInfo (actor)->deathstate);
+		actor->SetState (actor->DeathState);
 	}
 }
 
@@ -195,7 +191,7 @@ void A_FreezeDeathChunks (AActor *actor)
 			actor->x + (((P_Random()-128)*actor->radius)>>7), 
 			actor->y + (((P_Random()-128)*actor->radius)>>7), 
 			actor->z + (P_Random()*actor->height/255));
-		mo->SetState (GetInfo (mo)->spawnstate + (P_Random()%3));
+		mo->SetState (mo->SpawnState + (P_Random()%3));
 		if (mo)
 		{
 			mo->momz = FixedDiv(mo->z-actor->z, actor->height)<<2;
@@ -210,7 +206,7 @@ void A_FreezeDeathChunks (AActor *actor)
 			actor->x + (((P_Random()-128)*actor->radius)>>7), 
 			actor->y + (((P_Random()-128)*actor->radius)>>7), 
 			actor->z + (P_Random()*actor->height/255));
-		mo->SetState (GetInfo (mo)->spawnstate + (P_Random()%3));
+		mo->SetState (mo->SpawnState + (P_Random()%3));
 		if (mo)
 		{
 			mo->momz = FixedDiv (mo->z-actor->z, actor->height)<<2;
@@ -237,7 +233,7 @@ void A_FreezeDeathChunks (AActor *actor)
 	}
 	actor->RemoveFromHash ();
 	actor->SetState (&AActor::States[S_FREETARGMOBJ]);
-	actor->flags2 |= MF2_DONTDRAW;
+	actor->renderflags |= RF_INVISIBLE;
 }
 
 //----------------------------------------------------------------------------
@@ -251,9 +247,11 @@ void A_FreezeDeathChunks (AActor *actor)
 
 class DCorpseQueue : public DThinker
 {
-	DECLARE_SERIAL (DCorpseQueue, DThinker);
+	DECLARE_CLASS (DCorpseQueue, DThinker)
+	HAS_OBJECT_POINTERS
 public:
 	DCorpseQueue ();
+	void Serialize (FArchive &arc);
 	void Enqueue (AActor *);
 	void Dequeue (AActor *);
 protected:
@@ -261,7 +259,7 @@ protected:
 	int CorpseQueueSlot;
 };
 
-IMPLEMENT_POINTY_SERIAL (DCorpseQueue, DThinker)
+IMPLEMENT_POINTY_CLASS (DCorpseQueue)
  DECLARE_POINTER (CorpseQueue[0])
  DECLARE_POINTER (CorpseQueue[1])
  DECLARE_POINTER (CorpseQueue[2])

@@ -41,12 +41,8 @@ int		ParseHex (char *str);
 int 	ParseNum (char *str);
 BOOL	IsNum (char *str);		// [RH] added
 
-char	*COM_Parse (char *data);
-
-extern	char	com_token[8192];
-extern	BOOL	com_eof;
-
 char	*copystring(const char *s);
+void	ReplaceString (char **ptr, const char *str);
 
 void	CRC_Init(unsigned short *crcvalue);
 void	CRC_ProcessByte(unsigned short *crcvalue, byte data);

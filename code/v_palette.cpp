@@ -2,6 +2,7 @@
 #include <string.h>
 #include <math.h>
 
+#include "templates.h"
 #include "v_video.h"
 #include "m_alloc.h"
 #include "r_main.h"		// For lighting constants
@@ -13,16 +14,14 @@
 #include "st_stuff.h"
 #include "gi.h"
 
-void BuildColoredLights (byte *maps, int lr, int lg, int lb, int fr, int fg, int fb);
-static void DoBlending (DWORD *from, DWORD *to, unsigned count, int tor, int tog, int tob, int toa);
+extern "C" {
+FDynamicColormap NormalLight;
+}
+FPalette GPalette;
+BYTE *InvulnerabilityColormap;
+int Near0;
 
-dyncolormap_t NormalLight;
-
-palette_t DefPal;
-palette_t *FirstPal;
-
-DWORD IndexedPalette[256];
-
+FColorMatcher ColorMatcher;
 
 /* Current color blending values */
 int		BlendR, BlendG, BlendB, BlendA;
@@ -33,410 +32,192 @@ int		BlendR, BlendG, BlendB, BlendA;
 /**************************/
 
 byte newgamma[256];
-BEGIN_CUSTOM_CVAR (Gamma, "1", CVAR_ARCHIVE)
+CUSTOM_CVAR (Float, Gamma, 1.f, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 {
-	static float lastgamma = 0;
-	double invgamma;
-	int i;
-
-	if (var.value == 0)
+	if (*var == 0.f)
 	{
 		// Gamma values of 0 are illegal.
-		var.Set (1);
+		var = 1.f;
 		return;
 	}
 
-	if (lastgamma != var.value)
+	if (screen != NULL)
 	{
-		// Only recalculate the gamma table if the new gamma
-		// value is different from the old one.
-
-		lastgamma = var.value;
-		
-		// I found this formula on the web at
-		// http://panda.mostang.com/sane/sane-gamma.html
-
-		invgamma = 1.0 / var.value;
-
-		for (i = 0; i < 256; i++)
-		{
-			newgamma[i] = (byte)(255.0 * pow (i / 255.0, invgamma));
-		}
-		GammaAdjustPalettes ();
-		if (screen && screen->is8bit)
-		{
-			DoBlending (DefPal.colors, IndexedPalette, DefPal.numcolors,
-						newgamma[BlendR], newgamma[BlendG], newgamma[BlendB], BlendA);
-			I_SetPalette (IndexedPalette);
-		}
+		screen->SetGamma (*var);
 	}
 }
-END_CUSTOM_CVAR (gamma)
 
 
 /****************************/
 /* Palette management stuff */
 /****************************/
 
-BOOL InternalCreatePalette (palette_t *palette, char *name, byte *colors,
-							unsigned numcolors, unsigned flags)
+extern "C"
 {
-	unsigned i;
+	byte BestColor_MMX (DWORD rgb, const DWORD *pal);
+}
 
-	if (numcolors > 256)
-		numcolors = 256;
-	else if (numcolors == 0)
-		return false;
+int BestColor (const DWORD *pal_in, int r, int g, int b, int first)
+{
+#ifdef USEASM
+	if (UseMMX)
+	{
+		return BestColor_MMX ((first<<24)|(r<<16)|(g<<8)|b, pal_in);
+	}
+#endif
+	const PalEntry *pal = (const PalEntry *)pal_in;
+	int bestcolor = first;
+	int bestdist = 257*257+257*257+257*257;
 
-	strncpy (palette->name.name, name, 8);
-	palette->flags = flags;
-	palette->usecount = 1;
-	palette->maps.colormaps = NULL;
-	palette->basecolors = (DWORD *)Malloc (numcolors * 2 * sizeof(DWORD));
-	palette->colors = palette->basecolors + numcolors;
-	palette->numcolors = numcolors;
+	for (int color = first; color < 256; color++)
+	{
+		int dist = (r-pal[color].r)*(r-pal[color].r)+
+				   (g-pal[color].g)*(g-pal[color].g)+
+				   (b-pal[color].b)*(b-pal[color].b);
+		if (dist < bestdist)
+		{
+			if (dist == 0)
+				return color;
 
-	if (numcolors == 1)
-		palette->shadeshift = 0;
-	else if (numcolors <= 2)
-		palette->shadeshift = 1;
-	else if (numcolors <= 4)
-		palette->shadeshift = 2;
-	else if (numcolors <= 8)
-		palette->shadeshift = 3;
-	else if (numcolors <= 16)
-		palette->shadeshift = 4;
-	else if (numcolors <= 32)
-		palette->shadeshift = 5;
-	else if (numcolors <= 64)
-		palette->shadeshift = 6;
-	else if (numcolors <= 128)
-		palette->shadeshift = 7;
+			bestdist = dist;
+			bestcolor = color;
+		}
+	}
+	return bestcolor;
+}
+
+FPalette::FPalette ()
+{
+}
+
+FPalette::FPalette (BYTE *colors)
+{
+	SetPalette (colors);
+}
+
+void FPalette::SetPalette (BYTE *colors)
+{
+	int i;
+
+	for (i = 0; i < 256; i++, colors += 3)
+		BaseColors[i] = PalEntry (colors[0], colors[1], colors[2]);
+
+	GammaAdjust ();
+}
+
+void InitPalette ()
+{
+	BYTE *shade;
+	int c;
+
+	GPalette.SetPalette ((BYTE *)W_CacheLumpName ("PLAYPAL", PU_CACHE));
+	ColorMatcher.SetPalette ((DWORD *)GPalette.BaseColors);
+	Near0 = BestColor ((DWORD *)GPalette.BaseColors,
+		GPalette.BaseColors[0].r, GPalette.BaseColors[0].g, GPalette.BaseColors[0].b, 1);
+
+// NormalLight.Maps will be set to realcolormaps no later than G_InitLevelLocals()
+// (which occurs before it is ever needed)
+//	NormalLight.Maps = (BYTE *)Z_Malloc (NUMCOLORMAPS*256+255, PU_STATIC, 0);
+//	NormalLight.Maps = (BYTE *)(((ptrdiff_t)NormalLight.Maps + 255) & ~0xff);
+	NormalLight.Color = PalEntry (255, 255, 255);
+	NormalLight.Fade = 0;
+
+	InvulnerabilityColormap = (BYTE *)Z_Malloc (NUMCOLORMAPS*256+255, PU_STATIC, 0);
+	InvulnerabilityColormap = (BYTE *)(((ptrdiff_t)InvulnerabilityColormap + 255) & ~0xff);
+
+	// build special maps (e.g. invulnerability)
+	shade = InvulnerabilityColormap;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		int grayint;
+		for (c = 0; c < 256; c++)
+		{
+			grayint = (65535 -
+				(GPalette.BaseColors[c].r * 77 +
+				 GPalette.BaseColors[c].g * 143 +
+				 GPalette.BaseColors[c].b * 37)) >> 8;
+			*shade++ = ColorMatcher.Pick (grayint, grayint, grayint);
+		}
+	}
 	else
-		palette->shadeshift = 8;
+	{
+		int intensity;
 
-	for (i = 0; i < numcolors; i++, colors += 3)
-		palette->basecolors[i] = MAKERGB(colors[0],colors[1],colors[2]);
-
-	GammaAdjustPalette (palette);
-
-	return true;
-}
-
-
-palette_t *InitPalettes (char *name)
-{
-	byte *colors;
-
-	if (DefPal.usecount)
-		return &DefPal;
-
-	if ( (colors = (byte *)W_CacheLumpName (name, PU_CACHE)) )
-		if (InternalCreatePalette (&DefPal, name, colors, 256,
-									PALETTEF_SHADE|PALETTEF_BLEND|PALETTEF_DEFAULT)) {
-			return &DefPal;
-		}
-	return NULL;
-}
-
-palette_t *GetDefaultPalette (void)
-{
-	return &DefPal;
-}
-
-// MakePalette()
-//	input: colors: ptr to 256 3-byte RGB values
-//		   flags:  the flags for the new palette
-//
-palette_t *MakePalette (byte *colors, char *name, unsigned flags)
-{
-	palette_t *pal;
-
-	pal = (palette_t *)Malloc (sizeof (palette_t));
-
-	if (InternalCreatePalette (pal, name, colors, 256, flags)) {
-		pal->next = FirstPal;
-		pal->prev = NULL;
-		FirstPal = pal;
-
-		return pal;
-	} else {
-		free (pal);
-		return NULL;
-	}
-}
-
-// LoadPalette()
-//	input: name:  the name of the palette lump
-//		   flags: the flags for the palette
-//
-//	This function will try and find an already loaded
-//	palette and return that if possible.
-palette_t *LoadPalette (char *name, unsigned flags)
-{
-	palette_t *pal;
-
-	if (!(pal = FindPalette (name, flags))) {
-		// Palette doesn't already exist. Create a new one.
-		byte *colors = (byte *)W_CacheLumpName (name, PU_CACHE);
-
-		pal = MakePalette (colors, name, flags);
-	} else {
-		pal->usecount++;
-	}
-	return pal;
-}
-
-// LoadAttachedPalette()
-//	input: name:  the name of a graphic whose palette should be loaded
-//		   type:  the type of graphic whose palette is being requested
-//		   flags: the flags for the palette
-//
-//	This function looks through the PALETTES lump for a palette
-//	associated with the given graphic and returns that if possible.
-palette_t *LoadAttachedPalette (char *name, int type, unsigned flags);
-
-// FreePalette()
-//	input: palette: the palette to free
-//
-//	This function decrements the palette's usecount and frees it
-//	when it hits zero.
-void FreePalette (palette_t *palette)
-{
-	if (!(--palette->usecount)) {
-		if (!(palette->flags & PALETTEF_DEFAULT)) {
-			if (!palette->prev)
-				FirstPal = palette->next;
-			else
-				palette->prev->next = palette->next;
-
-			if (palette->basecolors)
-				free (palette->basecolors);
-
-			if (palette->colormapsbase)
-				free (palette->colormapsbase);
-
-			free (palette);
+		for (c = 0; c < 256; c++)
+		{
+			intensity = GPalette.BaseColors[c].r * 77 +
+						GPalette.BaseColors[c].g * 143 +
+						GPalette.BaseColors[c].b * 37;
+			*shade++ = ColorMatcher.Pick (
+				MIN (255, (intensity+intensity/2)>>8), intensity>>8, 0);
 		}
 	}
 }
 
-
-palette_t *FindPalette (char *name, unsigned flags)
+extern "C"
 {
-	palette_t *pal = FirstPal;
-	union {
-		char	s[9];
-		int		x[2];
-	} name8;
-
-	int			v1;
-	int			v2;
-
-	// make the name into two integers for easy compares
-	strncpy (name8.s,name,8);
-
-	v1 = name8.x[0];
-	v2 = name8.x[1];
-	
-	while (pal) {
-		if (pal->name.nameint[0] == v1 && pal->name.nameint[1] == v2) {
-			if ((flags == ~0) || (flags == pal->flags))
-				return pal;
-		}
-		pal = pal->next;
-	}
-	return NULL;
+	void STACK_ARGS DoBlending_MMX (const PalEntry *from, PalEntry *to, int count, int r, int g, int b, int a);
 }
 
-
-// This is based (loosely) on the ColorShiftPalette()
-// function from the dcolors.c file in the Doom utilities.
-static void DoBlending (DWORD *from, DWORD *to, unsigned count, int tor, int tog, int tob, int toa)
+void DoBlending (const PalEntry *from, PalEntry *to, int count, int r, int g, int b, int a)
 {
-	unsigned i;
-
-	if (toa == 0) {
+	if (a == 0)
+	{
 		if (from != to)
-			memcpy (to, from, count * sizeof(unsigned));
-	} else {
-		int dr,dg,db,r,g,b;
-
-		for (i = 0; i < count; i++) {
-			r = RPART(*from);
-			g = GPART(*from);
-			b = BPART(*from);
-			from++;
-			dr = tor - r;
-			dg = tog - g;
-			db = tob - b;
-			*to++ = MAKERGB (r + ((dr*toa)>>8),
-							 g + ((dg*toa)>>8),
-							 b + ((db*toa)>>8));
-		}
-	}
-
-}
-
-
-void RefreshPalette (palette_t *pal)
-{
-	DWORD l,c,r,g,b;
-	DWORD colors[256];
-
-	if (screen->is8bit)
-	{
-		if (pal->flags & PALETTEF_SHADE)
 		{
-			byte *shade;
-
-			r = RPART (level.fadeto);
-			g = GPART (level.fadeto);
-			b = BPART (level.fadeto);
-			if (pal->maps.colormaps && pal->maps.colormaps - pal->colormapsbase >= 256)
-				free (pal->maps.colormaps);
-			pal->colormapsbase = (byte *)Realloc (pal->colormapsbase, (NUMCOLORMAPS + 1) * 256 + 255);
-			pal->maps.colormaps = (byte *)(((ptrdiff_t)(pal->colormapsbase) + 255) & ~0xff);
-
-			// build normal light mappings
-			for (l = 0; l < NUMCOLORMAPS; l++)
-			{
-				DoBlending (pal->basecolors, colors, pal->numcolors, r, g, b, l * (256 / NUMCOLORMAPS));
-
-				shade = pal->maps.colormaps + (l << pal->shadeshift);
-				for (c = 0; c < pal->numcolors; c++)
-				{
-					*shade++ = BestColor (pal->basecolors,
-										  RPART(colors[c]),
-										  GPART(colors[c]),
-										  BPART(colors[c]),
-										  pal->numcolors);
-				}
-			}
-
-			// build special maps (e.g. invulnerability)
-			shade = pal->maps.colormaps + (NUMCOLORMAPS << pal->shadeshift);
-			if (gameinfo.gametype == GAME_Doom)
-			{
-				int grayint;
-
-				for (c = 0; c < pal->numcolors; c++)
-				{
-					grayint = (int)(255.f * (1.f -
-						(RPART(pal->basecolors[c]) * 0.00116796875f +
-						 GPART(pal->basecolors[c]) * 0.00229296875f +
-						 BPART(pal->basecolors[c]) * 0.0005625)));
-					*shade++ = BestColor (pal->basecolors, grayint, grayint, grayint, pal->numcolors);
-				}
-			}
-			else
-			{
-				float intensity;
-
-				for (c = 0; c < pal->numcolors; c++)
-				{
-					intensity = RPART(pal->basecolors[c]) * 0.00116796875f +
-								GPART(pal->basecolors[c]) * 0.00229296875f +
-								BPART(pal->basecolors[c]) * 0.0005625f;
-					*shade++ = BestColor (pal->basecolors,
-						MIN (255, (int)(intensity * 383.f)),
-						(int)(intensity * 255.f),
-						0, pal->numcolors);
-				}
-			}
+			memcpy (to, from, count * sizeof(DWORD));
 		}
 	}
+	else if (a == 256)
+	{
+		DWORD t = MAKERGB(r,g,b);
+		int i;
+
+		for (i = 0; i < count; i++)
+		{
+			to[i] = t;
+		}
+	}
+#ifdef USEASM
+	else if (UseMMX && !(count & 1))
+	{
+		DoBlending_MMX (from, to, count, r, g, b, a);
+	}
+#endif
 	else
 	{
-		if (pal->flags & PALETTEF_SHADE)
+		int i, ia;
+
+		ia = 256 - a;
+		r *= a;
+		g *= a;
+		b *= a;
+
+		for (i = count; i > 0; i--, to++, from++)
 		{
-			r = newgamma[RPART (level.fadeto)];
-			g = newgamma[GPART (level.fadeto)];
-			b = newgamma[BPART (level.fadeto)];
-			if (pal->colormapsbase)
-			{
-				free (pal->colormapsbase);
-				pal->colormapsbase = NULL;
-			}
-			pal->maps.shades = (DWORD *)Realloc (pal->colormapsbase, (NUMCOLORMAPS + 1)*256*sizeof(DWORD) + 255);
-
-			// build normal light mappings
-			for (l = 0; l < NUMCOLORMAPS; l++)
-			{
-				DoBlending (pal->colors,
-							pal->maps.shades + (l << pal->shadeshift),
-							pal->numcolors,
-							r, g, b,
-							l * (256 / NUMCOLORMAPS));
-			}
-
-			// build special maps (e.g. invulnerability)
-			{
-				DWORD *shade = pal->maps.shades + (NUMCOLORMAPS << pal->shadeshift);
-				int grayint;
-
-				for (c = 0; c < pal->numcolors; c++)
-				{
-					grayint = (int)(255.0f * (1.0f -
-						(RPART(pal->colors[c]) * 0.00116796875f +
-						 GPART(pal->colors[c]) * 0.00229296875f +
-						 BPART(pal->colors[c]) * 0.0005625)));
-					*shade++ = MAKERGB (grayint, grayint, grayint);
-				}
-			}
+			to->r = (r + from->r*ia) >> 8;
+			to->g = (g + from->g*ia) >> 8;
+			to->b = (b + from->b*ia) >> 8;
 		}
 	}
 
-	if (pal == &DefPal) {
-		NormalLight.maps = DefPal.maps.colormaps;
-		NormalLight.color = MAKERGB(255,255,255);
-		NormalLight.fade = level.fadeto;
-	}
 }
 
-void RefreshPalettes (void)
+void FPalette::GammaAdjust ()
 {
-	palette_t *pal = FirstPal;
+	int i;
 
-	RefreshPalette (&DefPal);
-	while (pal) {
-		RefreshPalette (pal);
-		pal = pal->next;
-	}
-}
-
-
-void GammaAdjustPalette (palette_t *pal)
-{
-	unsigned i, color;
-
-	if (pal->colors && pal->basecolors) {
-		for (i = 0; i < pal->numcolors; i++) {
-			color = pal->basecolors[i];
-			pal->colors[i] = MAKERGB (
-				newgamma[RPART(color)],
-				newgamma[GPART(color)],
-				newgamma[BPART(color)]
-			);
-		}
-	}
-}
-
-void GammaAdjustPalettes (void)
-{
-	palette_t *pal = FirstPal;
-
-	GammaAdjustPalette (&DefPal);
-	while (pal) {
-		GammaAdjustPalette (pal);
-		pal = pal->next;
+	for (i = 0; i < 256; i++)
+	{
+		PalEntry color = BaseColors[i];
+		Colors[i] = PalEntry (newgamma[color.r], newgamma[color.g], newgamma[color.b]);
 	}
 }
 
 void V_SetBlend (int blendr, int blendg, int blendb, int blenda)
 {
 	// Don't do anything if the new blend is the same as the old
-	if ((blenda == 0 && BlendA == 0) ||
+	if (((blenda|BlendA) == 0) ||
 		(blendr == BlendR &&
 		 blendg == BlendG &&
 		 blendb == BlendB &&
@@ -453,28 +234,28 @@ void V_ForceBlend (int blendr, int blendg, int blendb, int blenda)
 	BlendB = blendb;
 	BlendA = blenda;
 
-	if (screen->is8bit) {
-		DoBlending (DefPal.colors, IndexedPalette, DefPal.numcolors,
-					newgamma[BlendR], newgamma[BlendG], newgamma[BlendB], BlendA);
-		I_SetPalette (IndexedPalette);
-	} else {
-		RefreshPalettes();
-	}
+	screen->SetFlash (PalEntry (BlendR, BlendG, BlendB), BlendA);
 }
 
-BEGIN_COMMAND (testblend)
+CCMD (testblend)
 {
 	char *colorstring;
 	int color;
 	float amt;
 
-	if (argc < 3) {
-		Printf (PRINT_HIGH, "testblend <color> <amount>\n");
-	} else {
-		if ( (colorstring = V_GetColorStringByName (argv[1])) ) {
+	if (argc < 3)
+	{
+		Printf ("testblend <color> <amount>\n");
+	}
+	else
+	{
+		if ( (colorstring = V_GetColorStringByName (argv[1])) )
+		{
 			color = V_GetColorFromString (NULL, colorstring);
 			delete[] colorstring;
-		} else {
+		}
+		else
+		{
 			color = V_GetColorFromString (NULL, argv[1]);
 		}
 		amt = (float)atof (argv[2]);
@@ -488,28 +269,31 @@ BEGIN_COMMAND (testblend)
 		BaseBlendA = amt;
 	}
 }
-END_COMMAND (testblend)
 
-BEGIN_COMMAND (testfade)
+CCMD (testfade)
 {
 	char *colorstring;
-	int color;
+	DWORD color;
 
-	if (argc < 2) {
-		Printf (PRINT_HIGH, "testfade <color>\n");
-	} else {
-		if ( (colorstring = V_GetColorStringByName (argv[1])) ) {
+	if (argc < 2)
+	{
+		Printf ("testfade <color>\n");
+	}
+	else
+	{
+		if ( (colorstring = V_GetColorStringByName (argv[1])) )
+		{
 			color = V_GetColorFromString (NULL, colorstring);
 			delete[] colorstring;
-		} else {
+		}
+		else
+		{
 			color = V_GetColorFromString (NULL, argv[1]);
 		}
 		level.fadeto = color;
-		RefreshPalettes();
-		NormalLight.maps = DefPal.maps.colormaps;
+		NormalLight.ChangeFade (color);
 	}
 }
-END_COMMAND (testfade)
 
 /****** Colorspace Conversion Functions ******/
 
@@ -526,7 +310,8 @@ void RGBtoHSV (float r, float g, float b, float *h, float *s, float *v)
 {
 	float min, max, delta, foo;
 
-	if (r == g && g == b) {
+	if (r == g && g == b)
+	{
 		*h = 0;
 		*s = 0;
 		*v = r;
@@ -561,8 +346,8 @@ void HSVtoRGB (float *r, float *g, float *b, float h, float s, float v)
 	int i;
 	float f, p, q, t;
 
-	if (s == 0) {
-		// achromatic (grey)
+	if (s == 0)
+	{ // achromatic (grey)
 		*r = *g = *b = v;
 		return;
 	}
@@ -574,83 +359,126 @@ void HSVtoRGB (float *r, float *g, float *b, float h, float s, float v)
 	q = v * (1 - s * f);
 	t = v * (1 - s * (1 - f));
 
-	switch (i) {
-		case 0:		*r = v; *g = t; *b = p; break;
-		case 1:		*r = q; *g = v; *b = p; break;
-		case 2:		*r = p; *g = v; *b = t; break;
-		case 3:		*r = p; *g = q; *b = v; break;
-		case 4:		*r = t; *g = p; *b = v; break;
-		default:	*r = v; *g = p; *b = q; break;
+	switch (i)
+	{
+	case 0:		*r = v; *g = t; *b = p; break;
+	case 1:		*r = q; *g = v; *b = p; break;
+	case 2:		*r = p; *g = v; *b = t; break;
+	case 3:		*r = p; *g = q; *b = v; break;
+	case 4:		*r = t; *g = p; *b = v; break;
+	default:	*r = v; *g = p; *b = q; break;
 	}
 }
 
-/****** Colored Lighting Stuffs (Sorry, 8-bit only) ******/
+/****** Colored Lighting Stuffs ******/
 
-// Builds NUMCOLORMAPS colormaps lit with the specified color
-void BuildColoredLights (byte *maps, int lr, int lg, int lb, int r, int g, int b)
+FDynamicColormap *GetSpecialLights (PalEntry color, PalEntry fade)
 {
-	unsigned int l,c;
-	DWORD colors[256];
-	byte *shade;
+	FDynamicColormap *colormap;
 
-	// The default palette is assumed to contain the maps for white light.
-	if (!screen->is8bit || !maps)
-		return;
-
-	// build normal (but colored) light mappings
-	for (l = 0; l < NUMCOLORMAPS; l++)
+	// If this colormap have already been created, just return it
+	for (colormap = &NormalLight; colormap != NULL; colormap = colormap->Next)
 	{
-		DoBlending (DefPal.basecolors, colors, DefPal.numcolors, r, g, b, l * (256 / NUMCOLORMAPS));
-
-		shade = maps + 256*l;
-		for (c = 0; c < 256; c++)
+		if (color == colormap->Color && fade == colormap->Fade)
 		{
-			*shade++ = BestColor (DefPal.basecolors,
-								  (RPART(colors[c])*lr)/255,
-								  (GPART(colors[c])*lg)/255,
-								  (BPART(colors[c])*lb)/255,
-								  256);
-		}
-	}
-}
-
-dyncolormap_t *GetSpecialLights (int lr, int lg, int lb, int fr, int fg, int fb)
-{
-	unsigned int color = MAKERGB (lr, lg, lb);
-	unsigned int fade = MAKERGB (fr, fg, fb);
-	dyncolormap_t *colormap = &NormalLight;
-
-	// Bah! Simple linear search because I want to get this done.
-	while (colormap)
-	{
-		if (color == colormap->color && fade == colormap->fade)
 			return colormap;
-		else
-			colormap = colormap->next;
+		}
 	}
 
 	// Not found. Create it.
-	colormap = (dyncolormap_t *)Z_Malloc (sizeof(*colormap), PU_LEVEL, 0);
-	colormap->maps = (byte *)Z_Malloc (NUMCOLORMAPS*256+3+255, PU_LEVEL, 0);
-	colormap->maps = (byte *)(((ptrdiff_t)colormap->maps + 255) & ~0xff);
-	colormap->color = color;
-	colormap->fade = fade;
-	colormap->next = NormalLight.next;
-	NormalLight.next = colormap;
+	colormap = (FDynamicColormap *)Z_Malloc (sizeof(*colormap), PU_LEVEL, 0);
+	colormap->Maps = (BYTE *)Z_Malloc (NUMCOLORMAPS*256+255, PU_LEVEL, 0);
+	colormap->Maps = (BYTE *)(((ptrdiff_t)colormap->Maps + 255) & ~0xff);
+	colormap->Next = NormalLight.Next;
+	colormap->Color = color;
+	colormap->Fade = fade;
+	NormalLight.Next = colormap;
 
-	BuildColoredLights (colormap->maps, lr, lg, lb, fr, fg, fb);
+	colormap->BuildLights ();
 
 	return colormap;
 }
 
-BEGIN_COMMAND (testcolor)
+// Builds NUMCOLORMAPS colormaps lit with the specified color
+void FDynamicColormap::BuildLights ()
+{
+	int l, c;
+	int lr, lg, lb;
+	PalEntry colors[256];
+	BYTE *shade;
+
+	// Scale light to the range 0-256, so we can avoid
+	// dividing by 255 in the bottom loop.
+	lr = Color.r*256/255;
+	lg = Color.g*256/255;
+	lb = Color.b*256/255;
+
+	// build normal (but colored) light mappings
+	for (l = 0; l < NUMCOLORMAPS; l++)
+	{
+		DoBlending (GPalette.BaseColors, colors, 256,
+			Fade.r, Fade.g, Fade.b, l * (256 / NUMCOLORMAPS));
+
+		shade = Maps + 256*l;
+		if ((DWORD)Color == MAKERGB(255,255,255))
+		{ // White light, so we can just pick the colors directly
+			for (c = 0; c < 256; c++)
+			{
+				*shade++ = ColorMatcher.Pick (colors[c].r, colors[c].g, colors[c].b);
+			}
+		}
+		else
+		{ // Colored light, so do the slower thing
+			for (c = 0; c < 256; c++)
+			{
+				*shade++ = ColorMatcher.Pick (
+					(colors[c].r*lr)>>8,
+					(colors[c].g*lg)>>8,
+					(colors[c].b*lb)>>8);
+			}
+		}
+	}
+}
+
+void FDynamicColormap::ChangeColor (PalEntry lightcolor)
+{
+	if (lightcolor != Color)
+	{
+		Color = lightcolor;
+		BuildLights ();
+	}
+}
+
+void FDynamicColormap::ChangeFade (PalEntry fadecolor)
+{
+	if (fadecolor != Fade)
+	{
+		Fade = fadecolor;
+		BuildLights ();
+	}
+}
+
+void FDynamicColormap::ChangeColorFade (PalEntry lightcolor, PalEntry fadecolor)
+{
+	if (lightcolor != Color || fadecolor != Fade)
+	{
+		Color = lightcolor;
+		Fade = fadecolor;
+		BuildLights ();
+	}
+}
+
+CCMD (testcolor)
 {
 	char *colorstring;
-	int color;
+	DWORD color;
 
-	if (argc < 2) {
-		Printf (PRINT_HIGH, "testcolor <color>\n");
-	} else {
+	if (argc < 2)
+	{
+		Printf ("testcolor <color>\n");
+	}
+	else
+	{
 		if ( (colorstring = V_GetColorStringByName (argv[1])) )
 		{
 			color = V_GetColorFromString (NULL, colorstring);
@@ -660,8 +488,6 @@ BEGIN_COMMAND (testcolor)
 		{
 			color = V_GetColorFromString (NULL, argv[1]);
 		}
-		BuildColoredLights (NormalLight.maps, RPART(color), GPART(color), BPART(color),
-			RPART(level.fadeto), GPART(level.fadeto), BPART(level.fadeto));
+		NormalLight.ChangeColor (color);
 	}
 }
-END_COMMAND (testcolor)

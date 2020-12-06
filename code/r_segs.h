@@ -27,11 +27,25 @@
 
 void R_RenderMaskedSegRange (drawseg_t *ds, int x1, int x2);
 
-// [RH] There are two different RenderSegLoops.
-extern void (*R_RenderSegLoop)(void);
-EXTERN_CVAR (r_columnmethod)
+extern short *openings;
+extern ptrdiff_t lastopening;
+extern size_t maxopenings;
 
-void R_RenderSegLoop1 (void);
-void R_RenderSegLoop2 (void);
+inline ptrdiff_t R_NewOpening (ptrdiff_t len)
+{
+	ptrdiff_t res = lastopening;
+	lastopening += len;
+	return res;
+}
+
+void R_CheckOpenings (size_t need);
+void R_CheckDrawSegs ();
+
+// [RH] There are two different RenderSegLoops.
+extern void (*R_RenderSegLoop)();
+EXTERN_CVAR (Int, r_columnmethod)
+
+void R_RenderSegLoop1 ();
+void R_RenderSegLoop2 ();
 
 #endif

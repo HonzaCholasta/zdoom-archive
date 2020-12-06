@@ -177,11 +177,20 @@ void P_MakeDivline (const line_t *li, divline_t *dl)
 //
 fixed_t P_InterceptVector (const divline_t *v2, const divline_t *v1)
 {
-#if 1
+#if 1	// [RH] Use 64 bit ints, so long divlines don't overflow
+
+	SQWORD den = ((SQWORD)v1->dy*v2->dx - (SQWORD)v1->dx*v2->dy) >> FRACBITS;
+	if (den == 0)
+		return 0;		// parallel
+	SQWORD num = ((SQWORD)(v1->x - v2->x)*v1->dy + (SQWORD)(v2->y - v1->y)*v1->dx);
+	return (fixed_t)(num / den);
+
+#elif 1	// This is the original Doom version
+
 	fixed_t 	frac;
 	fixed_t 	num;
 	fixed_t 	den;
-		
+
 	den = FixedMul (v1->dy>>8,v2->dx) - FixedMul(v1->dx>>8,v2->dy);
 
 	if (den == 0)
@@ -195,7 +204,9 @@ fixed_t P_InterceptVector (const divline_t *v2, const divline_t *v1)
 	frac = FixedDiv (num , den);
 
 	return frac;
+
 #else	// UNUSED, float debug.
+
 	float frac;
 	float num;
 	float den;
@@ -220,7 +231,6 @@ fixed_t P_InterceptVector (const divline_t *v2, const divline_t *v1)
 #endif
 }
 
-
 //
 // P_LineOpening
 // Sets opentop and openbottom to the window
@@ -232,10 +242,12 @@ fixed_t openbottom;
 fixed_t openrange;
 fixed_t lowfloor;
 extern int tmfloorpic;
+sector_t *openbottomsec;
 
-void P_LineOpening (const line_t *linedef)
+void P_LineOpening (const line_t *linedef, fixed_t x, fixed_t y, fixed_t refx, fixed_t refy)
 {
 	sector_t *front, *back;
+	fixed_t fc, ff, bc, bf;
 
 	if (linedef->sidenum[1] == -1)
 	{
@@ -247,20 +259,46 @@ void P_LineOpening (const line_t *linedef)
 	front = linedef->frontsector;
 	back = linedef->backsector;
 
-	opentop = (front->ceilingheight < back->ceilingheight) ?
-		opentop = front->ceilingheight :
-		back->ceilingheight;
+	fc = front->ceilingplane.ZatPoint (x, y);
+	ff = front->floorplane.ZatPoint (x, y);
+	bc = back->ceilingplane.ZatPoint (x, y);
+	bf = back->floorplane.ZatPoint (x, y);
 
-	if (front->floorheight > back->floorheight)
+	opentop = fc < bc ? fc : bc;
+
+	bool usefront;
+
+	// [RH] fudge a bit for actors that are moving across lines
+	// bordering a slope/non-slope that meet on the floor. Note
+	// that imprecisions in the plane equation mean there is a
+	// good chance that even if a slope and non-slope look like
+	// they line up, they won't be perfectly aligned.
+	if (refx == FIXED_MIN || abs (ff-bf) > 256)
 	{
-		openbottom = front->floorheight;
-		lowfloor = back->floorheight;
+		usefront = (ff > bf);
+	}
+	else
+	{
+		if ((front->floorplane.a | front->floorplane.b) == 0)
+			usefront = true;
+		else if ((back->floorplane.a | front->floorplane.b) == 0)
+			usefront = false;
+		else
+			usefront = !P_PointOnLineSide (refx, refy, linedef);
+	}
+
+	if (usefront)
+	{
+		openbottom = ff;
+		openbottomsec = front;
+		lowfloor = bf;
 		tmfloorpic = front->floorpic;
 	}
 	else
 	{
-		openbottom = back->floorheight;
-		lowfloor = front->floorheight;
+		openbottom = bf;
+		openbottomsec = back;
+		lowfloor = ff;
 		tmfloorpic = back->floorpic;
 	}
 
@@ -411,8 +449,8 @@ void AActor::SetOrigin (fixed_t ix, fixed_t iy, fixed_t iz)
 	y = iy;
 	z = iz;
 	LinkToWorld ();
-	floorz = subsector->sector->floorheight;
-	ceilingz = subsector->sector->ceilingheight;
+	floorz = subsector->sector->floorplane.ZatPoint (ix, iy);
+	ceilingz = subsector->sector->ceilingplane.ZatPoint (ix, iy);
 }
 
 
@@ -516,9 +554,10 @@ BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(AActor*), AActor *actor)
 		}
 		while (actor != NULL)
 		{
+			AActor *next = actor->bnext;
 			if (!func (actor))
 				return false;
-			actor = actor->bnext;
+			actor = next;
 		}
 	}
 	return true;
@@ -551,7 +590,7 @@ BOOL PIT_AddLineIntercepts (line_t *ld)
 	int 				s2;
 	fixed_t 			frac;
 	divline_t			dl;
-		
+
 	// avoid precision problems with two routines
 	if ( trace.dx > FRACUNIT*16
 		 || trace.dy > FRACUNIT*16
@@ -674,13 +713,13 @@ BOOL P_TraverseIntercepts (traverser_t func, fixed_t maxfrac)
 	fixed_t 	 dist;
 	size_t		 scanpos;
 	intercept_t *scan;
-	intercept_t *in = 0;
+	intercept_t *in = NULL;
 
 	count = intercepts.Size ();
 
 	while (count--)
 	{
-		dist = MAXINT;
+		dist = FIXED_MAX;
 		for (scanpos = 0; scanpos < intercepts.Size (); scanpos++)
 		{
 			scan = &intercepts[scanpos];
@@ -691,13 +730,13 @@ BOOL P_TraverseIntercepts (traverser_t func, fixed_t maxfrac)
 			}
 		}
 		
-		if (dist > maxfrac)
+		if (dist > maxfrac || in == NULL)
 			return true;		// checked everything in range			
 
 		if (!func (in))
 			return false;		// don't bother going farther
 
-		in->frac = MAXINT;
+		in->frac = FIXED_MAX;
 	}
 		
 	return true;				// everything was traversed
@@ -814,13 +853,13 @@ BOOL P_PathTraverse (fixed_t x1, fixed_t y1, fixed_t x2, fixed_t y2, int flags, 
 	{
 		if (flags & PT_ADDLINES)
 		{
-			if (!P_BlockLinesIterator (mapx, mapy,PIT_AddLineIntercepts))
+			if (!P_BlockLinesIterator (mapx, mapy, PIT_AddLineIntercepts))
 				return false;	// early out
 		}
 		
 		if (flags & PT_ADDTHINGS)
 		{
-			if (!P_BlockThingsIterator (mapx, mapy,PIT_AddThingIntercepts))
+			if (!P_BlockThingsIterator (mapx, mapy, PIT_AddThingIntercepts))
 				return false;	// early out
 		}
 				

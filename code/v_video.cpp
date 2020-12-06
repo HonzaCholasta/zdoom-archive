@@ -58,30 +58,39 @@
 #include "c_dispatch.h"
 #include "cmdlib.h"
 
-IMPLEMENT_CLASS (DCanvas, DObject)
+IMPLEMENT_ABSTRACT_CLASS (DCanvas)
+IMPLEMENT_ABSTRACT_CLASS (DFrameBuffer)
+
+// SimpleCanvas is not really abstract, but this macro does not
+// try to generate a CreateNew() function.
+IMPLEMENT_ABSTRACT_CLASS (DSimpleCanvas)
 
 int DisplayWidth, DisplayHeight, DisplayBits;
 
 FFont *SmallFont, *BigFont, *ConFont;
 
-unsigned int Col2RGB8[65][256];
+extern "C" {
+DWORD *Col2RGB8_LessPrecision[65];
+DWORD Col2RGB8[65][256];
 byte RGB32k[32][32][32];
+}
 
+static DWORD Col2RGB8_2[63][256];
 
 // [RH] The framebuffer is no longer a mere byte array.
 // There's also only one, not four.
-DCanvas *screen;
+DFrameBuffer *screen;
 
-CVAR (vid_defwidth, "320", CVAR_ARCHIVE)
-CVAR (vid_defheight, "200", CVAR_ARCHIVE)
-CVAR (vid_defbits, "8", CVAR_ARCHIVE)
+int TransArea, TotalArea;
 
-CVAR (dimamount, "0.2", CVAR_ARCHIVE)
-CVAR (dimcolor, "ff d7 00", CVAR_ARCHIVE)
+CVAR (Int, vid_defwidth, 320, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Int, vid_defheight, 200, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Int, vid_defbits, 8, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Bool, vid_fps, false, 0)
+CVAR (Bool, ticker, false, 0)
 
-extern "C" {
-palette_t *DefaultPalette;
-}
+CVAR (Float, dimamount, 0.2f, CVAR_ARCHIVE)
+CVAR (Color, dimcolor, 0xffd700, CVAR_ARCHIVE)
 
 // [RH] Set true when vid_setmode command has been executed
 BOOL	setmodeneeded = false;
@@ -96,19 +105,46 @@ void V_MarkRect (int x, int y, int width, int height)
 {
 }
 
+DCanvas *DCanvas::CanvasChain = NULL;
 
-DCanvas::DCanvas (int _width, int _height, int _bits)
+DCanvas::DCanvas (int _width, int _height)
 {
-	buffer = NULL;
+	// Init member vars
+	Buffer = NULL;
 	Font = NULL;
-	m_LockCount = 0;
-	m_Private = NULL;
-	I_AllocateScreen (this, _width, _height, _bits);
+	LockCount = 0;
+	Width = _width;
+	Height = _height;
+
+	// Add to list of active canvases
+	Next = CanvasChain;
+	CanvasChain = this;
 }
 
 DCanvas::~DCanvas ()
 {
-	I_FreeScreen (this);
+	// Remove from list of active canvases
+	DCanvas *probe = CanvasChain, **prev;
+
+	prev = &CanvasChain;
+	probe = CanvasChain;
+
+	while (probe != NULL)
+	{
+		if (probe == this)
+		{
+			*prev = probe->Next;
+			break;
+		}
+		prev = &probe->Next;
+		probe = probe->Next;
+	}
+}
+
+bool DCanvas::IsValid ()
+{
+	// A nun-subclassed DCanvas is never valid
+	return false;
 }
 
 // [RH] Fill an area with a 64x64 flat texture
@@ -122,70 +158,25 @@ void DCanvas::FlatFill (int left, int top, int right, int bottom, const byte *sr
 	width = right - left;
 	right = width >> 6;
 
-	if (is8bit)
+	byte *dest;
+
+	advance = Pitch - width;
+	dest = Buffer + top * Pitch + left;
+
+	for (y = top; y < bottom; y++)
 	{
-		byte *dest;
-
-		advance = pitch - width;
-		dest = buffer + top * pitch + left;
-
-		for (y = top; y < bottom; y++)
+		for (x = 0; x < right; x++)
 		{
-			for (x = 0; x < right; x++)
-			{
-				memcpy (dest, src + ((y&63)<<6), 64);
-				dest += 64;
-			}
-
-			if (width & 63)
-			{
-				memcpy (dest, src + ((y&63)<<6), width & 63);
-				dest += width & 63;
-			}
-			dest += advance;
+			memcpy (dest, src + ((y&63)<<6), 64);
+			dest += 64;
 		}
-	}
-	else
-	{
-		unsigned int *dest;
-		int z;
-		const byte *l;
 
-		advance = (pitch - (width << 2)) >> 2;
-		dest = (unsigned int *)(buffer + top * pitch + (left << 2));
-
-		for (y = top; y < bottom; y++)
+		if (width & 63)
 		{
-			l = src + ((y&63)<<6);
-			for (x = 0; x < right; x++)
-			{
-				for (z = 0; z < 64; z += 4, dest += 4)
-				{
-					// Try and let the optimizer pair this on a Pentium
-					// (even though VC++ doesn't anyway)
-					dest[0] = V_Palette[l[z]];
-					dest[1] = V_Palette[l[z+1]];
-					dest[2] = V_Palette[l[z+2]];
-					dest[3] = V_Palette[l[z+3]];
-				}
-			}
-
-			if (width & 63)
-			{
-				// Do any odd pixel left over
-				if (width & 1)
-					*dest++ = V_Palette[l[0]];
-
-				// Do the rest of the pixels
-				for (z = 1; z < (width & 63); z += 2, dest += 2)
-				{
-					dest[0] = V_Palette[l[z]];
-					dest[1] = V_Palette[l[z+1]];
-				}
-			}
-
-			dest += advance;
+			memcpy (dest, src + ((y&63)<<6), width & 63);
+			dest += width & 63;
 		}
+		dest += advance;
 	}
 }
 
@@ -194,162 +185,79 @@ void DCanvas::FlatFill (int left, int top, int right, int bottom, const byte *sr
 void DCanvas::Clear (int left, int top, int right, int bottom, int color) const
 {
 	int x, y;
+	byte *dest;
 
-	if (is8bit)
+	dest = Buffer + top * Pitch + left;
+	x = right - left;
+	for (y = top; y < bottom; y++)
 	{
-		byte *dest;
-
-		dest = buffer + top * pitch + left;
-		x = right - left;
-		for (y = top; y < bottom; y++)
-		{
-			memset (dest, color, x);
-			dest += pitch;
-		}
-	}
-	else
-	{
-		unsigned int *dest;
-
-		dest = (unsigned int *)(buffer + top * pitch + (left << 2));
-		right -= left;
-
-		for (y = top; y < bottom; y++)
-		{
-			for (x = 0; x < right; x++)
-			{
-				dest[x] = color;
-			}
-			dest += pitch >> 2;
-		}
+		memset (dest, color, x);
+		dest += Pitch;
 	}
 }
 
 
 void DCanvas::Dim () const
 {
-	if (dimamount.value < 0)
-		dimamount.Set (0.0f);
-	else if (dimamount.value > 1)
-		dimamount.Set (1.0f);
+	if (*dimamount < 0.f)
+		dimamount = 0.f;
+	else if (*dimamount > 1.f)
+		dimamount = 1.f;
 
-	if (dimamount.value == 0)
+	if (*dimamount == 0.f)
 		return;
 
-	if (is8bit)
+	DWORD *bg2rgb;
+	DWORD fg;
+	int gap;
+	byte *spot;
+	int x, y;
+
 	{
-		unsigned int *bg2rgb;
-		unsigned int fg;
-		int gap;
-		byte *spot;
-		int x, y;
+		DWORD *fg2rgb;
+		fixed_t amount;
 
-		{
-			unsigned int *fg2rgb;
-			fixed_t amount;
-
-			amount = (fixed_t)(dimamount.value * 64);
-			fg2rgb = Col2RGB8[amount];
-			bg2rgb = Col2RGB8[64-amount];
-			fg = fg2rgb[V_GetColorFromString (DefaultPalette->basecolors, dimcolor.string)];
-		}
-
-		spot = buffer;
-		gap = pitch - width;
-		for (y = 0; y < height; y++)
-		{
-			for (x = 0; x < width; x++)
-			{
-				unsigned int bg = bg2rgb[*spot];
-				bg = (fg+bg) | 0x1f07c1f;
-				*spot++ = RGB32k[0][0][bg&(bg>>15)];
-			}
-			spot += gap;
-		}
-	}
-	else
-	{
-		int x, y;
-		int *line;
-		int fill = V_GetColorFromString (NULL, dimcolor.string);
-
-		line = (int *)(screen->buffer);
-
-		if (dimamount.value == 1.0)
-		{
-			fill = (fill >> 2) & 0x3f3f3f;
-			for (y = 0; y < height; y++)
-			{
-				for (x = 0; x < width; x++)
-				{
-					line[x] = (line[x] - ((line[x] >> 2) & 0x3f3f3f)) + fill;
-				}
-				line += pitch >> 2;
-			}
-		}
-		else if (dimamount.value == 2.0)
-		{
-			fill = (fill >> 1) & 0x7f7f7f;
-			for (y = 0; y < height; y++)
-			{
-				for (x = 0; x < width; x++)
-				{
-					line[x] = ((line[x] >> 1) & 0x7f7f7f) + fill;
-				}
-				line += pitch >> 2;
-			}
-		}
-		else if (dimamount.value == 3.0)
-		{
-			fill = fill - ((fill >> 2) & 0x3f3f3f);
-			for (y = 0; y < height; y++)
-			{
-				for (x = 0; x < width; x++)
-				{
-					line[x] = ((line[x] >> 2) & 0x3f3f3f) + fill;
-				}
-				line += pitch >> 2;
-			}
-		}
-	}
-}
-
-/*
-===============
-BestColor
-(borrowed from Quake2 source: utils3/qdata/images.c)
-===============
-*/
-byte BestColor (const DWORD *palette, const int r, const int g, const int b, const int numcolors)
-{
-	int		i;
-	int		dr, dg, db;
-	int		bestdistortion, distortion;
-	int		bestcolor;
-
-//
-// let any color go to 0 as a last resort
-//
-	bestdistortion = 256*256*4;
-	bestcolor = 0;
-
-	for (i = 0; i < numcolors; i++)
-	{
-		dr = r - RPART(palette[i]);
-		dg = g - GPART(palette[i]);
-		db = b - BPART(palette[i]);
-		distortion = dr*dr + dg*dg + db*db;
-		if (distortion < bestdistortion)
-		{
-			if (!distortion)
-				return i;		// perfect match
-
-			bestdistortion = distortion;
-			bestcolor = i;
-		}
+		amount = (fixed_t)(*dimamount * 64);
+		fg2rgb = Col2RGB8[amount];
+		bg2rgb = Col2RGB8[64-amount];
+		fg = fg2rgb[dimcolor.GetIndex ()];
 	}
 
-	return bestcolor;
+	spot = Buffer;
+	gap = Pitch - Width;
+	for (y = Height; y != 0; y--)
+	{
+		for (x = Width/4; x != 0; x--)
+		{
+			DWORD in = *(DWORD *)spot, out, bg;
+
+			// Do first pixel
+			bg = bg2rgb[in&0xff];
+			bg = (fg+bg) | 0x1f07c1f;
+			out = RGB32k[0][0][bg&(bg>>15)];
+
+			// Do second pixel
+			bg = bg2rgb[(in>>8)&0xff];
+			bg = (fg+bg) | 0x1f07c1f;
+			out |= RGB32k[0][0][bg&(bg>>15)] << 8;
+
+			// Do third pixel
+			bg = bg2rgb[(in>>16)&0xff];
+			bg = (fg+bg) | 0x1f07c1f;
+			out |= RGB32k[0][0][bg&(bg>>15)] << 16;
+
+			// Do fourth pixel and store
+			bg = bg2rgb[in>>24];
+			bg = (fg+bg) | 0x1f07c1f;
+			*(DWORD *)spot = out | RGB32k[0][0][bg&(bg>>15)] << 24;
+
+			spot += 4;
+		}
+		spot += gap;
+	}
+
+	if (this == screen)
+		TransArea += TotalArea;
 }
 
 int V_GetColorFromString (const DWORD *palette, const char *cstr)
@@ -359,27 +267,32 @@ int V_GetColorFromString (const DWORD *palette, const char *cstr)
 	const char *s, *g;
 
 	val[4] = 0;
-	for (s = cstr, i = 0; i < 3; i++) {
+	for (s = cstr, i = 0; i < 3; i++)
+	{
 		c[i] = 0;
 		while ((*s <= ' ') && (*s != 0))
 			s++;
-		if (*s) {
+		if (*s)
+		{
 			p = 0;
-			while (*s > ' ') {
-				if (p < 4) {
+			while (*s > ' ')
+			{
+				if (p < 4)
+				{
 					val[p++] = *s;
 				}
 				s++;
 			}
 			g = val;
-			while (p < 4) {
+			while (p < 4)
+			{
 				val[p++] = *g++;
 			}
 			c[i] = ParseHex (val);
 		}
 	}
 	if (palette)
-		return BestColor (palette, c[0]>>8, c[1]>>8, c[2]>>8, 256);
+		return ColorMatcher.Pick (c[0]>>8, c[1]>>8, c[2]>>8);
 	else
 		return ((c[0] << 8) & 0xff0000) |
 			   ((c[1])      & 0x00ff00) |
@@ -388,62 +301,105 @@ int V_GetColorFromString (const DWORD *palette, const char *cstr)
 
 char *V_GetColorStringByName (const char *name)
 {
-	/* Note: The X11R6RGB lump used by this function *MUST* end
-	 * with a NULL byte. This is so that COM_Parse is able to
-	 * detect the end of the lump.
-	 */
-	char *rgbNames, *data, descr[5*3];
+	char *rgbNames, *rgbEnd;
+	char *rgb, *endp;
+	char descr[5*3];
+	int rgblump;
 	int c[3], step;
+	int namelen;
 
-	if (!(rgbNames = (char *)W_CacheLumpName ("X11R6RGB", PU_CACHE))) {
-		Printf (PRINT_HIGH, "X11R6RGB lump not found\n");
+	rgblump = W_CheckNumForName ("X11R6RGB");
+	if (rgblump == -1)
+	{
+		Printf ("X11R6RGB lump not found\n");
 		return NULL;
 	}
 
-	// skip past the header line
-	data = strchr (rgbNames, '\n');
+	rgb = rgbNames = (char *)W_CacheLumpNum (rgblump, PU_CACHE);
+	rgbEnd = rgbNames + W_LumpLength (rgblump);
 	step = 0;
+	namelen = strlen (name);
 
-	while ( (data = COM_Parse (data)) )
+	while (rgb < rgbEnd)
 	{
-		if (step < 3)
+		// Skip white space
+		if (*rgb <= ' ')
 		{
-			c[step++] = atoi (com_token);
+			do
+			{
+				rgb++;
+			} while (rgb < rgbEnd && *rgb <= ' ');
+		}
+		else if (step == 0 && *rgb == '!')
+		{ // skip comment lines
+			do
+			{
+				rgb++;
+			} while (rgb < rgbEnd && *rgb != '\n');
+		}
+		else if (step < 3)
+		{ // collect RGB values
+			c[step++] = strtoul (rgb, &endp, 10);
+			if (endp == rgb)
+			{
+				break;
+			}
+			rgb = endp;
 		}
 		else
-		{
-			step = 0;
-			if (*data >= ' ')
-			{		// In case this name contains a space...
-				char *newchar = com_token + strlen(com_token);
-
-				while (*data >= ' ')
-				{
-					*newchar++ = *data++;
-				}
-				*newchar = 0;
-			}
-			
-			if (!stricmp (com_token, name))
+		{ // Check color name
+			endp = rgb;
+			// Find the end of the line
+			while (endp < rgbEnd && *endp != '\n')
+				endp++;
+			// Back up over any whitespace
+			while (endp > rgb && *endp <= ' ')
+				endp--;
+			if (endp == rgb)
 			{
-				sprintf (descr, "%04x %04x %04x",
-						 (c[0] << 8) | c[0],
-						 (c[1] << 8) | c[1],
-						 (c[2] << 8) | c[2]);
+				break;
+			}
+			int checklen = ++endp - rgb;
+			if (checklen == namelen && strnicmp (rgb, name, checklen) == 0)
+			{
+				sprintf (descr, "%02x %02x %02x", c[0], c[1], c[2]);
 				return copystring (descr);
 			}
+			rgb = endp;
+			step = 0;
 		}
+	}
+	if (rgb < rgbEnd)
+	{
+		Printf ("X11R6RGB lump is corrupt\n");
 	}
 	return NULL;
 }
 
-BEGIN_COMMAND (setcolor)
+int V_GetColor (const DWORD *palette, const char *str)
+{
+	char *string = V_GetColorStringByName (str);
+	int res;
+
+	if (string != NULL)
+	{
+		res = V_GetColorFromString (palette, string);
+		delete[] string;
+	}
+	else
+	{
+		res = V_GetColorFromString (palette, str);
+	}
+	return res;
+}
+
+CCMD (setcolor)
 {
 	char *desc, setcmd[256], *name;
 
 	if (argc < 3)
 	{
-		Printf (PRINT_HIGH, "Usage: setcolor <cvar> <color>\n");
+		Printf ("Usage: setcolor <cvar> <color>\n");
 		return;
 	}
 
@@ -458,124 +414,272 @@ BEGIN_COMMAND (setcolor)
 		delete[] name;
 	}
 }
-END_COMMAND (setcolor)
 
-// Build the tables necessary for translucency
-static void BuildTransTable (DWORD *palette)
+// Build the tables necessary for blending
+static void BuildTransTable (const PalEntry *palette)
 {
+	int r, g, b;
+
+	// create the RGB555 lookup table
+	for (r = 0; r < 32; r++)
+		for (g = 0; g < 32; g++)
+			for (b = 0; b < 32; b++)
+				RGB32k[r][g][b] = ColorMatcher.Pick ((r<<3)|(r>>2), (g<<3)|(g>>2), (b<<3)|(b>>2));
+
+	int x, y;
+
+	// create the swizzled palette
+	for (x = 0; x < 65; x++)
+		for (y = 0; y < 256; y++)
+			Col2RGB8[x][y] = (((palette[y].r*x)>>4)<<20) |
+							  ((palette[y].g*x)>>4) |
+							 (((palette[y].b*x)>>4)<<10);
+
+	// create the swizzled palette with the lsb of red and blue forced to 0
+	// (for green, a 1 is okay since it never gets added into)
+	for (x = 1; x < 64; x++)
 	{
-		int r, g, b;
-
-		// create the small RGB table
-		for (r = 0; r < 32; r++)
-			for (g = 0; g < 32; g++)
-				for (b = 0; b < 32; b++)
-					RGB32k[r][g][b] = BestColor (palette,
-						(r<<3)|(r>>2), (g<<3)|(g>>2), (b<<3)|(b>>2), 256);
-	}
-
-	{
-		int x, y;
-
-		for (x = 0; x < 65; x++)
-			for (y = 0; y < 256; y++)
-				Col2RGB8[x][y] = (((RPART(palette[y])*x)>>4)<<20) |
-								  ((GPART(palette[y])*x)>>4) |
-								 (((BPART(palette[y])*x)>>4)<<10);
-	}
-}
-
-void DCanvas::Lock ()
-{
-	m_LockCount++;
-	if (m_LockCount == 1)
-	{
-		I_LockScreen (this);
-
-		if (this == screen)
+		Col2RGB8_LessPrecision[x] = Col2RGB8_2[x-1];
+		for (y = 0; y < 256; y++)
 		{
-			if (dc_pitch != pitch << detailyshift)
-			{
-				dc_pitch = pitch << detailyshift;
-				R_InitFuzzTable ();
-#ifdef USEASM
-				ASM_PatchPitch ();
-#endif
-			}
-
-			if ((is8bit ? 1 : 4) << detailxshift != ds_colsize)
-			{
-				ds_colsize = (is8bit ? 1 : 4) << detailxshift;
-#ifdef USEASM
-				ASM_PatchColSize ();
-#endif
-			}
+			Col2RGB8_2[x-1][y] = Col2RGB8[x][y] & 0x3feffbff;
 		}
 	}
-}
-
-void DCanvas::Unlock ()
-{
-	if (m_LockCount)
-		if (--m_LockCount == 0)
-			I_UnlockScreen (this);
+	Col2RGB8_LessPrecision[0] = Col2RGB8[0];
+	Col2RGB8_LessPrecision[64] = Col2RGB8[64];
 }
 
 void DCanvas::Blit (int srcx, int srcy, int srcwidth, int srcheight,
 			 DCanvas *dest, int destx, int desty, int destwidth, int destheight)
 {
-	I_Blit (this, srcx, srcy, srcwidth, srcheight, dest, destx, desty, destwidth, destheight);
+	fixed_t fracxstep, fracystep;
+	fixed_t fracx, fracy;
+	int x, y;
+	bool lockthis, lockdest;
+
+	if ( (lockthis = (LockCount == 0)) )
+	{
+		if (Lock ())
+		{ // Surface was lost, so nothing to blit
+			Unlock ();
+			return;
+		}
+	}
+
+	if ( (lockdest = (dest->LockCount == 0)) )
+	{
+		dest->Lock ();
+	}
+
+	fracy = srcy << FRACBITS;
+	fracystep = (srcheight << FRACBITS) / destheight;
+	fracxstep = (srcwidth << FRACBITS) / destwidth;
+
+	byte *destline, *srcline;
+	byte *destbuffer = dest->Buffer;
+	byte *srcbuffer = Buffer;
+
+	if (fracxstep == FRACUNIT)
+	{
+		for (y = desty; y < desty + destheight; y++, fracy += fracystep)
+		{
+			memcpy (destbuffer + y * dest->Pitch + destx,
+					srcbuffer + (fracy >> FRACBITS) * Pitch + srcx,
+					destwidth);
+		}
+	}
+	else
+	{
+		for (y = desty; y < desty + destheight; y++, fracy += fracystep)
+		{
+			srcline = srcbuffer + (fracy >> FRACBITS) * Pitch + srcx;
+			destline = destbuffer + y * dest->Pitch + destx;
+			for (x = fracx = 0; x < destwidth; x++, fracx += fracxstep)
+			{
+				destline[x] = srcline[fracx >> FRACBITS];
+			}
+		}
+	}
+
+	if (lockthis)
+	{
+		Unlock ();
+	}
+	if (lockdest)
+	{
+		Unlock ();
+	}
 }
 
+void DCanvas::CalcGamma (float gamma, BYTE gammalookup[256])
+{
+	// I found this formula on the web at
+	// <http://panda.mostang.com/sane/sane-gamma.html>
+
+	double invgamma = 1.f / gamma;
+	int i;
+
+	for (i = 0; i < 256; i++)
+	{
+		gammalookup[i] = (BYTE)(255.0 * pow (i / 255.0, invgamma));
+	}
+}
+
+DSimpleCanvas::DSimpleCanvas (int width, int height)
+	: DCanvas (width, height)
+{
+	MemBuffer = new BYTE[width * height];
+	Pitch = width;
+}
+
+DSimpleCanvas::~DSimpleCanvas ()
+{
+	if (MemBuffer != NULL)
+	{
+		delete[] MemBuffer;
+		MemBuffer = NULL;
+	}
+}
+
+bool DSimpleCanvas::IsValid ()
+{
+	return (MemBuffer != NULL);
+}
+
+bool DSimpleCanvas::Lock ()
+{
+	if (LockCount == 0)
+	{
+		LockCount++;
+		Buffer = MemBuffer;
+	}
+	return false;		// System surfaces are never lost
+}
+
+void DSimpleCanvas::Unlock ()
+{
+	if (LockCount <= 1)
+	{
+		LockCount = 0;
+		Buffer = NULL;	// Enforce buffer access only between Lock/Unlock
+	}
+}
+
+DFrameBuffer::DFrameBuffer (int width, int height)
+	: DSimpleCanvas (width, height)
+{
+	LastMS = LastSec = FrameCount = LastCount = LastTic = 0;
+}
+
+void DFrameBuffer::DrawRateStuff ()
+{
+	// Draws frame time and cumulative fps
+	if (*vid_fps)
+	{
+		QWORD ms = I_MSTime ();
+		QWORD howlong = ms - LastMS;
+		if (howlong > 0)
+		{
+			char fpsbuff[40];
+			int chars;
+
+#if _MSC_VER
+			chars = sprintf (fpsbuff, "%I64d ms (%ld fps)", howlong, LastCount);
+#else
+			chars = sprintf (fpsbuff, "%Ld ms (%ld fps)", howlong, LastCount);
+#endif
+			Clear (0, screen->GetHeight() - 8, chars * 8, screen->GetHeight(), 0);
+			SetFont (ConFont);
+			DrawText (CR_WHITE, 0, screen->GetHeight() - 8, (char *)&fpsbuff[0]);
+			SetFont (SmallFont);
+
+			DWORD thisSec = ms/1000;
+			if (LastSec < thisSec)
+			{
+				LastCount = FrameCount / (thisSec - LastSec);
+				LastSec = thisSec;
+				FrameCount = 0;
+			}
+			FrameCount++;
+		}
+		LastMS = ms;
+	}
+
+	// draws little dots on the bottom of the screen
+	if (*ticker)
+	{
+		int i = I_GetTime();
+		int tics = i - LastTic;
+		BYTE *buffer = GetBuffer () + (GetHeight()-1)*GetPitch();
+
+		LastTic = i;
+		if (tics > 20) tics = 20;
+		
+		for (i = 0; i < tics*2; i += 2)		buffer[i] = 0xff;
+		for ( ; i < 20*2; i += 2)			buffer[i] = 0x00;
+	}
+}
+
+void DFrameBuffer::CopyFromBuff (BYTE *src, int srcPitch, int width, int height, BYTE *dest)
+{
+	if (Pitch == width && Pitch == Width)
+	{
+		memcpy (dest, src, Width * Height);
+	}
+	else
+	{
+		for (int y = 0; y < height; y++)
+		{
+			memcpy (dest, src, width);
+			dest += Pitch;
+			src += srcPitch;
+		}
+	}
+}
 
 //
 // V_SetResolution
 //
-BOOL V_DoModeSetup (int width, int height, int bits)
+bool V_DoModeSetup (int width, int height, int bits)
 {
-	I_SetMode (width, height, bits);
+	DFrameBuffer *buff = I_SetMode (width, height, screen);
+
+	if (buff == NULL)
+	{
+		return false;
+	}
+
+	screen = buff;
+	screen->SetFont (SmallFont);
+	screen->SetGamma (*Gamma);
 
 	CleanXfac = width / 320;
 	CleanYfac = height / 200;
 	CleanWidth = width / CleanXfac;
 	CleanHeight = height / CleanYfac;
+	TotalArea = width * height;
 
 	DisplayWidth = width;
 	DisplayHeight = height;
 	DisplayBits = bits;
 
-	// Free the virtual framebuffer
-	if (screen)
-	{
-		delete screen;
-		screen = NULL;
-	}
-
-	// Allocate a new virtual framebuffer
-	screen = new DCanvas (width, height, bits);
-
-	V_ForceBlend (0,0,0,0);
-	if (bits == 8)
-		RefreshPalettes ();
-
-	R_InitColumnDrawers (screen->is8bit);
+	R_InitColumnDrawers ();
 	R_MultiresInit ();
 
 	M_RefreshModesList ();
-	screen->SetFont (SmallFont);
 
 	return true;
 }
 
-BOOL V_SetResolution (int width, int height, int bits)
+bool V_SetResolution (int width, int height, int bits)
 {
 	int oldwidth, oldheight;
 	int oldbits;
 
 	if (screen)
 	{
-		oldwidth = screen->width;
-		oldheight = screen->height;
+		oldwidth = SCREENWIDTH;
+		oldheight = SCREENHEIGHT;
 		oldbits = DisplayBits;
 	}
 	else
@@ -601,10 +705,10 @@ BOOL V_SetResolution (int width, int height, int bits)
 	return V_DoModeSetup (width, height, bits);
 }
 
-BEGIN_COMMAND (vid_setmode)
+CCMD (vid_setmode)
 {
 	BOOL	goodmode = false;
-	int		width = 0, height = screen->height;
+	int		width = 0, height = SCREENHEIGHT;
 	int		bits = DisplayBits;
 
 	if (argc > 1)
@@ -639,14 +743,13 @@ BEGIN_COMMAND (vid_setmode)
 	}
 	else if (width)
 	{
-		Printf (PRINT_HIGH, "Unknown resolution %d x %d x %d\n", width, height, bits);
+		Printf ("Unknown resolution %d x %d x %d\n", width, height, bits);
 	}
 	else
 	{
-		Printf (PRINT_HIGH, "Usage: vid_setmode <width> <height> <mode>\n");
+		Printf ("Usage: vid_setmode <width> <height> <mode>\n");
 	}
 }
-END_COMMAND (vid_setmode)
 
 //
 // V_Init
@@ -657,26 +760,19 @@ void V_Init (void)
 	char *i;
 	int width, height, bits;
 
-	// [RH] Initialize palette subsystem
-	if (!(DefaultPalette = InitPalettes ("PLAYPAL")))
-		I_FatalError ("Could not initialize palette");
+	// [RH] Initialize palette management
+	InitPalette ();
 
 	// load the heads-up font
-	int base;
-
-	if ((base = W_CheckNumForName ("FONTA_S")) >= 0)
+	if (W_CheckNumForName ("FONTA_S") >= 0)
 	{
-		int size = W_GetNumForName ("FONTA_E") - base;
-		SmallFont = new FFont (base + 1, ' '+1, size - 1);
-		base = W_GetNumForName ("FONTB_S");
-		size = W_GetNumForName ("FONTB_E") - base;
-		BigFont = new FFont (base + 1, ' '+1, size - 1);
+		SmallFont = new FFont ("FONTA%02u", HU_FONTSTART, HU_FONTSIZE, 1);
 	}
 	else
 	{
 		SmallFont = new FFont ("STCFN%.3d", HU_FONTSTART, HU_FONTSIZE, HU_FONTSTART);
-		BigFont = new FFont ("FONTB%02u", HU_FONTSTART, HU_FONTSIZE, 1);
 	}
+	BigFont = new FFont ("FONTB%02u", HU_FONTSTART, HU_FONTSIZE, 1);
 
 	width = height = bits = 0;
 
@@ -693,8 +789,8 @@ void V_Init (void)
 	{
 		if (height == 0)
 		{
-			width = (int)(vid_defwidth.value);
-			height = (int)(vid_defheight.value);
+			width = *vid_defwidth;
+			height = *vid_defheight;
 		}
 		else
 		{
@@ -708,40 +804,30 @@ void V_Init (void)
 
 	if (bits == 0)
 	{
-		bits = (int)(vid_defbits.value);
+		bits = *vid_defbits;
 	}
+
+	atterm (FreeCanvasChain);
 
 	I_ClosestResolution (&width, &height, bits);
 
 	if (!V_SetResolution (width, height, bits))
 		I_FatalError ("Could not set resolution to %d x %d x %d", width, height, bits);
 	else
-		Printf (PRINT_HIGH, "Resolution: %d x %d x %d\n", screen->width, screen->height, screen->bits);
+		Printf ("Resolution: %d x %d\n", SCREENWIDTH, SCREENHEIGHT);
 
+	FBaseCVar::ResetColors ();
 	ConFont = new FConsoleFont (W_GetNumForName ("CONCHARS"));
-	C_InitConsole (screen->width, screen->height, true);
+	C_InitConsole (SCREENWIDTH, SCREENHEIGHT, true);
 
-	V_Palette = (unsigned int *)DefaultPalette->colors;
-
-	BuildTransTable (DefaultPalette->basecolors);
+	BuildTransTable (GPalette.BaseColors);
 }
 
-void DCanvas::AttachPalette (palette_t *pal)
+void STACK_ARGS FreeCanvasChain ()
 {
-	if (m_Palette == pal)
-		return;
-
-	DetachPalette ();
-
-	pal->usecount++;
-	m_Palette = pal;
-}
-
-void DCanvas::DetachPalette ()
-{
-	if (m_Palette)
+	while (DCanvas::CanvasChain != NULL)
 	{
-		FreePalette (m_Palette);
-		m_Palette = NULL;
+		delete DCanvas::CanvasChain;
 	}
+	screen = NULL;
 }

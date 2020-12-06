@@ -4,47 +4,38 @@
 /********** Decorations ***********/
 
 #define _DECCOMMON(cls,ednum,rad,hi,ns) \
-	class cls : public AActor { DECLARE_STATELESS_ACTOR (cls, AActor); static FState States[ns]; }; \
-	IMPLEMENT_DEF_SERIAL (cls, AActor); \
-	REGISTER_ACTOR (cls, Heretic); \
-	void cls::SetDefaults (FActorInfo *info) { \
-		INHERIT_DEFS; \
-		info->doomednum = ednum; \
-		info->spawnstate = &States[0]; \
-		info->radius = rad * FRACUNIT; \
-		info->height = hi * FRACUNIT;
+	class cls : public AActor { DECLARE_STATELESS_ACTOR (cls, AActor) static FState States[ns]; }; \
+	IMPLEMENT_ACTOR (cls, Heretic, ednum, 0) \
+		PROP_SpawnState (0) \
+		PROP_RadiusFixed (rad) \
+		PROP_HeightFixed (hi)
 
 #define _DECSTARTSTATES(cls,ns) \
 	FState cls::States[ns] =
 
+#define DECF(cls,ednum,rad,hi,ns,fl) \
+	_DECCOMMON(cls,ednum,rad,hi,ns) \
+	PROP_Flags (fl) \
+	END_DEFAULTS \
+	_DECSTARTSTATES(cls,ns)
+
 #define DEC(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SOLID; } _DECSTARTSTATES(cls,ns)
+	DECF(cls,ednum,rad,hi,ns,MF_SOLID)
 
 #define DECNSOLID(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) } _DECSTARTSTATES(cls,ns)
+	_DECCOMMON(cls,ednum,rad,hi,ns) END_DEFAULTS _DECSTARTSTATES(cls,ns)
 
 #define DECHANG(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	DECF(cls,ednum,rad,hi,ns,MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY)
 
 #define DECHANGNS(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_SPAWNCEILING|MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	DECF(cls,ednum,rad,hi,ns,MF_SPAWNCEILING|MF_NOGRAVITY)
 
 #define DECFLOATNS(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_NOGRAVITY; } _DECSTARTSTATES(cls,ns)
+	DECF(cls,ednum,rad,hi,ns,MF_NOGRAVITY)
 
 #define DECNBLOCK(cls,ednum,rad,hi,ns) \
-	_DECCOMMON(cls,ednum,rad,hi,ns) info->flags = MF_NOBLOCKMAP; } _DECSTARTSTATES(cls,ns)
-
-#define SUBCLASS_NS(cls,super,ednum,rad,hi) \
-	class cls : public super { DECLARE_STATELESS_ACTOR (cls, super); }; \
-	IMPLEMENT_DEF_SERIAL (cls, super); \
-	REGISTER_ACTOR (cls, Doom); \
-	void cls::SetDefaults (FActorInfo *info) { \
-		INHERIT_DEFS_STATELESS; \
-		info->doomednum= ednum; \
-		info->radius = rad * FRACUNIT; \
-		info->height = rad * FRACUNIT; \
-		info->flags &= ~MF_SOLID; }
+	DECF(cls,ednum,rad,hi,ns,MF_NOBLOCKMAP)
 
 DECHANGNS (ASkullHang70, 17, 20, 70, 1)
 {

@@ -50,41 +50,29 @@ class player_s;
 
 class APlayerPawn : public AActor
 {
-	DECLARE_STATELESS_ACTOR (APlayerPawn, AActor);
+	DECLARE_STATELESS_ACTOR (APlayerPawn, AActor)
 public:
-	virtual void PlayIdle ()
-	{
-		if (state >= GetInfo (this)->seestate && state < GetInfo (this)->missilestate)
-			SetState (GetInfo (this)->spawnstate);
-	}
-	virtual void PlayRunning ()
-	{
-		if (state == GetInfo (this)->spawnstate)
-			SetState (GetInfo (this)->seestate);
-	}
-	virtual void PlayAttacking ()
-	{
-		SetState (GetInfo (this)->missilestate);
-	}
-	virtual void PlayAttacking2 ()
-	{
-		SetState (GetInfo (this)->missilestate+1);
-	}
-	virtual bool HealOther (player_s *pawn) { return false; }	// returns true if effective
-	virtual void ThrowPoisonBag () {}
+	virtual void PlayIdle ();
+	virtual void PlayRunning ();
+	virtual void PlayAttacking ();
+	virtual void PlayAttacking2 ();
+	virtual bool HealOther (player_s *pawn);	// returns true if effective
+	virtual void ThrowPoisonBag ();
 	virtual const TypeInfo *GetDropType ();
-	virtual void GiveDefaultInventory () {}
-	virtual int GetAutoArmorSave () { return 0; }
-	virtual fixed_t GetArmorIncrement (int armortype) { return 10*FRACUNIT; }
-	virtual const char *BaseSoundName () { return NULL; }
-	virtual fixed_t GetJumpZ () { return 8*FRACUNIT; }
+	virtual void GiveDefaultInventory ();
+	virtual int GetAutoArmorSave ();
+	virtual fixed_t GetArmorIncrement (int armortype);
+	virtual const char *GetSoundClass ();
+	virtual fixed_t GetJumpZ ();
 
-	void NoBlockingSet ();
+	virtual void NoBlockingSet ();
+
+	void BeginPlay ();
 };
 
 class APlayerChunk : APlayerPawn
 {
-	DECLARE_STATELESS_ACTOR (APlayerChunk, APlayerPawn);
+	DECLARE_STATELESS_ACTOR (APlayerChunk, APlayerPawn)
 };
 
 //
@@ -94,7 +82,8 @@ typedef enum
 {
 	PST_LIVE,	// Playing or camping.
 	PST_DEAD,	// Dead on the ground, view follows killer.
-	PST_REBORN	// Ready to restart/respawn???
+	PST_REBORN,	// Ready to restart/respawn???
+	PST_ENTER	// [BC] Entered the game
 } playerstate_t;
 
 
@@ -111,8 +100,8 @@ typedef enum
 	CF_CHASECAM			= 32,	// [RH] Put camera behind player
 	CF_FROZEN			= 64,	// [RH] Don't let the player move
 	CF_REVERTPLEASE		= 128,	// [RH] Stick camera in player's head if (s)he moves
-	CF_NOSKIN			= 256,	// [RH] Don't use skin
 	CF_STEPLEFT			= 512,	// [RH] Play left footstep sound next time
+	CF_FRIGHTENING		= 1024,	// [RH] Scare monsters away
 } cheat_t;
 
 
@@ -133,7 +122,8 @@ public:
 	
 	const TypeInfo *cls;				// class of associated PlayerPawn
 
-	float		fov;					// field of vision
+	float		DesiredFOV;				// desired field of vision
+	float		FOV;					// current field of vision
 	fixed_t		viewz;					// focal origin above r.z
 	fixed_t		viewheight;				// base height above floor for viewz
 	fixed_t		deltaviewheight;		// squat speed.
@@ -165,6 +155,9 @@ public:
 	
 	int			frags[MAXPLAYERS];		// kills of other players
 	int			fragcount;				// [RH] Cumulative frags for this player
+	int			lastkilltime;			// [RH] For multikills
+	byte		multicount;
+	byte		spreecount;				// [RH] Keep track of killing sprees
 
 	weapontype_t	readyweapon;
 	weapontype_t	pendingweapon;		// wp_nochange if not changing

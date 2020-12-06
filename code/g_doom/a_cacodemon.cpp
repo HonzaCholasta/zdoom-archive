@@ -3,21 +3,18 @@
 #include "m_random.h"
 #include "p_local.h"
 #include "p_enemy.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_HeadAttack (AActor *);
 
 class ACacodemon : public AActor
 {
-	DECLARE_ACTOR (ACacodemon, AActor);
+	DECLARE_ACTOR (ACacodemon, AActor)
 public:
-	const char *GetObituary () { return OB_CACO; }
-	const char *GetHitObituary () { return OB_CACOHIT; }
+	const char *GetObituary () { return GStrings(OB_CACO); }
+	const char *GetHitObituary () { return GStrings(OB_CACOHIT); }
 };
-
-IMPLEMENT_DEF_SERIAL (ACacodemon, AActor);
-REGISTER_ACTOR (ACacodemon, Doom);
 
 FState ACacodemon::States[] =
 {
@@ -54,58 +51,47 @@ FState ACacodemon::States[] =
 	S_NORMAL (HEAD, 'G',	8, NULL 						, &States[S_HEAD_RUN+0])
 };
 
-void ACacodemon::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 3005;
-	info->spawnid = 19;
-	info->spawnstate = &States[S_HEAD_STND];
-	info->spawnhealth = 400;
-	info->seestate = &States[S_HEAD_RUN];
-	info->seesound = "caco/sight";
-	info->painstate = &States[S_HEAD_PAIN];
-	info->painchance = 128;
-	info->painsound = "caco/pain";
-	info->missilestate = &States[S_HEAD_ATK];
-	info->deathstate = &States[S_HEAD_DIE];
-	info->deathsound = "caco/death";
-	info->speed = 8;
-	info->radius = 31 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 400;
-	info->activesound = "caco/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_HEAD_RAISE];
-}
+IMPLEMENT_ACTOR (ACacodemon, Doom, 3005, 19)
+	PROP_SpawnHealth (400)
+	PROP_RadiusFixed (31)
+	PROP_HeightFixed (56)
+	PROP_Mass (400)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (128)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_HEAD_STND)
+	PROP_SeeState (S_HEAD_RUN)
+	PROP_PainState (S_HEAD_PAIN)
+	PROP_MissileState (S_HEAD_ATK)
+	PROP_DeathState (S_HEAD_DIE)
+	PROP_RaiseState (S_HEAD_RAISE)
+
+	PROP_SeeSound ("caco/sight")
+	PROP_PainSound ("caco/pain")
+	PROP_DeathSound ("caco/death")
+	PROP_ActiveSound ("caco/active")
+END_DEFAULTS
 
 class AStealthCacodemon : public ACacodemon
 {
-	DECLARE_STATELESS_ACTOR (AStealthCacodemon, ACacodemon);
+	DECLARE_STATELESS_ACTOR (AStealthCacodemon, ACacodemon)
 public:
-	const char *GetObituary () { return OB_STEALTHCACO; }
-	const char *GetHitObituary () { return OB_STEALTHCACO; }
+	const char *GetObituary () { return GStrings(OB_STEALTHCACO); }
+	const char *GetHitObituary () { return GStrings(OB_STEALTHCACO); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthCacodemon, ACacodemon);
-REGISTER_ACTOR (AStealthCacodemon, Doom);
-
-void AStealthCacodemon::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9053;
-	info->spawnid = 119;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthCacodemon, Doom, 9053, 119)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 class ACacodemonBall : public AActor
 {
-	DECLARE_ACTOR (ACacodemonBall, AActor);
+	DECLARE_ACTOR (ACacodemonBall, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ACacodemonBall, AActor);
-REGISTER_ACTOR (ACacodemonBall, Doom);
 
 FState ACacodemonBall::States[] =
 {
@@ -119,21 +105,25 @@ FState ACacodemonBall::States[] =
 	S_BRIGHT (BAL2, 'E',	6, NULL 						, NULL)
 };
 
-void ACacodemonBall::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ACacodemonBall, Doom, -1, 126)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (10)
+	PROP_Damage (5)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_RBALL)
+	PROP_DeathState (S_RBALLX)
+
+	PROP_SeeSound ("caco/attack")
+	PROP_DeathSound ("caco/shotx")
+END_DEFAULTS
+
+AT_SPEED_SET (CacodemonBall, speed)
 {
-	INHERIT_DEFS;
-	info->spawnid = 126;
-	info->spawnstate = &States[S_RBALL];
-	info->seesound = "caco/attack";
-	info->deathstate = &States[S_RBALLX];
-	info->deathsound = "caco/shotx";
-	info->speed = GameSpeed != SPEED_Fast ? 10 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 6 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 5;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-	info->translucency = TRANSLUC75;
+	SimpleSpeedSetter (ACacodemonBall, 10*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 void A_HeadAttack (AActor *self)
@@ -157,17 +147,10 @@ void A_HeadAttack (AActor *self)
 
 class ADeadCacodemon : public ACacodemon
 {
-	DECLARE_STATELESS_ACTOR (ADeadCacodemon, ACacodemon);
+	DECLARE_STATELESS_ACTOR (ADeadCacodemon, ACacodemon)
 };
 
-IMPLEMENT_DEF_SERIAL (ADeadCacodemon, ACacodemon);
-REGISTER_ACTOR (ADeadCacodemon, Doom);
-
-void ADeadCacodemon::SetDefaults (FActorInfo *info)
-{
-	AActor::SetDefaults (info);
-	info->OwnedStates = NULL;
-	info->NumOwnedStates = 0;
-	info->doomednum = 22;
-	info->spawnstate = &States[S_HEAD_DIE+5];
-}
+IMPLEMENT_STATELESS_ACTOR (ADeadCacodemon, Doom, 22, 0)
+	PROP_SKIP_SUPER
+	PROP_SpawnState (S_HEAD_DIE+5)
+END_DEFAULTS

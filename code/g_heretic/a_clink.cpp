@@ -5,6 +5,7 @@
 #include "p_local.h"
 #include "p_enemy.h"
 #include "a_action.h"
+#include "gstrings.h"
 
 void A_ClinkAttack (AActor *);
 
@@ -12,13 +13,11 @@ void A_ClinkAttack (AActor *);
 
 class AClink : public AActor
 {
-	DECLARE_ACTOR (AClink, AActor);
+	DECLARE_ACTOR (AClink, AActor)
 public:
 	void NoBlockingSet ();
+	const char *GetObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (AClink, AActor);
-REGISTER_ACTOR (AClink, Heretic);
 
 FState AClink::States[] =
 {
@@ -51,33 +50,37 @@ FState AClink::States[] =
 	S_NORMAL (CLNK, 'O',   -1, NULL 					, NULL)
 };
 
-void AClink::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 90;
-	info->spawnstate = &States[S_CLINK_LOOK];
-	info->spawnhealth = 150;
-	info->seestate = &States[S_CLINK_WALK];
-	info->seesound = "clink/sight";
-	info->attacksound = "clink/attack";
-	info->painstate = &States[S_CLINK_PAIN];
-	info->painchance = 32;
-	info->painsound = "clink/pain";
-	info->meleestate = &States[S_CLINK_ATK];
-	info->deathstate = &States[S_CLINK_DIE];
-	info->deathsound = "clink/death";
-	info->speed = 14;
-	info->radius = 20 * FRACUNIT;
-	info->height = 64 * FRACUNIT;
-	info->mass = 75;
-	info->activesound = "clink/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_NOBLOOD;
-	info->flags2 = MF2_FLOORCLIP|MF2_PASSMOBJ;
-}
+IMPLEMENT_ACTOR (AClink, Heretic, 90, 0)
+	PROP_SpawnHealth (150)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (64)
+	PROP_Mass (75)
+	PROP_SpeedFixed (14)
+	PROP_PainChance (32)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_NOBLOOD)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PASSMOBJ)
+
+	PROP_SpawnState (S_CLINK_LOOK)
+	PROP_SeeState (S_CLINK_WALK)
+	PROP_PainState (S_CLINK_PAIN)
+	PROP_MeleeState (S_CLINK_ATK)
+	PROP_DeathState (S_CLINK_DIE)
+
+	PROP_SeeSound ("clink/sight")
+	PROP_AttackSound ("clink/attack")
+	PROP_PainSound ("clink/pain")
+	PROP_DeathSound ("clink/death")
+	PROP_ActiveSound ("clink/active")
+END_DEFAULTS
 
 void AClink::NoBlockingSet ()
 {
-	P_DropItem (this, "SkullRodWimpy", 20, 84);
+	P_DropItem (this, "SkullRodAmmo", 20, 84);
+}
+
+const char *AClink::GetObituary ()
+{
+	return GStrings(OB_CLINK);
 }
 
 //----------------------------------------------------------------------------
@@ -94,10 +97,10 @@ void A_ClinkAttack (AActor *actor)
 	{
 		return;
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->AttackSound, 1, ATTN_NORM);
 	if (P_CheckMeleeRange (actor))
 	{
 		damage = ((P_Random()%7)+3);
-		P_DamageMobj (actor->target, actor, actor, damage);
+		P_DamageMobj (actor->target, actor, actor, damage, MOD_HIT);
 	}
 }

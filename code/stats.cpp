@@ -44,13 +44,13 @@ void FStat::SelectStat (const char *name)
 	if (stat)
 		SelectStat (stat);
 	else
-		Printf (PRINT_HIGH, "Unknown stat: %s\n", name);
+		Printf ("Unknown stat: %s\n", name);
 }
 
 void FStat::SelectStat (FStat *stat)
 {
 	m_CurrStat = stat;
-	SB_state = -1;
+	SB_state = screen->GetPageCount ();
 }
 
 void FStat::ToggleStat (const char *name)
@@ -59,7 +59,7 @@ void FStat::ToggleStat (const char *name)
 	if (stat)
 		ToggleStat (stat);
 	else
-		Printf (PRINT_HIGH, "Unknown stat: %s\n", name);
+		Printf ("Unknown stat: %s\n", name);
 }
 
 void FStat::ToggleStat (FStat *stat)
@@ -68,7 +68,7 @@ void FStat::ToggleStat (FStat *stat)
 		m_CurrStat = NULL;
 	else
 		m_CurrStat = stat;
-	SB_state = -1;
+	SB_state = screen->GetPageCount ();
 }
 
 void FStat::PrintStat ()
@@ -78,9 +78,9 @@ void FStat::PrintStat ()
 		char stattext[256];
 
 		m_CurrStat->GetStats (stattext);
-		screen->DrawText (CR_GREEN, 5, screen->height -
+		screen->DrawText (CR_GREEN, 5, SCREENHEIGHT -
 			SmallFont->GetHeight(), stattext);
-		SB_state = -1;
+		SB_state = screen->GetPageCount ();
 	}
 }
 
@@ -88,19 +88,19 @@ void FStat::DumpRegisteredStats ()
 {
 	FStat *stat = m_FirstStat;
 
-	Printf (PRINT_HIGH, "Available stats:\n");
+	Printf ("Available stats:\n");
 	while (stat)
 	{
-		Printf (PRINT_HIGH, "  %s\n", stat->m_Name);
+		Printf ("  %s\n", stat->m_Name);
 		stat = stat->m_Next;
 	}
 }
 
-BEGIN_COMMAND (stat)
+CCMD (stat)
 {
 	if (argc != 2)
 	{
-		Printf (PRINT_HIGH, "Usage: stat <statistics>\n");
+		Printf ("Usage: stat <statistics>\n");
 		FStat::DumpRegisteredStats ();
 	}
 	else
@@ -108,4 +108,3 @@ BEGIN_COMMAND (stat)
 		FStat::ToggleStat (argv[1]);
 	}
 }
-END_COMMAND (stat)

@@ -11,8 +11,9 @@
 #include "tables.h"
 #include "i_system.h"
 #include "a_sharedglobal.h"
+#include "statnums.h"
 
-#define FUNC(a) static BOOL a (line_t *ln, AActor *it, int arg0, int arg1, \
+#define FUNC(a) static bool a (line_t *ln, AActor *it, int arg0, int arg1, \
 							   int arg2, int arg3, int arg4)
 
 #define SPEED(a)		((a)*(FRACUNIT/8))
@@ -349,7 +350,7 @@ FUNC(LS_Generic_Stairs)
 // Generic_Stairs (tag, speed, step, dir/igntxt, reset)
 {
 	DFloor::EStair type = (arg3 & 1) ? DFloor::buildUp : DFloor::buildDown;
-	BOOL res = EV_BuildStairs (arg0, type, ln,
+	bool res = EV_BuildStairs (arg0, type, ln,
 							   arg2 * FRACUNIT, SPEED(arg1), 0, arg4, arg3 & 2, 0);
 
 	if (res && ln && (ln->flags & ML_REPEAT_SPECIAL) && ln->special == Generic_Stairs)
@@ -681,7 +682,7 @@ FUNC(LS_Teleport_EndGame)
 {
 	if (!TeleportSide && CheckIfExitIsGood (it))
 	{
-		strncpy (level.nextmap, "EndGameC", 8);
+		G_SetForEndGame (level.nextmap);
 		G_ExitLevel (0);
 		return true;
 	}
@@ -706,6 +707,49 @@ FUNC(LS_ThrustThing)
 		return true;
 	}
 	return false;
+}
+
+FUNC(LS_ThrustThingZ)	// [BC]
+// ThrustThingZ (tid, momz)
+{
+	AActor *victim;
+
+	if (arg0 != 0)
+	{
+		FActorIterator iterator (arg0);
+
+		while ( (victim = iterator.Next ()) )
+		{
+			victim->momz = arg1 << FRACBITS;
+		}
+		return true;
+	}
+	else if (it)
+	{
+		it->momz = arg1 * FRACUNIT/10;
+		return true;
+	}
+	return false;
+}
+
+FUNC(LS_Thing_SetSpecial)	// [BC]
+// Thing_SetSpecial (tid, special, arg1, arg2, arg3, arg4)
+// [RH] Use the SetThingSpecial ACS command instead.
+{
+	if (arg0 != 0)
+	{
+		AActor *actor;
+		FActorIterator iterator (arg0);
+
+		while ( (actor = iterator.Next ()) )
+		{
+			actor->special = arg1;
+			actor->args[0] = arg2;
+			actor->args[1] = arg3;
+			actor->args[2] = arg4;
+		}
+	}
+	return true;
 }
 
 FUNC(LS_DamageThing)
@@ -736,8 +780,8 @@ FUNC(LS_HealThing)
 		else
 		{
 			it->health += arg0;
-			if (GetInfo (it)->spawnhealth < it->health)
-				it->health = GetInfo (it)->spawnhealth;
+			if (it->GetDefault()->health < it->health)
+				it->health = it->GetDefault()->health;
 		}
 	}
 
@@ -835,25 +879,26 @@ FUNC(LS_Thing_ProjectileGravity)
 		arg4<<(FRACBITS-3), true);
 }
 
+// [BC] added newtid for next two
 FUNC(LS_Thing_Spawn)
-// Thing_Spawn (tid, type, angle)
+// Thing_Spawn (tid, type, angle, newtid)
 {
-	return P_Thing_Spawn (arg0, arg1, BYTEANGLE(arg2), true);
+	return P_Thing_Spawn (arg0, arg1, BYTEANGLE(arg2), true, arg3);
 }
 
 FUNC(LS_Thing_SpawnNoFog)
-// Thing_SpawnNoFog (tid, type, angle)
+// Thing_SpawnNoFog (tid, type, angle, newtid)
 {
-	return P_Thing_Spawn (arg0, arg1, BYTEANGLE(arg2), false);
+	return P_Thing_Spawn (arg0, arg1, BYTEANGLE(arg2), false, arg3);
 }
 
 FUNC(LS_Thing_SetGoal)
 // Thing_SetGoal (tid, goal, delay)
 {
 	TActorIterator<AActor> selfiterator (arg0);
-	TActorIterator<AWayPoint> goaliterator (arg1);
+	TActorIterator<APatrolPoint> goaliterator (arg1);
 	AActor *self;
-	AWayPoint *goal = goaliterator.Next ();
+	APatrolPoint *goal = goaliterator.Next ();
 
 	while ( (self = selfiterator.Next ()) )
 	{
@@ -866,6 +911,12 @@ FUNC(LS_Thing_SetGoal)
 	}
 
 	return true;
+}
+
+FUNC(LS_Thing_Move)		// [BC]
+// Thing_Move (tid, mapspot)
+{
+	return P_Thing_Move (arg0, arg1);
 }
 
 FUNC(LS_ACS_Execute)
@@ -1054,7 +1105,7 @@ FUNC(LS_Sector_ChangeSound)
 // Sector_ChangeSound (tag, sound)
 {
 	int secNum;
-	BOOL rtn;
+	bool rtn;
 
 	if (!arg0)
 		return false;
@@ -1140,6 +1191,66 @@ FUNC(LS_Sector_SetFriction)
 	return false;
 }
 
+static void SetWallScroller (int id, int sidechoice, fixed_t dx, fixed_t dy)
+{
+	if ((dx | dy) == 0)
+	{
+		// Special case: Remove the scroller, because the deltas are both 0.
+		TThinkerIterator<DScroller> iterator (STAT_SCROLLER);
+		DScroller *scroller;
+
+		while ( (scroller = iterator.Next ()) )
+		{
+			int wallnum = scroller->GetWallNum ();
+
+			if (wallnum >= 0 && lines[sides[wallnum].linenum].id == id &&
+				lines[sides[wallnum].linenum].sidenum[sidechoice] == wallnum)
+			{
+				scroller->Destroy ();
+			}
+		}
+	}
+	else
+	{
+		// Find scrollers already attached to the matching walls, and change
+		// their rates.
+		{
+			TThinkerIterator<DScroller> iterator (STAT_SCROLLER);
+			FThinkerCollection collect;
+
+			while ( (collect.Obj = iterator.Next ()) )
+			{
+				if ((collect.RefNum = ((DScroller *)collect.Obj)->GetWallNum ()) != -1 &&
+					lines[sides[collect.RefNum].linenum].id == id &&
+					lines[sides[collect.RefNum].linenum].sidenum[sidechoice] == collect.RefNum)
+				{
+					((DScroller *)collect.Obj)->SetRate (dx, dy);
+					Collection.Push (collect);
+				}
+			}
+		}
+
+		int numcollected = Collection.Size ();
+		int linenum = -1;
+
+		// Now create scrollers for any walls that don't already have them.
+		while ((linenum = P_FindLineFromID (id, linenum)) >= 0)
+		{
+			int i;
+			for (i = 0; i < numcollected; i++)
+			{
+				if (Collection[i].RefNum == lines[linenum].sidenum[sidechoice])
+					break;
+			}
+			if (i == numcollected)
+			{
+				new DScroller (DScroller::sc_side, dx, dy, -1, lines[linenum].sidenum[sidechoice], 0);
+			}
+		}
+		Collection.Clear ();
+	}
+}
+
 FUNC(LS_Scroll_Texture_Both)
 // Scroll_Texture_Both (id, left, right, up, down)
 {
@@ -1160,74 +1271,86 @@ FUNC(LS_Scroll_Texture_Both)
 		sidechoice = 0;
 	}
 
-	if (dx == 0 && dy == 0)
-	{
-		// Special case: Remove the scroller, because the deltas are both 0.
-		TThinkerIterator<DScroller> iterator;
-		DScroller *scroller;
-
-		while ( (scroller = iterator.Next ()) )
-		{
-			int wallnum = scroller->GetWallNum ();
-
-			if (wallnum >= 0 && lines[sides[wallnum].linenum].id == arg0 &&
-				lines[sides[wallnum].linenum].sidenum[sidechoice] == wallnum)
-			{
-				scroller->Destroy ();
-			}
-		}
-	}
-	else
-	{
-		// Find scrollers already attached to the matching walls, and change
-		// their rates.
-		{
-			TThinkerIterator<DScroller> iterator;
-			FThinkerCollection collect;
-
-			while ( (collect.Obj = iterator.Next ()) )
-			{
-				if ((collect.RefNum = ((DScroller *)collect.Obj)->GetWallNum ()) != -1 &&
-					lines[sides[collect.RefNum].linenum].id == arg0 &&
-					lines[sides[collect.RefNum].linenum].sidenum[sidechoice] == collect.RefNum)
-				{
-					((DScroller *)collect.Obj)->SetRate (dx, dy);
-					Collection.Push (collect);
-				}
-			}
-		}
-
-		int numcollected = Collection.Size ();
-		int linenum = -1;
-
-		// Now create scrollers for any walls that don't already have them.
-		while ((linenum = P_FindLineFromID (arg0, linenum)) >= 0)
-		{
-			int i;
-			for (i = 0; i < numcollected; i++)
-			{
-				if (Collection[i].RefNum == lines[linenum].sidenum[sidechoice])
-					break;
-			}
-			if (i == numcollected)
-			{
-				new DScroller (DScroller::sc_side, dx, dy, -1, lines[linenum].sidenum[sidechoice], 0);
-			}
-		}
-		Collection.Clear ();
-	}
+	SetWallScroller (arg0, sidechoice, dx, dy);
 
 	return true;
 }
 
-FUNC(LS_Scroll_Floor)
+static void SetScroller (int tag, DScroller::EScrollType type, fixed_t dx, fixed_t dy)
 {
-	return false;
+	TThinkerIterator<DScroller> iterator (STAT_SCROLLER);
+	DScroller *scroller;
+	int i;
+
+	// Check if there is already a scroller for this tag
+	// If at least one sector with this tag is scrolling, then they all are.
+	// If the deltas are both 0, we don't remove the scroller, because a
+	// displacement/accelerative scroller might have been set up, and there's
+	// no way to create one after the level is fully loaded.
+	i = 0;
+	while ( (scroller = iterator.Next ()) )
+	{
+		if (scroller->IsType (type))
+		{
+			if (sectors[scroller->GetAffectee ()].tag == tag)
+			{
+				i++;
+				scroller->SetRate (dx, dy);
+			}
+		}
+	}
+
+	if (i > 0 || (dx|dy) == 0)
+	{
+		return;
+	}
+
+	// Need to create scrollers for the sector(s)
+	for (i = -1; (i = P_FindSectorFromTag (tag, i)) >= 0; )
+	{
+		new DScroller (type, dx, dy, -1, i, 0);
+	}
+}
+
+// NOTE: For the next two functions, x-move and y-move are
+// 0-based, not 128-based as they are if they appear on lines.
+// Note also that parameter ordering is different.
+
+FUNC(LS_Scroll_Floor)
+// Scroll_Floor (tag, x-move, y-move, s/c)
+{
+	fixed_t dx = arg1 * FRACUNIT/32;
+	fixed_t dy = arg2 * FRACUNIT/32;
+
+	if (arg3 == 0 || arg3 == 2)
+	{
+		SetScroller (arg0, DScroller::sc_floor, -dx, dy);
+	}
+	else
+	{
+		SetScroller (arg0, DScroller::sc_floor, 0, 0);
+	}
+	if (arg3 > 0)
+	{
+		dx = FixedMul (dx, CARRYFACTOR);
+		dy = FixedMul (dy, CARRYFACTOR);
+		SetScroller (arg0, DScroller::sc_carry, dx, dy);
+	}
+	else
+	{
+		SetScroller (arg0, DScroller::sc_carry, 0, 0);
+	}
+	return true;
 }
 
 FUNC(LS_Scroll_Ceiling)
+// Scroll_Ceiling (tag, x-move, y-move, 0)
 {
-	return false;
+	fixed_t dx = arg1 * FRACUNIT/32;
+	fixed_t dy = arg2 * FRACUNIT/32;
+
+	SetScroller (arg0, DScroller::sc_ceiling, -dx, dy);
+	return true;
 }
 
 FUNC(LS_PointPush_SetForce)
@@ -1267,17 +1390,14 @@ FUNC(LS_Sector_SetColor)
 // Sector_SetColor (tag, r, g, b)
 {
 	int secnum = -1;
+	PalEntry color = PalEntry (arg1, arg2, arg3);
 	
 	while ((secnum = P_FindSectorFromTag (arg0, secnum)) >= 0)
 	{
-		sectors[secnum].floorcolormap = GetSpecialLights (arg1, arg2, arg3,
-			RPART(sectors[secnum].floorcolormap->fade),
-			GPART(sectors[secnum].floorcolormap->fade),
-			BPART(sectors[secnum].floorcolormap->fade));
-		sectors[secnum].ceilingcolormap = GetSpecialLights (arg1, arg2, arg3,
-			RPART(sectors[secnum].ceilingcolormap->fade),
-			GPART(sectors[secnum].ceilingcolormap->fade),
-			BPART(sectors[secnum].ceilingcolormap->fade));
+		sectors[secnum].floorcolormap = GetSpecialLights (
+			color, sectors[secnum].floorcolormap->Fade);
+		sectors[secnum].ceilingcolormap = GetSpecialLights (
+			color, sectors[secnum].ceilingcolormap->Fade);
 	}
 
 	return true;
@@ -1287,19 +1407,14 @@ FUNC(LS_Sector_SetFade)
 // Sector_SetFade (tag, r, g, b)
 {
 	int secnum = -1;
-	
+	PalEntry fade = PalEntry (arg1, arg2, arg3);
+
 	while ((secnum = P_FindSectorFromTag (arg0, secnum)) >= 0)
 	{
 		sectors[secnum].floorcolormap = GetSpecialLights (
-			RPART(sectors[secnum].floorcolormap->color),
-			GPART(sectors[secnum].floorcolormap->color),
-			BPART(sectors[secnum].floorcolormap->color),
-			arg1, arg2, arg3);
+			sectors[secnum].floorcolormap->Color, fade);
 		sectors[secnum].ceilingcolormap = GetSpecialLights (
-			RPART(sectors[secnum].ceilingcolormap->color),
-			GPART(sectors[secnum].ceilingcolormap->color),
-			BPART(sectors[secnum].ceilingcolormap->color),
-			arg1, arg2, arg3);
+			sectors[secnum].ceilingcolormap->Color, fade);
 	}
 	return true;
 }
@@ -1320,7 +1435,7 @@ FUNC(LS_Sector_SetCeilingPanning)
 }
 
 FUNC(LS_Sector_SetFloorPanning)
-// Sector_SetCeilingPanning (tag, x-int, x-frac, y-int, y-frac)
+// Sector_SetFloorPanning (tag, x-int, x-frac, y-int, y-frac)
 {
 	int secnum = -1;
 	fixed_t xofs = arg1 * FRACUNIT + arg2 * (FRACUNIT/100);
@@ -1397,7 +1512,7 @@ FUNC(LS_Line_AlignCeiling)
 // Line_AlignCeiling (lineid, side)
 {
 	int line = P_FindLineFromID (arg0, -1);
-	BOOL ret = 0;
+	bool ret = 0;
 
 	if (line < 0)
 		I_Error ("Sector_AlignCeiling: Lineid %d is undefined", arg0);
@@ -1412,7 +1527,7 @@ FUNC(LS_Line_AlignFloor)
 // Line_AlignFloor (lineid, side)
 {
 	int line = P_FindLineFromID (arg0, -1);
-	BOOL ret = 0;
+	bool ret = 0;
 
 	if (line < 0)
 		I_Error ("Sector_AlignFloor: Lineid %d is undefined", arg0);
@@ -1426,16 +1541,16 @@ FUNC(LS_Line_AlignFloor)
 FUNC(LS_ChangeCamera)
 // ChangeCamera (tid, who, revert?)
 {
-	const TypeInfo *camtype = TypeInfo::FindType ("SecurityCamera");
-	if (camtype == NULL)
-		return false;
-
-	FActorIterator iterator (arg0);
 	AActor *camera;
-
-	while ( (camera = iterator.Next ()) )
-		if (camera->IsKindOf (camtype))
-			break;
+	if (arg0 != 0)
+	{
+		FActorIterator iterator (arg0);
+		camera = iterator.Next ();
+	}
+	else
+	{
+		camera = NULL;
+	}
 
 	if (!it || !it->player || arg1)
 	{
@@ -1485,7 +1600,7 @@ FUNC(LS_SetPlayerProperty)
 
 	int mask = 0;
 
-	if (!it->player && !arg0)
+	if ((!it || !it->player) && !arg0)
 		return false;
 
 	switch (arg2)
@@ -1533,7 +1648,7 @@ FUNC(LS_TranslucentLine)
 	int linenum = -1;
 	while ((linenum = P_FindLineFromID (arg0, linenum)) >= 0)
 	{
-		lines[linenum].lucency = arg1 & 255;
+		lines[linenum].alpha = arg1 & 255;
 	}
 
 	return true;
@@ -1663,13 +1778,13 @@ lnSpecFunc LineSpecials[256] =
 	LS_NOP,		// 119
 	LS_Radius_Quake,
 	LS_NOP,		// Line_SetIdentification
-	LS_NOP,		// 122
-	LS_NOP,		// 123
-	LS_NOP,		// 124
-	LS_NOP,		// 125
-	LS_NOP,		// 126
-	LS_NOP,		// 127
-	LS_NOP,		// 128
+	LS_NOP,		// Thing_SetGravity
+	LS_NOP,		// Thing_ReverseGravity
+	LS_NOP,		// Thing_RevertGravity
+	LS_Thing_Move,
+	LS_NOP,		// Thing_SetSprite
+	LS_Thing_SetSpecial,
+	LS_ThrustThingZ,
 	LS_UsePuzzleItem,
 	LS_Thing_Activate,
 	LS_Thing_Deactivate,
@@ -1722,8 +1837,8 @@ lnSpecFunc LineSpecials[256] =
 	LS_NOP,		// 178
 	LS_NOP,		// 179
 	LS_NOP,		// 180
-	LS_NOP,		// 181
-	LS_NOP,		// 182
+	LS_NOP,		// Plane_Align
+	LS_NOP,		// Line_Mirror
 	LS_Line_AlignCeiling,
 	LS_Line_AlignFloor,
 	LS_Sector_SetRotation,

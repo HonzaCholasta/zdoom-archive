@@ -56,8 +56,16 @@
 extern	fixed_t 		finesine[5*FINEANGLES/4];
 
 // Re-use data, is just PI/2 phase shift.
-extern	fixed_t*		finecosine;
-
+// [RH] Instead of using a pointer, use some inline code
+// (encapsulated in a struct so that we can still use array accesses).
+struct cosine_inline
+{
+	fixed_t operator[] (unsigned int x)
+	{
+		return finesine[x+FINEANGLES/4];
+	}
+};
+extern cosine_inline finecosine;
 
 // Effective size is 4096.
 extern fixed_t			finetangent[FINEANGLES/2];
@@ -102,7 +110,5 @@ inline int SlopeDiv (unsigned int num, unsigned den)
 
 	return ans <= SLOPERANGE ? ans : SLOPERANGE;
 }
-
-#define CALC_TABLES
 
 #endif // __TABLES_H__

@@ -31,6 +31,7 @@
 
 #define FLOATSPEED		(FRACUNIT*4)
 
+#define STEEPSLOPE		46341	// [RH] Minimum floorplane.c value for walking
 
 #define MAXHEALTH		100
 #define MAXMORPHHEALTH	30
@@ -88,10 +89,10 @@ bool	P_UndoPlayerMorph (player_t *player, bool force=false);
 // P_MOBJ
 //
 
-#define ONFLOORZ		MININT
-#define ONCEILINGZ		MAXINT
-#define FLOATRANDZ		(MAXINT-1)
-#define FROMCEILINGZ128	(MAXINT-2)
+#define ONFLOORZ		FIXED_MIN
+#define ONCEILINGZ		FIXED_MAX
+#define FLOATRANDZ		(FIXED_MAX-1)
+#define FROMCEILINGZ128	(FIXED_MAX-2)
 
 extern fixed_t FloatBobOffsets[64];
 extern const TypeInfo *PuffType;
@@ -125,18 +126,15 @@ AActor *P_SpawnPlayerMissile (AActor *source, fixed_t x, fixed_t y, fixed_t z, c
 #define MAX_SPAWNABLES	(256)
 extern const TypeInfo *SpawnableThings[MAX_SPAWNABLES];
 
-BOOL	P_Thing_Spawn (int tid, int type, angle_t angle, BOOL fog);
-BOOL	P_Thing_Projectile (int tid, int type, angle_t angle,
-							fixed_t speed, fixed_t vspeed, BOOL gravity);
+bool	P_Thing_Spawn (int tid, int type, angle_t angle, bool fog, int newtid);
+bool	P_Thing_Projectile (int tid, int type, angle_t angle,
+			fixed_t speed, fixed_t vspeed, bool gravity);
+bool	P_Thing_Move (int tid, int mapspot);
+
 //
 // P_ENEMY
 //
 void	P_NoiseAlert (AActor* target, AActor* emmiter);
-void	P_SpawnBrainTargets(void);	// killough 3/26/98: spawn icon landings
-
-extern struct brain_s {				// killough 3/26/98: global state of boss brain
-	int easy, targeton;
-} brain;
 
 
 //
@@ -177,7 +175,7 @@ extern fixed_t			openbottom;
 extern fixed_t			openrange;
 extern fixed_t			lowfloor;
 
-void	P_LineOpening (const line_t *linedef);
+void	P_LineOpening (const line_t *linedef, fixed_t x, fixed_t y, fixed_t refx=FIXED_MIN, fixed_t refy=0);
 
 BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*));
 BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(AActor*), AActor *start=NULL);
@@ -208,7 +206,6 @@ extern BOOL				floatok;
 extern fixed_t			tmfloorz;
 extern fixed_t			tmceilingz;
 extern msecnode_t		*sector_list;		// phares 3/16/98
-extern BOOL				oldshootactivation;	// [RH]
 extern AActor			*BlockingMobj;
 extern line_t			*BlockingLine;		// Used only by P_Move
 											// This is not necessarily a *blocking* line
@@ -225,7 +222,7 @@ bool	P_TestMobjZ (AActor *mobj);
 BOOL	P_CheckPosition (AActor *thing, fixed_t x, fixed_t y);
 AActor	*P_CheckOnmobj (AActor *thing);
 void	P_FakeZMovement (AActor *mo);
-BOOL	P_TryMove (AActor* thing, fixed_t x, fixed_t y, BOOL dropoff);
+BOOL	P_TryMove (AActor* thing, fixed_t x, fixed_t y, BOOL dropoff, bool onfloor = false);
 BOOL	P_TeleportMove (AActor* thing, fixed_t x, fixed_t y, fixed_t z, BOOL telefrag);	// [RH] Added z and telefrag parameters
 void	P_SlideMove (AActor* mo);
 void	P_BounceWall (AActor *mo);
@@ -238,10 +235,11 @@ bool	P_ChangeSector (sector_t* sector, int crunch, int amt, int floorOrCeil);
 
 extern	AActor*	linetarget; 	// who got hit (or NULL)
 
-fixed_t P_AimLineAttack (AActor *t1, angle_t angle, fixed_t distance);
-void	P_LineAttack (AActor *t1, angle_t angle, fixed_t distance, fixed_t slope, int damage);
+fixed_t P_AimLineAttack (AActor *t1, angle_t angle, fixed_t distance, fixed_t vrange=0);
+void	P_LineAttack (AActor *t1, angle_t angle, fixed_t distance, int pitch, int damage);
 void	P_RailAttack (AActor *source, int damage, int offset);	// [RH] Shoot a railgun
 bool	P_HitFloor (AActor *thing);
+bool	P_HitWater (AActor *thing, sector_t *sec);
 bool	P_CheckMissileSpawn (AActor *missile);
 
 // [RH] Position the chasecam
@@ -255,8 +253,11 @@ void	P_DelSeclist(msecnode_t *);							// phares 3/16/98
 void	P_CreateSecNodeList(AActor*,fixed_t,fixed_t);		// phares 3/14/98
 int		P_GetMoveFactor(const AActor *mo, int *frictionp);	// phares  3/6/98
 int		P_GetFriction(const AActor *mo, int *frictionfactor);
+void    P_ApplyTorque(AActor *mo);							// killough 9/12/98
 BOOL	Check_Sides(AActor *, int, int);					// phares
 
+// [RH] 
+bool	P_CheckSlopeWalk (AActor *actor, fixed_t &xmove, fixed_t &ymove);
 
 //
 // P_SETUP
@@ -317,9 +318,10 @@ inline FArchive &operator<< (FArchive &arc, podoortype_t type)
 
 class DPolyAction : public DThinker
 {
-	DECLARE_SERIAL (DPolyAction, DThinker)
+	DECLARE_CLASS (DPolyAction, DThinker)
 public:
 	DPolyAction (int polyNum);
+	void Serialize (FArchive &arc);
 protected:
 	DPolyAction ();
 	int m_PolyObj;
@@ -331,21 +333,22 @@ protected:
 
 class DRotatePoly : public DPolyAction
 {
-	DECLARE_SERIAL (DRotatePoly, DPolyAction)
+	DECLARE_CLASS (DRotatePoly, DPolyAction)
 public:
 	DRotatePoly (int polyNum);
 	void RunThink ();
 protected:
-	friend BOOL EV_RotatePoly (line_t *line, int polyNum, int speed, int byteAngle, int direction, BOOL overRide);
+	friend bool EV_RotatePoly (line_t *line, int polyNum, int speed, int byteAngle, int direction, BOOL overRide);
 private:
 	DRotatePoly ();
 };
 
 class DMovePoly : public DPolyAction
 {
-	DECLARE_SERIAL (DMovePoly, DPolyAction)
+	DECLARE_CLASS (DMovePoly, DPolyAction)
 public:
 	DMovePoly (int polyNum);
+	void Serialize (FArchive &arc);
 	void RunThink ();
 protected:
 	DMovePoly ();
@@ -353,14 +356,15 @@ protected:
 	fixed_t m_xSpeed; // for sliding walls
 	fixed_t m_ySpeed;
 
-	friend BOOL EV_MovePoly (line_t *line, int polyNum, int speed, angle_t angle, fixed_t dist, BOOL overRide);
+	friend bool EV_MovePoly (line_t *line, int polyNum, int speed, angle_t angle, fixed_t dist, BOOL overRide);
 };
 
 class DPolyDoor : public DMovePoly
 {
-	DECLARE_SERIAL (DPolyDoor, DMovePoly)
+	DECLARE_CLASS (DPolyDoor, DMovePoly)
 public:
 	DPolyDoor (int polyNum, podoortype_t type);
+	void Serialize (FArchive &arc);
 	void RunThink ();
 protected:
 	int m_Direction;
@@ -370,7 +374,7 @@ protected:
 	podoortype_t m_Type;
 	bool m_Close;
 
-	friend BOOL EV_OpenPolyDoor (line_t *line, int polyNum, int speed, angle_t angle, int delay, int distance, podoortype_t type);
+	friend bool EV_OpenPolyDoor (line_t *line, int polyNum, int speed, angle_t angle, int delay, int distance, podoortype_t type);
 private:
 	DPolyDoor ();
 };

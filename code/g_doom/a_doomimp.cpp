@@ -4,21 +4,18 @@
 #include "s_sound.h"
 #include "p_local.h"
 #include "p_enemy.h"
-#include "dstrings.h"
+#include "gstrings.h"
 #include "a_action.h"
 
 void A_TroopAttack (AActor *);
 
 class ADoomImp : public AActor
 {
-	DECLARE_ACTOR (ADoomImp, AActor);
+	DECLARE_ACTOR (ADoomImp, AActor)
 public:
-	const char *GetObituary () { return OB_IMP; }
-	const char *GetHitObituary () { return OB_IMPHIT; }
+	const char *GetObituary () { return GStrings(OB_IMP); }
+	const char *GetHitObituary () { return GStrings(OB_IMPHIT); }
 };
-
-IMPLEMENT_DEF_SERIAL (ADoomImp, AActor);
-REGISTER_ACTOR (ADoomImp, Doom);
 
 FState ADoomImp::States[] =
 {
@@ -70,60 +67,49 @@ FState ADoomImp::States[] =
 	S_NORMAL (TROO, 'I',	6, NULL 						, &States[S_TROO_RUN+0])
 };
 
-void ADoomImp::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 3001;
-	info->spawnid = 5;
-	info->spawnstate = &States[S_TROO_STND];
-	info->spawnhealth = 60;
-	info->seestate = &States[S_TROO_RUN];
-	info->seesound = "imp/sight1";
-	info->painstate = &States[S_TROO_PAIN];
-	info->painchance = 200;
-	info->painsound = "imp/pain";
-	info->meleestate = &States[S_TROO_ATK];
-	info->missilestate = &States[S_TROO_ATK];
-	info->deathstate = &States[S_TROO_DIE];
-	info->xdeathstate = &States[S_TROO_XDIE];
-	info->deathsound = "imp/death1";
-	info->speed = 8;
-	info->radius = 20 * FRACUNIT;
-	info->height = 56 * FRACUNIT;
-	info->mass = 100;
-	info->activesound = "imp/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL;
-	info->raisestate = &States[S_TROO_RAISE];
-}
+IMPLEMENT_ACTOR (ADoomImp, Doom, 3001, 5)
+	PROP_SpawnHealth (60)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (56)
+	PROP_Mass (100)
+	PROP_SpeedFixed (8)
+	PROP_PainChance (200)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+
+	PROP_SpawnState (S_TROO_STND)
+	PROP_SeeState (S_TROO_RUN)
+	PROP_PainState (S_TROO_PAIN)
+	PROP_MeleeState (S_TROO_ATK)
+	PROP_MissileState (S_TROO_ATK)
+	PROP_DeathState (S_TROO_DIE)
+	PROP_XDeathState (S_TROO_XDIE)
+	PROP_RaiseState (S_TROO_RAISE)
+
+	PROP_SeeSound ("imp/sight")
+	PROP_PainSound ("imp/pain")
+	PROP_DeathSound ("imp/death")
+	PROP_ActiveSound ("imp/active")
+END_DEFAULTS
 
 class AStealthDoomImp : public ADoomImp
 {
-	DECLARE_STATELESS_ACTOR (AStealthDoomImp, ADoomImp);
+	DECLARE_STATELESS_ACTOR (AStealthDoomImp, ADoomImp)
 public:
-	const char *GetObituary () { return OB_STEALTHIMP; }
-	const char *GetHitObituary () { return OB_STEALTHIMP; }
+	const char *GetObituary () { return GStrings(OB_STEALTHIMP); }
+	const char *GetHitObituary () { return GStrings(OB_STEALTHIMP); }
 };
 
-IMPLEMENT_DEF_SERIAL (AStealthDoomImp, ADoomImp);
-REGISTER_ACTOR (AStealthDoomImp, Doom);
-
-void AStealthDoomImp::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 9057;
-	info->spawnid = 122;
-	info->flags |= MF_STEALTH;
-	info->translucency = 0;
-}
+IMPLEMENT_STATELESS_ACTOR (AStealthDoomImp, Doom, 9057, 122)
+	PROP_FlagsSet (MF_STEALTH)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (0)
+END_DEFAULTS
 
 class ADoomImpBall : public AActor
 {
-	DECLARE_ACTOR (ADoomImpBall, AActor);
+	DECLARE_ACTOR (ADoomImpBall, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ADoomImpBall, AActor);
-REGISTER_ACTOR (ADoomImpBall, Doom);
 
 FState ADoomImpBall::States[] =
 {
@@ -137,21 +123,25 @@ FState ADoomImpBall::States[] =
 	S_BRIGHT (BAL1, 'E',	6, NULL 						, NULL)
 };
 
-void ADoomImpBall::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (ADoomImpBall, Doom, -1, 10)
+	PROP_RadiusFixed (6)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (10)
+	PROP_Damage (3)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_TBALL)
+	PROP_DeathState (S_TBALLX)
+
+	PROP_SeeSound ("imp/attack")
+	PROP_DeathSound ("imp/shotx")
+END_DEFAULTS
+
+AT_SPEED_SET (ADoomImpBall, speed)
 {
-	INHERIT_DEFS;
-	info->spawnid = 10;
-	info->spawnstate = &States[S_TBALL];
-	info->seesound = "imp/attack";
-	info->deathstate = &States[S_TBALLX];
-	info->deathsound = "imp/shotx";
-	info->speed = GameSpeed != SPEED_Fast ? 10 * FRACUNIT : 20 * FRACUNIT;
-	info->radius = 6 * FRACUNIT;
-	info->height = 8 * FRACUNIT;
-	info->damage = 3;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_PCROSS|MF2_IMPACT;
-	info->translucency = TRANSLUC75;
+	SimpleSpeedSetter (ADoomImpBall, 10*FRACUNIT, 20*FRACUNIT, speed);
 }
 
 //
@@ -179,17 +169,10 @@ void A_TroopAttack (AActor *self)
 
 class ADeadDoomImp : public ADoomImp
 {
-	DECLARE_STATELESS_ACTOR (ADeadDoomImp, ADoomImp);
+	DECLARE_STATELESS_ACTOR (ADeadDoomImp, ADoomImp)
 };
 
-IMPLEMENT_DEF_SERIAL (ADeadDoomImp, ADoomImp);
-REGISTER_ACTOR (ADeadDoomImp, Doom);
-
-void ADeadDoomImp::SetDefaults (FActorInfo *info)
-{
-	AActor::SetDefaults (info);
-	info->OwnedStates = NULL;
-	info->NumOwnedStates = 0;
-	info->doomednum = 20;
-	info->spawnstate = &States[S_TROO_DIE+4];
-}
+IMPLEMENT_STATELESS_ACTOR (ADeadDoomImp, Doom, 20, 0)
+	PROP_SKIP_SUPER
+	PROP_SpawnState (S_TROO_DIE+4)
+END_DEFAULTS

@@ -22,14 +22,11 @@ void A_BishopMissileSeek (AActor *);
 
 class ABishop : public AActor
 {
-	DECLARE_ACTOR (ABishop, AActor);
+	DECLARE_ACTOR (ABishop, AActor)
 public:
 	void GetExplodeParms (int &damage, int &distance, bool &hurtSource);
 	bool NewTarget (AActor *other);
 };
-
-IMPLEMENT_DEF_SERIAL (ABishop, AActor);
-REGISTER_ACTOR (ABishop, Hexen);
 
 FState ABishop::States[] =
 {
@@ -82,33 +79,31 @@ FState ABishop::States[] =
 	S_NORMAL (BISH, 'X',	1, A_FreezeDeathChunks		, &States[S_BISHOP_ICE+1])
 };
 
-void ABishop::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 114;
-	info->spawnid = 19;
-	info->spawnstate = &States[S_BISHOP_LOOK];
-	info->spawnhealth = 130;
-	info->seestate = &States[S_BISHOP_WALK];
-	info->seesound = "BishopSight";
-	info->attacksound = "BishopAttack";
-	info->painstate = &States[S_BISHOP_PAIN];
-	info->painchance = 110;
-	info->painsound = "BishopPain";
-	info->missilestate = &States[S_BISHOP_ATK];
-	info->deathstate = &States[S_BISHOP_DEATH];
-	info->deathsound = "BishopDeath";
-	info->ideathstate = &States[S_BISHOP_ICE];
-	info->speed = 10;
-	info->radius = 22 * FRACUNIT;
-	info->height = 65 * FRACUNIT;
-	info->activesound = "BishopActive";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_FLOAT|MF_NOGRAVITY|MF_NOBLOOD;
-	info->flags2 = MF2_PASSMOBJ|MF2_PUSHWALL|MF2_TELESTOMP;
-	info->flags3 = MF3_SEEISALSOACTIVE|MF3_DONTOVERLAP;
-}
+IMPLEMENT_ACTOR (ABishop, Hexen, 114, 19)
+	PROP_SpawnHealth (130)
+	PROP_RadiusFixed (22)
+	PROP_HeightFixed (65)
+	PROP_SpeedFixed (10)
+	PROP_PainChance (110)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_FLOAT|MF_NOGRAVITY|MF_NOBLOOD)
+	PROP_Flags2 (MF2_PASSMOBJ|MF2_PUSHWALL|MF2_TELESTOMP)
+	PROP_Flags3 (MF3_SEEISALSOACTIVE|MF3_DONTOVERLAP)
 
-void ABishop::GetExplodeParms (int &damage, fixed_t &distance, bool &hurtSource)
+	PROP_SpawnState (S_BISHOP_LOOK)
+	PROP_SeeState (S_BISHOP_WALK)
+	PROP_PainState (S_BISHOP_PAIN)
+	PROP_MissileState (S_BISHOP_ATK)
+	PROP_DeathState (S_BISHOP_DEATH)
+	PROP_IDeathState (S_BISHOP_ICE)
+
+	PROP_SeeSound ("BishopSight")
+	PROP_AttackSound ("BishopAttack")
+	PROP_PainSound ("BishopPain")
+	PROP_DeathSound ("BishopDeath")
+	PROP_ActiveSound ("BishopActive")
+END_DEFAULTS
+
+void ABishop::GetExplodeParms (int &damage, int &distance, bool &hurtSource)
 {
 	damage = 25 + (P_Random() & 15);
 }
@@ -122,11 +117,8 @@ bool ABishop::NewTarget (AActor *other)
 
 class ABishopPuff : public AActor
 {
-	DECLARE_ACTOR (ABishopPuff, AActor);
+	DECLARE_ACTOR (ABishopPuff, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABishopPuff, AActor);
-REGISTER_ACTOR (ABishopPuff, Hexen);
 
 FState ABishopPuff::States[] =
 {
@@ -139,23 +131,20 @@ FState ABishopPuff::States[] =
 	S_NORMAL (BISH, 'W',	5, NULL 					, NULL)
 };
 
-void ABishopPuff::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = HX_SHADOW;
-}
+IMPLEMENT_ACTOR (ABishopPuff, Hexen, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HX_SHADOW)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Bishop blur --------------------------------------------------------------
 
 class ABishopBlur : public AActor
 {
-	DECLARE_ACTOR (ABishopBlur, AActor);
+	DECLARE_ACTOR (ABishopBlur, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABishopBlur, AActor);
-REGISTER_ACTOR (ABishopBlur, Hexen);
 
 FState ABishopBlur::States[] =
 {
@@ -163,48 +152,42 @@ FState ABishopBlur::States[] =
 	S_NORMAL (BISH, 'A',	8, A_SetAltShadow			, NULL)
 };
 
-void ABishopBlur::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = HX_SHADOW;
-}
+IMPLEMENT_ACTOR (ABishopBlur, Hexen, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HX_SHADOW)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Bishop pain blur ---------------------------------------------------------
 
 class ABishopPainBlur : public AActor
 {
-	DECLARE_ACTOR (ABishopPainBlur, AActor);
+	DECLARE_ACTOR (ABishopPainBlur, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ABishopPainBlur, AActor);
-REGISTER_ACTOR (ABishopPainBlur, Hexen);
 
 FState ABishopPainBlur::States[] =
 {
 	S_NORMAL (BISH, 'C',	8, NULL 					, NULL)
 };
 
-void ABishopPainBlur::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[0];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-	info->translucency = HX_SHADOW;
-}
+IMPLEMENT_ACTOR (ABishopPainBlur, Hexen, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HX_SHADOW)
+
+	PROP_SpawnState (0)
+END_DEFAULTS
 
 // Bishop FX ----------------------------------------------------------------
 
 class ABishopFX : public AActor
 {
-	DECLARE_ACTOR (ABishopFX, AActor);
+	DECLARE_ACTOR (ABishopFX, AActor)
 public:
 	int DoSpecialDamage (AActor *target, int damage);
 };
-
-IMPLEMENT_DEF_SERIAL (ABishopFX, AActor);
-REGISTER_ACTOR (ABishopFX, Hexen);
 
 FState ABishopFX::States[] =
 {
@@ -224,19 +207,19 @@ FState ABishopFX::States[] =
 	S_BRIGHT (BPFX, 'H',	3, NULL 					, NULL)
 };
 
-void ABishopFX::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_BISHFX1];
-	info->deathstate = &States[S_BISHFXI1];
-	info->deathsound = "BishopMissileExplode";
-	info->speed = 10 * FRACUNIT;
-	info->radius = 10 * FRACUNIT;
-	info->height = 6 * FRACUNIT;
-	info->damage = 1;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT|MF2_SEEKERMISSILE;
-}
+IMPLEMENT_ACTOR (ABishopFX, Hexen, -1, 0)
+	PROP_RadiusFixed (10)
+	PROP_HeightFixed (6)
+	PROP_SpeedFixed (10)
+	PROP_Damage (1)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT|MF2_SEEKERMISSILE)
+
+	PROP_SpawnState (S_BISHFX1)
+	PROP_DeathState (S_BISHFXI1)
+
+	PROP_DeathSound ("BishopMissileExplode")
+END_DEFAULTS
 
 int ABishopFX::DoSpecialDamage (AActor *target, int damage)
 { // Bishops are just too nasty
@@ -255,7 +238,7 @@ void A_BishopAttack (AActor *actor)
 	{
 		return;
 	}
-	S_Sound (actor, CHAN_BODY, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_BODY, actor->AttackSound, 1, ATTN_NORM);
 	if (P_CheckMeleeRange(actor))
 	{
 		P_DamageMobj (actor->target, actor, actor, HITDICE(4));
@@ -278,11 +261,11 @@ void A_BishopAttack2 (AActor *actor)
 	if (!actor->target || !actor->special1)
 	{
 		actor->special1 = 0;
-		actor->SetState (GetInfo (actor)->seestate);
+		actor->SetState (actor->SeeState);
 		return;
 	}
 	mo = P_SpawnMissile (actor, actor->target, RUNTIME_CLASS(ABishopFX));
-	if (mo)
+	if (mo != NULL)
 	{
 		mo->tracer = actor->target;
 		mo->special2 = 16; // High word == x/y, Low word == z
@@ -386,11 +369,11 @@ void A_BishopSpawnBlur (AActor *actor)
 		actor->momy = 0;
 		if (P_Random() > 96)
 		{
-			actor->SetState (GetInfo (actor)->seestate);
+			actor->SetState (actor->SeeState);
 		}
 		else
 		{
-			actor->SetState (GetInfo (actor)->missilestate);
+			actor->SetState (actor->MissileState);
 		}
 	}
 	mo = Spawn<ABishopBlur> (actor->x, actor->y, actor->z);
@@ -461,5 +444,6 @@ void A_BishopPainBlur (AActor *actor)
 
 void A_SetAltShadow (AActor *actor)
 {
-	actor->translucency = HX_ALTSHADOW;
+	actor->alpha = HX_ALTSHADOW;
+	actor->RenderStyle = STYLE_Translucent;
 }

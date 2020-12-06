@@ -160,12 +160,12 @@ public:
 		return (weapontype_t)Weapons[index].Weapon;
 	}
 
+	static bool LocateWeapon (weapontype_t weap, int *const slot, int *const index);
+
 	friend weapontype_t PickNextWeapon (player_s *player);
 	friend weapontype_t PickPrevWeapon (player_s *player);
 
 private:
-	static bool LocateWeapon (weapontype_t weap, int *const slot, int *const index);
-
 	struct
 	{
 		byte Weapon;
@@ -206,18 +206,18 @@ STREAM_ENUM (keytype_t)
 
 // A pickup is anything the player can pickup (i.e. weapons, ammo,
 // powerups, etc)
-class APickup : public AActor
+class AInventory : public AActor
 {
-	DECLARE_ACTOR (APickup, AActor);
+	DECLARE_ACTOR (AInventory, AActor)
 public:
 	virtual void Touch (AActor *toucher);
 
 	virtual bool ShouldRespawn ();
 	virtual bool ShouldStay ();
 	virtual void Hide ();
-	virtual bool DoRespawn () { return true; }
+	virtual bool DoRespawn ();
 protected:
-	virtual bool TryPickup (AActor *toucher) { return false; }
+	virtual bool TryPickup (AActor *toucher);
 	virtual const char *PickupMessage ();
 	virtual void PlayPickupSound (AActor *toucher);
 private:
@@ -226,39 +226,49 @@ private:
 };
 
 // A weapon is just that.
-class AWeapon : public APickup
+class AWeapon : public AInventory
 {
-	DECLARE_ACTOR (AWeapon, APickup);
+	DECLARE_ACTOR (AWeapon, AInventory)
 protected:
 	virtual void PlayPickupSound (AActor *toucher);
 };
 #define S_LIGHTDONE 0
 
 // Health is some item that gives the player health when picked up.
-class AHealth : public APickup
+class AHealth : public AInventory
 {
-	DECLARE_SERIAL (AHealth, APickup);
+	DECLARE_CLASS (AHealth, AInventory)
 protected:
 	AHealth () {}
+	virtual void PlayPickupSound (AActor *toucher);
 };
 
 // Armor gives the player armor when picked up.
-class AArmor : public APickup
+class AArmor : public AInventory
 {
-	DECLARE_SERIAL (AArmor, APickup);
+	DECLARE_CLASS (AArmor, AInventory)
 protected:
 	AArmor () {}
+	virtual void PlayPickupSound (AActor *toucher);
+};
+
+class AAmmo : public AInventory
+{
+	DECLARE_CLASS (AAmmo, AInventory)
+protected:
+	AAmmo () {}
+	virtual void PlayPickupSound (AActor *toucher);
 };
 
 // A key is something the player can use to unlock something
-class AKey : public APickup
+class AKey : public AInventory
 {
-	DECLARE_SERIAL (AKey, APickup);
+	DECLARE_CLASS (AKey, AInventory)
 protected:
 	virtual bool TryPickup (AActor *toucher);
 	virtual bool ShouldStay ();
 	virtual void PlayPickupSound (AActor *toucher);
-	virtual keytype_t GetKeyType () { return it_bluecard; }
+	virtual keytype_t GetKeyType ();
 	AKey () {}
 };
 

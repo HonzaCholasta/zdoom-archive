@@ -11,15 +11,10 @@
 #include "p_local.h"
 #include "cmdlib.h"
 
-//CVAR (bot_flag_return_time, "1000", CVAR_ARCHIVE)
-CVAR (bot_next_color, "11", 0)
-//CVAR (bot_allow_duds, "0", CVAR_ARCHIVE)
-//CVAR (bot_maxcorpses, "0", CVAR_ARCHIVE)
-CVAR (bot_observer, "0", 0)
-//CVAR (bot_watersplash, "0", CVAR_ARCHIVE)
-//CVAR (bot_chat, "1", CVAR_ARCHIVE)
+CVAR (Int, bot_next_color, 11, 0)
+CVAR (Bool, bot_observer, false, 0)
 
-IMPLEMENT_POINTY_CLASS (DCajunMaster, DObject)
+IMPLEMENT_POINTY_CLASS (DCajunMaster)
  DECLARE_POINTER (getspawned)
  DECLARE_POINTER (botinfo)
  DECLARE_POINTER (firstthing)
@@ -28,17 +23,17 @@ IMPLEMENT_POINTY_CLASS (DCajunMaster, DObject)
  DECLARE_POINTER (body2)
 END_POINTERS
 
-BEGIN_COMMAND (addbot)
+CCMD (addbot)
 {
 	if (consoleplayer != Net_Arbitrator)
 	{
-		Printf (PRINT_HIGH, "Only player %d can add bots\n", Net_Arbitrator + 1);
+		Printf ("Only player %d can add bots\n", Net_Arbitrator + 1);
 		return;
 	}
 
 	if (argc > 2)
 	{
-		Printf (PRINT_HIGH, "addbot [botname] : add a bot to the game\n");
+		Printf ("addbot [botname] : add a bot to the game\n");
 		return;
 	}
 /*
@@ -54,7 +49,6 @@ BEGIN_COMMAND (addbot)
 	else
 		bglobal.SpawnBot (NULL);
 }
-END_COMMAND (addbot)
 
 void DCajunMaster::ClearPlayer (int i)
 {
@@ -72,44 +66,41 @@ void DCajunMaster::ClearPlayer (int i)
 	playeringame[i] = false;
 }
 
-BEGIN_COMMAND (removebots)
+CCMD (removebots)
 {
 	Net_WriteByte (DEM_KILLBOTS);
 }
-END_COMMAND (removebots)
 
-BEGIN_COMMAND (freeze)
+CCMD (freeze)
 {
 	if (!netgame)
 	{
 		if (bglobal.freeze)
 		{
 			bglobal.freeze = false;
-			Printf (PRINT_HIGH, "Freeze mode off\n");
+			Printf ("Freeze mode off\n");
 		}
 		else
 		{
 			bglobal.freeze = true;
-			Printf (PRINT_HIGH, "Freeze mode on\n");
+			Printf ("Freeze mode on\n");
 		}
 	}
 }
-END_COMMAND (freeze)
 
-BEGIN_COMMAND (listbots)
+CCMD (listbots)
 {
 	botinfo_t *thebot = bglobal.botinfo;
 	int count = 0;
 
 	while (thebot)
 	{
-		Printf (PRINT_HIGH, "%s%s\n", thebot->name, thebot->inuse ? " (active)" : "");
+		Printf ("%s%s\n", thebot->name, thebot->inuse ? " (active)" : "");
 		thebot = thebot->next;
 		count++;
 	}
-	Printf (PRINT_HIGH, "> %d bots\n", count);
+	Printf ("> %d bots\n", count);
 }
-END_COMMAND (listbots)
 
 FArchive &operator<< (FArchive &arc, botskill_t &skill)
 {

@@ -5,6 +5,7 @@
 #include "p_local.h"
 #include "p_enemy.h"
 #include "a_action.h"
+#include "gstrings.h"
 
 void A_MummyAttack (AActor *);
 void A_MummySoul (AActor *);
@@ -16,13 +17,11 @@ void A_MummyFX1Seek (AActor *);
 
 class AMummy : public AActor
 {
-	DECLARE_ACTOR (AMummy, AActor);
+	DECLARE_ACTOR (AMummy, AActor)
 public:
 	void NoBlockingSet ();
+	const char *GetHitObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (AMummy, AActor);
-REGISTER_ACTOR (AMummy, Heretic);
 
 FState AMummy::States[] =
 {
@@ -56,44 +55,47 @@ FState AMummy::States[] =
 	S_NORMAL (MUMM, 'P',   -1, NULL 					, NULL)
 };
 
-void AMummy::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 68;
-	info->spawnstate = &States[S_MUMMY_LOOK];
-	info->spawnhealth = 80;
-	info->seestate = &States[S_MUMMY_WALK];
-	info->seesound = "mummy/sight";
-	info->attacksound = "mummy/attack1";
-	info->painstate = &States[S_MUMMY_PAIN];
-	info->painchance = 128;
-	info->painsound = "mummy/pain";
-	info->meleestate = &States[S_MUMMY_ATK];
-	info->deathstate = &States[S_MUMMY_DIE];
-	info->deathsound = "mummy/death";
-	info->speed = 12;
-	info->radius = 22 * FRACUNIT;
-	info->height = 62 * FRACUNIT;
-	info->mass = 75;
-	info->activesound = "mummy/active";
-	info->flags = MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL;
-	info->flags2 = MF2_FLOORCLIP|MF2_PASSMOBJ;
-}
+IMPLEMENT_ACTOR (AMummy, Heretic, 68, 0)
+	PROP_SpawnHealth (80)
+	PROP_RadiusFixed (22)
+	PROP_HeightFixed (62)
+	PROP_Mass (75)
+	PROP_SpeedFixed (12)
+	PROP_PainChance (128)
+	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
+	PROP_Flags2 (MF2_FLOORCLIP|MF2_PASSMOBJ)
+
+	PROP_SpawnState (S_MUMMY_LOOK)
+	PROP_SeeState (S_MUMMY_WALK)
+	PROP_PainState (S_MUMMY_PAIN)
+	PROP_MeleeState (S_MUMMY_ATK)
+	PROP_DeathState (S_MUMMY_DIE)
+
+	PROP_SeeSound ("mummy/sight")
+	PROP_AttackSound ("mummy/attack1")
+	PROP_PainSound ("mummy/pain")
+	PROP_DeathSound ("mummy/death")
+	PROP_ActiveSound ("mummy/active")
+END_DEFAULTS
 
 void AMummy::NoBlockingSet ()
 {
-	P_DropItem (this, "GoldWandWimpy", 3, 84);
+	P_DropItem (this, "GoldWandAmmo", 3, 84);
+}
+
+const char *AMummy::GetHitObituary ()
+{
+	return GStrings(OB_MUMMY);
 }
 
 // Mummy leader -------------------------------------------------------------
 
 class AMummyLeader : public AMummy
 {
-	DECLARE_ACTOR (AMummyLeader, AMummy);
+	DECLARE_ACTOR (AMummyLeader, AMummy)
+public:
+	const char *GetObituary ();
 };
-
-IMPLEMENT_DEF_SERIAL (AMummyLeader, AMummy);
-REGISTER_ACTOR (AMummyLeader, Heretic);
 
 FState AMummyLeader::States[] =
 {
@@ -107,62 +109,51 @@ FState AMummyLeader::States[] =
 
 };
 
-void AMummyLeader::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AMummyLeader, Heretic, 45, 0)
+	PROP_SpawnHealth (100)
+	PROP_PainChance (64)
+	PROP_MissileState (S_MUMMYL_ATK)
+END_DEFAULTS
+
+const char *AMummyLeader::GetObituary ()
 {
-	INHERIT_DEFS;
-	info->doomednum = 45;
-	info->spawnhealth = 100;
-	info->painchance = 64;
-	info->missilestate = &States[S_MUMMYL_ATK];
+	return GStrings (OB_MUMMYLEADER);
 }
 
 // Mummy ghost --------------------------------------------------------------
 
 class AMummyGhost : public AMummy
 {
-	DECLARE_STATELESS_ACTOR (AMummyGhost, AMummy);
+	DECLARE_STATELESS_ACTOR (AMummyGhost, AMummy)
 };
 
-IMPLEMENT_DEF_SERIAL (AMummyGhost, AMummy);
-REGISTER_ACTOR (AMummyGhost, Heretic);
-
-void AMummyGhost::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 69;
-	info->flags |= MF_SHADOW;
-	info->flags3 = MF3_GHOST;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_STATELESS_ACTOR (AMummyGhost, Heretic, 69, 0)
+	PROP_FlagsSet (MF_SHADOW)
+	PROP_Flags3 (MF3_GHOST)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+END_DEFAULTS
 
 // Mummy leader ghost -------------------------------------------------------
 
 class AMummyLeaderGhost : public AMummyLeader
 {
-	DECLARE_STATELESS_ACTOR (AMummyLeaderGhost, AMummyLeader);
+	DECLARE_STATELESS_ACTOR (AMummyLeaderGhost, AMummyLeader)
 };
 
-IMPLEMENT_DEF_SERIAL (AMummyLeaderGhost, AMummyLeader);
-REGISTER_ACTOR (AMummyLeaderGhost, Heretic);
-
-void AMummyLeaderGhost::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS_STATELESS;
-	info->doomednum = 46;
-	info->flags |= MF_SHADOW;
-	info->flags3 = MF3_GHOST;
-	info->translucency = HR_SHADOW;
-}
+IMPLEMENT_STATELESS_ACTOR (AMummyLeaderGhost, Heretic, 46, 0)
+	PROP_FlagsSet (MF_SHADOW)
+	PROP_Flags3 (MF3_GHOST)
+	PROP_RenderStyle (STYLE_Translucent)
+	PROP_Alpha (HR_SHADOW)
+END_DEFAULTS
 
 // Mummy soul ---------------------------------------------------------------
 
 class AMummySoul : public AActor
 {
-	DECLARE_ACTOR (AMummySoul, AActor);
+	DECLARE_ACTOR (AMummySoul, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AMummySoul, AActor);
-REGISTER_ACTOR (AMummySoul, Heretic);
 
 FState AMummySoul::States[] =
 {
@@ -176,22 +167,17 @@ FState AMummySoul::States[] =
 	S_NORMAL (MUMM, 'W',	5, NULL 					, NULL)
 };
 
-void AMummySoul::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MUMMY_SOUL];
-	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
-}
+IMPLEMENT_ACTOR (AMummySoul, Heretic, -1, 0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_NOGRAVITY)
+	PROP_SpawnState (S_MUMMY_SOUL)
+END_DEFAULTS
 
 // Mummy FX 1 (flying head) -------------------------------------------------
 
 class AMummyFX1 : public AActor
 {
-	DECLARE_ACTOR (AMummyFX1, AActor);
+	DECLARE_ACTOR (AMummyFX1, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (AMummyFX1, AActor)
-REGISTER_ACTOR (AMummyFX1, Heretic);
 
 FState AMummyFX1::States[] =
 {
@@ -210,17 +196,21 @@ FState AMummyFX1::States[] =
 	S_BRIGHT (FX15, 'G',	5, NULL 					, NULL)
 };
 
-void AMummyFX1::SetDefaults (FActorInfo *info)
+IMPLEMENT_ACTOR (AMummyFX1, Heretic, -1, 0)
+	PROP_RadiusFixed (8)
+	PROP_HeightFixed (14)
+	PROP_SpeedFixed (9)
+	PROP_Damage (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_MUMMYFX1)
+	PROP_DeathState (S_MUMMYFXI1)
+END_DEFAULTS
+
+AT_SPEED_SET (MummyFX1, speed)
 {
-	INHERIT_DEFS;
-	info->spawnstate = &States[S_MUMMYFX1];
-	info->deathstate = &States[S_MUMMYFXI1];
-	info->speed = GameSpeed != SPEED_Fast ? 9 * FRACUNIT : 18 * FRACUNIT;
-	info->radius = 8 * FRACUNIT;
-	info->height = 14 * FRACUNIT;
-	info->damage = 4;
-	info->flags = MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY;
-	info->flags2 = MF2_NOTELEPORT;
+	SimpleSpeedSetter (AMummyFX1, 9*FRACUNIT, 18*FRACUNIT, speed);
 }
 
 //----------------------------------------------------------------------------
@@ -237,11 +227,11 @@ void A_MummyAttack (AActor *actor)
 	}
 	if (P_CheckMeleeRange (actor))
 	{
-		P_DamageMobj (actor->target, actor, actor, HITDICE(2));
+		P_DamageMobj (actor->target, actor, actor, HITDICE(2), MOD_HIT);
 		S_Sound (actor, CHAN_WEAPON, "mummy/attack2", 1, ATTN_NORM);
 		return;
 	}
-	S_Sound (actor, CHAN_WEAPON, GetInfo (actor)->attacksound, 1, ATTN_NORM);
+	S_SoundID (actor, CHAN_WEAPON, actor->AttackSound, 1, ATTN_NORM);
 }
 
 //----------------------------------------------------------------------------
@@ -263,7 +253,7 @@ void A_MummyAttack2 (AActor *actor)
 	//S_StartSound(actor, actor->info->attacksound);
 	if (P_CheckMeleeRange (actor))
 	{
-		P_DamageMobj (actor->target, actor, actor, HITDICE(2));
+		P_DamageMobj (actor->target, actor, actor, HITDICE(2), MOD_HIT);
 		return;
 	}
 	mo = P_SpawnMissile (actor, actor->target, RUNTIME_CLASS(AMummyFX1));

@@ -9,11 +9,8 @@ void A_KeenDie (AActor *);
 
 class ACommanderKeen : public AActor
 {
-	DECLARE_ACTOR (ACommanderKeen, AActor);
+	DECLARE_ACTOR (ACommanderKeen, AActor)
 };
-
-IMPLEMENT_DEF_SERIAL (ACommanderKeen, AActor);
-REGISTER_ACTOR (ACommanderKeen, Doom);
 
 FState ACommanderKeen::States[] =
 {
@@ -39,22 +36,21 @@ FState ACommanderKeen::States[] =
 	S_NORMAL (KEEN, 'M',	8, A_Pain						, &States[S_KEENSTND])
 };
 
-void ACommanderKeen::SetDefaults (FActorInfo *info)
-{
-	INHERIT_DEFS;
-	info->doomednum = 72;
-	info->spawnstate = &States[S_KEENSTND];
-	info->spawnhealth = 100;
-	info->painstate = &States[S_KEENPAIN];
-	info->painchance = 256;
-	info->painsound = "keen/pain";
-	info->deathstate = &States[S_COMMKEEN];
-	info->deathsound = "keen/death";
-	info->radius = 16 * FRACUNIT;
-	info->height = 72 * FRACUNIT;
-	info->mass = 10000000;
-	info->flags = MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY|MF_SHOOTABLE|MF_COUNTKILL;
-}
+IMPLEMENT_ACTOR (ACommanderKeen, Doom, 72, 0)
+	PROP_SpawnHealth (100)
+	PROP_RadiusFixed (16)
+	PROP_HeightFixed (72)
+	PROP_MassLong (10000000)
+	PROP_MaxPainChance
+	PROP_Flags (MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY|MF_SHOOTABLE|MF_COUNTKILL)
+
+	PROP_SpawnState (S_KEENSTND)
+	PROP_PainState (S_KEENPAIN)
+	PROP_DeathState (S_COMMKEEN)
+
+	PROP_PainSound ("keen/pain")
+	PROP_DeathSound ("keen/death")
+END_DEFAULTS
 
 //
 // A_KeenDie

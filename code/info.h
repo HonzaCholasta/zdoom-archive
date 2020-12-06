@@ -28,34 +28,115 @@
 #include "dthinker.h"
 #include "farchive.h"
 
+/* Important restrictions because of the way FState is structured:
+ *
+ * The range of Frame is [0,63]. Since sprite naming conventions
+ * are even more restrictive than this, this isn't something to
+ * really worry about.
+ *
+ * The range of Tics is [-1,65534]. If Misc1 is important, then
+ * the range of Tics is reduced to [-1,254], because Misc1 also
+ * doubles as the high byte of the tic.
+ *
+ * The range of Misc1 is [-128,127] and Misc2's range is [0,255].
+ *
+ * When compiled with Visual C++, this struct is 16 bytes. With
+ * any other compiler (assuming a 32-bit architecture), it is 20 bytes.
+ * This is because with VC++, I can use the charizing operator to
+ * initialize the name array to exactly 4 chars. If GCC would
+ * compile something like char t = "PLYR"[0]; as char t = 'P'; then GCC
+ * could also use the 16-byte version. Unfortunately, GCC compiles it
+ * more like:
+ *
+ * char t;
+ * void initializer () {
+ *     static const char str[]="PLYR";
+ *     t = str[0];
+ * }
+ *
+ * While this does allow the use of a 16-byte FState, the additional
+ * code amounts to more than 4 bytes.
+ *
+ * If C++ would allow char name[4] = "PLYR"; without an error (as C does),
+ * I could just initialize the name as a regular string and be done with it.
+ */
+
+const BYTE SF_FULLBRIGHT = 0x40;
+const BYTE SF_BIGTIC	 = 0x80;
+
 struct FState
 {
 	union
 	{
+#if _MSC_VER
 		char name[4];
+#else
+		char name[8];	// 4 for name, 1 for '\0', 3 for pad
+#endif
 		int index;
 	} sprite;
-	int			frame;
-	int			tics;
-	actionf_t 	action;
-	FState		*nextstate;
-	int			misc1, misc2;
+	BYTE		Tics;
+	SBYTE		Misc1;
+	BYTE		Misc2;
+	BYTE		Frame;
+	actionf_t	Action;
+	FState		*NextState;
+
+	inline int GetFrame() const
+	{
+		return Frame & ~(SF_FULLBRIGHT|SF_BIGTIC);
+	}
+	inline int GetFullbright() const
+	{
+		return Frame & SF_FULLBRIGHT ? 0x10 /*RF_FULLBRIGHT*/ : 0;
+	}
+	inline int GetTics() const
+	{
+#ifdef __BIG_ENDIAN__
+		return Frame & SF_BIGTIC ? (Tics|((BYTE)Misc1<<8))-1 : Tics-1;
+#else
+		// Use some trickery to help the compiler create this without
+		// using any jumps.
+		return ((*(int *)&Tics) & ((*(int *)&Tics) < 0 ? 0xffff : 0xff)) - 1;
+#endif
+	}
+	inline int GetMisc1() const
+	{
+		return Frame & SF_BIGTIC ? 0 : Misc1;
+	}
+	inline int GetMisc2() const
+	{
+		return Misc2;
+	}
+	inline FState *GetNextState() const
+	{
+		return NextState;
+	}
+	inline actionf_t GetAction() const
+	{
+		return Action;
+	}
 };
 
+FArchive &operator<< (FArchive &arc, FState *&state);
 
 #if _MSC_VER
-#define _S__COMMON_(spr) \
+#define _S__SPRITE_(spr) \
 	{ {{(char)(#@spr>>24),(char)(#@spr>>16),(char)(#@spr>>8),(char)#@spr}}
 #else
-#define _S__COMMON_(spr) \
-	{ {#spr}
+#define _S__SPRITE_(spr) \
+	{ {{#spr}}
 #endif
 
-#define _S_N_COMMON_(spr,frm,tic,cmd,next) \
-	_S__COMMON_(spr), (frm) - 'A', tic, {cmd}, next
+#define _S__FR_TIC_(spr,frm,tic,m1,m2,cmd,next) \
+	_S__SPRITE_(spr), (tic+1)&255, m1|((tic+1)>>8), m2, (tic>254)?SF_BIGTIC|(frm):(frm), \
+	{cmd}, next }
 
-#define _S_B_COMMON_(spr,frm,tic,cmd,next) \
-	_S__COMMON_(spr), 0x8000 | ((frm) - 'A'), tic, {cmd}, next
+#define S_NORMAL2(spr,frm,tic,cmd,next,m1,m2) \
+	_S__FR_TIC_(spr, (frm) - 'A', tic, m1, m2, (void *)cmd, next)
+
+#define S_BRIGHT2(spr,frm,tic,cmd,next,m1,m2) \
+	_S__FR_TIC_(spr, (frm) - 'A' | SF_FULLBRIGHT, tic, m1, m2, (void *)cmd, next)
 
 /* <winbase.h> #defines its own, completely unrelated S_NORMAL.
  * Since winbase.h will only be included in Win32-specific files that
@@ -63,18 +144,9 @@ struct FState
  */
 
 #ifndef S_NORMAL
-#define S_NORMAL(spr,frm,tic,cmd,next) \
-	_S_N_COMMON_(spr,frm,tic,cmd,next), 0, 0}
+#define S_NORMAL(spr,frm,tic,cmd,next)	S_NORMAL2(spr,frm,tic,(void *)cmd,next,0,0)
 #endif
-
-#define S_BRIGHT(spr,frm,tic,cmd,next) \
-	_S_B_COMMON_(spr,frm,tic,cmd,next), 0, 0}
-
-#define S_NORMAL2(spr,frm,tic,cmd,next,m1,m2) \
-	_S_N_COMMON_(spr,frm,tic,cmd,next), m1, m2}
-
-#define S_BRIGHT2(spr,frm,tic,cmd,next,m1,m2) \
-	_S_B_COMMON_(spr,frm,tic,cmd,next), m1, m2}
+#define S_BRIGHT(spr,frm,tic,cmd,next)	S_BRIGHT2(spr,frm,tic,(void *)cmd,next,0,0)
 
 
 #ifndef EGAMETYPE
@@ -89,93 +161,103 @@ enum EGameType
 };
 #endif
 
+enum
+{
+	ADEFTYPE_Byte		= 0,
+	ADEFTYPE_FixedMul	= 64,		// one byte, multiplied by FRACUNIT
+	ADEFTYPE_Word		= 128,
+	ADEFTYPE_Long		= 192,
+	ADEFTYPE_MASK		= 192,
+
+	// These first properties are always strings
+	ADEF_SeeSound = 1,
+	ADEF_AttackSound,
+	ADEF_PainSound,
+	ADEF_DeathSound,
+	ADEF_ActiveSound,
+	ADEF_LastString = ADEF_ActiveSound,
+
+	// The rest of the properties use their type field (upper 2 bits)
+	ADEF_XScale,
+	ADEF_YScale,
+	ADEF_SpawnHealth,
+	ADEF_ReactionTime,
+	ADEF_PainChance,
+	ADEF_Speed,
+	ADEF_Radius,
+	ADEF_Height,
+	ADEF_Mass,
+	ADEF_Damage,
+	ADEF_Flags,			// Use these flags exactly
+	ADEF_Flags2,		// "
+	ADEF_Flags3,		// "
+	ADEF_FlagsSet,		// Or these flags with previous
+	ADEF_Flags2Set,		// "
+	ADEF_Flags3Set,		// "
+	ADEF_FlagsClear,	// Clear these flags from previous
+	ADEF_Flags2Clear,	// "
+	ADEF_Flags3Clear,	// "
+	ADEF_Alpha,
+	ADEF_RenderStyle,
+	ADEF_RenderFlags,
+
+	ADEF_SpawnState,
+	ADEF_SeeState,
+	ADEF_PainState,
+	ADEF_MeleeState,
+	ADEF_MissileState,
+	ADEF_CrashState,
+	ADEF_DeathState,
+	ADEF_XDeathState,
+	ADEF_BDeathState,
+	ADEF_IDeathState,
+	ADEF_RaiseState,
+
+	// The following are not properties but effect how the list is parsed
+	ADEF_FirstCommand,
+	ADEF_LimitGame = ADEF_FirstCommand,
+	ADEF_SkipSuper,		// Take defaults from AActor instead of superclass(es)
+	ADEF_StateBase,		// Use states not owned by this actor
+
+	ADEF_EOL = 0		// End Of List
+};
+
+#if _MSC_VER
+#pragma warning(disable:4200)	// nonstandard extension used : zero-sized array in struct/union
+#endif
+
 struct FActorInfo
 {
-	int doomednum;
-	FState *spawnstate;
-	int spawnhealth;
-	FState *seestate;
-	char *seesound;
-	int reactiontime;
-	char *attacksound;
-	FState *painstate;
-	int painchance;
-	char *painsound;
-	FState *meleestate;
-	FState *missilestate;
-	FState *crashstate;
-	FState *deathstate;
-	FState *xdeathstate;
-	FState *bdeathstate;
-	FState *ideathstate;
-	char *deathsound;
-	int speed;
-	int radius;
-	int height;
-	int mass;
-	int damage;
-	char *activesound;
-	int flags;
-	int flags2;
-	int flags3;
-	FState *raisestate;
-	int translucency;
-	int spawnid;
+	static void StaticInit ();
+	static void StaticGameSet ();
+	static void StaticSpeedSet ();
 
+	void BuildDefaults ();
+	void ApplyDefaults (BYTE *defaults);
+
+	TypeInfo *Class;
 	FState *OwnedStates;
+	BYTE *Defaults;
 	int NumOwnedStates;
+	BYTE GameFilter;
+	BYTE SpawnID;
+	SWORD DoomEdNum;
+
+	// Followed by a 0-terminated list of default properties
+	BYTE DefaultList[];
 };
 
-class FActorInfoInitializer
-{
-public:
-	FActorInfoInitializer (EGameType game, const TypeInfo *actorinfo, void (*setdefs)(FActorInfo *))
-		: gamemode (game),
-		  active (0),
-		  info (actorinfo),
-		  setdefaults (setdefs)
-	{
-		next = StaticInitList;
-		StaticInitList = this;
-	}
-	static void StaticInit (EGameType game);
-	static void StaticSetDefaults (EGameType game);
-
-private:
-	DWORD gamemode:31;
-	DWORD active:1;
-	const TypeInfo *info;
-	void (*setdefaults)(FActorInfo *);
-	FActorInfoInitializer *next;
-
-	static FActorInfoInitializer *StaticInitList;
-
-	friend FArchive &operator<< (FArchive &arc, FState *&state);
-};
-
-#define REGISTER_ACTOR(spawnclass, game) \
-	static FActorInfoInitializer info_##spawnclass##_init (GAME_##game, RUNTIME_CLASS(spawnclass), &spawnclass::SetDefaults);
-
-#define DECLARE_STATELESS_ACTOR(cls,parent) \
-		DECLARE_SERIAL(cls,parent); \
-	public: \
-		cls () {} \
-		static void SetDefaults (FActorInfo *info);
-
-#define DECLARE_ACTOR(cls,parent) \
-	DECLARE_STATELESS_ACTOR(cls,parent); \
-	static FState States[];
-
-#define __INHERIT__				Super::SetDefaults (info); info->doomednum = -1; info->spawnid = 0;
-#define INHERIT_DEFS			{__INHERIT__ info->OwnedStates = &States[0]; info->NumOwnedStates = sizeof(States)/sizeof(States[0]);}
-#define INHERIT_DEFS_STATELESS	{__INHERIT__ info->OwnedStates = NULL; info->NumOwnedStates = 0;}
-#define ACTOR_DEFS_STATELESS	{INHERIT_DEFS_STATELESS info->spawnstate = &AActor::States[0];}
+#if _MSC_VER
+#pragma warning(default:4200)
+#endif
 
 class FDoomEdMap
 {
 public:
-	const TypeInfo *FindType (int doomednum);
+	const TypeInfo *FindType (int doomednum) const;
 	void AddType (int doomednum, const TypeInfo *type);
+	void DelType (int doomednum);
+	void Empty ();
 
 private:
 	enum { DOOMED_HASHSIZE = 256 };
@@ -183,13 +265,17 @@ private:
 	struct FDoomEdEntry
 	{
 		FDoomEdEntry *HashNext;
-		int DoomEdNum;
 		const TypeInfo *Type;
+		int DoomEdNum;
 	};
 
 	static FDoomEdEntry *DoomEdHash[DOOMED_HASHSIZE];
+
+	friend void Cmd_dumpmapthings (int,char **,const char *,AActor *);
 };
 
 extern FDoomEdMap DoomEdMap;
+
+#include "infomacros.h"
 
 #endif	// __INFO_H__
