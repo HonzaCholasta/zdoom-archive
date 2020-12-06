@@ -1,4 +1,7 @@
 December 5, 2003
+- Rewrote P_TranslateTeleportThings() so that it only assigns TIDs to things
+  in sectors with tag 0.
+- Fixed: Teleporters by TID didn't work.
 - Fixed: P_SpawnMissileXYZ spawned floor/ceiling huggers as if they could move
   with a vertical component to their velocity. They can't, so it could result
   in very slow moving projectiles when aiming at something nearby in the X/Y

@@ -313,6 +313,7 @@ static AActor *SelectTeleDest (int tid, int tag)
 				}
 			}
 		}
+		return searcher;
 	}
 
 	if (tag != 0)

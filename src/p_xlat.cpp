@@ -331,84 +331,45 @@ void P_TranslateLineDef (line_t *ld, maplinedef_t *mld)
 	memset (ld->args, 0, sizeof(ld->args));
 }
 
-// The teleport specials that use things as destinations also require
-// that their TIDs be set to the tags of their containing sectors. We
-// do that after the rest of the level has been loaded. If any dest is
-// in a sector with a tag of 0, it gets mapped to some unused tag and
-// so do the lines that reference it.
+// Now that ZDoom again gives the option of using Doom's original teleport
+// behavior, only teleport dests in a sector with a 0 tag need to be
+// given a TID. And since Doom format maps don't have TIDs, we can safely
+// give them TID 1.
 
 void P_TranslateTeleportThings ()
 {
-	TArray<ATeleportDest *> baddests;
-	TArray<int> badlines;
-	int i, j;
-	int highestid = 0;
+	ATeleportDest *dest;
+	TThinkerIterator<ATeleportDest> iterator;
+	bool foundSomething = false;
 
-	for (i = 0; i < numlines; i++)
+	while ( (dest = iterator.Next()) )
 	{
-		if (lines[i].special == Teleport ||
-			lines[i].special == Teleport_NoFog)
+		if (dest->Sector->tag == 0)
 		{
-			if (lines[i].args[0] == 0)
-			{
-				badlines.Push (i);
-			}
-			else if (lines[i].args[0] > highestid)
-			{
-				highestid = lines[i].args[0];
-			}
-
-			// The sector tag hash table hasn't been set up yet,
-			// so we need to use this linear search.
-			for (j = 0; j < numsectors; j++)
-			{
-				if (sectors[j].tag == lines[i].args[0])
-				{
-					ATeleportDest *other;
-					TThinkerIterator<ATeleportDest> iterator;
-
-					while ( (other = iterator.Next ()) )
-					{
-						// wrong sector
-						if (other->Sector - sectors != j)
-							continue;
-
-						// already handled
-						if (other->tid != 0)
-							continue;
-
-						// it's a teleportdest
-						if (lines[i].args[0] == 0)
-						{
-							baddests.Push (other);
-							other->tid = 1;
-						}
-						else
-						{
-							other->tid = lines[i].args[0];
-							other->AddToHash ();
-						}
-					}
-					if (other)
-						break;
-				}
-			}
+			dest->tid = 1;
+			dest->AddToHash ();
+			foundSomething = true;
 		}
 	}
 
-	if (baddests.Size ())
+	if (foundSomething)
 	{
-		ATeleportDest *other;
-
-		highestid++;
-		while (baddests.Pop (other))
+		for (int i = 0; i < numlines; ++i)
 		{
-			other->tid = highestid;
-			other->AddToHash ();
-		}
-		while (badlines.Pop (i))
-		{
-			lines[i].args[0] = highestid;
+			if (lines[i].special == Teleport)
+			{
+				if (lines[i].args[1] == 0)
+				{
+					lines[i].args[1] = 1;
+				}
+			}
+			else if (lines[i].special == Teleport_NoFog)
+			{
+				if (lines[i].args[2] == 0)
+				{
+					lines[i].args[2] = 1;
+				}
+			}
 		}
 	}
 }
