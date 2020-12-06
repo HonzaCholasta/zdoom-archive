@@ -182,7 +182,7 @@ void DRotatePoly::RunThink ()
 			SN_StopSequence (poly);
 			Destroy ();
 		}
-		else if (m_Dist < (unsigned)absSpeed)
+		else if (m_Dist < absSpeed)
 		{
 			m_Speed = m_Dist * (m_Speed < 0 ? -1 : 1);
 		}
@@ -298,7 +298,7 @@ void DMovePoly::RunThink ()
 			SN_StopSequence (poly);
 			Destroy ();
 		}
-		else if (m_Dist < (unsigned)absSpeed)
+		else if (m_Dist < absSpeed)
 		{
 			m_Speed = m_Dist * (m_Speed < 0 ? -1 : 1);
 			m_xSpeed = FixedMul (m_Speed, finecosine[m_Angle]);
@@ -1250,7 +1250,7 @@ static void SpawnPolyobj (int index, int tag, BOOL crush)
 			polyobjs[index].numsegs = PolySegCount;
 			polyobjs[index].segs = (seg_t **)Z_Malloc (PolySegCount*sizeof(seg_t *),
 				PU_LEVEL, 0);
-			*(polyobjs[index].segs) = &segs[i]; // insert the first seg
+			polyobjs[index].segs[0] = &segs[i]; // insert the first seg
 			IterFindPolySegs (segs[i].v2->x, segs[i].v2->y,
 				polyobjs[index].segs+1);
 			polyobjs[index].crush = crush;
@@ -1368,7 +1368,7 @@ static void TranslateToStartSpot (int tag, int originX, int originY)
 			break;
 		}
 	}
-	if (!po)
+	if (po == NULL)
 	{ // didn't match the tag with a polyobj tag
 		I_Error("TranslateToStartSpot: Unable to match polyobj tag: %d\n",
 			tag);

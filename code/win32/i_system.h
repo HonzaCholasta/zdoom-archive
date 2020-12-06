@@ -50,7 +50,7 @@ void I_Init (void);
 // Called by startup code
 // to get the ammount of memory to malloc
 // for the zone management.
-byte *I_ZoneBase (unsigned int *size);
+byte *I_ZoneBase (size_t *size);
 
 
 // Called by D_DoomLoop,

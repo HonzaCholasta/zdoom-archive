@@ -138,8 +138,10 @@ inline	FArchive& operator<< (SQWORD i) { return operator<< ((QWORD)i); }
 inline	FArchive& operator<< (const unsigned char *str) { return operator<< ((const char *)str); }
 inline	FArchive& operator<< (const signed char *str) { return operator<< ((const char *)str); }
 inline	FArchive& operator<< (bool b) { return operator<< ((BYTE)b); }
+#ifndef ALPHA
 inline	FArchive& operator<< (int i) { return operator<< ((SDWORD)i); }
 inline	FArchive& operator<< (unsigned int i) { return operator<< ((DWORD)i); }
+#endif
 
 		FArchive& operator>> (BYTE &c);
 		FArchive& operator>> (WORD &s);
@@ -158,8 +160,10 @@ inline	FArchive& operator>> (SQWORD &i) { return operator>> ((QWORD &)i); }
 inline	FArchive& operator>> (unsigned char *&str) { return operator>> ((char *&)str); }
 inline	FArchive& operator>> (signed char *&str) { return operator>> ((char *&)str); }
 inline	FArchive& operator>> (bool &b) { return operator>> ((BYTE &)b); }
+#ifndef ALPHA
 inline	FArchive& operator>> (int &i) { return operator>> ((DWORD &)i); }
 inline	FArchive& operator>> (unsigned int &i) { return operator>> ((DWORD &)i); }
+#endif
 inline  FArchive& operator>> (DObject* &object) { return ReadObject (object, RUNTIME_CLASS(DObject)); }
 
 protected:

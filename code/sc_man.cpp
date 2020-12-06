@@ -582,7 +582,14 @@ void SC_ScriptError (const char *message, const char **args)
 	{
 		message = "Bad syntax.";
 	}
+#if !defined(__GNUC__) && !defined(_MSC_VER)
+	va_list arglist;
+	va_start (arglist, *args);
+	vsprintf (composed, message, arglist);
+	va_end (arglist);
+#else
 	vsprintf (composed, message, (va_list)args);
+#endif
 	I_Error ("Script error, \"%s\" line %d:\n%s\n", ScriptName,
 		sc_Line, composed);
 }

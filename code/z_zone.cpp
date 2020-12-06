@@ -21,14 +21,15 @@
 //
 //-----------------------------------------------------------------------------
 
+#include <stddef.h>
+#include <stdlib.h>
+#include <malloc.h>
 
 #include "z_zone.h"
 #include "i_system.h"
 #include "doomdef.h"
 #include "c_dispatch.h"
 
-#include <stdlib.h>
-#include <malloc.h>
 
 /*
 ==============================================================================
@@ -138,14 +139,14 @@ void Z_Free (void *ptr)
 
 	if (block->id != ZONEID)
 		I_FatalError ("Z_Free: freed a pointer without ZONEID");
-				
+
 	if (block->user > (void **)0x100)
 	{
 		// smaller values are not pointers
 		// Note: OS-dependent?
 		
 		// clear the user's mark
-		*block->user = 0;
+		*block->user = NULL;
 	}
 
 	// mark as free
@@ -191,6 +192,7 @@ void Z_Free (void *ptr)
 */
 
 #define MINFRAGMENT	64
+#define ALIGN		8
 
 void *Z_Malloc (size_t size, int tag, void *user)
 {
@@ -204,7 +206,7 @@ void *Z_Malloc (size_t size, int tag, void *user)
 //	Z_CheckHeap ();
 //#endif
 
-	size = (size + 3) & ~3;
+	size = (size + ALIGN - 1) & ~(ALIGN - 1);
 
 //
 // scan through the block list, looking for the first free block
@@ -247,13 +249,15 @@ void *Z_Malloc (size_t size, int tag, void *user)
 			}
 		}
 		else
+		{
 			rover = rover->next;
+		}
 	} while (base->user || base->size < size);
 
 	// found a block big enough
 	extra = base->size - size;
 	
-	if (extra >  MINFRAGMENT)
+	if (extra > MINFRAGMENT)
 	{
 		// there will be a free fragment after the allocated block
 		newblock = (memblock_t *) ((byte *)base + size );
@@ -349,7 +353,7 @@ void Z_DumpHeap (int lowtag, int hightag)
 	for (block = mainzone->blocklist.next ; ; block = block->next)
 	{
 		if (block->tag >= lowtag && block->tag <= hightag)
-			Printf (PRINT_HIGH, "block:%p    size:%7i    user:%p    tag:%3i\n",
+			Printf (PRINT_HIGH, "block:%p    size:%7i    user:%016p    tag:%3i\n",
 					block, block->size, block->user, block->tag);
 				
 		if (block->next == &mainzone->blocklist)
@@ -381,7 +385,7 @@ void Z_FileDumpHeap (FILE *f)
 		
 	for (block = mainzone->blocklist.next ; ; block = block->next)
 	{
-		fprintf (f,"block:%p    size:%7i    user:%p    tag:%3i\n",
+		fprintf (f,"block:%p    size:%7i    user:%016p    tag:%3i\n",
 				 block, block->size, block->user, block->tag);
 				
 		if (block->next == &mainzone->blocklist)
@@ -453,7 +457,7 @@ void Z_ChangeTag2 (void *ptr, int tag)
 	if (block->id != ZONEID)
 		I_FatalError ("Z_ChangeTag: freed a pointer without ZONEID");
 
-	if (tag >= PU_PURGELEVEL && (unsigned)block->user < 0x100)
+	if (tag >= PU_PURGELEVEL && (ptrdiff_t)block->user < 0x100)
 		I_FatalError ("Z_ChangeTag: an owner is required for purgable blocks");
 
 	block->tag = tag;

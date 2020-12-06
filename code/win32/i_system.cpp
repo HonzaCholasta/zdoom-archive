@@ -105,7 +105,7 @@ int I_GetHeapSize (void)
 	return (int)(mb_used*1024*1024);
 }
 
-byte *I_ZoneBase (unsigned int *size)
+byte *I_ZoneBase (size_t *size)
 {
 	char *p;
 	void *zone;
@@ -113,7 +113,7 @@ byte *I_ZoneBase (unsigned int *size)
 	p = Args.CheckValue ("-heapsize");
 	if (p)
 		mb_used = (float)atof (p);
-	*size = (int)(mb_used*1024*1024);
+	*size = (size_t)(mb_used*1024*1024);
 
 	while (NULL == (zone = malloc (*size)) && *size >= 2*1024*1024)
 		*size -= 1024*1024;

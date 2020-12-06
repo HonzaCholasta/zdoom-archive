@@ -7,6 +7,7 @@
 
 #include <malloc.h>
 
+#include "doomtype.h"
 #include "doomdef.h"
 #include "doomstat.h"
 #include "p_local.h"
@@ -69,12 +70,12 @@ static int PTR_Reachable (intercept_t *in)
 				return (reachable = false);
 			}
 		}
+	}
 
-		if (dist > estimated_dist)
-		{
-			reachable = true;
-			return false; //Don't need to continue.
-		}
+	if (dist > estimated_dist)
+	{
+		reachable = true;
+		return false; //Don't need to continue.
 	}
 
 	thing = in->d.thing;

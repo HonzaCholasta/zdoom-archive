@@ -28,16 +28,16 @@ void V_InitConChars (byte transcolor)
 	int x, y, z, a;
 	DCanvas temp (128, 128, 8);
 
+	chars = (patch_t *)W_CacheLumpName ("CONCHARS", PU_CACHE);
 	temp.Lock ();
 
-	chars = (patch_t *)W_CacheLumpName ("CONCHARS", PU_CACHE);
 	{
-		long *scrn, fill;
+		DWORD *scrn, fill;
 
 		fill = (transcolor << 24) | (transcolor << 16) | (transcolor << 8) | transcolor;
 		for (y = 0; y < 128; y++)
 		{
-			scrn = (long *)(temp.buffer + temp.pitch * y);
+			scrn = (DWORD *)(temp.buffer + temp.pitch * y);
 			for (x = 0; x < 128/4; x++)
 			{
 				*scrn++ = fill;
@@ -45,7 +45,9 @@ void V_InitConChars (byte transcolor)
 		}
 		temp.DrawPatch (chars, 0, 0);
 	}
+
 	src = temp.buffer;
+
 	if ( (ConChars = new byte[256*8*8*2]) )
 	{
 		d = ConChars;
@@ -86,14 +88,14 @@ void V_InitConChars (byte transcolor)
 // Print a line of text using the console font
 //
 
-extern "C" void STACK_ARGS PrintChar1P (long *charimg, byte *dest, int screenpitch);
-extern "C" void STACK_ARGS PrintChar2P_MMX (long *charimg, byte *dest, int screenpitch);
+extern "C" void STACK_ARGS PrintChar1P (DWORD *charimg, byte *dest, int screenpitch);
+extern "C" void STACK_ARGS PrintChar2P_MMX (DWORD *charimg, byte *dest, int screenpitch);
 
 void DCanvas::PrintStr (int x, int y, const char *s, int count) const
 {
 	const byte *str = (const byte *)s;
 	byte *temp;
-	long *charimg;
+	DWORD *charimg;
 	
 	if (!buffer)
 		return;
@@ -123,16 +125,16 @@ void DCanvas::PrintStr (int x, int y, const char *s, int count) const
 
 	while (count && x <= (width - 8))
 	{
-		charimg = (long *)&ConChars[(*str) * 128];
+		charimg = (DWORD *)&ConChars[(*str) * 128];
 		if (is8bit)
 		{
 #ifdef USEASM
 			PrintChar1P (charimg, temp + x, pitch);
 #else
 			int z;
-			long *writepos;
+			DWORD *writepos;
 
-			writepos = (long *)(temp + x);
+			writepos = (DWORD *)(temp + x);
 			for (z = 0; z < 8; z++)
 			{
 				*writepos = (*writepos & charimg[2]) ^ charimg[0];
@@ -185,7 +187,7 @@ void DCanvas::PrintStr2 (int x, int y, const char *s, int count) const
 {
 	const byte *str = (const byte *)s;
 	byte *temp;
-	long *charimg;
+	DWORD *charimg;
 	
 	if (y > (height - 16))
 		return;
@@ -212,7 +214,7 @@ void DCanvas::PrintStr2 (int x, int y, const char *s, int count) const
 
 	while (count && x <= (width - 16))
 	{
-		charimg = (long *)&ConChars[(*str) * 128];
+		charimg = (DWORD *)&ConChars[(*str) * 128];
 #ifdef USEASM
 		if (UseMMX)
 		{

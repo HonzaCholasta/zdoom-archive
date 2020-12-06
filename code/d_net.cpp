@@ -22,6 +22,8 @@
 //
 //-----------------------------------------------------------------------------
 
+#include <stddef.h>
+
 #include "version.h"
 #include "m_alloc.h"
 #include "m_menu.h"
@@ -251,7 +253,7 @@ unsigned NetbufferChecksum (int len)
 //	return 0;					// byte order problems
 //#endif
 
-	l = (len - (int)&(((doomdata_t *)0)->retransmitfrom))/4;
+	l = (len - myoffsetof(doomdata_t, retransmitfrom))/4;
 	for (i=0 ; i<l ; i++)
 		c += ((unsigned *)&netbuffer->retransmitfrom)[i] * (i+1);
 
@@ -688,12 +690,12 @@ void NetUpdate (void)
 			if (remoteresend[i])
 			{
 				netbuffer->retransmitfrom = nettics[i];
-				HSendPacket (i, NCMD_RETRANSMIT, (int)cmddata - (int)netbuffer);
+				HSendPacket (i, NCMD_RETRANSMIT, (ptrdiff_t)cmddata - (ptrdiff_t)netbuffer);
 			}
 			else
 			{
 				netbuffer->retransmitfrom = 0;
-				HSendPacket (i, 0, (int)cmddata - (int)netbuffer);
+				HSendPacket (i, 0, (ptrdiff_t)cmddata - (ptrdiff_t)netbuffer);
 			}
 		}
 	}
@@ -823,7 +825,7 @@ void D_ArbitrateNetStart (void)
 
 			D_WriteUserInfoStrings (consoleplayer, &stream, true);
 
-			HSendPacket (i, NCMD_SETUP|NCMD_KILL, (int)stream - (int)netbuffer);
+			HSendPacket (i, NCMD_SETUP|NCMD_KILL, (ptrdiff_t)stream - (ptrdiff_t)netbuffer);
 		}
 
 		// If we're the key player, also send the game info packet
@@ -841,7 +843,7 @@ void D_ArbitrateNetStart (void)
 				WriteLong (rngseed, &stream);
 				C_WriteCVars (&stream, CVAR_SERVERINFO, true);
 
-				HSendPacket (i, NCMD_SETUP, (int)stream - (int)netbuffer);
+				HSendPacket (i, NCMD_SETUP, (ptrdiff_t)stream - (ptrdiff_t)netbuffer);
 			}
 		}
 	} while (theresmore);

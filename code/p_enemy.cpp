@@ -595,8 +595,10 @@ BOOL P_LookForPlayers (AActor *actor, BOOL allaround)
 		return true;
 	}
 
-	// Use last known enemy if no players sighted -- killough 2/15/98:
+	// Note if using cxx: Despite what the warning claims, the following
+	// code really is reachable.
 
+	// Use last known enemy if no players sighted -- killough 2/15/98:
 	if (actor->lastenemy && actor->lastenemy->health > 0)
 	{
 		actor->target = actor->lastenemy;
@@ -758,7 +760,7 @@ void A_Chase (AActor *actor)
 	// turn towards movement direction if not there yet
 	if (actor->movedir < 8)
 	{
-		actor->angle &= (7<<29);
+		actor->angle &= (angle_t)(7<<29);
 		delta = actor->angle - (actor->movedir << 29);
 		
 		if (delta > 0)
@@ -1919,12 +1921,10 @@ void A_BossDeath (AActor *actor)
 			case LEVEL_SPECLOWERFLOOR:
 				EV_DoFloor (DFloor::floorLowerToLowest, NULL, 666, FRACUNIT, 0, 0, 0);
 				return;
-				break;
 			
 			case LEVEL_SPECOPENDOOR:
 				EV_DoDoor (DDoor::doorOpen, NULL, NULL, 666, 8*TICRATE, 0, NoKey);
 				return;
-				break;
 		}
 	}
 

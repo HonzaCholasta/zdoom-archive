@@ -67,9 +67,9 @@ struct TypeInfo
 	const char *Name;
 	const TypeInfo *ParentType;
 	unsigned int SizeOf;
+	const size_t *const Pointers;
 	DObject *(*CreateNew)();
 	unsigned short TypeIndex;
-	const size_t *const Pointers;
 
 	void RegisterType ();
 

@@ -1966,13 +1966,6 @@ static void P_SpawnFriction(void)
 	int i;
 	line_t *l = lines;
 
-	// killough 8/28/98: initialize all sectors to normal friction first
-	for (i = 0; i < numsectors; i++)
-	{
-		sectors[i].friction = ORIG_FRICTION;
-		sectors[i].movefactor = ORIG_FRICTION_FACTOR;
-	}
-
 	for (i = 0 ; i < numlines ; i++,l++)
 	{
 		if (l->special == Sector_SetFriction)
@@ -2100,10 +2093,7 @@ DPusher::DPusher (DPusher::EPusher type, line_t *l, int magnitude, int angle,
 	}
 	else
 	{ // [RH] Allow setting magnitude and angle with parameters
-		angle_t ang = (angle<<24) >> ANGLETOFINESHIFT;
-		m_Xmag = (magnitude * finecosine[ang]) >> FRACBITS;
-		m_Ymag = (magnitude * finesine[ang]) >> FRACBITS;
-		m_Magnitude = magnitude;
+		ChangeValues (magnitude, angle);
 	}
 	if (source) // point source exist?
 	{
@@ -2199,7 +2189,6 @@ void DPusher::RunThink ()
 
 	if (m_Type == p_push)
 	{
-
 		// Seek out all pushable things within the force radius of this
 		// point pusher. Crosses sectors, so use blockmap.
 

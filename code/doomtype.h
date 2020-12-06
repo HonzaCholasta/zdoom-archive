@@ -27,7 +27,7 @@
 
 #ifndef __BYTEBOOL__
 #define __BYTEBOOL__
-// [RH] Some windows includes already defines this
+// [RH] Some windows includes already define this
 #if !defined(_WINDEF_) && !defined(__wtypes_h__)
 typedef int BOOL;
 #endif
@@ -47,10 +47,18 @@ typedef unsigned char byte;
 #endif
 
 // Predefined with some OS.
-#ifdef __GNUC__
+#ifndef _MSC_VER
 #include <values.h>
+#endif
+
+#if defined(__GNUC__) && !defined(OSF1)
 #define __int64 long long
-#else
+#endif
+
+#ifdef OSF1
+#define __int64 long
+#endif
+
 #ifndef MAXCHAR
 #define MAXCHAR 		((char)0x7f)
 #endif
@@ -63,8 +71,13 @@ typedef unsigned char byte;
 #define MAXINT			((int)0x7fffffff)
 #endif
 #ifndef MAXLONG
+#ifndef ALPHA
 #define MAXLONG 		((long)0x7fffffff)
+#else
+#define MAXLONG			((long)0x7fffffffffffffff)
 #endif
+#endif
+
 #ifndef MINCHAR
 #define MINCHAR 		((char)0x80)
 #endif
@@ -77,22 +90,32 @@ typedef unsigned char byte;
 #define MININT			((int)0x80000000)
 #endif
 #ifndef MINLONG
+#ifndef ALPHA
 #define MINLONG 		((long)0x80000000)
+#else
+#define MINLONG			((long)0x8000000000000000)
 #endif
 #endif
 
 
 typedef unsigned char		BYTE;
-typedef unsigned short		WORD;
-typedef unsigned long		DWORD;
-typedef unsigned __int64	QWORD;
-
 typedef signed char			SBYTE;
+
+typedef unsigned short		WORD;
 typedef signed short		SWORD;
+
+#ifdef ALPHA
+typedef unsigned int		DWORD;
+typedef signed int			SDWORD;
+#else
+typedef unsigned long		DWORD;
 typedef signed long			SDWORD;
+#endif
+
+typedef unsigned __int64	QWORD;
 typedef signed __int64		SQWORD;
 
-typedef unsigned long		BITFIELD;
+typedef DWORD				BITFIELD;
 
 #ifndef NOASM
 #ifndef USEASM

@@ -383,6 +383,10 @@ void P_LoadSectors (int lump)
 				RPART(level.fadeto),GPART(level.fadeto),BPART(level.fadeto));
 
 		ss->sky = 0;
+
+		// killough 8/28/98: initialize all sectors to normal friction
+		ss->friction = ORIG_FRICTION;
+		ss->movefactor = ORIG_FRICTION_FACTOR;
 	}
 		
 	Z_Free (data);
@@ -573,12 +577,17 @@ void P_AdjustLine (line_t *ld)
 // killough 4/4/98: delay using sidedefs until they are loaded
 void P_FinishLoadingLineDefs (void)
 {
-	int i;
+	int i, linenum;
 	register line_t *ld = lines;
 
-	for (i = numlines; i--; ld++) {
+	for (i = numlines, linenum = 0; i--; ld++, linenum++)
+	{
 		ld->frontsector = ld->sidenum[0]!=-1 ? sides[ld->sidenum[0]].sector : 0;
 		ld->backsector  = ld->sidenum[1]!=-1 ? sides[ld->sidenum[1]].sector : 0;
+		if (ld->sidenum[0] != -1)
+			sides[ld->sidenum[0]].linenum = linenum;
+		if (ld->sidenum[1] != -1)
+			sides[ld->sidenum[1]].linenum = linenum;
 
 		switch (ld->special)
 		{						// killough 4/11/98: handle special types
@@ -736,6 +745,7 @@ void P_LoadSideDefs2 (int lump)
 
 		sd->textureoffset = SHORT(msd->textureoffset)<<FRACBITS;
 		sd->rowoffset = SHORT(msd->rowoffset)<<FRACBITS;
+		sd->linenum = -1;
 
 		// killough 4/4/98: allow sidedef texture names to be overloaded
 		// killough 4/11/98: refined to allow colormaps to work as wall
@@ -816,8 +826,8 @@ void P_LoadSideDefs2 (int lump)
 
 typedef struct linelist_t        // type used to list lines in each block
 {
-  long num;
-  struct linelist_t *next;
+	DWORD num;
+	struct linelist_t *next;
 } linelist_t;
 
 //
@@ -831,7 +841,7 @@ static void AddBlockLine
 	int *count,
 	int *done,
 	int blockno,
-	long lineno
+	DWORD lineno
 )
 {
 	linelist_t *l;
@@ -863,7 +873,7 @@ void P_CreateBlockMap()
 	int *blockcount=NULL;			// array of counters of line lists
 	int *blockdone=NULL;			// array keeping track of blocks/line
 	int NBlocks;					// number of cells = nrows*ncols
-	long linetotal=0;				// total length of all blocklists
+	DWORD linetotal=0;				// total length of all blocklists
 	int i,j;
 	int map_minx=MAXINT;			// init for map limits search
 	int map_miny=MAXINT;
@@ -1092,7 +1102,7 @@ void P_CreateBlockMap()
 	for (i = 0; i < NBlocks; i++)
 	{
 		linelist_t *bl = blocklists[i];
-		long offs = blockmaplump[4+i] =   // set offset to block's list
+		DWORD offs = blockmaplump[4+i] =   // set offset to block's list
 			(i? blockmaplump[4+i-1] : 4+NBlocks) + (i? blockcount[i-1] : 0);
 
 		// add the lines in each block's list to the blockmaplump
@@ -1120,7 +1130,7 @@ void P_CreateBlockMap()
 //
 // P_LoadBlockMap
 //
-// [RH] Took a look at BOOM's version and made some changes.
+// [RH] Changed this some
 //
 void P_LoadBlockMap (int lump)
 {
@@ -1141,13 +1151,13 @@ void P_LoadBlockMap (int lump)
 
 		blockmaplump[0] = SHORT(wadblockmaplump[0]);
 		blockmaplump[1] = SHORT(wadblockmaplump[1]);
-		blockmaplump[2] = (long)(SHORT(wadblockmaplump[2])) & 0xffff;
-		blockmaplump[3] = (long)(SHORT(wadblockmaplump[3])) & 0xffff;
+		blockmaplump[2] = (DWORD)(SHORT(wadblockmaplump[2])) & 0xffff;
+		blockmaplump[3] = (DWORD)(SHORT(wadblockmaplump[3])) & 0xffff;
 
 		for (i=4 ; i<count ; i++)
 		{
 			short t = SHORT(wadblockmaplump[i]);          // killough 3/1/98
-			blockmaplump[i] = t == -1 ? -1l : (long) t & 0xffff;
+			blockmaplump[i] = t == -1 ? (DWORD)0xffffffff : (DWORD) t & 0xffff;
 		}
 
 		Z_Free (wadblockmaplump);
@@ -1203,7 +1213,7 @@ void P_GroupLines (void)
 	}
 		
 	// build line tables for each sector		
-	linebuffer = (line_t **)Z_Malloc (total*4, PU_LEVEL, 0);
+	linebuffer = (line_t **)Z_Malloc (total*sizeof(line_t *), PU_LEVEL, 0);
 	sector = sectors;
 	for (i=0 ; i<numsectors ; i++, sector++)
 	{
@@ -1374,9 +1384,8 @@ void P_SetupLevel (char *lumpname, int position)
 // are cleared in the normal freeing of zoned memory between maps, so all
 // we have to do here is clear the pointers to them.
 
-	if (bodyque)
-		for (i = 0; i < BODYQUESIZE; i++)
-			bodyque[i] = NULL;
+	for (i = 0; i < BODYQUESIZE; i++)
+		bodyque[i] = NULL;
 
 	po_NumPolyobjs = 0;
 

@@ -2,6 +2,7 @@
 #define __C_CVARS_H__
 
 #include "doomtype.h"
+#include "tarray.h"
 
 /*
 ==========================================================
@@ -95,6 +96,8 @@ private:
 	friend void C_SetCVarsToDefaults (void);
 
 	friend BOOL SetServerVar (char *name, char *value);
+
+	friend void FilterCompactCVars (TArray<cvar_t *> &cvars, DWORD filter);
 
  protected:
 #if CVAR_IMPLEMENTOR

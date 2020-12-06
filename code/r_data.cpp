@@ -23,8 +23,17 @@
 //
 //-----------------------------------------------------------------------------
 
+// On the Alpha, accessing the shorts directly if they aren't aligned on a
+// 4-byte boundary causes unaligned access warnings. Why it does this it at
+// all and only while initing the textures is beyond me.
 
+#ifdef ALPHA
+#define SAFESHORT(s)	((short)(((byte *)&(s))[0] + ((byte *)&(s))[1] * 256))
+#else
+#define SAFESHORT(s)	SHORT(s)
+#endif
 
+#include <stddef.h>
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_alloc.h"
@@ -484,12 +493,12 @@ void R_InitTextures (void)
 
 		texture = textures[i] = (texture_t *)
 			Z_Malloc (sizeof(texture_t)
-					  + sizeof(texpatch_t)*(SHORT(mtexture->patchcount)-1),
+					  + sizeof(texpatch_t)*(SAFESHORT(mtexture->patchcount)-1),
 					  PU_STATIC, 0);
-		
-		texture->width = SHORT(mtexture->width);
-		texture->height = SHORT(mtexture->height);
-		texture->patchcount = SHORT(mtexture->patchcount);
+
+		texture->width = SAFESHORT(mtexture->width);
+		texture->height = SAFESHORT(mtexture->height);
+		texture->patchcount = SAFESHORT(mtexture->patchcount);
 
 		uppercopy (texture->name, mtexture->name);
 		mpatch = &mtexture->patches[0];
@@ -651,7 +660,7 @@ void R_InitColormaps (void)
 	else
 		numfakecmaps = lastfakecmap - firstfakecmap;
 	realcolormaps = (byte *)Z_Malloc (256*(NUMCOLORMAPS+1)*numfakecmaps+255,PU_STATIC,0);
-	realcolormaps = (byte *)((int)(realcolormaps + 255) & ~255);
+	realcolormaps = (byte *)(((ptrdiff_t)realcolormaps + 255) & ~255);
 	fakecmaps = (FakeCmap *)Z_Malloc (sizeof(*fakecmaps) * numfakecmaps, PU_STATIC, 0);
 
 	fakecmaps[0].name[0] = 0;

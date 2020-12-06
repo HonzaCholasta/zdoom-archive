@@ -57,6 +57,10 @@ public:
 
 	void RunThink ();
 
+	bool AffectsWall (int wallnum) { return m_Type == sc_side && m_Affectee == wallnum; }
+	int GetWallNum () { return m_Type == sc_side ? m_Affectee : -1; }
+	void SetRate (fixed_t dx, fixed_t dy) { m_dx = dx; m_dy = dy; }
+
 protected:
 	EScrollType m_Type;		// Type of scroll effect
 	fixed_t m_dx, m_dy;		// (dx,dy) scroll speeds
@@ -95,6 +99,20 @@ public:
 
 	DPusher ();
 	DPusher (EPusher type, line_t *l, int magnitude, int angle, AActor *source, int affectee);
+	int CheckForSectorMatch (EPusher type, int tag)
+	{
+		if (m_Type == type && sectors[m_Affectee].tag == tag)
+			return m_Affectee;
+		else
+			return -1;
+	}
+	void ChangeValues (int magnitude, int angle)
+	{
+		angle_t ang = (angle<<24) >> ANGLETOFINESHIFT;
+		m_Xmag = (magnitude * finecosine[ang]) >> FRACBITS;
+		m_Ymag = (magnitude * finesine[ang]) >> FRACBITS;
+		m_Magnitude = magnitude;
+	}
 
 	void RunThink ();
 

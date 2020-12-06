@@ -63,28 +63,28 @@ typedef struct
 
 typedef struct
 {
-	long	id;				// should be DOOMCOM_ID
-	short	intnum;			// DOOM executes an int to execute commands
+	DWORD	id;				// should be DOOMCOM_ID
+	SWORD	intnum;			// DOOM executes an int to execute commands
 
 // communication between DOOM and the driver
-	short	command;		// CMD_SEND or CMD_GET
-	short	remotenode;		// dest for send, set by get (-1 = no packet).
-	short	datalength;		// bytes in doomdata to be sent
+	SWORD	command;		// CMD_SEND or CMD_GET
+	SWORD	remotenode;		// dest for send, set by get (-1 = no packet).
+	SWORD	datalength;		// bytes in doomdata to be sent
 
 // info common to all nodes
-	short	numnodes;		// console is always node 0.
-	short	ticdup;			// 1 = no duplication, 2-5 = dup for slow nets
-	short	extratics;		// 1 = send a backup tic in every packet
+	SWORD	numnodes;		// console is always node 0.
+	SWORD	ticdup;			// 1 = no duplication, 2-5 = dup for slow nets
+	SWORD	extratics;		// 1 = send a backup tic in every packet
 #ifdef DJGPP
-	short	pad[5];			// keep things aligned for DOS drivers
+	SWORD	pad[5];			// keep things aligned for DOS drivers
 #endif
 
 // info specific to this node
-	short	consoleplayer;
-	short	numplayers;
+	SWORD	consoleplayer;
+	SWORD	numplayers;
 #ifdef DJGPP
-	short	angleoffset;	// does not work, but needed to preserve
-	short	drone;			// alignment for DOS drivers
+	SWORD	angleoffset;	// does not work, but needed to preserve
+	SWORD	drone;			// alignment for DOS drivers
 #endif
 
 // packet data to be sent

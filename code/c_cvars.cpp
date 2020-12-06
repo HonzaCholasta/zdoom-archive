@@ -208,24 +208,53 @@ void cvar_t::EnableCallbacks ()
 	}
 }
 
+static int STACK_ARGS sortcvars (const void *a, const void *b)
+{
+	return strcmp (((*(cvar_t **)a))->name, ((*(cvar_t **)b))->name);
+}
+
+void FilterCompactCVars (TArray<cvar_t *> &cvars, DWORD filter)
+{
+	cvar_t *cvar = CVars;
+	while (cvar)
+	{
+		if (cvar->flags & filter)
+			cvars.Push (cvar);
+		cvar = cvar->m_Next;
+	}
+	if (cvars.Size () > 0)
+	{
+		qsort (&cvars[0], cvars.Size (), sizeof(cvar_t *), sortcvars);
+	}
+}
+
 void C_WriteCVars (byte **demo_p, DWORD filter, bool compact)
 {
 	cvar_t *cvar = CVars;
 	byte *ptr = *demo_p;
 
 	if (compact)
-		ptr += sprintf ((char *)ptr, "\\\\%lux", filter);
-
-	while (cvar)
 	{
-		if (cvar->flags & filter)
+		TArray<cvar_t *> cvars;
+		ptr += sprintf ((char *)ptr, "\\\\%lux", filter);
+		FilterCompactCVars (cvars, filter);
+		while (cvars.Pop (cvar))
 		{
-			if (compact)
-				ptr += sprintf ((char *)ptr, "\\%s", cvar->string);
-			else
-				ptr += sprintf ((char *)ptr, "\\%s\\%s", cvar->name, cvar->string);
+			ptr += sprintf ((char *)ptr, "\\%s", cvar->string);
 		}
-		cvar = cvar->m_Next;
+	}
+	else
+	{
+		cvar = CVars;
+		while (cvar)
+		{
+			if (cvar->flags & filter)
+			{
+				ptr += sprintf ((char *)ptr, "\\%s\\%s",
+								cvar->name, cvar->string);
+			}
+			cvar = cvar->m_Next;
+		}
 	}
 
 	*demo_p = ptr + 1;
@@ -241,7 +270,8 @@ void C_ReadCVars (byte **demo_p)
 
 	if (*ptr == '\\')
 	{	// compact mode
-		cvar_t *cvar = CVars;
+		TArray<cvar_t *> cvars;
+		cvar_t *cvar;
 		DWORD filter;
 
 		ptr++;
@@ -250,24 +280,22 @@ void C_ReadCVars (byte **demo_p)
 		filter = strtoul (ptr, NULL, 16);
 		*breakpt = '\\';
 		ptr = breakpt + 1;
-		
-		while (cvar)
+
+		FilterCompactCVars (cvars, filter);
+
+		while (cvars.Pop (cvar))
 		{
-			if (cvar->flags & filter)
+			breakpt = strchr (ptr, '\\');
+			if (breakpt)
+				*breakpt = 0;
+			cvar->Set (ptr);
+			if (breakpt)
 			{
-				breakpt = strchr (ptr, '\\');
-				if (breakpt)
-					*breakpt = 0;
-				cvar->Set (ptr);
-				if (breakpt)
-				{
-					*breakpt = '\\';
-					ptr = breakpt + 1;
-				}
-				else
-					break;
+				*breakpt = '\\';
+				ptr = breakpt + 1;
 			}
-			cvar = cvar->m_Next;
+			else
+				break;
 		}
 	}
 	else

@@ -171,8 +171,9 @@ struct side_s
 {
 	fixed_t 	textureoffset;	// add this to the calculated texture column
 	fixed_t 	rowoffset;		// add this to the calculated texture top
-	short		toptexture, bottomtexture, midtexture;	// texture indices
 	sector_t*	sector;			// Sector the SideDef is facing.
+	short		toptexture, bottomtexture, midtexture;	// texture indices
+	short		linenum;
 	short		special;		// [RH] Bah. Had to add these for BOOM stuff
 	short		tag;
 };

@@ -234,7 +234,7 @@ angle_t R_PointToAngle2 (fixed_t x1, fixed_t y1, fixed_t x, fixed_t y)
       y >= 0 ? 
         (x > y) ? tantoangle[SlopeDiv(y,x)] :						// octant 0 
                 ANG90-1-tantoangle[SlopeDiv(x,y)] :					// octant 1
-        x > (y = -y) ? (angle_t)-(long)tantoangle[SlopeDiv(y,x)] :	// octant 8
+        x > (y = -y) ? (angle_t)-(SDWORD)tantoangle[SlopeDiv(y,x)] :	// octant 8
                        ANG270+tantoangle[SlopeDiv(x,y)] :			// octant 7
       y >= 0 ? (x = -x) > y ? ANG180-1-tantoangle[SlopeDiv(y,x)] :	// octant 3
                             ANG90 + tantoangle[SlopeDiv(x,y)] :		// octant 2

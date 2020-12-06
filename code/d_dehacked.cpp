@@ -844,7 +844,7 @@ static int PatchThing (int thingy)
 	BOOL hadHeight = false;
 
 	thingNum--;
-	if (thingNum >= 0 && thingNum < NUMMOBJTYPES) {
+	if (thingNum < NUMMOBJTYPES) {
 		info = &mobjinfo[thingNum];
 		DPrintf ("Thing %d\n", thingNum);
 	} else {

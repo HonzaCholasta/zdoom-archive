@@ -1053,10 +1053,69 @@ FUNC(LS_Sector_ChangeSound)
 	return rtn;
 }
 
-FUNC(LS_Sector_SetWind)
-// Sector_SetWind ()
+struct FThinkerCollection
 {
-	return false;
+	int RefNum;
+	DThinker *Obj;
+};
+
+static TArray<FThinkerCollection> Collection;
+
+void AdjustPusher (int tag, int magnitude, int angle, DPusher::EPusher type)
+{
+	// Find pushers already attached to the sector, and change their parameters.
+	{
+		TThinkerIterator<DPusher> iterator;
+		FThinkerCollection collect;
+
+		while ( (collect.Obj = iterator.Next ()) )
+		{
+			if ((collect.RefNum = ((DPusher *)collect.Obj)->CheckForSectorMatch (type, tag)) >= 0)
+			{
+				((DPusher *)collect.Obj)->ChangeValues (magnitude, angle);
+				Collection.Push (collect);
+			}
+		}
+	}
+
+	int numcollected = Collection.Size ();
+	int secnum = -1;
+
+	// Now create pushers for any sectors that don't already have them.
+	while ((secnum = P_FindSectorFromTag (tag, secnum)) >= 0)
+	{
+		int i;
+		for (i = 0; i < numcollected; i++)
+		{
+			if (Collection[i].RefNum == sectors[secnum].tag)
+				break;
+		}
+		if (i == numcollected)
+		{
+			new DPusher (type, NULL, magnitude, angle, NULL, secnum);
+		}
+	}
+	Collection.Clear ();
+}
+
+FUNC(LS_Sector_SetWind)
+// Sector_SetWind (tag, amount, angle)
+{
+	if (ln || arg3)
+		return false;
+
+	AdjustPusher (arg0, arg1, arg2, DPusher::p_wind);
+	return true;
+}
+
+FUNC(LS_Sector_SetCurrent)
+// Sector_SetCurrent (tag, amount, angle)
+{
+	if (ln || arg3)
+		return false;
+
+	AdjustPusher (arg0, arg1, arg2, DPusher::p_current);
+	return true;
 }
 
 FUNC(LS_Sector_SetFriction)
@@ -1065,15 +1124,84 @@ FUNC(LS_Sector_SetFriction)
 	return false;
 }
 
-FUNC(LS_Sector_SetCurrent)
-// Sector_SetCurrent ()
-{
-	return false;
-}
-
 FUNC(LS_Scroll_Texture_Both)
+// Scroll_Texture_Both (id, left, right, up, down)
 {
-	return false;
+	if (arg0 == 0)
+		return false;
+
+	fixed_t dx = (arg1 - arg2) * (FRACUNIT/64);
+	fixed_t dy = (arg4 - arg3) * (FRACUNIT/64);
+	int sidechoice;
+
+	if (arg0 < 0)
+	{
+		sidechoice = 1;
+		arg0 = -arg0;
+	}
+	else
+	{
+		sidechoice = 0;
+	}
+
+	if (dx == 0 && dy == 0)
+	{
+		// Special case: Remove the scroller, because the deltas are both 0.
+		TThinkerIterator<DScroller> iterator;
+		DScroller *scroller;
+
+		while ( (scroller = iterator.Next ()) )
+		{
+			int wallnum = scroller->GetWallNum ();
+
+			if (wallnum >= 0 && lines[sides[wallnum].linenum].id == arg0 &&
+				lines[sides[wallnum].linenum].sidenum[sidechoice] == wallnum)
+			{
+				scroller->Destroy ();
+			}
+		}
+	}
+	else
+	{
+		// Find scrollers already attached to the matching walls, and change
+		// their rates.
+		{
+			TThinkerIterator<DScroller> iterator;
+			FThinkerCollection collect;
+
+			while ( (collect.Obj = iterator.Next ()) )
+			{
+				if ((collect.RefNum = ((DScroller *)collect.Obj)->GetWallNum ()) != -1 &&
+					lines[sides[collect.RefNum].linenum].id == arg0 &&
+					lines[sides[collect.RefNum].linenum].sidenum[sidechoice] == collect.RefNum)
+				{
+					((DScroller *)collect.Obj)->SetRate (dx, dy);
+					Collection.Push (collect);
+				}
+			}
+		}
+
+		int numcollected = Collection.Size ();
+		int linenum = -1;
+
+		// Now create scrollers for any walls that don't already have them.
+		while ((linenum = P_FindLineFromID (arg0, linenum)) >= 0)
+		{
+			int i;
+			for (i = 0; i < numcollected; i++)
+			{
+				if (Collection[i].RefNum == lines[linenum].sidenum[sidechoice])
+					break;
+			}
+			if (i == numcollected)
+			{
+				new DScroller (DScroller::sc_side, dx, dy, -1, lines[linenum].sidenum[sidechoice], 0);
+			}
+		}
+		Collection.Clear ();
+	}
+
+	return true;
 }
 
 FUNC(LS_Scroll_Floor)
@@ -1361,6 +1489,21 @@ FUNC(LS_SetPlayerProperty)
 	return !!mask;
 }
 
+FUNC(LS_TranslucentLine)
+// TranslucentLine (id, amount)
+{
+	if (ln)
+		return false;
+
+	int linenum = -1;
+	while ((linenum = P_FindLineFromID (arg0, linenum)) >= 0)
+	{
+		lines[linenum].lucency = arg1 & 255;
+	}
+
+	return true;
+}
+
 lnSpecFunc LineSpecials[256] =
 {
 	LS_NOP,
@@ -1571,7 +1714,7 @@ lnSpecFunc LineSpecials[256] =
 	LS_Generic_Crusher,
 	LS_Plat_DownWaitUpStayLip,
 	LS_Plat_PerpetualRaiseLip,
-	LS_NOP,		// TranslucentLine
+	LS_TranslucentLine,
 	LS_NOP,		// Transfer_Heights
 	LS_NOP,		// Transfer_FloorLight
 	LS_NOP,		// Transfer_CeilingLight

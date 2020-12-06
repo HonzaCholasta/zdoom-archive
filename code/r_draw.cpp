@@ -23,6 +23,8 @@
 //
 //-----------------------------------------------------------------------------
 
+#include <stddef.h>
+
 #include "m_alloc.h"
 #include "doomdef.h"
 #include "i_system.h"
@@ -987,7 +989,7 @@ void R_InitTranslationTables (void)
 	int i;
 		
 	translationtables = new byte[256*(MAXPLAYERS+3+11)+255];
-	translationtables = (byte *)(( (int)translationtables + 255 )& ~255);
+	translationtables = (byte *)(((ptrdiff_t)translationtables + 255) & ~255);
 	
 	// [RH] Each player now gets their own translation table
 	//		(soon to be palettes). These are set up during

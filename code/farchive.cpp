@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <string.h>
 
 #include "doomtype.h"
@@ -255,7 +256,7 @@ void FLZOFile::Implode ()
 	m_Buffer = (BYTE *)Malloc (m_BufferSize + 8);
 	m_Pos = 0;
 
-	unsigned long *lens = (DWORD *)(m_Buffer);
+	DWORD *lens = (DWORD *)(m_Buffer);
 	lens[0] = BELONG(outlen);
 	lens[1] = BELONG(len);
 
@@ -909,7 +910,7 @@ DWORD FArchive::MapObject (const DObject *obj)
 
 DWORD FArchive::HashObject (const DObject *obj) const
 {
-	return (DWORD)obj % EObjectHashSize;
+	return (DWORD)((ptrdiff_t)obj % EObjectHashSize);
 }
 
 DWORD FArchive::FindObjectIndex (const DObject *obj) const

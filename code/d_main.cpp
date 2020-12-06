@@ -1082,7 +1082,7 @@ void D_DoomMain (void)
 
 	atterm (DObject::StaticShutdown);
 
-	rngseed = (unsigned long)time (NULL);
+	rngseed = (DWORD)time (NULL);
 
 	gamestate = GS_STARTUP;
 	M_FindResponseFile ();

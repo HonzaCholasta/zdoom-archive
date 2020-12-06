@@ -124,7 +124,7 @@ void P_SerializeWorld (FArchive &arc)
 				<< li->special
 				<< li->lucency
 				<< li->id
-				<< li->args[0] << li->args[1] << li->args[2] << li->args[3] << li->args[4] << li->args[5];
+				<< li->args[0] << li->args[1] << li->args[2] << li->args[3] << li->args[4] << (WORD)0;
 
 			for (j = 0; j < 2; j++)
 			{
@@ -195,11 +195,12 @@ void P_SerializeWorld (FArchive &arc)
 		// do lines
 		for (i = 0, li = lines; i < numlines; i++, li++)
 		{
+		    WORD dummy;
 			arc >> li->flags
 				>> li->special
 				>> li->lucency
 				>> li->id
-				>> li->args[0] >> li->args[1] >> li->args[2] >> li->args[3] >> li->args[4] >> li->args[5];
+				>> li->args[0] >> li->args[1] >> li->args[2] >> li->args[3] >> li->args[4] >> dummy;
 
 			for (j = 0; j < 2; j++)
 			{

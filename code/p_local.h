@@ -336,7 +336,7 @@ protected:
 	DPolyAction ();
 	int m_PolyObj;
 	int m_Speed;
-	unsigned int m_Dist;
+	int m_Dist;
 
 	friend void ThrustMobj (AActor *actor, seg_t *seg, polyobj_t *po);
 };

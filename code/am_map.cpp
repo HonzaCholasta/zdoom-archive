@@ -1097,6 +1097,7 @@ void AM_drawFline (fline_t *fl, int color)
 		default:
 			DrawTransWuLine (fl->a.x, fl->a.y, fl->b.x, fl->b.y, color);
 			break;
+#if 0
   		{
 			register int x;
 			register int y;
@@ -1183,6 +1184,7 @@ void AM_drawFline (fline_t *fl, int color)
 				}
 			}
 		}
+#endif
 	}
 }
 
@@ -1315,7 +1317,7 @@ void DrawWuLine (int x0, int y0, int x1, int y1, byte *baseColor)
 		// Y-major line; calculate 16-bit fixed-point fractional part of a
 		// pixel that X advances each time Y advances 1 pixel, truncating the
 		// result so that we won't overrun the endpoint along the X axis
-		fixed_t errorAdj = ((unsigned long) deltaX << 16) / (unsigned long) deltaY & 0xffff;
+		fixed_t errorAdj = ((DWORD) deltaX << 16) / (DWORD) deltaY & 0xffff;
 
 		// Draw all pixels other than the first and last
 		if (xDir < 0)
@@ -1352,7 +1354,7 @@ void DrawWuLine (int x0, int y0, int x1, int y1, byte *baseColor)
 		// It's an X-major line; calculate 16-bit fixed-point fractional part of a
 		// pixel that Y advances each time X advances 1 pixel, truncating the
 		// result to avoid overrunning the endpoint along the X axis
-		fixed_t errorAdj = ((unsigned long) deltaY << 16) / (unsigned long) deltaX;
+		fixed_t errorAdj = ((DWORD) deltaY << 16) / (DWORD) deltaX;
 
 		// Draw all pixels other than the first and last
 		while (--deltaX)
@@ -1508,7 +1510,7 @@ void DrawTransWuLine (int x0, int y0, int x1, int y1, byte baseColor)
 	}
 	else
 	{ // x-major line
-		fixed_t errorAdj = (((unsigned long) deltaY << 16) / (unsigned long) deltaX) & 0xffff;
+		fixed_t errorAdj = (((DWORD) deltaY << 16) / (DWORD) deltaX) & 0xffff;
 
 		while (--deltaX)
 		{

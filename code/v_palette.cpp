@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <string.h>
 #include <math.h>
 
@@ -292,7 +293,7 @@ void RefreshPalette (palette_t *pal)
 			if (pal->maps.colormaps && pal->maps.colormaps - pal->colormapsbase >= 256)
 				free (pal->maps.colormaps);
 			pal->colormapsbase = (byte *)Realloc (pal->colormapsbase, (NUMCOLORMAPS + 1) * 256 + 255);
-			pal->maps.colormaps = (byte *)(((int)(pal->colormapsbase) + 255) & ~0xff);
+			pal->maps.colormaps = (byte *)(((ptrdiff_t)(pal->colormapsbase) + 255) & ~0xff);
 
 			// build normal light mappings
 			for (l = 0; l < NUMCOLORMAPS; l++) {
@@ -601,7 +602,7 @@ dyncolormap_t *GetSpecialLights (int lr, int lg, int lb, int fr, int fg, int fb)
 	// Not found. Create it.
 	colormap = (dyncolormap_t *)Z_Malloc (sizeof(*colormap), PU_LEVEL, 0);
 	colormap->maps = (byte *)Z_Malloc (NUMCOLORMAPS*256+3+255, PU_LEVEL, 0);
-	colormap->maps = (byte *)(((int)colormap->maps + 255) & ~0xff);
+	colormap->maps = (byte *)(((ptrdiff_t)colormap->maps + 255) & ~0xff);
 	colormap->color = color;
 	colormap->fade = fade;
 	colormap->next = NormalLight.next;

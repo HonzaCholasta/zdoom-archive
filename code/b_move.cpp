@@ -55,7 +55,7 @@ void DCajunMaster::Roam (AActor *actor, ticcmd_t *cmd)
 		actor->player->angle = R_PointToAngle2(actor->x, actor->y, actor->player->dest->x, actor->player->dest->y);
 	else if (actor->movedir < 8) // turn towards movement direction if not there yet
 	{
-		actor->player->angle &= (7<<29);
+		actor->player->angle &= (angle_t)(7<<29);
 		delta = actor->player->angle - (actor->movedir << 29);
 
 		if (delta > 0)

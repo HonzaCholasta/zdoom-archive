@@ -128,7 +128,7 @@ static void BlastMaskedColumn (void (*blastfunc)(column_t *column), int texnum)
 //				if (t + (__int64) textureheight[texnum] * spryscale < 0 ||
 //					 t > (__int64) screen.height << FRACBITS*2)
 //					continue;		// skip if the texture is out of screen's range
-			sprtopscreen = (long)(t >> FRACBITS);
+			sprtopscreen = (fixed_t)(t >> FRACBITS);
 		}
 		dc_iscale = 0xffffffffu / (unsigned)spryscale;
 		

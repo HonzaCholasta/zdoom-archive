@@ -123,58 +123,55 @@ BOOL EV_SilentTeleport (int tid, line_t *line, int side, AActor *thing)
 		if (NULL == (m = AActor::FindGoal (NULL, tid, MT_TELEPORTMAN2)))
 			return false;
 
+	// Height of thing above ground, in case of mid-air teleports:
+	fixed_t z = thing->z - thing->floorz;
+
+	// Get the angle between the exit thing and source linedef.
+	// Rotate 90 degrees, so that walking perpendicularly across
+	// teleporter linedef causes thing to exit in the direction
+	// indicated by the exit thing.
+	angle_t angle =
+		R_PointToAngle2(0, 0, line->dx, line->dy) - m->angle + ANG90;
+
+	// Sine, cosine of angle adjustment
+	fixed_t s = finesine[angle>>ANGLETOFINESHIFT];
+	fixed_t c = finecosine[angle>>ANGLETOFINESHIFT];
+
+	// Momentum of thing crossing teleporter linedef
+	fixed_t momx = thing->momx;
+	fixed_t momy = thing->momy;
+
+	// Whether this is a player, and if so, a pointer to its player_t
+	player_t *player = thing->player;
+
+	// Attempt to teleport, aborting if blocked
+	if (!P_TeleportMove (thing, m->x, m->y, z + m->floorz, false))
+		return 0;
+
+	// Rotate thing according to difference in angles
+	thing->angle += angle;
+
+	// Rotate thing's momentum to come out of exit just like it entered
+	thing->momx = FixedMul(momx, c) - FixedMul(momy, s);
+	thing->momy = FixedMul(momy, c) + FixedMul(momx, s);
+
+	// Adjust player's view, in case there has been a height change
+	// Voodoo dolls are excluded by making sure player->mo == thing.
+	if (player && player->mo == thing)
 	{
-		// Height of thing above ground, in case of mid-air teleports:
-		fixed_t z = thing->z - thing->floorz;
+		// Save the current deltaviewheight, used in stepping
+		fixed_t deltaviewheight = player->deltaviewheight;
 
-		// Get the angle between the exit thing and source linedef.
-		// Rotate 90 degrees, so that walking perpendicularly across
-		// teleporter linedef causes thing to exit in the direction
-		// indicated by the exit thing.
-		angle_t angle =
-			R_PointToAngle2(0, 0, line->dx, line->dy) - m->angle + ANG90;
+		// Clear deltaviewheight, since we don't want any changes
+		player->deltaviewheight = 0;
 
-		// Sine, cosine of angle adjustment
-		fixed_t s = finesine[angle>>ANGLETOFINESHIFT];
-		fixed_t c = finecosine[angle>>ANGLETOFINESHIFT];
+		// Set player's view according to the newly set parameters
+		P_CalcHeight(player);
 
-		// Momentum of thing crossing teleporter linedef
-		fixed_t momx = thing->momx;
-		fixed_t momy = thing->momy;
-
-		// Whether this is a player, and if so, a pointer to its player_t
-		player_t *player = thing->player;
-
-		// Attempt to teleport, aborting if blocked
-		if (!P_TeleportMove (thing, m->x, m->y, z + m->floorz, false))
-			return 0;
-
-		// Rotate thing according to difference in angles
-		thing->angle += angle;
-
-		// Rotate thing's momentum to come out of exit just like it entered
-		thing->momx = FixedMul(momx, c) - FixedMul(momy, s);
-		thing->momy = FixedMul(momy, c) + FixedMul(momx, s);
-
-		// Adjust player's view, in case there has been a height change
-		// Voodoo dolls are excluded by making sure player->mo == thing.
-		if (player && player->mo == thing)
-		{
-			// Save the current deltaviewheight, used in stepping
-			fixed_t deltaviewheight = player->deltaviewheight;
-
-			// Clear deltaviewheight, since we don't want any changes
-			player->deltaviewheight = 0;
-
-			// Set player's view according to the newly set parameters
-			P_CalcHeight(player);
-
-			// Reset the delta to have the same dynamics as before
-			player->deltaviewheight = deltaviewheight;
-		}
-		return true;
+		// Reset the delta to have the same dynamics as before
+		player->deltaviewheight = deltaviewheight;
 	}
-	return false;
+	return true;
 }
 
 //
