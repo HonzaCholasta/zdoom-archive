@@ -80,7 +80,7 @@ IMPLEMENT_ACTOR (AZombieMan, Doom, 3004, 4)
 	PROP_SpeedFixed (8)
 	PROP_PainChance (200)
 	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
-	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL|MF2_FLOORCLIP)
 
 	PROP_SpawnState (S_POSS_STND)
 	PROP_SeeState (S_POSS_RUN)
@@ -221,7 +221,7 @@ IMPLEMENT_ACTOR (AShotgunGuy, Doom, 9, 1)
 	PROP_SpeedFixed (8)
 	PROP_PainChance (170)
 	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
-	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL|MF2_FLOORCLIP)
 
 	PROP_SpawnState (S_SPOS_STND)
 	PROP_SeeState (S_SPOS_RUN)
@@ -379,7 +379,7 @@ IMPLEMENT_ACTOR (AChaingunGuy, Doom, 65, 2)
 	PROP_SpeedFixed (8)
 	PROP_PainChance (170)
 	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
-	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL|MF2_FLOORCLIP)
 
 	PROP_SpawnState (S_CPOS_STND)
 	PROP_SeeState (S_CPOS_RUN)
@@ -393,6 +393,7 @@ IMPLEMENT_ACTOR (AChaingunGuy, Doom, 65, 2)
 	PROP_PainSound ("chainguy/pain")
 	PROP_DeathSound ("chainguy/death")
 	PROP_ActiveSound ("chainguy/active")
+	PROP_AttackSound ("chainguy/attack")
 END_DEFAULTS
 
 void AChaingunGuy::NoBlockingSet ()
@@ -485,7 +486,7 @@ IMPLEMENT_ACTOR (AWolfensteinSS, Doom, 84, 116)
 	PROP_SpeedFixed (8)
 	PROP_PainChance (170)
 	PROP_Flags (MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL)
-	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL)
+	PROP_Flags2 (MF2_MCROSS|MF2_PASSMOBJ|MF2_PUSHWALL|MF2_FLOORCLIP)
 
 	PROP_SpawnState (S_SSWV_STND)
 	PROP_SeeState (S_SSWV_RUN)
@@ -499,6 +500,7 @@ IMPLEMENT_ACTOR (AWolfensteinSS, Doom, 84, 116)
 	PROP_PainSound ("wolfss/pain")
 	PROP_DeathSound ("wolfss/death")
 	PROP_ActiveSound ("wolfss/active")
+	PROP_AttackSound ("wolfss/attack")
 END_DEFAULTS
 
 void AWolfensteinSS::NoBlockingSet ()
@@ -522,7 +524,7 @@ void A_CPosAttack (AActor *self)
 		self->visdir = 1;
 	}
 
-	S_Sound (self, CHAN_WEAPON, "chainguy/attack", 1, ATTN_NORM);
+	S_SoundID (self, CHAN_WEAPON, self->AttackSound, 1, ATTN_NORM);
 	A_FaceTarget (self);
 	bangle = self->angle;
 	slope = P_AimLineAttack (self, bangle, MISSILERANGE);

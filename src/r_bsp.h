@@ -33,8 +33,11 @@ struct drawseg_s
 	fixed_t 	neardepth, fardepth;
 	fixed_t		light, lightstep;
 	fixed_t		iscale, iscalestep;
-	fixed_t		sx1, sx2, sz1, sz2;
-	int 		silhouette;		// 0=none, 1=bottom, 2=top, 3=both
+	short		sx1, sx2;
+	fixed_t		sz1, sz2;
+	fixed_t		cx, cy, cdx, cdy;
+	BYTE 		silhouette;		// 0=none, 1=bottom, 2=top, 3=both
+	BYTE		bFogBoundary;
 // Pointers to lists for sprite clipping,
 // all three adjusted so [x1] is first value.
 	ptrdiff_t	sprtopclip; 		// type short
@@ -51,11 +54,12 @@ extern line_t*		linedef;
 extern sector_t*	frontsector;
 extern sector_t*	backsector;
 
-extern BOOL			skymap;
-
 extern drawseg_t	*drawsegs;
 extern drawseg_t	*firstdrawseg;
 extern drawseg_t*	ds_p;
+
+extern TArray<int>	InterestingDrawsegs;	// drawsegs that have something drawn on them
+extern int			FirstInterestingDrawseg;
 
 extern int			WindowLeft, WindowRight;
 extern WORD			MirrorFlags;

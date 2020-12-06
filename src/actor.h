@@ -71,8 +71,8 @@
 // A walking creature will have its z equal to the floor
 // it is standing on.
 //
-// The sound code uses the x,y, and subsector fields
-// to do stereo positioning of any sound effited by the AActor.
+// The sound code uses the x,y, and sometimes z fields
+// to do stereo positioning of any sound emitted by the actor.
 //
 // The play simulation uses the blocklinks, x,y,z, radius, height
 // to determine when AActors are touching each other,
@@ -150,9 +150,6 @@ enum
 
 	MF_SKULLFLY		= 0x01000000,	// skull in flight
 	MF_NOTDMATCH	= 0x02000000,	// don't spawn in death match (key cards)
-
-	MF_TRANSLATION	= 0x0c000000,	// if 0x4 0x8 or 0xc, use a translation
-	MF_TRANSSHIFT	= 26,			// table for player colormaps
 
 	MF_UNMORPHED	= 0x10000000,	// [RH] Actor is the unmorphed version of something else
 	MF_FALLING		= 0x20000000,
@@ -334,7 +331,7 @@ public:
 	virtual void Activate (AActor *activator);
 	virtual void Deactivate (AActor *activator);
 
-	virtual void RunThink ();
+	virtual void Tick ();
 
 	// Smallest yaw interval for a mapthing to be spawned with
 	virtual angle_t AngleIncrements ();
@@ -396,19 +393,18 @@ public:
 	angle_t			angle;
 	WORD			sprite;				// used to find patch_t and flip value
 	BYTE			frame;				// sprite frame to draw
-	BYTE			xscale, yscale;		// Scaling values, 63 is normal size
+	BYTE			xscale, yscale;		// Scaling values; 63 is normal size
 	BYTE			RenderStyle;		// Style to draw this actor with
 	WORD			renderflags;		// Different rendering flags
 	WORD			picnum;				// Draw this instead of sprite if != 0xffff
 	DWORD			effects;			// [RH] see p_effect.h
-	BYTE			*translation;		// Translation table (or NULL)
 	fixed_t			alpha;
 	DWORD			alphacolor;			// Color to draw when STYLE_Shaded
 
 // interaction info
 	fixed_t			pitch, roll;
 	AActor			*bnext, **bprev;	// links in blocks (if needed)
-	struct subsector_s		*subsector;
+	struct sector_t	*Sector;
 	fixed_t			floorz, ceilingz;	// closest together of contacted secs
 	fixed_t			dropoffz;		// killough 11/98: the lowest floor over all contacted Sectors.
 
@@ -461,6 +457,7 @@ public:
 	int id;							// Player ID (for items, # in list.)
 
 	BYTE FloatBobPhase;
+	WORD Translation;
 
 	// [RH] Stuff that used to be part of an Actor Info
 	WORD SeeSound;
@@ -510,6 +507,7 @@ public:
 	void SetOrigin (fixed_t x, fixed_t y, fixed_t z);
 	bool SetState (FState *newstate);
 	bool SetStateNF (FState *newstate);
+	bool UpdateWaterLevel (fixed_t oldz);
 
 	static FState States[];
 };

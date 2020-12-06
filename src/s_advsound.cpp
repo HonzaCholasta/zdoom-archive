@@ -1,10 +1,36 @@
-//**************************************************************************
-//**
-//** s_advsound.cpp
-//**
-//** [RH] Sound routines for managing SNDINFO lumps and ambient sounds.
-//**
-//**************************************************************************
+/*
+** s_advsound.cpp
+** Routines for managing SNDINFO lumps and ambient sounds
+**
+**---------------------------------------------------------------------------
+** Copyright 1998-2001 Randy Heit
+** All rights reserved.
+**
+** Redistribution and use in source and binary forms, with or without
+** modification, are permitted provided that the following conditions
+** are met:
+**
+** 1. Redistributions of source code must retain the above copyright
+**    notice, this list of conditions and the following disclaimer.
+** 2. Redistributions in binary form must reproduce the above copyright
+**    notice, this list of conditions and the following disclaimer in the
+**    documentation and/or other materials provided with the distribution.
+** 3. The name of the author may not be used to endorse or promote products
+**    derived from this software without specific prior written permission.
+**
+** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+**---------------------------------------------------------------------------
+**
+*/
 
 // HEADER FILES ------------------------------------------------------------
 
@@ -65,6 +91,7 @@ enum SICommands
 	SI_PlayerReserve,
 	SI_PlayerSound,
 	SI_PlayerSoundDup,
+	SI_PlayerCompat,
 	SI_PlayerAlias,
 	SI_Alias,
 	SI_Map,
@@ -88,7 +115,7 @@ struct FBloodSFX
 // EXTERNAL FUNCTION PROTOTYPES --------------------------------------------
 
 void S_StartNamedSound (AActor *ent, fixed_t *pt, int channel, 
-	const char *name, float volume, float attenuation, BOOL looping, int tag=0);
+	const char *name, float volume, float attenuation, BOOL looping);
 
 // PUBLIC FUNCTION PROTOTYPES ----------------------------------------------
 
@@ -124,6 +151,7 @@ static const char *SICommandStrings[] =
 	"$playerreserve",
 	"$playersound",
 	"$playersounddup",
+	"$playercompat",
 	"$playeralias",
 	"$alias",
 	"$map",
@@ -326,6 +354,11 @@ static int S_AddSound (const char *logicalname, int lumpnum)
 		if (sfx->bPlayerReserve)
 		{
 			SC_ScriptError ("Sounds that are reserved for players cannot be reassigned", NULL);
+		}
+		// Redefining a player compatibility sound will redefine the target instead.
+		if (sfx->bPlayerCompat)
+		{
+			sfx = &S_sfx[sfx->link];
 		}
 		if (sfx->bRandomHeader)
 		{
@@ -606,7 +639,7 @@ static void S_AddSNDINFO (int lump)
 				else
 				{
 					SC_MustGetString ();
-					int id = S_AddSound (sc_String, NULL);
+					int id = S_AddSound (sc_String, -1);
 					S_sfx[id].link = NumPlayerReserves++;
 					S_sfx[id].bPlayerReserve = true;
 				}
@@ -638,6 +671,20 @@ static void S_AddSNDINFO (int lump)
 				}
 				break;
 
+			case SI_PlayerCompat: {
+				// $playercompat <logical name> <player class> <gender> <logical name>
+				char pclass[MAX_SNDNAME+1];
+				int gender, refid;
+				int sfxfrom, aliasto;
+
+				S_ParsePlayerSoundCommon (pclass, gender, refid);
+				sfxfrom = S_AddSound (sc_String, -1);
+				aliasto = S_LookupPlayerSound (pclass, gender, refid);
+				S_sfx[sfxfrom].link = aliasto;
+				S_sfx[sfxfrom].bPlayerCompat = true;
+				}
+				break;
+
 			case SI_PlayerAlias: {
 				// $playeralias <player class> <gender> <logical name> <logical name of existing sound>
 				char pclass[MAX_SNDNAME+1];
@@ -653,8 +700,12 @@ static void S_AddSNDINFO (int lump)
 				int sfxfrom;
 
 				SC_MustGetString ();
-				sfxfrom = S_AddSound (sc_String, NULL);
+				sfxfrom = S_AddSound (sc_String, -1);
 				SC_MustGetString ();
+				if (S_sfx[sfxfrom].bPlayerCompat)
+				{
+					sfxfrom = S_sfx[sfxfrom].link;
+				}
 				S_sfx[sfxfrom].link = S_FindSoundTentative (sc_String);
 				}
 				break;
@@ -665,7 +716,7 @@ static void S_AddSNDINFO (int lump)
 
 				list.Clear ();
 				SC_MustGetString ();
-				random.SfxHead = S_AddSound (sc_String, NULL);
+				random.SfxHead = S_AddSound (sc_String, -1);
 				SC_MustGetStringName ("{");
 				while (SC_GetString () && !SC_Compare ("}"))
 				{
@@ -1135,9 +1186,9 @@ void AAmbientSound::Serialize (FArchive &arc)
 	arc << bActive << NextCheck;
 }
 
-void AAmbientSound::RunThink ()
+void AAmbientSound::Tick ()
 {
-	Super::RunThink ();
+	Super::Tick ();
 
 	if (!bActive || gametic < NextCheck)
 		return;
@@ -1193,9 +1244,9 @@ void AAmbientSound::SetTicker (struct AmbientSound *ambient)
 	}
 }
 
-void AAmbientSound::PostBeginPlay ()
+void AAmbientSound::BeginPlay ()
 {
-	Super::PostBeginPlay ();
+	Super::BeginPlay ();
 	Activate (NULL);
 }
 
@@ -1238,4 +1289,8 @@ void AAmbientSound::Deactivate (AActor *activator)
 {
 	Super::Deactivate (activator);
 	bActive = false;
+	if ((Ambients[args[0]]->type & CONTINUOUS) == CONTINUOUS)
+	{
+		S_StopSound (this, CHAN_BODY);
+	}
 }

@@ -20,7 +20,7 @@ GZIP = gzip
 basename = zdoom-1.23
 
 # the OS type we are building for; should match a directory in src_dir
-SYSTEM = linux
+SYSTEM = $(shell uname -s)
 
 # distribution names
 BINTAR = $(basename)-i586.tar.gz
@@ -56,7 +56,7 @@ include $(IMPDIR)/files.mak
 CPPFLAGS_debug = -g -Wp,-DRANGECHECK
 LDFLAGS_debug =
 ASFLAGS_debug = -g
-DEFS_debug = -Wp,-DDEBUG,-DUSEASM	# -DNOASM
+DEFS_debug = -Wp,-DDEBUG,-DNOASM
 
 # options specific to the release build
 CPPFLAGS_release = -O2 -march=pentium -fomit-frame-pointer
@@ -162,9 +162,17 @@ srctar: $(ALLSOURCES) Makefile $(SRCDOC) docs/* other/*
 			$(basename)/Makefile \
 			$(basename)/docs/* \
 			$(basename)/other/* \
+			$(basename)/util/*.c \
+			$(basename)/util/*dos \
 			$(basename)/$(src_dir)/* \
-			$(basename)/$(src_dir)/linux/* \
+			$(basename)/$(src_dir)/Linux/* \
 			$(basename)/$(src_dir)/win32/* \
+			$(basename)/$(src_dir)/fmodsound/* \
+			$(basename)/$(src_dir)/g_heretic/* \
+			$(basename)/$(src_dir)/g_raven/* \
+			$(basename)/$(src_dir)/g_doom/* \
+			$(basename)/$(src_dir)/g_hexen/* \
+			$(basename)/$(src_dir)/g_shared/* \
 			$(SRCDOC:%=$(basename)/%) \
 		| $(GZIP) -9c > $(basename)/$(SRCTAR)'
 

@@ -54,6 +54,7 @@
 
 #include "v_palette.h"
 #include "v_video.h"
+#include "gi.h"
 
 //
 // Graphics.
@@ -116,12 +117,16 @@ texture_t** 	textures;
 
 
 int*			texturewidthmask;
-static byte*	textureheightmask;		// [RH] Tutti-Frutti fix
+byte*			textureheightlog2;		// [RH] Tutti-Frutti fix
 fixed_t*		textureheight;			// needed for texture pegging
 static int*		texturecompositesize;
 static short** 	texturecolumnlump;
 static unsigned **texturecolumnofs;	// killough 4/9/98: make 32-bit
 static byte**	texturecomposite;
+byte*			texturenodecals;
+byte*			texturescalex;			// [RH] Texture scales
+byte*			texturescaley;
+byte*			texturetype2;			// [RH] Texture uses 2 bytes for column lengths
 
 // for global animation
 bool*			flatwarp;
@@ -152,10 +157,20 @@ int*			texturetranslation;
 void R_DrawColumnInCache (const column_t *patch, byte *cache,
 						  int originy, int cacheheight, byte *marks)
 {
+	int top = -1; // [RH] DeePsea tall patches
+
 	while (patch->topdelta != 0xff)
 	{
+		if (patch->topdelta <= top)
+		{
+			top += patch->topdelta;
+		}
+		else
+		{
+			top = patch->topdelta;
+		}
 		int count = patch->length;
-		int position = originy + patch->topdelta;
+		int position = originy + top;
 
 		if (position < 0)
 		{
@@ -221,17 +236,21 @@ void R_GenerateComposite (int texnum)
 
 	// killough 4/9/98: Next, convert multipatched columns into true columns,
 	// to fix Medusa bug while still allowing for transparent regions.
+	// [RH] The patches constructed use two bytes for column lengths and offsets
+	// each and do not have padding for precision errors like normal Doom patches.
+	// This lets them work with tall textures.
 
-	source = (byte *)Malloc (texture->height); 		// temporary column
-	for (i=0; i < texture->width; i++)
+	source = new byte[texture->height]; 	// temporary column
+	for (i = 0; i < texture->width; i++)
+	{
 		if (collump[i] == -1) 				// process only multipatched columns
 		{
-			column_t *col = (column_t *)(block + colofs[i] - 3);	// cached column
+			column2_t *col = (column2_t *)(block + colofs[i] - 4); // cached column
 			const byte *mark = marks + i * texture->height;
 			int j = 0;
 
 			// save column in temporary so we can shuffle it around
-			memcpy(source, (byte *) col + 3, texture->height);
+			memcpy (source, (byte *)col + 4, texture->height);
 
 			for (;;)	// reconstruct the column by scanning transparency marks
 			{
@@ -239,24 +258,29 @@ void R_GenerateComposite (int texnum)
 					j++;
 				if (j >= texture->height) 				// if at end of column
 				{
-					col->topdelta = 255; 				// end-of-column marker
+					col->Length = 0;					// end-of-column marker
 					break;
 				}
-				col->topdelta = j;						// starting offset of post
-				for (col->length=0; j < texture->height && mark[j]; j++)
-					col->length++;						// count opaque cells
+				col->TopDelta = j;						// starting offset of post
+				col->Length = 0;
+				do										// count opaque cells
+				{
+					col->Length++;
+					j++;
+				} while (j < texture->height && mark[j]);
 				// copy opaque cells from the temporary back into the column
-				memcpy((byte *) col + 3, source + col->topdelta, col->length);
-				col = (column_t *)((byte *) col + col->length + 4); // next post
+				memcpy ((byte *)col + 4, source + col->TopDelta, col->Length);
+				col = (column2_t *)((byte *)col + col->Length + 4); // next post
 			}
 		}
-	free(source); 				// free temporary column
+	}
+	delete[] source;			// free temporary column
 	free(marks);				// free transparency marks
 
 	// Now that the texture has been built in column cache,
 	// it is purgable from zone memory.
 
-	Z_ChangeTag(block, PU_CACHE);
+	Z_ChangeTag (block, PU_CACHE);
 }
 
 //
@@ -268,7 +292,6 @@ void R_GenerateComposite (int texnum)
 static void R_GenerateLookup(int texnum, int *const errors)
 {
 	const texture_t *texture = textures[texnum];
-	const bool nottall = texture->height < 256;
 
 	// Composited texture not created yet.
 
@@ -282,47 +305,48 @@ static void R_GenerateLookup(int texnum, int *const errors)
 		unsigned short patches, posts;
 	} *count = (cs *)Calloc (sizeof *count, texture->width);
 
+	int i = texture->patchcount;
+	const texpatch_t *patch = texture->patches;
+
+	// [RH] Some wads (I forget which!) have single-patch textures 256
+	// pixels tall that have patch lengths recorded as 0. I can't think of
+	// any good reason for them to do this, and since I didn't make note
+	// of which wad made me hack in support for them, the hack is gone
+	// because I've added support for DeePsea's real tall patches.
+	while (--i >= 0)
 	{
-		int i = texture->patchcount;
-		const texpatch_t *patch = texture->patches;
+		int pat = patch->patch;
+		const patch_t *realpatch = (patch_t *)W_CacheLumpNum (pat, PU_CACHE);
+		int x1 = patch++->originx, x2 = x1 + SHORT(realpatch->width), x = x1;
+		const int *cofs = realpatch->columnofs-x1;
 
-		while (--i >= 0)
+		if (x2 > texture->width)
+			x2 = texture->width;
+		if (x1 < 0)
+			x = 0;
+		for (; x < x2; x++)
 		{
-			int pat = patch->patch;
-			const patch_t *realpatch = (patch_t *)W_CacheLumpNum (pat, PU_CACHE);
-			int x1 = patch++->originx, x2 = x1 + SHORT(realpatch->width), x = x1;
-			const int *cofs = realpatch->columnofs-x1;
+			// killough 4/9/98: keep a count of the number of posts in column,
+			// to fix Medusa bug while allowing for transparent multipatches.
 
-			if (x2 > texture->width)
-				x2 = texture->width;
-			if (x1 < 0)
-				x = 0;
-			for ( ; x<x2 ; x++)
-			{
-				// killough 4/9/98: keep a count of the number of posts in column,
-				// to fix Medusa bug while allowing for transparent multipatches.
-
-				const column_t *col = (column_t*)((byte*)realpatch+LONG(cofs[x]));
-				for (;col->topdelta != 0xff; count[x].posts++)
-					col = (column_t *)((byte *) col + (col->length || nottall ? col->length : 256) + 4);
-				count[x].patches++;
-				collump[x] = pat;
-				colofs[x] = LONG(cofs[x])+3;
-			}
+			const column_t *col = (column_t*)((byte*)realpatch+LONG(cofs[x]));
+			for (;col->topdelta != 0xff; count[x].posts++)
+				col = (column_t *)((byte *)col + col->length + 4);
+			count[x].patches++;
+			collump[x] = pat;
+			colofs[x] = LONG(cofs[x])+3;
 		}
 	}
 
-	// Now count the number of columns
-	//	that are covered by more than one patch.
-	// Fill in the lump / offset, so columns
-	//	with only a single patch are all done.
+	// Now count the number of columns that are covered by more than one patch.
+	// Fill in the lump / offset, so columns with only a single patch are all done.
 
 	texturecomposite[texnum] = 0;
 
 	{
 		int x = texture->width;
 		int height = texture->height;
-		int csize = 0;
+		int csize;
 
 		while (--x >= 0)
 		{
@@ -332,22 +356,44 @@ static void R_GenerateLookup(int texnum, int *const errors)
 						x, texture->name);
 						++*errors;
 			}
-			if (count[x].patches > 1) 			// killough 4/9/98
-			{
-				// killough 1/25/98, 4/9/98:
-				//
-				// Fix Medusa bug, by adding room for column header
-				// and trailer bytes for each post in merged column.
-				// For now, just allocate conservatively 4 bytes
-				// per post per patch per column, since we don't
-				// yet know how many posts the merged column will
-				// require, and it's bounded above by this limit.
+		}
 
-				collump[x] = -1;				// mark lump as multipatched
-				colofs[x] = csize + 3;			// three header bytes in a column
-				csize += 4*count[x].posts+1;	// 1 stop byte plus 4 bytes per post
+		// [RH] Always create a composite texture for multipatch textures
+		// or tall textures in order to keep things simpler.
+
+		if (texture->patchcount > 1 || texture->height > 254)
+		{
+			texturetype2[texnum] = 1;
+			x = texture->width;
+			csize = 0;
+			while (--x >= 0)
+			{
+				if (!count[x].patches)				// killough 4/9/98
+				{
+					Printf ("\nR_GenerateLookup: Column %d is without a patch in texture %.8s",
+							x, texture->name);
+							++*errors;
+				}
+				else
+				{
+					// killough 1/25/98, 4/9/98:
+					//
+					// Fix Medusa bug, by adding room for column header
+					// and trailer bytes for each post in merged column.
+					// For now, just allocate conservatively 4 bytes
+					// per post per patch per column, since we don't
+					// yet know how many posts the merged column will
+					// require, and it's bounded above by this limit.
+
+					collump[x] = -1;				// mark lump as multipatched
+					colofs[x] = csize + 4;			// four header bytes in a column
+					csize += 4*count[x].posts+2+height;	// 2 stop bytes plus 4 bytes per post
+				}
 			}
-			csize += height;					// height bytes of texture data
+		}
+		else
+		{
+			csize = x*height;
 		}
 		texturecompositesize[texnum] = csize;
 	}
@@ -365,7 +411,6 @@ byte *R_GetColumn (int tex, int col)
 	col &= texturewidthmask[tex];
 	lump = texturecolumnlump[tex][col];
 	ofs = texturecolumnofs[tex][col];
-	dc_mask = textureheightmask[tex];		// [RH] Tutti-Frutti fix
 	
 	if (lump > 0)
 		return (byte *)W_CacheLumpNum(lump,PU_CACHE)+ofs;
@@ -469,8 +514,15 @@ void R_InitTextures (void)
 	texturecomposite = new byte *[numtextures];
 	texturecompositesize = new int[numtextures];
 	texturewidthmask = new int[numtextures];
-	textureheightmask = new byte[numtextures];
+	textureheightlog2 = new byte[numtextures];
 	textureheight = new fixed_t[numtextures];
+	texturenodecals = new byte[numtextures];
+	texturescalex = new byte[numtextures];
+	texturescaley = new byte[numtextures];
+	texturetype2 = new byte[numtextures];
+
+	memset (texturenodecals, 0, numtextures);
+	memset (texturetype2, 0, numtextures);
 
 	totalwidth = 0;
 
@@ -489,7 +541,7 @@ void R_InitTextures (void)
 		if (offset > maxoff)
 			I_FatalError ("R_InitTextures: bad texture directory");
 		
-		mtexture = (maptexture_t *) ( (byte *)maptex + offset);
+		mtexture = (maptexture_t *) ((byte *)maptex + offset);
 
 		texture = textures[i] = (texture_t *)
 			Z_Malloc (sizeof(texture_t)
@@ -499,8 +551,22 @@ void R_InitTextures (void)
 		texture->width = SAFESHORT(mtexture->width);
 		texture->height = SAFESHORT(mtexture->height);
 		texture->patchcount = SAFESHORT(mtexture->patchcount);
-
 		uppercopy (texture->name, mtexture->name);
+
+		// [RH] Heretic sky textures are marked as only 128 pixels tall,
+		// even though they are really 200 pixels tall. Hack around this.
+		if (gameinfo.gametype == GAME_Heretic &&
+			texture->name[0] == 'S' &&
+			texture->name[1] == 'K' &&
+			texture->name[2] == 'Y' &&
+			texture->name[4] == 0 &&
+			texture->name[3] >= '1' &&
+			texture->name[3] <= '3' &&
+			texture->height == 128)
+		{
+			texture->height = 200;
+		}
+
 		mpatch = &mtexture->patches[0];
 		patch = &texture->patches[0];
 
@@ -521,21 +587,25 @@ void R_InitTextures (void)
 		texturecolumnlump[i] = new short[texture->width];
 		texturecolumnofs[i] = new unsigned int[texture->width];
 
-		j = 1;
-		while (j*2 <= texture->width)
-			j<<=1;
-
+		for (j = 1; j*2 <= texture->width; j <<= 1)
+			;
 		texturewidthmask[i] = j-1;
-		textureheight[i] = texture->height<<FRACBITS;
 
 		// [RH] Tutti-Frutti fix
 		// Sorry, only power-of-2 tall textures are actually fixed.
-		j = 1;
-		while (j < texture->height)
-			j <<= 1;
+		// For performance reasons, I have no intention of changing this.
+		for (j = 0; (1<<j) < texture->height; ++j)
+			;
+		textureheightlog2[i] = j;
+		textureheight[i] = texture->height<<FRACBITS;
 
-		textureheightmask[i] = j-1;
-				
+		// [RH] Special for beta 29: Values of 0 will use the tx/ty cvars
+		// to determine scaling instead of defaulting to 8. I will likely
+		// remove this once I finish the betas, because by then, users
+		// should be able to actually create scaled textures.
+		texturescalex[i] = mtexture->ScaleX ? mtexture->ScaleX : 0;
+		texturescaley[i] = mtexture->ScaleY ? mtexture->ScaleY : 0;
+
 		totalwidth += texture->width;
 	}
 	delete[] patchlookup;
@@ -854,7 +924,7 @@ int R_CheckTileNumForName (const char *name, ETileType type)
 
 	const namespace_t *space = spaces[type];
 	int i;
-	int lump;
+	int lump = -1;
 
 	for (i = 0; i < NUM_TILE_TYPES; i++)
 	{

@@ -226,7 +226,8 @@ FWeaponInfo AFWeapFist::WeaponInfo =
 	0,
 	NULL,
 	NULL,
-	RUNTIME_CLASS(AFWeapFist)
+	RUNTIME_CLASS(AFWeapFist),
+	-1
 };
 
 IMPLEMENT_ACTOR (AFWeapFist, Hexen, -1, 0)
@@ -391,10 +392,11 @@ punchdone:
 class AFWeapAxe : public AWeapon
 {
 	DECLARE_ACTOR (AFWeapAxe, AWeapon)
-protected:
+public:
 	bool TryPickup (AActor *toucher)
 	{
 		return P_GiveWeapon
+protected:
 
 FState AFWeapAxe::States[] =
 {

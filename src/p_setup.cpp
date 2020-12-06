@@ -46,6 +46,7 @@
 #include "p_acs.h"
 #include "vectors.h"
 #include "announcer.h"
+#include "wi_stuff.h"
 
 extern void P_SpawnMapThing (mapthing2_t *mthing, int position);
 
@@ -90,14 +91,14 @@ struct sidei_t	// [RH] Only keep BOOM sidedef init stuff around for init
 		struct
 		{
 			short tag, special, map;
-		};
+		} a;
 
 		// Used when grouping sidedefs into loops.
 		struct
 		{
 			short first, next;
 			char lineside;
-		};
+		} b;
 	};
 }				*sidetemp;
 
@@ -108,7 +109,7 @@ BOOL			HasBehavior;
 // BLOCKMAP
 // Created from axis aligned bounding box
 // of the map, a rectangular array of
-// blocks of size ...
+// blocks of size 256x256.
 // Used to speed up collision detection
 // by spatial subdivision in 2D.
 //
@@ -545,6 +546,199 @@ void P_LoadThings (int lump)
 	Z_Free (data);
 }
 
+//
+// P_SpawnSlopeMakers
+//
+
+static void P_SlopeLineToPoint (int lineid, fixed_t x, fixed_t y, fixed_t z, BOOL slopeCeil)
+{
+	int linenum = -1;
+
+	while ((linenum = P_FindLineFromID (lineid, linenum)) != -1)
+	{
+		const line_t *line = &lines[linenum];
+		sector_t *sec;
+		secplane_t *plane;
+		
+		if (P_PointOnLineSide (x, y, line) == 0)
+		{
+			sec = line->frontsector;
+		}
+		else
+		{
+			sec = line->backsector;
+		}
+		if (sec == NULL)
+		{
+			continue;
+		}
+		if (slopeCeil)
+		{
+			plane = &sec->ceilingplane;
+		}
+		else
+		{
+			plane = &sec->floorplane;
+		}
+
+		vec3_t p, v1, v2, cross;
+
+		p[0] = FIXED2FLOAT (line->v1->x);
+		p[1] = FIXED2FLOAT (line->v1->y);
+		p[2] = FIXED2FLOAT (plane->ZatPoint (line->v1->x, line->v1->y));
+		v1[0] = FIXED2FLOAT (line->dx);
+		v1[1] = FIXED2FLOAT (line->dy);
+		v1[2] = FIXED2FLOAT (plane->ZatPoint (line->v2->x, line->v2->y)) - p[2];
+		v2[0] = FIXED2FLOAT (x - line->v1->x);
+		v2[1] = FIXED2FLOAT (y - line->v1->y);
+		v2[2] = FIXED2FLOAT (z) - p[2];
+
+		CrossProduct (v1, v2, cross);
+		VectorNormalize (cross);
+
+		// Fix backward normals
+		if ((cross[2] < 0 && !slopeCeil) || (cross[2] > 0 && slopeCeil))
+		{
+			cross[0] = -cross[0];
+			cross[1] = -cross[1];
+			cross[2] = -cross[2];
+		}
+
+		plane->a = FLOAT2FIXED (cross[0]);
+		plane->b = FLOAT2FIXED (cross[1]);
+		plane->c = FLOAT2FIXED (cross[2]);
+		plane->ic = FLOAT2FIXED (1.f/cross[2]);
+		plane->d = -TMulScale16 (plane->a, x,
+								 plane->b, y,
+								 plane->c, z);
+	}
+}
+
+static void P_CopyPlane (int tag, fixed_t x, fixed_t y, BOOL copyCeil)
+{
+	sector_t *dest = R_PointInSubsector (x, y)->sector;
+	sector_t *source;
+	int secnum;
+	size_t planeofs;
+
+	secnum = P_FindSectorFromTag (tag, -1);
+	if (secnum == -1)
+	{
+		return;
+	}
+
+	source = &sectors[secnum];
+
+	if (copyCeil)
+	{
+		planeofs = myoffsetof(sector_t, ceilingplane);
+	}
+	else
+	{
+		planeofs = myoffsetof(sector_t, floorplane);
+	}
+	*(secplane_t *)((BYTE *)dest + planeofs) = *(secplane_t *)((BYTE *)source + planeofs);
+}
+
+void P_SetSlope (secplane_t *plane, BOOL setCeil, int xyangi, int zangi,
+	fixed_t x, fixed_t y, fixed_t z)
+{
+	angle_t xyang;
+	angle_t zang;
+
+	if (zangi >= 180)
+	{
+		zang = ANGLE_180-ANGLE_1;
+	}
+	else if (zangi <= 0)
+	{
+		zang = ANGLE_1;
+	}
+	else
+	{
+		zang = Scale (zangi, ANGLE_180, 180);
+	}
+	if (!setCeil)
+	{
+		zang += ANGLE_180;
+	}
+	zang >>= ANGLETOFINESHIFT;
+
+	xyang = (angle_t)Scale (xyangi, ANGLE_180, 180) >> ANGLETOFINESHIFT;
+
+	vec3_t norm;
+
+	norm[0] = (float)(finecosine[zang] * finecosine[xyang]);
+	norm[1] = (float)(finecosine[zang] * finesine[xyang]);
+	norm[2] = (float)(finesine[zang]) * 65536.f;
+	VectorNormalize (norm);
+	plane->a = (int)(norm[0] * 65536.f);
+	plane->b = (int)(norm[1] * 65536.f);
+	plane->c = (int)(norm[2] * 65536.f);
+	plane->ic = (int)(65536.f / norm[2]);
+	plane->d = -TMulScale16 (plane->a, x,
+							 plane->b, y,
+							 plane->c, z);
+}
+
+enum
+{
+	THING_SlopeFloorPointLine = 9500,
+	THING_SlopeCeilingPointLine = 9501,
+	THING_SetFloorSlope = 9502,
+	THING_SetCeilingSlope = 9503,
+	THING_CopyFloorPlane = 9510,
+	THING_CopyCeilingPlane = 9511,
+};
+
+static void P_SpawnSlopeMakers (mapthing2_t *mt, mapthing2_t *lastmt)
+{
+	mapthing2_t *firstmt = mt;
+
+	for (; mt < lastmt; ++mt)
+	{
+		if (mt->type >= THING_SlopeFloorPointLine &&
+			mt->type <= THING_SetCeilingSlope)
+		{
+			fixed_t x, y, z;
+			secplane_t *refplane;
+			sector_t *sec;
+
+			x = mt->x << FRACBITS;
+			y = mt->y << FRACBITS;
+			sec = R_PointInSubsector (x, y)->sector;
+			if (mt->type & 1)
+			{
+				refplane = &sec->ceilingplane;
+			}
+			else
+			{
+				refplane = &sec->floorplane;
+			}
+			z = refplane->ZatPoint (x, y) + (mt->z << FRACBITS);
+			if (mt->type <= THING_SlopeCeilingPointLine)
+			{
+				P_SlopeLineToPoint (mt->args[0], x, y, z, mt->type & 1);
+			}
+			else
+			{
+				P_SetSlope (refplane, mt->type & 1, mt->angle, mt->args[0], x, y, z);
+			}
+			mt->type = 0;
+		}
+	}
+
+	for (mt = firstmt; mt < lastmt; ++mt)
+	{
+		if (mt->type == THING_CopyFloorPlane ||
+			mt->type == THING_CopyCeilingPlane)
+		{
+			P_CopyPlane (mt->args[0], mt->x << FRACBITS, mt->y << FRACBITS, mt->type & 1);
+			mt->type = 0;
+		}
+	}
+}
+
 // [RH]
 // P_LoadThings2
 //
@@ -559,13 +753,9 @@ void P_LoadThings2 (int lump, int position)
 	mapthing2_t *mt = (mapthing2_t *)data;
 	mapthing2_t *lastmt = (mapthing2_t *)(data + W_LumpLength (lump));
 
-	for ( ; mt < lastmt; mt++)
+#ifdef __BIG_ENDIAN__
+	for (; mt < lastmt; ++mt)
 	{
-		// [RH] At this point, monsters unique to Doom II were weeded out
-		//		if the IWAD wasn't for Doom II. P_SpawnMapThing() can now
-		//		handle these and more cases better, so we just pass it
-		//		everything and let it decide what to do with them.
-
 		mt->thingid = SHORT(mt->thingid);
 		mt->x = SHORT(mt->x);
 		mt->y = SHORT(mt->y);
@@ -573,7 +763,14 @@ void P_LoadThings2 (int lump, int position)
 		mt->angle = SHORT(mt->angle);
 		mt->type = SHORT(mt->type);
 		mt->flags = SHORT(mt->flags);
+	}
+#endif
 
+	// [RH] Spawn slope creating things first.
+	P_SpawnSlopeMakers (mt, lastmt);
+
+	for (; mt < lastmt; mt++)
+	{
 		P_SpawnMapThing (mt, position);
 	}
 
@@ -605,7 +802,7 @@ void P_AdjustLine (line_t *ld)
 	else if (ld->dy == 0)
 		ld->slopetype = ST_HORIZONTAL;
 	else
-		ld->slopetype = (FixedDiv (ld->dy , ld->dx) > 0) ? ST_POSITIVE : ST_NEGATIVE;
+		ld->slopetype = ((ld->dy ^ ld->dx) >= 0) ? ST_POSITIVE : ST_NEGATIVE;
 			
 	if (v1->x < v2->x)
 	{
@@ -642,12 +839,12 @@ void P_AdjustLine (line_t *ld)
 		// [RH] Save Static_Init only if it's interested in the textures
 		(ld->special != Static_Init || ld->args[1] == Init_Color))
 	{
-		sidetemp[*ld->sidenum].special = ld->special;
-		sidetemp[*ld->sidenum].tag = ld->args[0];
+		sidetemp[*ld->sidenum].a.special = ld->special;
+		sidetemp[*ld->sidenum].a.tag = ld->args[0];
 	}
 	else
 	{
-		sidetemp[*ld->sidenum].special = 0;
+		sidetemp[*ld->sidenum].a.special = 0;
 	}
 }
 
@@ -675,6 +872,12 @@ void P_FinishLoadingLineDefs ()
 		len = (int)sqrtf (dx*dx + dy*dy);
 		light = dy == 0 ? level.WallHorizLight :
 				dx == 0 ? level.WallVertLight : 0;
+
+		if (len == 0)
+		{
+			Printf ("Line %d has 0 length\n", linenum);
+			len = 1;
+		}
 
 		if (ld->sidenum[0] != -1)
 		{
@@ -818,8 +1021,8 @@ static void P_AllocateSideDefs (int count)
 		*sizeof(sidei_t), PU_LEVEL, 0);
 	for (i = 0; i < count; i++)
 	{
-		sidetemp[i].special = sidetemp[i].tag = 0;
-		sidetemp[i].map = -1;
+		sidetemp[i].a.special = sidetemp[i].a.tag = 0;
+		sidetemp[i].a.map = -1;
 	}
 	if (count < numsides)
 	{
@@ -838,7 +1041,7 @@ static void P_SetSideNum (short *sidenum_p, short sidenum)
 	}
 	else if (sidecount < numsides)
 	{
-		sidetemp[sidecount].map = sidenum;
+		sidetemp[sidecount].a.map = sidenum;
 		*sidenum_p = sidecount++;
 	}
 	else
@@ -856,12 +1059,12 @@ static void P_LoopSidedefs ()
 
 	for (i = 0; i < numvertexes; ++i)
 	{
-		sidetemp[i].first = -1;
-		sidetemp[i].next = -1;
+		sidetemp[i].b.first = -1;
+		sidetemp[i].b.next = -1;
 	}
 	for (; i < numsides; ++i)
 	{
-		sidetemp[i].next = -1;
+		sidetemp[i].b.next = -1;
 	}
 
 	for (i = 0; i < numsides; ++i)
@@ -872,9 +1075,9 @@ static void P_LoopSidedefs ()
 		int lineside = (line->sidenum[0] != i);
 		int vert = (lineside ? line->v2 : line->v1) - vertexes;
 		
-		sidetemp[i].lineside = lineside;
-		sidetemp[i].next = sidetemp[vert].first;
-		sidetemp[vert].first = i;
+		sidetemp[i].b.lineside = lineside;
+		sidetemp[i].b.next = sidetemp[vert].b.first;
+		sidetemp[vert].b.first = i;
 
 		// Set each side so that it is the only member of its loop
 		sides[i].LeftSide = -1;
@@ -894,11 +1097,11 @@ static void P_LoopSidedefs ()
 		// instead of as part of another loop
 		if (line->frontsector == line->backsector)
 		{
-			right = line->sidenum[!sidetemp[i].lineside];
+			right = line->sidenum[!sidetemp[i].b.lineside];
 		}
 		else
 		{
-			if (sidetemp[i].lineside)
+			if (sidetemp[i].b.lineside)
 			{
 				right = line->v1 - vertexes;
 			}
@@ -907,18 +1110,24 @@ static void P_LoopSidedefs ()
 				right = line->v2 - vertexes;
 			}
 
-			right = sidetemp[right].first;
+			right = sidetemp[right].b.first;
 
-			if (sidetemp[right].next != -1)
+			if (right == -1)
+			{ // There is no right side!
+				Printf ("Line %d's right edge is unconnected\n", line-lines);
+				continue;
+			}
+
+			if (sidetemp[right].b.next != -1)
 			{
-				int bestright;
+				int bestright = right;	// Shut up, GCC
 				angle_t bestang = ANGLE_MAX;
 				line_t *leftline, *rightline;
 				angle_t ang1, ang2, ang;
 
 				leftline = &lines[sides[i].linenum];
 				ang1 = R_PointToAngle (leftline->dx, leftline->dy);
-				if (!sidetemp[i].lineside)
+				if (!sidetemp[i].b.lineside)
 				{
 					ang1 += ANGLE_180;
 				}
@@ -931,7 +1140,7 @@ static void P_LoopSidedefs ()
 						if (rightline->frontsector != rightline->backsector)
 						{
 							ang2 = R_PointToAngle (rightline->dx, rightline->dy);
-							if (sidetemp[right].lineside)
+							if (sidetemp[right].b.lineside)
 							{
 								ang2 += ANGLE_180;
 							}
@@ -945,7 +1154,7 @@ static void P_LoopSidedefs ()
 							}
 						}
 					}
-					right = sidetemp[right].next;
+					right = sidetemp[right].b.next;
 				}
 				right = bestright;
 			}
@@ -970,7 +1179,7 @@ void P_LoadSideDefs2 (int lump)
 
 	for (i = 0; i < numsides; i++)
 	{
-		register mapsidedef_t *msd = (mapsidedef_t *)data + sidetemp[i].map;
+		register mapsidedef_t *msd = (mapsidedef_t *)data + sidetemp[i].a.map;
 		register side_t *sd = sides + i;
 		register sector_t *sec;
 
@@ -982,25 +1191,28 @@ void P_LoadSideDefs2 (int lump)
 		// killough 4/11/98: refined to allow colormaps to work as wall
 		// textures if invalid as colormaps but valid as textures.
 
-		if ((unsigned)SHORT(msd->sector)>=numsectors)
+		if ((unsigned)SHORT(msd->sector)>=(unsigned)numsectors)
 		{
 			Printf (PRINT_HIGH, "Sidedef %d has a bad sector\n", i);
-			sd->sector = NULL;
+			sd->sector = sec = NULL;
 		}
 		else
 		{
 			sd->sector = sec = &sectors[SHORT(msd->sector)];
 		}
-		switch (sidetemp[i].special)
+		switch (sidetemp[i].a.special)
 		{
 		case Transfer_Heights:	// variable colormap via 242 linedef
 			  // [RH] The colormap num we get here isn't really a colormap,
 			  //	  but a packed ARGB word for blending, so we also allow
 			  //	  the blend to be specified directly by the texture names
 			  //	  instead of figuring something out from the colormap.
-			SetTexture (&sd->bottomtexture, &sec->bottommap, msd->bottomtexture);
-			SetTexture (&sd->midtexture, &sec->midmap, msd->midtexture);
-			SetTexture (&sd->toptexture, &sec->topmap, msd->toptexture);
+			if (sec != NULL)
+			{
+				SetTexture (&sd->bottomtexture, &sec->bottommap, msd->bottomtexture);
+				SetTexture (&sd->midtexture, &sec->midmap, msd->midtexture);
+				SetTexture (&sd->toptexture, &sec->topmap, msd->toptexture);
+			}
 			break;
 
 		case Static_Init:
@@ -1021,7 +1233,7 @@ void P_LoadSideDefs2 (int lump)
 
 					for (s = 0; s < numsectors; s++)
 					{
-						if (sectors[s].tag == sidetemp[i].tag)
+						if (sectors[s].tag == sidetemp[i].a.tag)
 						{
 							sectors[s].ceilingcolormap =
 								sectors[s].floorcolormap = colormap;
@@ -1053,7 +1265,6 @@ void P_LoadSideDefs2 (int lump)
 }
 
 // [RH] Set slopes for sectors, based on line specials
-
 //
 // P_AlignPlane
 //
@@ -1069,7 +1280,7 @@ static void P_AlignPlane (sector_t *sec, line_t *line, int which)
 {
 	sector_t *refsec;
 	int bestdist;
-	vertex_t *refvert;
+	vertex_t *refvert = (*sec->lines)->v1;	// Shut up, GCC
 	int i;
 	line_t **probe;
 
@@ -1155,6 +1366,7 @@ void P_SetSlopes ()
 		if (lines[i].special == Plane_Align)
 		{
 			lines[i].special = 0;
+			lines[i].id = lines[i].args[2];
 			if (lines[i].backsector != NULL)
 			{
 				// args[0] is for floor, args[1] is for ceiling
@@ -1202,15 +1414,20 @@ static void P_CreateBlockMap ()
 
 	for (i = 0; i < numvertexes; i++)
 	{
-		if (vertexes[i].x >> FRACBITS < minx)
-			minx = vertexes[i].x >> FRACBITS;
-		else if (vertexes[i].x >> FRACBITS > maxx)
-			maxx = vertexes[i].x >> FRACBITS;
-		if (vertexes[i].y >> FRACBITS < miny)
-			miny = vertexes[i].y >> FRACBITS;
-		else if (vertexes[i].y >> FRACBITS > maxy)
-			maxy = vertexes[i].y >> FRACBITS;
+		if (vertexes[i].x < minx)
+			minx = vertexes[i].x;
+		else if (vertexes[i].x > maxx)
+			maxx = vertexes[i].x;
+		if (vertexes[i].y < miny)
+			miny = vertexes[i].y;
+		else if (vertexes[i].y > maxy)
+			maxy = vertexes[i].y;
 	}
+
+	minx >>= FRACBITS;
+	miny >>= FRACBITS;
+	maxx >>= FRACBITS;
+	maxy >>= FRACBITS;
 
 	// Save blockmap parameters
 
@@ -1449,33 +1666,42 @@ void P_GroupLines ()
 	{
 		I_Error ("This map contains errors that must be fixed.\n");
 	}
-		
+
 	// build line tables for each sector		
 	linebuffer = (line_t **)Z_Malloc (total*sizeof(line_t *), PU_LEVEL, 0);
 	sector = sectors;
 	for (i = 0; i < numsectors; i++, sector++)
 	{
 		bbox.ClearBox ();
-		sector->lines = linebuffer;
-		li = lines;
-		for (j = 0; j < numlines; j++, li++)
+		if (sector->linecount == 0)
 		{
-			if (li->frontsector == sector || li->backsector == sector)
+			Printf ("Sector %i (tag %i) has no lines\n", i, sector->tag);
+			// 0 the sector's tag so that no specials can use it
+			sector->tag = 0;
+		}
+		else
+		{
+			sector->lines = linebuffer;
+			li = lines;
+			for (j = 0; j < numlines; j++, li++)
 			{
-				*linebuffer++ = li;
-				bbox.AddToBox (li->v1->x, li->v1->y);
-				bbox.AddToBox (li->v2->x, li->v2->y);
+				if (li->frontsector == sector || li->backsector == sector)
+				{
+					*linebuffer++ = li;
+					bbox.AddToBox (li->v1->x, li->v1->y);
+					bbox.AddToBox (li->v2->x, li->v2->y);
+				}
+			}
+			if (linebuffer - sector->lines != sector->linecount)
+			{
+				I_Error ("P_GroupLines: miscounted");
 			}
 		}
-		if (linebuffer - sector->lines != sector->linecount)
-		{
-			I_Error ("P_GroupLines: miscounted");
-		}
-						
+
 		// set the soundorg to the middle of the bounding box
 		sector->soundorg[0] = (bbox.Right()+bbox.Left())/2;
 		sector->soundorg[1] = (bbox.Top()+bbox.Bottom())/2;
-		
+
 #if 0
 		int block;
 
@@ -1514,6 +1740,32 @@ void P_LoadBehavior (int lumpnum)
 	}
 }
 
+// Hash the sector tags across the sectors and linedefs.
+static void P_InitTagLists ()
+{
+	int i;
+
+	for (i=numsectors; --i>=0; )		// Initially make all slots empty.
+		sectors[i].firsttag = -1;
+	for (i=numsectors; --i>=0; )		// Proceed from last to first sector
+	{									// so that lower sectors appear first
+		int j = (unsigned) sectors[i].tag % (unsigned) numsectors;	// Hash func
+		sectors[i].nexttag = sectors[j].firsttag;	// Prepend sector to chain
+		sectors[j].firsttag = i;
+	}
+
+	// killough 4/17/98: same thing, only for linedefs
+
+	for (i=numlines; --i>=0; )			// Initially make all slots empty.
+		lines[i].firstid = -1;
+	for (i=numlines; --i>=0; )        // Proceed from last to first linedef
+	{									// so that lower linedefs appear first
+		int j = (unsigned) lines[i].id % (unsigned) numlines;	// Hash func
+		lines[i].nextid = lines[j].firstid;	// Prepend linedef to chain
+		lines[j].firstid = i;
+	}
+}
+
 //
 // P_SetupLevel
 //
@@ -1524,7 +1776,7 @@ extern polyblock_t **PolyBlockMap;
 void P_SetupLevel (char *lumpname, int position)
 {
 	int i, lumpnum;
-		
+
 	level.total_monsters = level.total_items = level.total_secrets =
 		level.killed_monsters = level.found_items = level.found_secrets =
 		wminfo.maxfrags = 0;
@@ -1542,19 +1794,26 @@ void P_SetupLevel (char *lumpname, int position)
 	{
 		players[i].mo = NULL;
 	}
-
+	// [RH] Set default scripted translation colors
+	for (i = 0; i < 256; ++i)
+	{
+		translationtables[TRANSLATION_LevelScripted][i] = i;
+	}
+	for (i = 1; i < MAX_ACS_TRANSLATIONS; ++i)
+	{
+		memcpy (&translationtables[TRANSLATION_LevelScripted][i*256],
+				translationtables[TRANSLATION_LevelScripted], 256);
+	}
 	// Initial height of PointOfView will be set by player think.
 	players[consoleplayer].viewz = 1; 
 
 	// Make sure all sounds are stopped before Z_FreeTags.
 	S_Start ();
-
 	// [RH] Clear all ThingID hash chains.
 	AActor::ClearTIDHashes ();
 
 	// [RH] clear out the mid-screen message
 	C_MidPrint (NULL);
-
 	PolyBlockMap = NULL;
 
 	DThinker::DestroyAllThinkers ();
@@ -1633,6 +1892,8 @@ void P_SetupLevel (char *lumpname, int position)
 
 	P_SetSlopes ();
 
+	P_InitTagLists();   // killough 1/30/98: Create xref tables for tags
+
 	if (!HasBehavior)
 		P_LoadThings (lumpnum+ML_THINGS);
 	else
@@ -1673,7 +1934,6 @@ void P_SetupLevel (char *lumpname, int position)
 	}
 
 	P_ResetSightCounters (true);
-
 	//Printf ("free memory: 0x%x\n", Z_FreeMemory());
 }
 

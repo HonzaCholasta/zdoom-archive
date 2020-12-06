@@ -96,10 +96,10 @@ typedef struct
 	float		volume;
 	int			pitch;
 	int			priority;
-	int			tag;
 	bool		loop;
 	bool		is3d;
 	bool		constz;
+	int			time;		// time when sound started playing
 } channel_t;
 
 struct MusPlayingInfo
@@ -117,7 +117,7 @@ struct MusPlayingInfo
 static fixed_t P_AproxDistance2 (fixed_t *listener, fixed_t x, fixed_t y);
 static void S_StopChannel (int cnum);
 static void S_StartSound (fixed_t *pt, AActor *mover, int channel,
-	int sound_id, float volume, float attenuation, BOOL looping, int tag=0);
+	int sound_id, float volume, float attenuation, BOOL looping);
 static void S_ActivatePlayList (bool goBack);
 static void CalcPosVel (fixed_t *pt, AActor *mover, int constz, float pos[3],
 	float vel[3]);
@@ -148,6 +148,7 @@ FBoolCVar noisedebug ("noise", false, 0);	// [RH] Print sound debugging info?
 CVAR (Int, snd_channels, 12, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)	// number of channels available
 CVAR (Bool, sv_ihatesounds, false, CVAR_SERVERINFO)
 CVAR (Bool, snd_dolby, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Bool, snd_flipstereo, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
 // CODE --------------------------------------------------------------------
 
@@ -309,12 +310,16 @@ void S_Start ()
 
 	// kill all playing sounds at start of level (trust me - a good idea)
 	for (cnum = 0; cnum < numChannels; cnum++)
+	{
 		if (Channel[cnum].sfxinfo)
+		{
 			S_StopChannel (cnum);
-	
+		}
+	}
+
 	// start new music for the level
 	mus_paused = 0;
-	
+
 	// [RH] This is a lot simpler now.
 	if (!savegamerestore)
 	{
@@ -374,7 +379,7 @@ void CalcPosVel (fixed_t *pt, AActor *mover, int constz,
 //==========================================================================
 
 static void S_StartSound (fixed_t *pt, AActor *mover, int channel,
-	int sound_id, float volume, float attenuation, BOOL looping, int tag)
+	int sound_id, float volume, float attenuation, BOOL looping)
 {
 	sfxinfo_t *sfx;
 	int dist, vol;
@@ -513,7 +518,7 @@ static void S_StartSound (fixed_t *pt, AActor *mover, int channel,
 	}
 	priority = basepriority * (PRIORITY_MAX_ADJUST - (dist/DIST_ADJUST));
 
-	if (!S_StopSoundID (sound_id, priority, tag))
+	if (!S_StopSoundID (sound_id, priority, x, y))
 		return;	// other sounds have greater priority
 
 	if (pt)
@@ -622,6 +627,10 @@ static void S_StartSound (fixed_t *pt, AActor *mover, int channel,
 				angle = angle + (ANGLE_MAX - listener->angle);
 			angle >>= ANGLETOFINESHIFT;
 			sep = NORM_SEP - (FixedMul (S_STEREO_SWING, finesine[angle])>>FRACBITS);
+			if (snd_flipstereo)
+			{
+				sep = 255-sep;
+			}
 			if (snd_dolby)
 			{
 				int rearsep = NORM_SEP -
@@ -683,8 +692,8 @@ static void S_StartSound (fixed_t *pt, AActor *mover, int channel,
 	Channel[i].x = x;
 	Channel[i].y = y;
 	Channel[i].z = z;
-	Channel[i].tag = tag;
 	Channel[i].loop = looping ? true : false;
+	Channel[i].time = gametic;
 
 	if (sfx->usefulness < 0)
 		sfx->usefulness = 1;
@@ -705,14 +714,14 @@ void S_SoundID (int channel, int sound_id, float volume, int attenuation)
 
 void S_SoundID (AActor *ent, int channel, int sound_id, float volume, int attenuation)
 {
-	if (ent->subsector->sector->MoreFlags & SECF_SILENT)
+	if (ent->Sector->MoreFlags & SECF_SILENT)
 		return;
 	S_StartSound (&ent->x, ent, channel, sound_id, volume, SELECT_ATTEN(attenuation), false);
 }
 
-void S_SoundID (fixed_t *pt, int channel, int sound_id, float volume, int attenuation, int tag)
+void S_SoundID (fixed_t *pt, int channel, int sound_id, float volume, int attenuation)
 {
-	S_StartSound (pt, NULL, channel, sound_id, volume, SELECT_ATTEN(attenuation), false, tag);
+	S_StartSound (pt, NULL, channel, sound_id, volume, SELECT_ATTEN(attenuation), false);
 }
 
 //==========================================================================
@@ -723,14 +732,14 @@ void S_SoundID (fixed_t *pt, int channel, int sound_id, float volume, int attenu
 
 void S_LoopedSoundID (AActor *ent, int channel, int sound_id, float volume, int attenuation)
 {
-	if (ent->subsector->sector->MoreFlags & SECF_SILENT)
+	if (ent->Sector->MoreFlags & SECF_SILENT)
 		return;
 	S_StartSound (&ent->x, ent, channel, sound_id, volume, SELECT_ATTEN(attenuation), true);
 }
 
-void S_LoopedSoundID (fixed_t *pt, int channel, int sound_id, float volume, int attenuation, int tag)
+void S_LoopedSoundID (fixed_t *pt, int channel, int sound_id, float volume, int attenuation)
 {
-	S_StartSound (pt, NULL, channel, sound_id, volume, SELECT_ATTEN(attenuation), true, tag);
+	S_StartSound (pt, NULL, channel, sound_id, volume, SELECT_ATTEN(attenuation), true);
 }
 
 //==========================================================================
@@ -740,12 +749,12 @@ void S_LoopedSoundID (fixed_t *pt, int channel, int sound_id, float volume, int 
 //==========================================================================
 
 void S_StartNamedSound (AActor *ent, fixed_t *pt, int channel, 
-	const char *name, float volume, float attenuation, BOOL looping, int tag=0)
+	const char *name, float volume, float attenuation, BOOL looping)
 {
 	int sfx_id;
 	
 	if (name == NULL ||
-		(ent != NULL && ent->subsector->sector->MoreFlags & SECF_SILENT))
+		(ent != NULL && ent->Sector->MoreFlags & SECF_SILENT))
 	{
 		return;
 	}
@@ -755,9 +764,9 @@ void S_StartNamedSound (AActor *ent, fixed_t *pt, int channel,
 		DPrintf ("Unknown sound %s\n", name);
 
 	if (ent)
-		S_StartSound (&ent->x, ent, channel, sfx_id, volume, attenuation, looping, tag);
+		S_StartSound (&ent->x, ent, channel, sfx_id, volume, attenuation, looping);
 	else
-		S_StartSound (pt, NULL, channel, sfx_id, volume, attenuation, looping, tag);
+		S_StartSound (pt, NULL, channel, sfx_id, volume, attenuation, looping);
 }
 
 //==========================================================================
@@ -776,9 +785,9 @@ void S_Sound (AActor *ent, int channel, const char *name, float volume, int atte
 	S_StartNamedSound (ent, NULL, channel, name, volume, SELECT_ATTEN(attenuation), false);
 }
 
-void S_Sound (fixed_t *pt, int channel, const char *name, float volume, int attenuation, int tag)
+void S_Sound (fixed_t *pt, int channel, const char *name, float volume, int attenuation)
 {
-	S_StartNamedSound (NULL, pt, channel, name, volume, SELECT_ATTEN(attenuation), false, tag);
+	S_StartNamedSound (NULL, pt, channel, name, volume, SELECT_ATTEN(attenuation), false);
 }
 
 void S_Sound (fixed_t x, fixed_t y, int channel, const char *name, float volume, int attenuation)
@@ -809,17 +818,12 @@ void S_LoopedSound (AActor *ent, int channel, const char *name, float volume, in
 // Stops more than <limit> copies of the sound from playing at once.
 //==========================================================================
 
-BOOL S_StopSoundID (int sound_id, int priority, int tag)
+BOOL S_StopSoundID (int sound_id, int priority, fixed_t x, fixed_t y)
 {
 	int i;
 	int lp; //least priority
 	int limit;
 	int found;
-
-	if (tag == 0)
-	{
-		return true;
-	}
 
 	limit = 2;
 	lp = -1;
@@ -828,7 +832,7 @@ BOOL S_StopSoundID (int sound_id, int priority, int tag)
 	{
 		if (Channel[i].sound_id == sound_id &&
 			Channel[i].sfxinfo &&
-			Channel[i].tag == tag)
+			P_AproxDistance (Channel[i].pt[0] - x, Channel[i].pt[1] - y) < 256*FRACUNIT)
 		{
 			found++; //found one.  Now, should we replace it??
 			if (priority > Channel[i].priority)
@@ -842,7 +846,7 @@ BOOL S_StopSoundID (int sound_id, int priority, int tag)
 	{
 		return true;
 	}
-	else if (lp == -1)
+	if (lp == -1)
 	{
 		return false; // don't replace any sounds
 	}
@@ -917,10 +921,17 @@ void S_RelinkSound (AActor *from, AActor *to)
 	{
 		if (Channel[i].pt == frompt)
 		{
-			Channel[i].pt = topt ? topt : &Channel[i].x;
-			Channel[i].x = frompt[0];
-			Channel[i].y = frompt[1];
-			Channel[i].z = frompt[2];
+			if (to != NULL || !Channel[i].loop)
+			{
+				Channel[i].pt = topt ? topt : &Channel[i].x;
+				Channel[i].x = frompt[0];
+				Channel[i].y = frompt[1];
+				Channel[i].z = frompt[2];
+			}
+			else
+			{
+				S_StopChannel (i);
+			}
 		}
 	}
 }
@@ -1091,6 +1102,10 @@ void S_UpdateSounds (void *listener_p)
 					angle = angle + (ANGLE_MAX - players[consoleplayer].camera->angle);
 				angle >>= ANGLETOFINESHIFT;
 				sep = NORM_SEP - (FixedMul (S_STEREO_SWING, finesine[angle])>>FRACBITS);
+				if (snd_flipstereo)
+				{
+					sep = 255-sep;
+				}
 				if (snd_dolby)
 				{
 					int rearsep = NORM_SEP -
