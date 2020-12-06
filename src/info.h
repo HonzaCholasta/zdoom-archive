@@ -68,6 +68,7 @@
 #include "dobject.h"
 #include "dthinker.h"
 #include "farchive.h"
+#include "doomdef.h"
 
 const BYTE SF_FULLBRIGHT = 0x40;
 const BYTE SF_BIGTIC	 = 0x80;
@@ -100,12 +101,18 @@ struct FState
 	}
 	inline int GetTics() const
 	{
+		int tics;
 #ifdef __BIG_ENDIAN__
-		return Frame & SF_BIGTIC ? (Tics|((BYTE)Misc1<<8))-1 : Tics-1;
+		tics = Frame & SF_BIGTIC ? (Tics|((BYTE)Misc1<<8))-1 : Tics-1;
 #else
 		// Use some trickery to help the compiler create this without
 		// using any jumps.
-		return ((*(int *)&Tics) & ((*(int *)&Tics) < 0 ? 0xffff : 0xff)) - 1;
+		tics = ((*(int *)&Tics) & ((*(int *)&Tics) < 0 ? 0xffff : 0xff)) - 1;
+#endif
+#if TICRATE == 35
+		return tics;
+#else
+		return tics > 0 ? tics * TICRATE / 35 : tics;
 #endif
 	}
 	inline int GetMisc1() const
@@ -123,6 +130,10 @@ struct FState
 	inline actionf_t GetAction() const
 	{
 		return Action;
+	}
+	inline void SetFrame(BYTE frame)
+	{
+		Frame = (Frame & (SF_FULLBRIGHT|SF_BIGTIC)) | (frame-'A');
 	}
 };
 
@@ -226,13 +237,13 @@ enum
 	ADEF_FirstCommand,
 	ADEF_LimitGame = ADEF_FirstCommand,
 	ADEF_SkipSuper,		// Take defaults from AActor instead of superclass(es)
-	ADEF_StateBase,		// Use states not owned by this actor
 
 	ADEF_EOL = 0		// End Of List
 };
 
 #if _MSC_VER
-#pragma warning(disable:4200)	// nonstandard extension used : zero-sized array in struct/union
+// nonstandard extension used : zero-sized array in struct/union
+#pragma warning(disable:4200)
 #endif
 
 struct FActorInfo
@@ -241,9 +252,11 @@ struct FActorInfo
 	static void StaticGameSet ();
 	static void StaticSetActorNums ();
 	static void StaticSpeedSet ();
+	static void StaticWeaponInit ();
 
 	void BuildDefaults ();
 	void ApplyDefaults (BYTE *defaults);
+	void RegisterIDs ();
 
 	TypeInfo *Class;
 	FState *OwnedStates;
@@ -285,6 +298,15 @@ private:
 };
 
 extern FDoomEdMap DoomEdMap;
+
+struct FWeaponInfo;
+
+struct FWeaponInfoInit
+{
+	int WeaponType;
+	FWeaponInfo *Level1;
+	FWeaponInfo *Level2;
+};
 
 #include "infomacros.h"
 

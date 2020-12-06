@@ -55,6 +55,7 @@ struct FSplashDef
 	byte ChunkZVelShift;
 	fixed_t ChunkBaseZVel;
 	fixed_t SmallSplashClip;
+	bool NoAlert;
 };
 
 struct FTerrainDef
@@ -69,12 +70,11 @@ struct FTerrainDef
 	float StepVolume;
 	int WalkStepTics;
 	int RunStepTics;
-	int LeftStepSounds[4];
-	int RightStepSounds[4];
-	byte NumLeftStepSounds;
-	byte NumRightStepSounds;
+	int LeftStepSound;
+	int RightStepSound;
 	bool IsLiquid;
-	bool ReducedFriction;
+	fixed_t Friction;
+	fixed_t MoveFactor;
 };
 
 extern TArray<FSplashDef> Splashes;

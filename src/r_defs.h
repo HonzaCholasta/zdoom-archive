@@ -42,6 +42,8 @@
 #define MAXWIDTH 2048
 #define MAXHEIGHT 1536
 
+const WORD NO_INDEX = 0xffff;
+
 // Silhouette, needed for clipping Segs (mainly)
 // and sprites representing things.
 enum
@@ -52,7 +54,7 @@ enum
 	SIL_BOTH
 };
 
-extern int MaxDrawSegs;
+extern size_t MaxDrawSegs;
 
 
 
@@ -71,6 +73,11 @@ extern int MaxDrawSegs;
 struct vertex_s
 {
 	fixed_t x, y;
+
+	bool operator== (const vertex_s &other)
+	{
+		return x == other.x && y == other.y;
+	}
 };
 typedef struct vertex_s vertex_t;
 
@@ -97,7 +104,8 @@ enum
 	SECSPAC_EyesDive	= 64,	// Trigger when player eyes go below fake floor
 	SECSPAC_EyesSurface = 128,	// Trigger when player eyes go above fake floor
 	SECSPAC_EyesBelowC	= 256,	// Trigger when player eyes go below fake ceiling
-	SECSPAC_EyesAboveC	= 512,	// Triggen when player eyes go above fake ceiling
+	SECSPAC_EyesAboveC	= 512,	// Trigger when player eyes go above fake ceiling
+	SECSPAC_HitFakeFloor= 1024,	// Trigger when player hits fake floor
 };
 
 class ASectorAction : public AActor
@@ -220,6 +228,25 @@ enum
 
 struct FDynamicColormap;
 
+struct FLightStack
+{
+	secplane_t Plane;		// Plane above this light (points up)
+	sector_t *Master;		// Sector to get light from (NULL for owner)
+	BITFIELD bBottom:1;		// Light is from the bottom of a block?
+	BITFIELD bFlooder:1;	// Light floods lower lights until another flooder is reached?
+	BITFIELD bOverlaps:1;	// Plane overlaps the next one
+};
+
+struct FExtraLight
+{
+	short Tag;
+	WORD NumLights;
+	WORD NumUsedLights;
+	FLightStack *Lights;	// Lights arranged from top to bottom
+
+	void InsertLight (const secplane_t &plane, line_s *line, int type);
+};
+
 struct sector_t
 {
 	// Member functions
@@ -239,6 +266,7 @@ struct sector_t
 	sector_t *NextSpecialSector (int type, sector_t *prev) const;		// [RH]
 	fixed_t FindLowestCeilingPoint (vertex_t **v) const;
 	fixed_t FindHighestFloorPoint (vertex_t **v) const;
+	void AdjustFloorClip () const;
 
 	// Member variables
 	fixed_t		CenterFloor () const { return floorplane.ZatPoint (soundorg[0], soundorg[1]); }
@@ -249,8 +277,7 @@ struct sector_t
 	fixed_t		floortexz, ceilingtexz;	// [RH] used for wall texture mapping
 
 	// [RH] give floor and ceiling even more properties
-	FDynamicColormap *floorcolormap;	// [RH] Per-sector colormap
-	FDynamicColormap *ceilingcolormap;
+	FDynamicColormap *ColorMap;	// [RH] Per-sector colormap
 
 	// killough 3/7/98: floor and ceiling texture offsets
 	fixed_t		  floor_xoffs,   floor_yoffs;
@@ -331,6 +358,11 @@ struct sector_t
 	// [RH] The sky box to render for this sector. NULL means use a
 	// regular sky.
 	ASkyViewpoint *SkyBox;
+
+	// Planes that partition this sector into different light zones.
+	FExtraLight *ExtraLights;
+
+	vertex_t *Triangle[3];	// Three points that can define a plane
 };
 
 
@@ -345,6 +377,7 @@ enum
 {
 	WALLF_ABSLIGHTING	= 1,	// Light is absolute instead of relative
 	WALLF_NOAUTODECALS	= 2,	// Do not attach impact decals to this wall
+	WALLF_ADDTRANS		= 4,	// Use additive instead of normal translucency
 };
 
 struct side_s
@@ -355,10 +388,12 @@ struct side_s
 	ADecal*		BoundActors;	// [RH] Decals bound to the wall
 	short		toptexture, bottomtexture, midtexture;	// texture indices
 	short		linenum;
-	short		LeftSide, RightSide;	// [RH] Group walls into loops
+	WORD		LeftSide, RightSide;	// [RH] Group walls into loops
 	WORD		TexelLength;
 	SBYTE		Light;
 	BYTE		Flags;
+
+	int GetLightLevel (bool foggy, int baselight) const;
 };
 typedef struct side_s side_t;
 
@@ -386,7 +421,7 @@ struct line_s
 							//		note that these are shorts in order to support
 							//		the tag parameter from DOOM.
 	short		firstid, nextid;
-	short		sidenum[2];	// sidenum[1] will be -1 if one sided
+	WORD		sidenum[2];	// sidenum[1] will be 0xffff if one sided
 	fixed_t		bbox[4];	// bounding box, for the extent of the LineDef.
 	slopetype_t	slopetype;	// To aid move clipping.
 	sector_t	*frontsector, *backsector;
@@ -423,6 +458,23 @@ typedef struct msecnode_s
 } msecnode_t;
 
 //
+// A SubSector.
+// References a Sector.
+// Basically, this is a list of LineSegs indicating the visible walls that
+// define (all or some) sides of a convex BSP leaf.
+//
+struct FPolyObj;
+typedef struct subsector_s
+{
+	sector_t	*sector;
+	WORD		numlines;
+	WORD		firstline;
+	FPolyObj	*poly;
+	int			validcount;
+	fixed_t		CenterX, CenterY;
+} subsector_t;
+
+//
 // The LineSeg.
 //
 struct seg_s
@@ -430,19 +482,17 @@ struct seg_s
 	vertex_t*	v1;
 	vertex_t*	v2;
 	
-	angle_t 	angle;
-
 	side_t* 	sidedef;
 	line_t* 	linedef;
 
-	// Sector references.
-	// Could be retrieved from linedef, too.
-	sector_t*	frontsector;
-	sector_t*	backsector;		// NULL for one-sided lines
-	
+	// Sector references. Could be retrieved from linedef, too.
+	sector_t*		frontsector;
+	sector_t*		backsector;		// NULL for one-sided lines
+
+	subsector_t*	Subsector;
+	seg_s*			PartnerSeg;
 };
 typedef struct seg_s seg_t;
-
 
 // ===== Polyobj data =====
 typedef struct FPolyObj
@@ -462,27 +512,6 @@ typedef struct FPolyObj
 	DThinker	*specialdata;	// pointer to a thinker, if the poly is moving
 } polyobj_t;
 
-typedef struct polyblock_s
-{
-	polyobj_t *polyobj;
-	struct polyblock_s *prev;
-	struct polyblock_s *next;
-} polyblock_t;
-
-//
-// A SubSector.
-// References a Sector.
-// Basically, this is a list of LineSegs indicating the visible walls that
-// define (all or some) sides of a convex BSP leaf.
-//
-typedef struct subsector_s
-{
-	sector_t	*sector;
-	short		numlines;
-	short		firstline;
-	polyobj_t	*poly;
-} subsector_t;
-
 //
 // BSP node.
 //
@@ -497,6 +526,14 @@ struct node_s
 	unsigned short children[2];	// If NF_SUBSECTOR its a subsector.
 };
 typedef struct node_s node_t;
+
+
+typedef struct polyblock_s
+{
+	polyobj_t *polyobj;
+	struct polyblock_s *prev;
+	struct polyblock_s *next;
+} polyblock_t;
 
 
 
@@ -529,7 +566,7 @@ typedef byte lighttable_t;	// This could be wider for >8 bit display.
 // A patch holds one or more columns.
 // Patches are used for sprites and all masked pictures, and we compose
 // textures from the TEXTURE1/2 lists of patches.
-struct patch_s
+struct patch_t
 { 
 	short			width;			// bounding box size 
 	short			height; 
@@ -538,13 +575,12 @@ struct patch_s
 	int 			columnofs[8];	// only [width] used
 	// the [0] is &columnofs[width] 
 };
-typedef struct patch_s patch_t;
 
 
 // A vissprite_t is a thing
 //	that will be drawn during a refresh.
 // I.e. a sprite object that is partly visible.
-struct vissprite_s
+struct vissprite_t
 {
 	short			x1, x2;
 	fixed_t			cx;				// for line side calculation
@@ -566,7 +602,6 @@ struct vissprite_s
 	BYTE			FakeFlatStat;	// [RH] which side of fake/floor ceiling sprite is on
 	WORD			Translation;	// [RH] for color translation
 };
-typedef struct vissprite_s vissprite_t;
 
 enum
 {
@@ -585,25 +620,25 @@ enum
 // is used to save space, thus NNNNF2F5 defines a mirrored patch.
 // Some sprites will only have one picture used for all views: NNNNF0
 //
-struct spriteframe_s
+struct spriteframe_t
 {
 	byte	 	rotate;		// if false, use 0 for any position.
 	short		lump[16];	// lump to use for view angles 0-15
 	WORD		flip;		// flip (1 = flip) to use for view angles 0-15.
 };
-typedef struct spriteframe_s spriteframe_t;
 
 //
 // A sprite definition:
 //	a number of animation frames.
 //
-struct spritedef_s
+struct spritedef_t
 {
 	char			name[5];
-	short 			numframes;
-	spriteframe_t	*spriteframes;
+	BYTE			numframes;
+	WORD			spriteframes;
 };
-typedef struct spritedef_s spritedef_t;
+
+extern TArray<spriteframe_t> SpriteFrames;
 
 //
 // [RH] Internal "skin" definition.
@@ -616,6 +651,8 @@ public:
 	byte		gender;		// This skin's gender (not really used)
 	byte		range0start;
 	byte		range0end;
+	byte		scale;
+	byte		game;
 	int			sprite;
 	int			namespc;	// namespace for this skin
 };

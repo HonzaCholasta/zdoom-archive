@@ -46,6 +46,7 @@
 #include "sc_man.h"
 #include "s_sound.h"
 #include "p_local.h"
+#include "templates.h"
 
 // MACROS ------------------------------------------------------------------
 
@@ -79,7 +80,7 @@ enum ETerrainKeywords
 	TR_LEFTSTEPSOUNDS,
 	TR_RIGHTSTEPSOUNDS,
 	TR_LIQUID,
-	TR_LOWFRICTION
+	TR_FRICTION
 };
 
 enum EDamageKeywords
@@ -129,7 +130,7 @@ static int FindTerrain (const char *name);
 static void GenericParse (FGenericParse *parser, const char **keywords,
 	void *fields, const char *type, const char *name);
 static void ParseDamage (int keyword, void *fields);
-static void ParseSounds (int keyword, void *fields);
+static void ParseFriction (int keyword, void *fields);
 
 // EXTERNAL DATA DECLARATIONS ----------------------------------------------
 
@@ -166,6 +167,7 @@ static const char *SplashKeywords[] =
 	"chunkyvelshift",
 	"chunkzvelshift",
 	"chunkbasezvel",
+	"noalert",
 	NULL
 };
 
@@ -183,7 +185,7 @@ static const char *TerrainKeywords[] =
 	"leftstepsounds",
 	"rightstepsounds",
 	"liquid",
-	"lowfriction",
+	"friction",
 	NULL
 };
 
@@ -207,7 +209,8 @@ static FGenericParse SplashParser[] =
 	{ GEN_Byte,   {myoffsetof(FSplashDef, ChunkXVelShift)} },
 	{ GEN_Byte,   {myoffsetof(FSplashDef, ChunkYVelShift)} },
 	{ GEN_Byte,   {myoffsetof(FSplashDef, ChunkZVelShift)} },
-	{ GEN_Fixed,  {myoffsetof(FSplashDef, ChunkBaseZVel)} }
+	{ GEN_Fixed,  {myoffsetof(FSplashDef, ChunkBaseZVel)} },
+	{ GEN_Bool,	  {myoffsetof(FSplashDef, NoAlert)} }
 };
 
 static FGenericParse TerrainParser[] =
@@ -221,10 +224,10 @@ static FGenericParse TerrainParser[] =
 	{ GEN_Float,  {myoffsetof(FTerrainDef, StepVolume)} },
 	{ GEN_Time,   {myoffsetof(FTerrainDef, WalkStepTics)} },
 	{ GEN_Time,   {myoffsetof(FTerrainDef, RunStepTics)} },
-	{ GEN_Custom, {(size_t)ParseSounds} },
-	{ GEN_Custom, {(size_t)ParseSounds} },
+	{ GEN_Sound,  {myoffsetof(FTerrainDef, LeftStepSound)} },
+	{ GEN_Sound,  {myoffsetof(FTerrainDef, RightStepSound)} },
 	{ GEN_Bool,   {myoffsetof(FTerrainDef, IsLiquid)} },
-	{ GEN_Bool,   {myoffsetof(FTerrainDef, ReducedFriction)} }
+	{ GEN_Custom, {(size_t)ParseFriction} }
 };
 
 /*
@@ -264,7 +267,7 @@ void P_InitTerrainTypes ()
 	int size;
 
 	size = (numflats+1)*sizeof(byte);
-	TerrainTypes = (byte *)Z_Malloc (size, PU_STATIC, 0);
+	TerrainTypes = (byte *)Malloc (size);
 	memset (TerrainTypes, 0, size);
 
 	MakeDefaultTerrain ();
@@ -387,21 +390,21 @@ void ParseSplash ()
 {
 	int splashnum;
 	FSplashDef *splashdef;
-	bool isnew = false;;
+	bool isnew = false;
 
 	SC_MustGetString ();
-	splashnum = FindSplash (sc_String);
+	splashnum = (int)FindSplash (sc_String);
 	if (splashnum < 0)
 	{
 		FSplashDef def;
 		def.Name = copystring (sc_String);
-		splashnum = Splashes.Push (def);
+		splashnum = (int)Splashes.Push (def);
 		isnew = true;
 	}
 	splashdef = &Splashes[splashnum];
 
 	SC_MustGetString ();
-	if (!SC_Compare ("modify") || isnew)
+	if (!SC_Compare ("modify") || (SC_MustGetString(), isnew))
 	{ // Set defaults
 		splashdef->SmallSplashSound =
 			splashdef->NormalSplashSound = -1;
@@ -413,10 +416,7 @@ void ParseSplash ()
 			splashdef->ChunkZVelShift = 8;
 		splashdef->ChunkBaseZVel = FRACUNIT;
 		splashdef->SmallSplashClip = 12*FRACUNIT;
-	}
-	if (SC_Compare ("modify"))
-	{
-		SC_MustGetString ();
+		splashdef->NoAlert = false;
 	}
 	if (!SC_Compare ("{"))
 	{
@@ -441,14 +441,14 @@ void ParseTerrain ()
 	const char *name;
 
 	SC_MustGetString ();
-	terrainnum = FindTerrain (sc_String);
+	terrainnum = (int)FindTerrain (sc_String);
 	if (terrainnum < 0)
 	{
 		FTerrainDef def;
 		memset (&def, 0, sizeof(def));
 		def.Splash = -1;
 		def.Name = copystring (sc_String);
-		terrainnum = Terrains.Push (def);
+		terrainnum = (int)Terrains.Push (def);
 	}
 
 	// Set defaults
@@ -508,58 +508,33 @@ static void ParseDamage (int keyword, void *fields)
 
 //==========================================================================
 //
-// ParseSounds
+// ParseFriction
 //
 //==========================================================================
 
-static void ParseSounds (int keyword, void *fields)
+static void ParseFriction (int keyword, void *fields)
 {
 	FTerrainDef *def = (FTerrainDef *)fields;
-	bool notdone = true;
-	bool warned = false;
-	int *array;
-	byte *count;
+	fixed_t friction, movefactor;
 
-	if (keyword == TR_LEFTSTEPSOUNDS)
-	{
-		array = &def->LeftStepSounds[0];
-		count = &def->NumLeftStepSounds;
-	}
+	SC_MustGetFloat ();
+
+	// These calculations should match those in P_SetSectorFriction().
+	// A friction of 1.0 is equivalent to ORIG_FRICTION.
+
+	friction = (0x1EB8*(sc_Float*100))/0x80 + 0xD001;
+	friction = clamp<fixed_t> (friction, 0, FRACUNIT);
+
+	if (friction > ORIG_FRICTION)	// ice
+		movefactor = ((0x10092 - friction) * 1024) / 4352 + 568;
 	else
-	{
-		array = &def->RightStepSounds[0];
-		count = &def->NumRightStepSounds;
-	}
-	*count = 0;
-	SC_MustGetStringName ("{");
-	do
-	{
-		SC_MustGetString ();
-		if (SC_Compare ("}"))
-		{
-			notdone = false;
-		}
-		else if (*count < 4)
-		{
-			int id = S_FindSound (sc_String);
-			if (id == -1)
-			{
-				Printf ("Unknown sound %s in terrain %s\n",
-					sc_String, def->Name);
-			}
-			else
-			{
-				array[*count] = id;
-				count++;
-			}
-		}
-		else if (!warned)
-		{
-			warned = true;
-			Printf ("Terrain %s has too many %s footstep sounds\n",
-				def->Name, (keyword == TR_LEFTSTEPSOUNDS) ? "left" : "right");
-		}
-	} while (notdone);
+		movefactor = ((friction - 0xDB34)*(0xA))/0x80;
+
+	if (movefactor < 32)
+		movefactor = 32;
+
+	def->Friction = friction;
+	def->MoveFactor = movefactor;
 }
 
 //==========================================================================
@@ -609,17 +584,24 @@ static void GenericParse (FGenericParse *parser, const char **keywords,
 
 		case GEN_Class:
 			SC_MustGetString ();
-			info = TypeInfo::IFindType (sc_String);
-			if (!info->IsDescendantOf (RUNTIME_CLASS(AActor)))
+			if (SC_Compare ("None"))
 			{
-				Printf ("%s is not an Actor (in %s %s)\n",
-					sc_String, type, name);
 				info = NULL;
 			}
-			else if (info == NULL)
+			else
 			{
-				Printf ("Unknown actor %s in %s %s\n",
-					sc_String, type, name);
+				info = TypeInfo::IFindType (sc_String);
+				if (!info->IsDescendantOf (RUNTIME_CLASS(AActor)))
+				{
+					Printf ("%s is not an Actor (in %s %s)\n",
+						sc_String, type, name);
+					info = NULL;
+				}
+				else if (info == NULL)
+				{
+					Printf ("Unknown actor %s in %s %s\n",
+						sc_String, type, name);
+				}
 			}
 			SET_FIELD (const TypeInfo *, info);
 			break;
@@ -704,7 +686,7 @@ int FindSplash (const char *name)
 	{
 		if (stricmp (Splashes[i].Name, name) == 0)
 		{
-			return i;
+			return (int)i;
 		}
 	}
 	return -1;
@@ -724,7 +706,7 @@ int FindTerrain (const char *name)
 	{
 		if (stricmp (Terrains[i].Name, name) == 0)
 		{
-			return i;
+			return (int)i;
 		}
 	}
 	return -1;

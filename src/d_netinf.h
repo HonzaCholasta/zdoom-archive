@@ -40,9 +40,21 @@ EXTERN_CVAR (Float, autoaim)
 
 #define MAXPLAYERNAME	15
 
-#define GENDER_MALE		0
-#define GENDER_FEMALE	1
-#define GENDER_NEUTER	2
+enum
+{
+	GENDER_MALE,
+	GENDER_FEMALE,
+	GENDER_NEUTER
+};
+
+enum
+{
+	PLAYERCLASS_Random = -1,
+	PLAYERCLASS_Fighter,
+	PLAYERCLASS_Cleric,
+	PALYERCLASS_Mage
+};
+extern const char *PlayerClassNames[4];
 
 int D_GenderToInt (const char *gender);
 extern const char *GenderNames[3];
@@ -57,6 +69,7 @@ struct userinfo_s
 	int			gender;
 	bool		neverswitch;
 	fixed_t		MoveBob, StillBob;
+	int			PlayerClass;
 };
 typedef struct userinfo_s userinfo_t;
 
@@ -72,6 +85,7 @@ enum ETeams
 };
 
 extern const char *TeamNames[NUM_TEAMS];
+extern float TeamHues[NUM_TEAMS];
 
 FArchive &operator<< (FArchive &arc, userinfo_t &info);
 
@@ -84,5 +98,11 @@ void D_DoServerInfoChange (byte **stream);
 
 void D_WriteUserInfoStrings (int player, byte **stream, bool compact=false);
 void D_ReadUserInfoStrings (int player, byte **stream, bool update);
+
+void D_GetPlayerColor (int player, float *h, float *s, float *v);
+void D_PickRandomTeam (int player);
+int D_PickRandomTeam ();
+class player_s;
+int D_GetFragCount (player_s *player);
 
 #endif //__D_CLIENTINFO_H__

@@ -64,6 +64,7 @@
 #include "d_player.h"
 #include "r_main.h"
 #include "templates.h"
+#include "p_local.h"
 
 extern FILE *Logfile;
 
@@ -274,9 +275,21 @@ CCMD (changemap)
 		}
 		else
 		{
-			Net_WriteByte (DEM_CHANGEMAP);
+			if (argv.argc() > 2)
+			{
+				Net_WriteByte (DEM_CHANGEMAP2);
+				Net_WriteByte (atoi(argv[2]));
+			}
+			else
+			{
+				Net_WriteByte (DEM_CHANGEMAP);
+			}
 			Net_WriteString (argv[1]);
 		}
+	}
+	else
+	{
+		Printf ("Usage: changemap <map name> [position]\n");
 	}
 }
 
@@ -336,7 +349,7 @@ CCMD (exec)
 
 CCMD (dumpheap)
 {
-	int lo = PU_STATIC, hi = PU_CACHE;
+	int lo = 0, hi = 255;
 
 	if (argv.argc() >= 2)
 	{
@@ -412,8 +425,28 @@ CCMD (puke)
 
 CCMD (error)
 {
-	char *textcopy = copystring (argv[1]);
-	I_Error (textcopy);
+	if (argv.argc() > 1)
+	{
+		char *textcopy = copystring (argv[1]);
+		I_Error (textcopy);
+	}
+	else
+	{
+		Printf ("Usage: error <error text>\n");
+	}
+}
+
+CCMD (error_fatal)
+{
+	if (argv.argc() > 1)
+	{
+		char *textcopy = copystring (argv[1]);
+		I_FatalError (textcopy);
+	}
+	else
+	{
+		Printf ("Usage: error_fatal <error text>\n");
+	}
 }
 
 CCMD (dir)
@@ -421,7 +454,7 @@ CCMD (dir)
 	char dir[256], curdir[256];
 	char *match;
 	findstate_t c_file;
-	long file;
+	void *file;
 
 	if (!getcwd (curdir, 256))
 	{
@@ -461,7 +494,7 @@ CCMD (dir)
 			strcat (dir, "/");
 	}
 
-	if ( (file = I_FindFirst (match, &c_file)) == -1)
+	if ( (file = I_FindFirst (match, &c_file)) == ((void *)(-1)))
 		Printf ("Nothing matching %s%s\n", dir, match);
 	else
 	{
@@ -469,7 +502,7 @@ CCMD (dir)
 		do
 		{
 			if (I_FindAttr (&c_file) & FA_DIREC)
-				Printf_Bold ("%s <dir>\n", I_FindName (&c_file));
+				Printf (PRINT_BOLD, "%s <dir>\n", I_FindName (&c_file));
 			else
 				Printf ("%s\n", I_FindName (&c_file));
 		} while (I_FindNext (file, &c_file) == 0);
@@ -532,4 +565,31 @@ CCMD (r_visibility)
 	{
 		Printf ("Visibility cannot be changed in net games.\n");
 	}
+}
+
+//==========================================================================
+//
+// CCMD warp
+//
+// Warps to a specific location on a map
+//
+//==========================================================================
+
+CCMD (warp)
+{
+	if (gamestate != GS_LEVEL)
+	{
+		Printf ("You can only warp inside a level.\n");
+		return;
+	}
+	if (netgame)
+	{
+		Printf ("You cannot warp in a net game!\n");
+		return;
+	}
+	if (argv.argc() != 3)
+	{
+		Printf ("Usage: warp <x> <y>\n");
+	}
+	P_TeleportMove (players[consoleplayer].mo, atof(argv[1])*65536.0, atof(argv[2])*65536.0, ONFLOORZ, true);
 }

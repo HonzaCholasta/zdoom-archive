@@ -35,6 +35,7 @@
 #include "v_video.h"
 #include "doomstat.h"
 #include "st_stuff.h"
+#include "a_hexenglobal.h"
 
 #include "gi.h"
 #include "stats.h"
@@ -791,6 +792,8 @@ dsfixed_t 				ds_xfrac;
 dsfixed_t 				ds_yfrac; 
 dsfixed_t 				ds_xstep; 
 dsfixed_t 				ds_ystep;
+int						ds_xbits;
+int						ds_ybits;
 
 // start of a 64*64 tile image 
 byte*					ds_source;		
@@ -813,18 +816,14 @@ void R_DrawSpanP_C (void)
 	int 				spot;
 
 #ifdef RANGECHECK 
-	if (ds_x2 < ds_x1
-		|| ds_x1<0
-		|| ds_x2>=screen->width
-		|| ds_y>screen->height)
+	if (ds_x2 < ds_x1 || ds_x1 < 0
+		|| ds_x2 >= screen->width || ds_y > screen->height)
 	{
-		I_Error ("R_DrawSpan: %i to %i at %i",
-				 ds_x1,ds_x2,ds_y);
+		I_Error ("R_DrawSpan: %i to %i at %i", ds_x1, ds_x2, ds_y);
 	}
 //		dscount++;
 #endif
 
-	
 	xfrac = ds_xfrac;
 	yfrac = ds_yfrac;
 
@@ -836,18 +835,43 @@ void R_DrawSpanP_C (void)
 	xstep = ds_xstep;
 	ystep = ds_ystep;
 
-	do {
-		// Current texture index in u,v.
-		spot = ((yfrac>>(32-6-6))&(63*64)) + (xfrac>>(32-6));
+	if (ds_xbits == 6 && ds_ybits == 6)
+	{
+		// 64x64 is the most common case by far, so special case it.
+		do
+		{
+			// Current texture index in u,v.
+			spot = ((yfrac>>(32-6-6))&(63*64)) + (xfrac>>(32-6));
 
-		// Lookup pixel from flat texture tile,
-		//  re-index using light/colormap.
-		*dest++ = ds_colormap[ds_source[spot]];
+			// Lookup pixel from flat texture tile,
+			//  re-index using light/colormap.
+			*dest++ = ds_colormap[ds_source[spot]];
 
-		// Next step in u,v.
-		xfrac += xstep;
-		yfrac += ystep;
-	} while (--count);
+			// Next step in u,v.
+			xfrac += xstep;
+			yfrac += ystep;
+		} while (--count);
+	}
+	else
+	{
+		do
+		{
+			BYTE xshift = 32 - ds_xbits;
+			BYTE yshift = xshift - ds_ybits;
+			int ymask = ((1 << ds_ybits) - 1) << ds_xbits;
+		
+			// Current texture index in u,v.
+			spot = ((yfrac >> yshift) & ymask) + (xfrac >> xshift);
+
+			// Lookup pixel from flat texture tile,
+			//  re-index using light/colormap.
+			*dest++ = ds_colormap[ds_source[spot]];
+
+			// Next step in u,v.
+			xfrac += xstep;
+			yfrac += ystep;
+		} while (--count);
+	}
 }
 #endif
 // [RH] Just fill a span with a color
@@ -1106,9 +1130,7 @@ void R_InitTranslationTables ()
 	// Diminishing translucency tables for shaded actors. Not really
 	// translation tables, but putting them here was convenient, particularly
 	// since translationtables[0] would otherwise be wasted.
-	translationtables[0] = (byte *)Z_Malloc (
-		(NUMCOLORMAPS*16+MAXPLAYERS*2+3+MAX_ACS_TRANSLATIONS)*256,
-		PU_STATIC, NULL);
+	translationtables[0] = new BYTE[(NUMCOLORMAPS*16+MAXPLAYERS*2+3+MAX_ACS_TRANSLATIONS)*256];
 
 	// Player translations, one for each player
 	translationtables[TRANSLATION_Players] =
@@ -1183,78 +1205,163 @@ void R_InitTranslationTables ()
 	}
 }
 
-// [RH] Create a player's translation table based on
-//		a given mid-range color.
-void R_BuildPlayerTranslation (int player, int color)
+// [RH] Create a player's translation table based on a given mid-range color.
+void R_BuildPlayerTranslation (int player)
 {
 	byte *table = &translationtables[TRANSLATION_Players][player*256];
 	FPlayerSkin *skin = &skins[players[player].userinfo.skin];
 
-	byte i;
+	int i;
 	byte start = skin->range0start;
 	byte end = skin->range0end;
-	float r = (float)RPART(color) / 255.f;
-	float g = (float)GPART(color) / 255.f;
-	float b = (float)BPART(color) / 255.f;
+	float r, g, b;
 	float h, s, v;
 	float bases, basev;
 	float sdelta, vdelta;
 	float range;
 
+	// Set up the base translation for this skin. If the skin was created
+	// for the current game, then this is just an identity translation.
+	// Otherwise, it remaps the colors from the skin's original palette to
+	// the current one.
+	if (skin->game & gameinfo.gametype)
+	{
+		for (i = 0; i < 256; ++i)
+		{
+			table[i] = i;
+		}
+	}
+	else
+	{
+		memcpy (table, OtherGameSkinRemap, 256);
+	}
+
 	range = (float)(end-start+1);
 
-	RGBtoHSV (r, g, b, &h, &s, &v);
+	D_GetPlayerColor (player, &h, &s, &v);
 
 	bases = s;
 	basev = v;
 
-	if (gameinfo.gametype == GAME_Doom)
+	if (gameinfo.gametype != GAME_Hexen)
 	{
-		// Build player sprite translation
-		s -= 0.23f;
-		v += 0.1f;
-		sdelta = 0.23f / range;
-		vdelta = -0.94112f / range;
-
-		for (i = start; i <= end; i++)
+		if (skin->game == GAME_Doom)
 		{
-			float uses, usev;
-			uses = clamp (s, 0.f, 1.f);
-			usev = clamp (v, 0.f, 1.f);
-			HSVtoRGB (&r, &g, &b, h, uses, usev);
-			table[i] = ColorMatcher.Pick (
-				clamp ((int)(r * 255.f), 0, 255),
-				clamp ((int)(g * 255.f), 0, 255),
-				clamp ((int)(b * 255.f), 0, 255));
-			s += sdelta;
-			v += vdelta;
+			// Build player sprite translation
+			s -= 0.23f;
+			v += 0.1f;
+			sdelta = 0.23f / range;
+			vdelta = -0.94112f / range;
+
+			for (i = start; i <= end; i++)
+			{
+				float uses, usev;
+				uses = clamp (s, 0.f, 1.f);
+				usev = clamp (v, 0.f, 1.f);
+				HSVtoRGB (&r, &g, &b, h, uses, usev);
+				table[i] = ColorMatcher.Pick (
+					clamp ((int)(r * 255.f), 0, 255),
+					clamp ((int)(g * 255.f), 0, 255),
+					clamp ((int)(b * 255.f), 0, 255));
+				s += sdelta;
+				v += vdelta;
+			}
+		}
+		else
+		{ // This is not Doom, so it must be Heretic
+			float vdelta = 0.418916f / range;
+
+			// Build player sprite translation
+			for (i = start; i <= end; i++)
+			{
+				v = vdelta * (float)(i - start) + basev - 0.2352937f;
+				v = clamp (v, 0.f, 1.f);
+				HSVtoRGB (&r, &g, &b, h, s, v);
+				table[i] = ColorMatcher.Pick (
+					clamp ((int)(r * 255.f), 0, 255),
+					clamp ((int)(g * 255.f), 0, 255),
+					clamp ((int)(b * 255.f), 0, 255));
+			}
+
+			// Build rain/lifegem translation
+			table = &translationtables[TRANSLATION_PlayersExtra][player*256];
+			bases = MIN (bases*1.3f, 1.f);
+			basev = MIN (basev*1.3f, 1.f);
+			for (i = 145; i <= 168; i++)
+			{
+				s = MIN (bases, 0.8965f - 0.0962f*(float)(i - 161));
+				v = MIN (1.f, (0.2102f + 0.0489f*(float)(i - 144)) * basev);
+				HSVtoRGB (&r, &g, &b, h, s, v);
+				table[i] = ColorMatcher.Pick (
+					clamp ((int)(r * 255.f), 0, 255),
+					clamp ((int)(g * 255.f), 0, 255),
+					clamp ((int)(b * 255.f), 0, 255));
+			}
 		}
 	}
-	else if (gameinfo.gametype == GAME_Heretic)
-	{
-		float vdelta = 0.418916f / range;
+	else
+	{ // This is Hexen we are playing
+		bool fighter;
 
-		// Build player sprite translation
-		for (i = start; i <= end; i++)
+		if (players[player].mo != NULL)
 		{
-			v = vdelta * (float)(i - start) + basev - 0.2352937f;
-			v = clamp (v, 0.f, 1.f);
-			HSVtoRGB (&r, &g, &b, h, s, v);
-			table[i] = ColorMatcher.Pick (
-				clamp ((int)(r * 255.f), 0, 255),
-				clamp ((int)(g * 255.f), 0, 255),
-				clamp ((int)(b * 255.f), 0, 255));
+			fighter = players[player].mo->IsKindOf (RUNTIME_CLASS(AFighterPlayer));
+		}
+		else
+		{
+			fighter = players[player].userinfo.PlayerClass == 0;
+		}
+		if (fighter)
+		{ // The fighter is different! He gets a brown hairy loincloth, but the other
+		  // two have blue capes.
+			float vs[9] = { .28f, .32f, .38f, .42f, .47f, .5f, .58f, .71f, .83f };
+			start = 0xf6;
+			end = 0xfe;
+
+			// Build player sprite translation
+			//h = 45.f;
+			v = MAX (0.1f, v);
+
+			for (i = start; i <= end; i++)
+			{
+				HSVtoRGB (&r, &g, &b, h, s, vs[i-start]*basev);
+				table[i] = ColorMatcher.Pick (
+					clamp ((int)(r * 255.f), 0, 255),
+					clamp ((int)(g * 255.f), 0, 255),
+					clamp ((int)(b * 255.f), 0, 255));
+			}
+		}
+		else
+		{
+			float ms[18] = { .95f, .96f, .89f, .97f, .97f, 1.f, 1.f, 1.f, .97f, .99f, .87f, .77f, .69f, .62f, .57f, .47f, .43f };
+			float mv[18] = { .16f, .19f, .22f, .25f, .31f, .35f, .38f, .41f, .47f, .54f, .60f, .65f, .71f, .77f, .83f, .89f, .94f, 1.f };
+			start = 0x92;
+			end = 0xa3;
+
+			// Build player sprite translation
+			v = MAX (0.1f, v);
+
+			for (i = start; i <= end; i++)
+			{
+				HSVtoRGB (&r, &g, &b, h, ms[i-start]*bases, mv[i-start]*basev);
+				table[i] = ColorMatcher.Pick (
+					clamp ((int)(r * 255.f), 0, 255),
+					clamp ((int)(g * 255.f), 0, 255),
+					clamp ((int)(b * 255.f), 0, 255));
+			}
 		}
 
-		// Build rain/lifegem translation
+		// Build lifegem translation
 		table = &translationtables[TRANSLATION_PlayersExtra][player*256];
-		bases = MIN (bases*1.3f, 1.f);
-		basev = MIN (basev*1.3f, 1.f);
-		for (i = 145; i <= 168; i++)
+		start = 0xa4;
+		end = 0xb9;
+		for (i = start; i <= end; ++i)
 		{
-			s = MIN (bases, 0.8965f - 0.0962f*(float)(i - 161));
-			v = MIN (1.f, (0.2102f + 0.0489f*(float)(i - 144)) * basev);
-			HSVtoRGB (&r, &g, &b, h, s, v);
+			const PalEntry *base = &GPalette.BaseColors[i];
+			float dummy;
+
+			RGBtoHSV (base->r/255.f, base->g/255.f, base->b/255.f, &dummy, &s, &v);
+			HSVtoRGB (&r, &g, &b, h, s*bases, v*basev);
 			table[i] = ColorMatcher.Pick (
 				clamp ((int)(r * 255.f), 0, 255),
 				clamp ((int)(g * 255.f), 0, 255),

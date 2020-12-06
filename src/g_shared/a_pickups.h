@@ -51,7 +51,7 @@ extern const char *AmmoPics[NUMAMMO];
 
 typedef enum
 {
-	ARMOR_ARMOR,
+	ARMOR_ARMOR = 0,
 	ARMOR_SHIELD,
 	ARMOR_HELMET,
 	ARMOR_AMULET,
@@ -121,6 +121,7 @@ struct FWeaponInfo
 {
 	DWORD			flags;
 	ammotype_t		ammo;
+	ammotype_t		givingammo;
 	int				ammouse;
 	int				ammogive;
 	FState			*upstate;
@@ -152,37 +153,52 @@ enum
 	WIF_FIREDAMAGE =		0x00000010, // weapon does fire damage on impact
 };
 
-#define MAX_WEAPONS_PER_SLOT	4
+#define MAX_WEAPONS_PER_SLOT	8
 #define NUM_WEAPON_SLOTS		10
 
 class player_s;
+class FConfigFile;
 
 class FWeaponSlot
 {
 public:
 	FWeaponSlot ();
-	bool AddWeapon (weapontype_t weap, int priority);
+	void Clear ();
+	bool AddWeapon (const char *type);
+	bool AddWeapon (const TypeInfo *type);
+	bool AddWeapon (weapontype_t weap);
 	weapontype_t PickWeapon (player_s *player);
+	int CountWeapons ();
+	void StreamOut ();
+	void StreamIn (byte **stream);
 
 	inline weapontype_t GetWeapon (int index) const
 	{
-		return (weapontype_t)Weapons[index].Weapon;
+		return (weapontype_t)Weapons[index];
 	}
-
-	static bool LocateWeapon (weapontype_t weap, int *const slot, int *const index);
 
 	friend weapontype_t PickNextWeapon (player_s *player);
 	friend weapontype_t PickPrevWeapon (player_s *player);
 
+	friend struct FWeaponSlots;
+
 private:
-	struct
-	{
-		byte Weapon;
-		byte Priority;
-	} Weapons[MAX_WEAPONS_PER_SLOT];
+	byte Weapons[MAX_WEAPONS_PER_SLOT];
 };
 
-extern FWeaponSlot WeaponSlots[NUM_WEAPON_SLOTS];
+struct FWeaponSlots
+{
+	FWeaponSlot Slots[NUM_WEAPON_SLOTS];
+
+	void Clear ();
+	bool LocateWeapon (weapontype_t weap, int *const slot, int *const index);
+	void RestoreSlots (FConfigFile &config);
+	void SaveSlots (FConfigFile &config);
+	void StreamOutSlots ();
+	void StreamInSlots (byte **stream);
+};
+
+extern FWeaponSlots LocalWeapons;
 extern FWeaponInfo *wpnlev1info[NUMWEAPONS], *wpnlev2info[NUMWEAPONS];
 
 //
@@ -203,6 +219,19 @@ typedef enum
 	it_yellowskull,
 	it_redskull,
 
+// Hexen keys
+	KEY_STEEL = 0,
+	KEY_CAVE,
+	KEY_AXE,
+	KEY_FIRE,
+	KEY_EMERALD,
+	KEY_DUNGEON,
+	KEY_SILVER,
+	KEY_RUSTED,
+	KEY_HORN,
+	KEY_SWAMP,
+	KEY_CASTLE,
+
 	NUMKEYS
 	
 } keytype_t;
@@ -221,12 +250,13 @@ class AInventory : public AActor
 public:
 	virtual void Touch (AActor *toucher);
 
+	virtual void BeginPlay ();
 	virtual bool ShouldRespawn ();
 	virtual bool ShouldStay ();
 	virtual void Hide ();
 	virtual bool DoRespawn ();
 	virtual bool TryPickup (AActor *toucher);
-protected:
+
 	virtual const char *PickupMessage ();
 	virtual void PlayPickupSound (AActor *toucher);
 private:
@@ -240,9 +270,9 @@ class AWeapon : public AInventory
 	DECLARE_ACTOR (AWeapon, AInventory)
 public:
 	virtual bool TryPickup (AActor *toucher);
+	virtual weapontype_t OldStyleID() const;
 protected:
 	virtual void PlayPickupSound (AActor *toucher);
-	virtual weapontype_t OldStyleID() const;
 	virtual bool ShouldStay ();
 };
 #define S_LIGHTDONE 0
@@ -268,6 +298,8 @@ protected:
 class AAmmo : public AInventory
 {
 	DECLARE_CLASS (AAmmo, AInventory)
+public:
+	virtual ammotype_t GetAmmoType () const;
 protected:
 	AAmmo () {}
 	virtual void PlayPickupSound (AActor *toucher);

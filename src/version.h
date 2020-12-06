@@ -35,15 +35,19 @@
 #define __VERSION_H__
 
 // Lots of different representations for the version number
-enum { VERSION = 123 };
-#define STRVERSION "123.1"
-#define DOTVERSIONSTR "1.23 beta 33"
-#define GAMEVER (1*256+23)
+enum { VERSION = 201 };
+#define STRVERSION "201"
+#define DOTVERSIONSTR "oodoo"
+#define GAMEVER (2*256+1)
 
-// SAVESIG is the save game signature. It should be the minimum version
-// whose savegames this version is compatible with, which could be
-// earlier than this version.
-#define SAVESIG "ZDOOMSAVE123576 "	// Needs to be exactly 16 chars long
+// SAVEVER is the version of the information stored in level snapshots.
+// Note that SAVEVER is not directly comparable to VERSION.
+// SAVESIG should match SAVEVER.
+#define SAVEVER 204
+#define SAVESIG "ZDOOMSAVE204"
+
+// MINSAVEVER is the minimum level snapshot version that can be loaded.
+#define MINSAVEVER 200
 
 // The maximum length of one save game description for the menus.
 #define SAVESTRINGSIZE		24

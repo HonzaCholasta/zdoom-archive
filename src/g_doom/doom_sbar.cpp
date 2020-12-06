@@ -117,6 +117,17 @@ public:
 		OldFaceIndex = -1;
 	}
 
+	void MultiplayerChanged ()
+	{
+		FBaseStatusBar::MultiplayerChanged ();
+		if (multiplayer)
+		{
+			// draw face background
+			DrawToSBar ("STFBANY", 143, 1,
+				translationtables[TRANSLATION_Players] + (CPlayer - players)*256);
+		}
+	}
+
 	void AttachToPlayer (player_t *player)
 	{
 		int i;
@@ -125,8 +136,9 @@ public:
 		SetFace (&skins[CPlayer->userinfo.skin]);
 		if (multiplayer)
 		{
-			V_ColorMap = translationtables[TRANSLATION_Players] + (CPlayer - players)*256*2;
-			DrawToSBar ("STFBANY", 143, 1);	// face background
+			// draw face background
+			DrawToSBar ("STFBANY", 143, 1,
+				translationtables[TRANSLATION_Players] + (CPlayer - players)*256);
 		}
 		for (i = 0; i < NUMWEAPONS; i++)
 		{
@@ -165,6 +177,7 @@ public:
 				OldArmor = -1;
 				OldActiveAmmo = -1;
 				OldFrags = -9999;
+				FaceHealth = -9999;
 			}
 			DrawMainBar ();
 		}
@@ -275,7 +288,7 @@ private:
 		{
 			for (j = 0; j < MAX_WEAPONS_PER_SLOT; j++)
 			{
-				weapontype_t weap = WeaponSlots[i+2].GetWeapon (j);
+				weapontype_t weap = CPlayer->WeaponSlots.Slots[i+2].GetWeapon (j);
 				if (weap < NUMWEAPONS && CPlayer->weaponowned[weap])
 				{
 					arms[i] = 1;
@@ -419,7 +432,10 @@ private:
 				int y = 3 + i*10;
 
 				DrawPartialImage (Images, imgSBAR, 239, y, 239, y, 8, 5);
-				DrawImage (Images, imgKEYS0+keys[i], 239, y);
+				if (keys[i] != 255)
+				{
+					DrawImage (Images, imgKEYS0+keys[i], 239, y);
+				}
 			}
 		}
 	}
@@ -494,7 +510,7 @@ private:
 		}
 	}
 
-	void DrawToSBar (const char *name, int x, int y) const
+	void DrawToSBar (const char *name, int x, int y, BYTE *colormap=NULL) const
 	{
 		int dummy;
 		byte *desttop = Images.GetImage (imgSBAR,
@@ -507,36 +523,72 @@ private:
 			int *ofs = &arms->columnofs[0];
 			desttop += x + 320*y;
 
-			do
+			if (colormap == NULL)
 			{
-				column_t *column = (column_t *)((byte *)arms + LONG(*ofs));
-				int top = -1;
-
-				while (column->topdelta != 0xff)
+				do
 				{
-					if  (column->topdelta <= top)
-					{
-						top += column->topdelta;
-					}
-					else
-					{
-						top = column->topdelta;
-					}
-					byte *source = (byte *)column + 3;
-					byte *dest = desttop + top * 320;
-					int count = column->length;
+					column_t *column = (column_t *)((byte *)arms + LONG(*ofs));
+					int top = -1;
 
-					do
+					while (column->topdelta != 0xff)
 					{
-						*dest = *source++;
-						dest += 320;
-					} while (--count);
+						if  (column->topdelta <= top)
+						{
+							top += column->topdelta;
+						}
+						else
+						{
+							top = column->topdelta;
+						}
+						byte *source = (byte *)column + 3;
+						byte *dest = desttop + top * 320;
+						int count = column->length;
 
-					column = (column_t *)(source + 1);
-				}
-				ofs++;
-				desttop++;
-			} while (--w);
+						do
+						{
+							*dest = *source++;
+							dest += 320;
+						} while (--count);
+
+						column = (column_t *)(source + 1);
+					}
+					ofs++;
+					desttop++;
+				} while (--w);
+			}
+			else
+			{
+				do
+				{
+					column_t *column = (column_t *)((byte *)arms + LONG(*ofs));
+					int top = -1;
+
+					while (column->topdelta != 0xff)
+					{
+						if  (column->topdelta <= top)
+						{
+							top += column->topdelta;
+						}
+						else
+						{
+							top = column->topdelta;
+						}
+						byte *source = (byte *)column + 3;
+						byte *dest = desttop + top * 320;
+						int count = column->length;
+
+						do
+						{
+							*dest = colormap[*source++];
+							dest += 320;
+						} while (--count);
+
+						column = (column_t *)(source + 1);
+					}
+					ofs++;
+					desttop++;
+				} while (--w);
+			}
 		}
 	}
 
@@ -615,10 +667,11 @@ private:
 				// being attacked
 				priority = 7;
 				
-				if (OldHealth != -1 && CPlayer->health - OldHealth > ST_MUCHPAIN)
+				if (FaceHealth != -9999 && FaceHealth - CPlayer->health > ST_MUCHPAIN)
 				{
 					FaceCount = ST_TURNCOUNT;
 					FaceIndex = CalcPainOffset() + ST_OUCHOFFSET;
+					priority = 8;
 				}
 				else
 				{
@@ -727,6 +780,7 @@ private:
 		}
 
 		FaceCount--;
+		FaceHealth = CPlayer->health;
 	}
 
 	enum
@@ -788,6 +842,7 @@ private:
 	int OldArmor;
 	int OldActiveAmmo;
 	int OldFrags;
+	int FaceHealth;
 
 	char HealthRefresh;
 	char ArmorRefresh;

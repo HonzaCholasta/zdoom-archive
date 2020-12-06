@@ -374,12 +374,22 @@ void DCanvas::DrawWrapper (EWrapperCode drawer, const patch_t *patch, int x, int
 			{
 				top = column->topdelta;
 			}
-			if (column->length != 0)
+			int len = column->length;
+			if (len != 0)
 			{
-				drawfunc ((byte *)column + 3,
-						  desttop + top * Pitch,
-						  column->length,
-						  Pitch);
+				if (top + len > patch->height)
+				{
+					len = patch->height - top;
+					if (len > 0)
+					{
+						drawfunc ((byte *)column + 3, desttop + top * Pitch, len, Pitch);
+						break;
+					}
+				}
+				else
+				{
+					drawfunc ((byte *)column + 3, desttop + top * Pitch, len, Pitch);
+				}
 			}
 			column = (column_t *)((byte *)column + column->length + 4);
 		}
@@ -399,6 +409,7 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 	byte*		desttop;
 	vdrawsfunc	drawfunc;
 	int			colstep;
+	int			maxy;
 
 	int			xinc, yinc, col, w, ymul, xmul;
 
@@ -446,6 +457,7 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 	desttop = Buffer + y0*Pitch + x0 * colstep;
 
 	w = destwidth * xinc;
+	maxy = SHORT(patch->height);
 
 	for ( ; col<w ; col += xinc, desttop += colstep)
 	{
@@ -473,8 +485,8 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 					top = (top) >> 16;
 					drawfunc ((byte *)column + 3, desttop + top * Pitch,
 						bot, Pitch, yinc);
-					column = (column_t *)((byte *)column + column->length + 4);
 				}
+				column = (column_t *)((byte *)column + column->length + 4);
 			}
 			else
 			{
@@ -1134,11 +1146,11 @@ void DCanvas::DrawShadowedMaskedBlock (int x, int y, int _width, int _height,
 		return;		// Nothing to draw
 	}
 
-	if (y + _height + 2 >= Height || x + _width + 2 >= Width)
+	if (y + _height + 2 > Height || x + _width + 2 > Width)
 	{
 		// Shadow extends past edge of canvas
-		DrawMaskedBlock (x, y, srcpitch, _height, src, colors);
 		DrawShadowBlock (x+2, y+2, srcpitch, _height, src, shade);
+		DrawMaskedBlock (x, y, srcpitch, _height, src, colors);
 		return;
 	}
 
@@ -1189,6 +1201,7 @@ void DCanvas::DrawShadowedMaskedBlock (int x, int y, int _width, int _height,
 	{
 #ifdef USEASM
 		MaskedBlockFunctions.DMSUP (src, dest, srcpitch, destpitch, _width, _height, fg, bg2rgb);
+		//MaskedBlockFunctions.DMPUP (src, dest, srcpitch, destpitch, _width, _height);
 #else
 		do
 		{
@@ -1239,11 +1252,11 @@ void DCanvas::ScaleShadowedMaskedBlock (int x, int y, int _width, int _height,
 		return;		// Nothing to draw
 	}
 
-	if (y + dheight + 2 >= Height || x + dwidth + 2 >= Width)
+	if (y + dheight + 2 > Height || x + dwidth + 2 > Width)
 	{
 		// Shadow extends past end of canvas
-		ScaleMaskedBlock (x, y, srcpitch, _height, dwidth, dheight, src, colors);
 		ScaleShadowBlock (x+2, y+2, srcpitch, _height, dwidth, dheight, src, shade);
+		ScaleMaskedBlock (x, y, srcpitch, _height, dwidth, dheight, src, colors);
 		return;
 	}
 

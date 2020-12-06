@@ -24,6 +24,8 @@
 #include "vectors.h"
 #include "a_doomglobal.h"
 
+static FRandom pr_botdofire ("BotDoFire");
+
 //Used with Reachable().
 static AActor *looker;
 static AActor *rtarget;
@@ -166,9 +168,12 @@ void DCajunMaster::Dofire (AActor *actor, ticcmd_t *cmd)
 
 	//Reaction skill thing.
 	if (actor->player->first_shot &&
-		!(actor->player->readyweapon==wp_bfg || actor->player->readyweapon==wp_missile))
+		!(actor->player->readyweapon==wp_bfg ||
+		  actor->player->readyweapon==wp_missile ||
+		  actor->player->readyweapon==wp_phoenixrod ||
+		  actor->player->readyweapon==wp_mace))
 	{
-		actor->player->t_react = (100-actor->player->skill.reaction+1)/((P_Random(pr_botdofire)%3)+3);
+		actor->player->t_react = (100-actor->player->skill.reaction+1)/((pr_botdofire()%3)+3);
 	}
 	actor->player->first_shot = false;
 	if (actor->player->t_react)
@@ -182,10 +187,12 @@ void DCajunMaster::Dofire (AActor *actor, ticcmd_t *cmd)
 	dist = P_AproxDistance ((actor->x + actor->momx) - (enemy->x + enemy->momx),
 		(actor->y + actor->momy) - (enemy->y + enemy->momy));
 
-	//FIRE EACH TYPE OF WEAPON DIFFERENT: Here should all the ddf weapons go.
+	//FIRE EACH TYPE OF WEAPON DIFFERENT: Here should all the different weapons go.
 	switch (actor->player->readyweapon)
 	{
 	case wp_missile: //Special rules for RL
+	case wp_phoenixrod:
+	case wp_cfire:
 		an = FireRox (actor, enemy, cmd);
 		if(an)
 		{
@@ -198,10 +205,30 @@ void DCajunMaster::Dofire (AActor *actor, ticcmd_t *cmd)
 		}
 		break;
 
+	case wp_fhammer:
+		if (actor->player->ammo[MANA_2] == 0)
+		{
+			goto fighternoammo;
+		}
+	case wp_faxe:
 	case wp_plasma: //Plasma (prediction aiming)
+	case wp_skullrod:
+	case wp_crossbow:
+	case wp_cstaff:
+	case wp_mfrost:
+	case wp_mlightning:
+	case wp_fsword:
+	case wp_choly:
+	case wp_mstaff:
 		//Here goes the prediction.
 		dist = P_AproxDistance (actor->x - enemy->x, actor->y - enemy->y);
-		m = (dist/FRACUNIT) / GetDefaultByName ("PlasmaBall")->Speed;
+		m = (dist/FRACUNIT);
+		if (actor->player->readyweapon == wp_plasma)
+			m /= GetDefaultByName ("PlasmaBall")->Speed;
+		else if (actor->player->readyweapon == wp_skullrod)
+			m /= GetDefaultByName ("HornRodFX1")->Speed;
+		else
+			m /= GetDefaultByName ("CrossbowFX1")->Speed;
 		SetBodyAt (enemy->x + FixedMul (enemy->momx, (m*2*FRACUNIT)),
 				   enemy->y + FixedMul (enemy->momy, (m*2*FRACUNIT)), ONFLOORZ, 1);
 		actor->player->angle = R_PointToAngle2 (actor->x, actor->y, body1->x, body1->y);
@@ -211,12 +238,19 @@ void DCajunMaster::Dofire (AActor *actor, ticcmd_t *cmd)
 
 	case wp_chainsaw:
 	case wp_fist:
+	case wp_staff:
+	case wp_gauntlets:
+	case wp_snout:
+	case wp_beak:
+	case wp_ffist:
+	case wp_cmace:
+fighternoammo:
 		no_fire = (dist > (MELEERANGE*4)); //*4 is for atmosphere,  the chainsaws sounding and all..
 		break;
 
 	case wp_bfg:
 		//MAKEME: This should be smarter.
-		if ((P_Random(pr_botdofire)%200)<=actor->player->skill.reaction)
+		if ((pr_botdofire()%200)<=actor->player->skill.reaction)
 			if(Check_LOS(actor, actor->player->enemy, SHOOTFOV))
 				no_fire = false;
 		break;
@@ -225,9 +259,9 @@ void DCajunMaster::Dofire (AActor *actor, ticcmd_t *cmd)
 		actor->player->angle = R_PointToAngle2 (actor->x, actor->y, enemy->x, enemy->y);
 		aiming_penalty = 0;
 		if (enemy->flags & MF_SHADOW)
-			aiming_penalty += (P_Random (pr_botdofire)%25)+10;
+			aiming_penalty += (pr_botdofire()%25)+10;
 		if (enemy->Sector->lightlevel<WHATS_DARK && !actor->player->powers[pw_infrared])
-			aiming_penalty += P_Random (pr_botdofire)%40;//Dark
+			aiming_penalty += pr_botdofire()%40;//Dark
 		if (actor->player->damagecount)
 			aiming_penalty += actor->player->damagecount; //Blood in face makes it hard to aim
 		aiming_value = actor->player->skill.aiming - aiming_penalty;
@@ -370,9 +404,10 @@ AActor *DCajunMaster::Find_enemy (AActor *bot)
 	angle_t vangle;
 	AActor *observer;
 
-	//Allow monster killing. keep monster enemy.
 	if (!deathmatch)
-		return NULL;
+	{ // [RH] Take advantage of the Heretic/Hexen code to be a little smarter
+		return P_RoughMonsterSearch (bot, 20);
+	}
 
 	//Note: It's hard to ambush a bot who is not alone
 	if (bot->player->allround || bot->player->mate)

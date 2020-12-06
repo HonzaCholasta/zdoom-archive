@@ -888,8 +888,9 @@ void AM_changeWindowScale ()
 //
 void AM_doFollowPlayer ()
 {
-    if (f_oldloc.x != players[consoleplayer].camera->x ||
-		f_oldloc.y != players[consoleplayer].camera->y)
+    if (players[consoleplayer].camera != NULL &&
+		(f_oldloc.x != players[consoleplayer].camera->x ||
+		 f_oldloc.y != players[consoleplayer].camera->y))
 	{
 		m_x = FTOM(MTOF(players[consoleplayer].camera->x)) - m_w/2;
 		m_y = FTOM(MTOF(players[consoleplayer].camera->y)) - m_h/2;
@@ -1778,31 +1779,49 @@ void AM_drawPlayers ()
 		int color;
 		mpoint_t pt;
 
-		if (!playeringame[i] ||
-			(deathmatch && !demoplayback) && p != players[consoleplayer].camera->player)
+		if (!playeringame[i] || p->mo == NULL)
+		{
+			continue;
+		}
+		
+		if (deathmatch && !demoplayback &&
+			!p->mo->IsTeammate (players[consoleplayer].mo) &&
+			p != players[consoleplayer].camera->player)
 		{
 			continue;
 		}
 
 		if (p->powers[pw_invisibility])
-			color = AlmostBackground;
-		else
-			color = ColorMatcher.Pick
-				(RPART(p->userinfo.color), GPART(p->userinfo.color), BPART(p->userinfo.color));
-				
-		pt.x = p->mo->x;
-		pt.y = p->mo->y;
-		angle = p->mo->angle;
-
-		if (am_rotate)
 		{
-			AM_rotatePoint (&pt.x, &pt.y);
-			angle -= players[consoleplayer].camera->angle - ANG90;
+			color = AlmostBackground;
+		}
+		else
+		{
+			float h, s, v, r, g, b;
+
+			D_GetPlayerColor (i, &h, &s, &v);
+			HSVtoRGB (&r, &g, &b, h, s, v);
+
+			color = ColorMatcher.Pick (clamp (int(r*255.f),0,255),
+				clamp (int(g*255.f),0,255), clamp (int(b*255.f),0,255));
 		}
 
-		AM_drawLineCharacter
-			(player_arrow, NUMPLYRLINES, 0, angle,
-			 color, pt.x, pt.y);
+		if (p->mo != NULL)
+		{
+			pt.x = p->mo->x;
+			pt.y = p->mo->y;
+			angle = p->mo->angle;
+
+			if (am_rotate)
+			{
+				AM_rotatePoint (&pt.x, &pt.y);
+				angle -= players[consoleplayer].camera->angle - ANG90;
+			}
+
+			AM_drawLineCharacter
+				(player_arrow, NUMPLYRLINES, 0, angle,
+				color, pt.x, pt.y);
+		}
     }
 }
 

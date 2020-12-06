@@ -43,7 +43,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /YX /FD /c
-# ADD CPP /nologo /Gr /MD /W3 /GX /O2 /I "f:\fmod\api\inc" /I "win32" /I "fmodsound" /I "." /I "zlib-1.1.3" /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "USEASM" /YX /FD /I /fmod/api/inc" " /c
+# ADD CPP /nologo /Gr /MD /W3 /GX /O2 /I "f:\fmodapi360win32\api\inc" /I "win32" /I "fmodsound" /I "." /I "zlib-1.1.4" /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "USEASM" /YX /FD /I /fmod/api/inc" " /c
 # SUBTRACT CPP /Fr
 # ADD BASE MTL /nologo /D "NDEBUG" /mktyplib203 /o "NUL" /win32
 # ADD MTL /nologo /D "NDEBUG" /mktyplib203 /o "NUL" /win32
@@ -54,7 +54,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /machine:I386
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib strmiids.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib wsock32.lib winmm.lib zlib-1.1.3/release/zlib.lib f:\fmod/api/lib/fmodvc.lib /nologo /subsystem:windows /pdb:none /map /machine:I386 /nodefaultlib:"libc" /nodefaultlib:"libcmt" /out:"../../zdoom.exe"
+# ADD LINK32 zlib-1.1.4/release/zlib.lib kernel32.lib user32.lib gdi32.lib comctl32.lib strmiids.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib winmm.lib wsock32.lib f:\fmodapi360win32/api/lib/fmodvc.lib /nologo /subsystem:windows /pdb:none /map /machine:I386 /nodefaultlib:"libc" /nodefaultlib:"libcmt" /out:"../../zdoom.exe"
 # SUBTRACT LINK32 /verbose /profile /debug
 
 !ELSEIF  "$(CFG)" == "zdoom - Win32 Debug"
@@ -71,7 +71,7 @@ LINK32=link.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /Zi /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /YX /FD /c
-# ADD CPP /nologo /MTd /W3 /Gm /GX /ZI /Od /I "f:\fmod\api\inc" /I "win32" /I "fmodsound" /I "." /I "zlib-1.1.3" /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /FD /I /fmod/api/inc" " /c
+# ADD CPP /nologo /MTd /W3 /Gm /GX /ZI /Od /I "f:\fmodapi360win32\api\inc" /I "win32" /I "fmodsound" /I "." /I "zlib-1.1.4" /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /FD /I /fmod/api/inc" " /c
 # ADD BASE MTL /nologo /D "_DEBUG" /mktyplib203 /o "NUL" /win32
 # ADD MTL /nologo /D "_DEBUG" /mktyplib203 /o "NUL" /win32
 # ADD BASE RSC /l 0x409 /d "_DEBUG"
@@ -81,7 +81,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib strmiids.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib ddraw.lib winmm.lib wsock32.lib zlib-1.1.3/debug/zlib.lib f:\fmod/api/lib/fmodvc.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcmt" /out:"../../doomdbg.exe"
+# ADD LINK32 odbc32.lib odbccp32.lib ddraw.lib zlib-1.1.4/debug/zlib.lib kernel32.lib user32.lib gdi32.lib comctl32.lib strmiids.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib winmm.lib wsock32.lib f:\fmodapi360win32/api/lib/fmodvc.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcmt" /out:"../../doomdbg.exe"
 # SUBTRACT LINK32 /pdb:none
 
 !ENDIF 
@@ -195,6 +195,10 @@ SOURCE=.\decallib.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\decorations.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\dobject.cpp
 # End Source File
 # Begin Source File
@@ -243,6 +247,10 @@ SOURCE=.\gi.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\hu_scores.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\info.cpp
 # End Source File
 # Begin Source File
@@ -287,6 +295,10 @@ SOURCE=.\m_options.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\m_png.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\m_random.cpp
 # End Source File
 # Begin Source File
@@ -295,7 +307,31 @@ SOURCE=.\mus2midi.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\nodebuild.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\nodebuild_events.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\nodebuild_extract.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\nodebuild_gl.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\nodebuild_utility.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\p_acs.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\p_buildmap.cpp
 # End Source File
 # Begin Source File
 
@@ -400,6 +436,10 @@ SOURCE=.\p_trace.cpp
 # Begin Source File
 
 SOURCE=.\p_user.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\p_writemap.cpp
 # End Source File
 # Begin Source File
 
@@ -556,6 +596,10 @@ SOURCE=.\configfile.h
 # Begin Source File
 
 SOURCE=.\d_dehacked.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\d_dehackedactions.h
 # End Source File
 # Begin Source File
 
@@ -727,6 +771,10 @@ SOURCE=.\m_misc.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\m_png.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\m_random.h
 # End Source File
 # Begin Source File
@@ -740,6 +788,10 @@ SOURCE=.\mscinlines.h
 # Begin Source File
 
 SOURCE=.\mus2midi.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\nodebuild.h
 # End Source File
 # Begin Source File
 
@@ -1113,7 +1165,15 @@ SOURCE=.\win32\helperthread.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\win32\i_altsound.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\win32\i_cd.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\win32\i_crash.cpp
 # End Source File
 # Begin Source File
 
@@ -1181,6 +1241,10 @@ SOURCE=.\win32\win32video.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\win32\zdoom.exe.manifest
+# End Source File
+# Begin Source File
+
 SOURCE=.\win32\zdoom.rc
 # End Source File
 # End Group
@@ -1210,6 +1274,10 @@ SOURCE=..\docs\colors.txt
 # Begin Source File
 
 SOURCE=..\docs\commands.txt
+# End Source File
+# Begin Source File
+
+SOURCE=..\docs\console.html
 # End Source File
 # Begin Source File
 
@@ -1254,6 +1322,10 @@ SOURCE=.\g_shared\a_bridge.cpp
 # Begin Source File
 
 SOURCE=.\g_shared\a_camera.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_debris.cpp
 # End Source File
 # Begin Source File
 
@@ -1557,6 +1629,10 @@ SOURCE=.\g_heretic\a_snake.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\g_hexen\a_summon.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\g_heretic\a_wizard.cpp
 # End Source File
 # Begin Source File
@@ -1569,7 +1645,7 @@ SOURCE=.\g_heretic\heretic_sbar.cpp
 # PROP Default_Filter ""
 # Begin Source File
 
-SOURCE=.\g_hexen\__hexentemp.cpp
+SOURCE=.\g_hexen\a_bats.cpp
 # End Source File
 # Begin Source File
 
@@ -1577,11 +1653,43 @@ SOURCE=.\g_hexen\a_bishop.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\g_hexen\a_blastradius.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_boostarmor.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_boostmana.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\g_hexen\a_centaur.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\g_hexen\a_debris_and_spike.cpp
+SOURCE=.\g_hexen\a_clericboss.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_clericflame.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_clericholy.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_clericmace.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_clericplayer.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_clericstaff.cpp
 # End Source File
 # Begin Source File
 
@@ -1589,7 +1697,31 @@ SOURCE=.\g_hexen\a_demons.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\g_hexen\a_dragon.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\g_hexen\a_ettin.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_fighteraxe.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_fighterboss.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_fighterhammer.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_fighterplayer.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_fighterquietus.cpp
 # End Source File
 # Begin Source File
 
@@ -1597,15 +1729,39 @@ SOURCE=.\g_hexen\a_firedemon.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\g_hexen\a_flame.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_flechette.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_fog.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_healingradius.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_heresiarch.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_hexenarmor.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\g_hexen\a_hexendecorations.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\g_hexen\a_hexenfighter.cpp
+SOURCE=.\g_hexen\a_hexenglobal.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\g_hexen\a_hexenglobal.h
+SOURCE=.\g_hexen\a_hexenkeys.cpp
 # End Source File
 # Begin Source File
 
@@ -1617,14 +1773,78 @@ SOURCE=.\g_hexen\a_iceguy.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\g_hexen\a_korax.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_mageboss.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_magecone.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_magelightning.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_mageplayer.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_magestaff.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_magewand.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\g_hexen\a_mana.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_pig.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_puzzleitems.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_scriptprojectiles.cpp
 # End Source File
 # Begin Source File
 
 SOURCE=.\g_hexen\a_serpent.cpp
 # End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_speedboots.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_spike.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_teleportother.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_weaponpieces.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_wraith.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\hexen_sbar.cpp
+# End Source File
 # End Group
-# Begin Group "Audio Files"
+# Begin Group "FMOD Audio Files"
 
 # PROP Default_Filter ""
 # Begin Source File
@@ -1735,6 +1955,42 @@ SOURCE=.\r_state.h
 SOURCE=.\r_things.h
 # End Source File
 # End Group
+# End Group
+# Begin Group "OPL Synth"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\oplsynth\fmopl.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\oplsynth\fmopl.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\oplsynth\mlkernel.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\oplsynth\mlopl.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\oplsynth\mlopl_io.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\oplsynth\muslib.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\oplsynth\opl_mus_player.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\oplsynth\opl_mus_player.h
+# End Source File
 # End Group
 # Begin Source File
 

@@ -136,8 +136,8 @@ CVAR(Bool, r_fogboundary, true, 0)
 
 inline bool IsFogBoundary (sector_t *front, sector_t *back)
 {
-	return r_fogboundary && front->floorcolormap->Fade &&
-		front->floorcolormap->Fade != back->floorcolormap->Fade &&
+	return r_fogboundary && front->ColorMap->Fade &&
+		front->ColorMap->Fade != back->ColorMap->Fade &&
 		(front->ceilingpic != skyflatnum || back->ceilingpic != skyflatnum);
 }
 
@@ -184,6 +184,12 @@ static void BlastMaskedColumn (void (*blastfunc)(column_t *), int texnum)
 	spryscale += rw_scalestep;
 }
 
+//
+// BlastMaskedColumn2
+//
+// [RH] This function draws masked columns that use words to store run
+// lengths and offsets.
+//
 static void BlastMaskedColumn2 (void (*blastfunc)(column2_t *), int texnum)
 {
 	if (maskedtexturecol[dc_x] != SHRT_MAX)
@@ -218,9 +224,10 @@ void R_RenderMaskedSegRange (drawseg_t *ds, int x1, int x2)
 	curline = ds->curline;
 
 	// killough 4/11/98: draw translucent 2s normal textures
-	// [RH] modified because we don't use user-definable
-	//		translucency maps
-	ESPSResult drawmode = R_SetPatchStyle (STYLE_Translucent,
+	// [RH] modified because we don't use user-definable translucency maps
+	ESPSResult drawmode;
+	
+	drawmode = R_SetPatchStyle (curline->sidedef->Flags & WALLF_ADDTRANS ? STYLE_Add : STYLE_Translucent,
 		curline->linedef->alpha < 255 ? curline->linedef->alpha<<8 : FRACUNIT,
 		0, 0);
 
@@ -234,7 +241,7 @@ void R_RenderMaskedSegRange (drawseg_t *ds, int x1, int x2)
 
 	texnum = texturetranslation[curline->sidedef->midtexture];
 
-	basecolormap = frontsector->floorcolormap->Maps;	// [RH] Set basecolormap
+	basecolormap = frontsector->ColorMap->Maps;	// [RH] Set basecolormap
 
 	// [RH] Get wall light level
 	if (curline->sidedef->Flags & WALLF_ABSLIGHTING)
@@ -247,9 +254,7 @@ void R_RenderMaskedSegRange (drawseg_t *ds, int x1, int x2)
 		const sector_t *sec = R_FakeFlat (frontsector, &tempsec, NULL, NULL, false);
 		lightnum = sec->lightlevel;
 
-		if (!level.fadeto &&
-			!sec->floorcolormap->Fade &&
-			!sec->floorcolormap->Fade) // Don't do relative lighting in foggy sectors
+		if (!level.fadeto && !sec->ColorMap) // Don't do relative lighting in foggy sectors
 		{
 			lightnum += curline->sidedef->Light * 2;
 		}
@@ -579,6 +584,79 @@ void wallscan (int x1, int x2, short *uwal, short *dwal, fixed_t *swal, fixed_t 
 	//unclock (WallScanCycles);
 }
 
+void wallscan_striped (int x1, int x2, short *uwal, short *dwal, fixed_t *swal, fixed_t *lwal)
+{
+	bool flooding = false;
+	byte *startcolormap = basecolormap;
+	int startshade = wallshade;
+	bool fogginess = foggy;
+
+	byte *floodcolormap = startcolormap;
+	int floodshade = startshade;
+	bool floodfoggy = foggy;
+
+	short most1[MAXWIDTH], most2[MAXWIDTH], most3[MAXWIDTH];
+	short *up, *down;
+
+	FExtraLight *el = frontsector->ExtraLights;
+
+	up = uwal;
+	down = most1;
+
+	for (int i = 0; i < el->NumUsedLights; ++i)
+	{
+		if (flooding && !el->Lights[i].bFlooder)
+		{
+			continue;
+		}
+
+		if (!el->Lights[i].bOverlaps)
+		{
+			int j = WallMost (most3, el->Lights[i].Plane);
+
+			if (most3[x1] > dwal[x1] && most3[x2] > dwal[x2])
+			{ // Done - does not work as well as I thought it would
+				//break;
+			}
+
+			if (j != 3 && (most3[x1] > up[x1] || most3[x2] > up[x2]))
+			{
+				for (int j = x1; j <= x2; ++j)
+				{
+					down[j] = clamp (most3[j], up[j], dwal[j]);
+				}
+				wallscan (x1, x2, up, down, swal, lwal);
+
+				up = down;
+				down = (down == most1) ? most2 : most1;
+			}
+		}
+
+		if (el->Lights[i].Master == NULL)
+		{
+			basecolormap = floodcolormap;
+			wallshade = floodshade;
+			fogginess = floodfoggy;
+		}
+		else
+		{
+			basecolormap = el->Lights[i].Master->ColorMap->Maps;
+			fogginess = level.fadeto || el->Lights[i].Master->ColorMap->Fade;
+			wallshade = LIGHT2SHADE(curline->sidedef->GetLightLevel(fogginess,
+				el->Lights[i].Master->lightlevel) + r_actualextralight);
+			if (el->Lights[i].bFlooder)
+			{
+				floodcolormap = basecolormap;
+				floodshade = wallshade;
+				flooding = true;
+			}
+		}
+	}
+	wallscan (x1, x2, up, dwal, swal, lwal);
+	basecolormap = startcolormap;
+	wallshade = startshade;
+}
+
 //
 // R_RenderSegLoop
 // Draws zero, one, or two textures for walls.
@@ -656,7 +734,14 @@ void R_RenderSegLoop ()
 			PrepLWall (lwall, (curline->sidedef->TexelLength*xscale) << (FRACBITS-3));
 			lwallscale = xscale;
 		}
-		wallscan (x1, x2-1, walltop, wallbottom, swall, lwall);
+		if (fixedlightlev || fixedcolormap || !frontsector->ExtraLights)
+		{
+			wallscan (x1, x2-1, walltop, wallbottom, swall, lwall);
+		}
+		else
+		{
+			wallscan_striped (x1, x2-1, walltop, wallbottom, swall, lwall);
+		}
 		clearbufshort (ceilingclip+x1, x2-x1, viewheight);
 		clearbufshort (floorclip+x1, x2-x1, 0xffff);
 	}
@@ -676,7 +761,14 @@ void R_RenderSegLoop ()
 				PrepLWall (lwall, (curline->sidedef->TexelLength*xscale) << (FRACBITS-3));
 				lwallscale = xscale;
 			}
-			wallscan (x1, x2-1, walltop, wallupper, swall, lwall);
+			if (fixedlightlev || fixedcolormap || !frontsector->ExtraLights)
+			{
+				wallscan (x1, x2-1, walltop, wallupper, swall, lwall);
+			}
+			else
+			{
+				wallscan_striped (x1, x2-1, walltop, wallupper, swall, lwall);
+			}
 			memcpy (ceilingclip+x1, wallupper+x1, (x2-x1)*sizeof(short));
 		}
 		else if (markceiling)
@@ -699,7 +791,14 @@ void R_RenderSegLoop ()
 				PrepLWall (lwall, (curline->sidedef->TexelLength*xscale) << (FRACBITS-3));
 				lwallscale = xscale;
 			}
-			wallscan (x1, x2-1, walllower, wallbottom, swall, lwall);
+			if (fixedlightlev || fixedcolormap || !frontsector->ExtraLights)
+			{
+				wallscan (x1, x2-1, walllower, wallbottom, swall, lwall);
+			}
+			else
+			{
+				wallscan_striped (x1, x2-1, walllower, wallbottom, swall, lwall);
+			}
 			memcpy (floorclip+x1, walllower+x1, (x2-x1)*sizeof(short));
 		}
 		else if (markfloor)
@@ -793,7 +892,7 @@ void R_NewWall ()
 				|| backsector->FloorFlags != frontsector->FloorFlags
 
 				// [RH] Add checks for colormaps
-				|| backsector->floorcolormap != frontsector->floorcolormap
+				|| backsector->ColorMap != frontsector->ColorMap
 
 				|| backsector->floor_xscale != frontsector->floor_xscale
 				|| backsector->floor_yscale != frontsector->floor_yscale
@@ -820,7 +919,7 @@ void R_NewWall ()
 				|| backsector->CeilingFlags != frontsector->CeilingFlags
 
 				// [RH] Add check for colormaps
-				|| backsector->ceilingcolormap != frontsector->ceilingcolormap
+				|| backsector->ColorMap != frontsector->ColorMap
 
 				|| backsector->ceiling_xscale != frontsector->ceiling_xscale
 				|| backsector->ceiling_yscale != frontsector->ceiling_yscale
@@ -832,18 +931,17 @@ void R_NewWall ()
 		if (rw_havehigh)
 		{ // top texture
 			toptexture = texturetranslation[sidedef->toptexture];
+			const int scale = texturescaley[toptexture] ? texturescaley[toptexture] : ty;
 
 			if (linedef->flags & ML_DONTPEGTOP)
 			{ // top of texture at top
-				rw_toptexturemid = frontsector->ceilingtexz;
+				rw_toptexturemid = MulScale3 (frontsector->ceilingtexz - viewz, scale);
 			}
 			else
 			{ // bottom of texture at bottom
-				rw_toptexturemid = backsector->ceilingtexz + textureheight[sidedef->toptexture];		
+				rw_toptexturemid = MulScale3 (backsector->ceilingtexz - viewz, scale) + textureheight[toptexture];
 			}
-			rw_toptexturemid = MulScale3 (rw_toptexturemid - viewz,
-				texturescaley[toptexture] ? texturescaley[toptexture] : ty)
-				+ sidedef->rowoffset;
+			rw_toptexturemid += sidedef->rowoffset;
 		}
 		if (rw_havelow)
 		{ // bottom texture
@@ -893,22 +991,8 @@ void R_NewWall ()
 
 		if (!fixedcolormap)
 		{
-			int lightnum;
-
-			// [RH] Get wall light level
-			if (curline->sidedef->Flags & WALLF_ABSLIGHTING)
-			{
-				lightnum = (BYTE)curline->sidedef->Light;
-			}
-			else
-			{
-				lightnum = frontsector->lightlevel + r_actualextralight;
-				if (!foggy) // Don't do relative lighting in foggy sectors
-				{
-					lightnum += curline->sidedef->Light * 2;
-				}
-			}
-			wallshade = LIGHT2SHADE(lightnum + r_actualextralight);
+			wallshade = LIGHT2SHADE(curline->sidedef->GetLightLevel(foggy, frontsector->lightlevel)
+				+ r_actualextralight);
 			GlobVis = r_WallVisibility;
 			rw_lightleft = SafeDivScale12 (GlobVis, WallSZ1);
 			rw_lightstep = (SafeDivScale12 (GlobVis, WallSZ2) - rw_lightleft) / (WallSX2 - WallSX1);
@@ -920,6 +1004,24 @@ void R_NewWall ()
 		}
 	}
 }
+
+int side_s::GetLightLevel (bool foggy, int baselight) const
+{
+	// [RH] Get wall light level
+	if (sidedef->Flags & WALLF_ABSLIGHTING)
+	{
+		return sidedef->Light;
+	}
+	else
+	{
+		if (!foggy) // Don't do relative lighting in foggy sectors
+		{
+			baselight += curline->sidedef->Light * 2;
+		}
+		return baselight;
+	}
+}
+
 
 //
 // R_CheckDrawSegs
@@ -1451,7 +1553,17 @@ void PrepWall (fixed_t *swall, fixed_t *lwall, fixed_t walxrepeat)
 
 	l = top / bot;
 	swall[x] = quickertoint (l * WallDepthScale + WallDepthOrg);
-	lwall[x] = quickertoint (l *= xrepeat);
+	lwall[x] = quickertoint (l * xrepeat);
+	// As long as l is invalid, step one column at a time so that
+	// we can get as many correct texture columns as possible.
+	while (l > 1.0 && x+1 < WallSX2)
+	{
+		l = (top += WallUoverZstep) / (bot += WallInvZstep);
+		x++;
+		swall[x] = quickertoint (l * WallDepthScale + WallDepthOrg);
+		lwall[x] = quickertoint (l * xrepeat);
+	}
+	l *= xrepeat;
 	while (x+4 < WallSX2)
 	{
 		top += topinc; bot += botinc;
@@ -1481,7 +1593,7 @@ void PrepWall (fixed_t *swall, fixed_t *lwall, fixed_t walxrepeat)
 	}
 	if (x+1 < WallSX2)
 	{
-		l = (top + topinc * 0.25f) / (bot + botinc * 0.25f);
+		l = (top + WallUoverZstep) / (bot + WallInvZstep);
 		swall[x+1] = quickertoint (l * WallDepthScale + WallDepthOrg);
 		lwall[x+1] = quickertoint (l * xrepeat);
 	}
@@ -1497,19 +1609,30 @@ void PrepWall (fixed_t *swall, fixed_t *lwall, fixed_t walxrepeat)
 	*/
 
 	// fix for rounding errors
-	if (MirrorFlags & RF_XFLIP)
+	walxrepeat -= FRACUNIT;
+	fixed_t fix = (MirrorFlags & RF_XFLIP) ? walxrepeat : 0;
+	for (x = WallSX1; x < WallSX2; x++)
 	{
-		for (x = WallSX1; x < WallSX2 && lwall[x] >= walxrepeat; x++)
-			lwall[x] = walxrepeat - FRACUNIT;
-		for (x = WallSX2-1; x >= WallSX1 && lwall[x] < 0; x--)
-			lwall[x] = 0;
+		if ((unsigned)lwall[x] > (unsigned)walxrepeat)
+		{
+			lwall[x] = fix;
+		}
+		else
+		{
+			break;
+		}
 	}
-	else
+	fix = walxrepeat - fix;
+	for (x = WallSX2-1; x >= WallSX1; x--)
 	{
-		for (x = WallSX1; x < WallSX2 && lwall[x] < 0; x++)
-			lwall[x] = 0;
-		for (x = WallSX2-1; x >= WallSX1 && lwall[x] >= walxrepeat; x--)
-			lwall[x] = walxrepeat - FRACUNIT;
+		if ((unsigned)lwall[x] > (unsigned)walxrepeat)
+		{
+			lwall[x] = fix;
+		}
+		else
+		{
+			break;
+		}
 	}
 }
 
@@ -1529,7 +1652,15 @@ void PrepLWall (fixed_t *lwall, fixed_t walxrepeat)
 	x = WallSX1;
 
 	l = top / bot;
-	lwall[x] = quickertoint (l *= xrepeat);
+	lwall[x] = quickertoint (l * xrepeat);
+	// As long as l is invalid, step one column at a time so that
+	// we can get as many correct texture columns as possible.
+	while (l > 1.0 && x+1 < WallSX2)
+	{
+		l = (top += WallUoverZstep) / (bot += WallInvZstep);
+		lwall[++x] = quickertoint (l * xrepeat);
+	}
+	l *= xrepeat;
 	while (x+4 < WallSX2)
 	{
 		top += topinc; bot += botinc;
@@ -1552,30 +1683,43 @@ void PrepLWall (fixed_t *lwall, fixed_t walxrepeat)
 	}
 	if (x+1 < WallSX2)
 	{
-		l = (top + topinc * 0.25f) / (bot + botinc * 0.25f);
+		l = (top + WallUoverZstep) / (bot + WallInvZstep);
 		lwall[x+1] = quickertoint (l * xrepeat);
 	}
 
 	// fix for rounding errors
-	if (MirrorFlags & RF_XFLIP)
+	walxrepeat -= FRACUNIT;
+	fixed_t fix = (MirrorFlags & RF_XFLIP) ? walxrepeat : 0;
+	for (x = WallSX1; x < WallSX2; x++)
 	{
-		for (x = WallSX1; x < WallSX2 && lwall[x] >= walxrepeat; x++)
-			lwall[x] = walxrepeat - FRACUNIT;
-		for (x = WallSX2-1; x >= WallSX1 && lwall[x] < 0; x--)
-			lwall[x] = 0;
+		if ((unsigned)lwall[x] > (unsigned)walxrepeat)
+		{
+			lwall[x] = fix;
+		}
+		else
+		{
+			break;
+		}
 	}
-	else
+	fix = walxrepeat - fix;
+	for (x = WallSX2-1; x >= WallSX1; x--)
 	{
-		for (x = WallSX1; x < WallSX2 && lwall[x] < 0; x++)
-			lwall[x] = 0;
-		for (x = WallSX2-1; x >= WallSX1 && lwall[x] >= walxrepeat; x--)
-			lwall[x] = walxrepeat - FRACUNIT;
+		if ((unsigned)lwall[x] > (unsigned)walxrepeat)
+		{
+			lwall[x] = fix;
+		}
+		else
+		{
+			break;
+		}
 	}
 }
 
 // pass = 0: when seg is first drawn
 //		= 1: drawing masked textures (including sprites)
 // Currently, only pass = 0 is done or used
+
+static AActor *DecalActorForDebug;
 
 static void R_RenderBoundWallSprite (AActor *actor, drawseg_t *clipper, int pass)
 {
@@ -1590,6 +1734,8 @@ static void R_RenderBoundWallSprite (AActor *actor, drawseg_t *clipper, int pass
 
 	if (actor->renderflags & RF_INVISIBLE)
 		return;
+
+	DecalActorForDebug = actor;
 
 	// Determine actor z
 	zpos = actor->z;
@@ -1641,8 +1787,8 @@ static void R_RenderBoundWallSprite (AActor *actor, drawseg_t *clipper, int pass
 	}
 	else
 	{
-		WallSpriteTile = sprites[actor->sprite].spriteframes[actor->frame].lump[0];
-		flipx = sprites[actor->sprite].spriteframes[actor->frame].flip & 1;
+		WallSpriteTile = SpriteFrames[sprites[actor->sprite].spriteframes + actor->frame].lump[0];
+		flipx = SpriteFrames[sprites[actor->sprite].spriteframes + actor->frame].flip & 1;
 	}
 
 	// Determine left and right edges of sprite. Since this sprite is bound
@@ -1660,10 +1806,11 @@ static void R_RenderBoundWallSprite (AActor *actor, drawseg_t *clipper, int pass
 	x1 *= xscale;
 	x2 *= xscale;
 
-	lx  = actor->x - MulScale6 (x1, finecosine[curline->angle >> ANGLETOFINESHIFT]) - viewx;
-	lx2 = actor->x + MulScale6 (x2, finecosine[curline->angle >> ANGLETOFINESHIFT]) - viewx;
-	ly  = actor->y - MulScale6 (x1, finesine[curline->angle >> ANGLETOFINESHIFT]) - viewy;
-	ly2 = actor->y + MulScale6 (x2, finesine[curline->angle >> ANGLETOFINESHIFT]) - viewy;
+	angle_t ang = R_PointToAngle2 (curline->v1->x, curline->v1->y, curline->v2->x, curline->v2->y) >> ANGLETOFINESHIFT;
+	lx  = actor->x - MulScale6 (x1, finecosine[ang]) - viewx;
+	lx2 = actor->x + MulScale6 (x2, finecosine[ang]) - viewx;
+	ly  = actor->y - MulScale6 (x1, finesine[ang]) - viewy;
+	ly2 = actor->y + MulScale6 (x2, finesine[ang]) - viewy;
 
 	WallTX1 = DMulScale20 (lx,  viewsin, -ly,  viewcos);
 	WallTX2 = DMulScale20 (lx2, viewsin, -ly2, viewcos);
@@ -1859,70 +2006,63 @@ static void R_RenderBoundWallSprite (AActor *actor, drawseg_t *clipper, int pass
 	do
 	{
 		dc_x = x1;
+		ESPSResult mode;
 
-		switch (R_SetPatchStyle (actor->RenderStyle, actor->alpha,
-			actor->Translation, actor->alphacolor))
+		mode = R_SetPatchStyle (actor->RenderStyle, actor->alpha, actor->Translation, actor->alphacolor);
+
+		if (mode == DontDraw)
 		{
-		case DontDraw:
 			needrepeat = 0;
-			break;
+		}
+		else
+		{
+			int stop4;
 
-		case DoDraw0:
-			// 1 column at a time
-			for (; dc_x < x2; dc_x++)
+			if (mode == DoDraw0)
+			{ // 1 column at a time
+				stop4 = dc_x;
+			}
+			else	 // DoDraw1
+			{ // up to 4 columns at a time
+				stop4 = x2 & ~3;
+			}
+
+			while ((dc_x < stop4) && (dc_x & 3))
 			{
 				if (calclighting)
 				{ // calculate lighting
 					dc_colormap = basecolormap + (GETPALOOKUP (rw_light, wallshade) << COLORMAPSHIFT);
 				}
-				WallSpriteColumn (R_DrawMaskedColumn);
-			}
-			break;
 
-		case DoDraw1:
-			// up to 4 columns at a time
-			int stop = x2 & ~3;
-
-			if (calclighting)
-			{ // calculate lighting
-				dc_colormap = basecolormap + (GETPALOOKUP (rw_light, wallshade) << COLORMAPSHIFT);
-			}
-
-			while ((dc_x < stop) && (dc_x & 3))
-			{
 				WallSpriteColumn (R_DrawMaskedColumn);
 				dc_x++;
 			}
 
-			while (dc_x < stop)
+			while (dc_x < stop4)
 			{
 				if (calclighting)
 				{ // calculate lighting
 					dc_colormap = basecolormap + (GETPALOOKUP (rw_light, wallshade) << COLORMAPSHIFT);
 				}
 				rt_initcols();
-				WallSpriteColumn (R_DrawMaskedColumnHoriz);
-				dc_x++;
-				WallSpriteColumn (R_DrawMaskedColumnHoriz);
-				dc_x++;
-				WallSpriteColumn (R_DrawMaskedColumnHoriz);
-				dc_x++;
-				WallSpriteColumn (R_DrawMaskedColumnHoriz);
-				rt_draw4cols (dc_x - 3);
-				dc_x++;
-			}
-
-			if (calclighting)
-			{ // calculate lighting
-				dc_colormap = basecolormap + (GETPALOOKUP (rw_light, wallshade) << COLORMAPSHIFT);
+				for (int zz = 4; zz; --zz)
+				{
+					WallSpriteColumn (R_DrawMaskedColumnHoriz);
+					dc_x++;
+				}
+				rt_draw4cols (dc_x - 4);
 			}
 
 			while (dc_x < x2)
 			{
+				if (calclighting)
+				{ // calculate lighting
+					dc_colormap = basecolormap + (GETPALOOKUP (rw_light, wallshade) << COLORMAPSHIFT);
+				}
+
 				WallSpriteColumn (R_DrawMaskedColumn);
 				dc_x++;
 			}
-			break;
 		}
 
 		// If this sprite is RF_CLIPFULL on a two-sided line, needrepeat will
@@ -1946,7 +2086,20 @@ static void WallSpriteColumn (void (*drawfunc)(column_t *))
 #if 0
 	if (texturecolumn >= (unsigned)TileCache[WallSpriteTile]->width)
 	{
-		Printf ("%d->%d\n", dc_x, texturecolumn);
+		char lump[9];
+		lump[8] = 0;
+		W_GetLumpName (lump, WallSpriteTile);
+		I_FatalError ("WallSpriteColumn tried to draw part of a decal that didn't exist.\n"
+			"Please report all of the following information, because\n"
+			"I want to get this fixed, yet I just can't get it happen to me:\n\n"
+			"%d->%d/%d"
+			"  %d(%s)  %04x  %d\n"
+			"%d  %d  %d\n"
+			"%d  %d  %d  %u\n",
+			dc_x, texturecolumn, TileCache[WallSpriteTile]->width,
+			WallSpriteTile, lump, DecalActorForDebug->renderflags, DecalActorForDebug->RenderStyle,
+			DecalActorForDebug->x, DecalActorForDebug->y, DecalActorForDebug->z,
+			viewx, viewy, viewz, viewangle);
 		texturecolumn = TileCache[WallSpriteTile]->width-1;
 	}
 #endif

@@ -45,7 +45,8 @@
 #include "a_sharedglobal.h"
 #include "a_lightning.h"
 #include "statnums.h"
-//#include "r_draw.h"
+#include "s_sound.h"
+#include "templates.h"
 
 #define FUNC(a) static bool a (line_t *ln, AActor *it, int arg0, int arg1, \
 							   int arg2, int arg3, int arg4)
@@ -287,7 +288,13 @@ FUNC(LS_Floor_LowerToLowestTxTy)
 FUNC(LS_Floor_Waggle)
 // Floor_Waggle (tag, amplitude, frequency, delay, time)
 {
-	return EV_StartFloorWaggle (arg0, arg1, arg2, arg3, arg4);
+	return EV_StartWaggle (arg0, arg1, arg2, arg3, arg4, false);
+}
+
+FUNC(LS_Ceiling_Waggle)
+// Ceiling_Waggle (tag, amplitude, frequency, delay, time)
+{
+	return EV_StartWaggle (arg0, arg1, arg2, arg3, arg4, true);
 }
 
 FUNC(LS_Floor_TransferTrigger)
@@ -702,13 +709,13 @@ FUNC(LS_Teleport_NewMap)
 FUNC(LS_Teleport)
 // Teleport (tid)
 {
-	return EV_Teleport (arg0, ln, TeleportSide, it, true);
+	return EV_Teleport (arg0, ln, TeleportSide, it, true, false);
 }
 
 FUNC(LS_Teleport_NoFog)
-// Teleport_NoFog (tid)
+// Teleport_NoFog (tid, useang)
 {
-	return EV_Teleport (arg0, ln, TeleportSide, it, false);
+	return EV_Teleport (arg0, ln, TeleportSide, it, false, !arg1);
 }
 
 FUNC(LS_TeleportOther)
@@ -748,14 +755,19 @@ FUNC(LS_Teleport_Line)
 }
 
 FUNC(LS_ThrustThing)
-// ThrustThing (angle, force)
+// ThrustThing (angle, force, nolimit)
 {
 	if (it)
 	{
 		angle_t angle = BYTEANGLE(arg0) >> ANGLETOFINESHIFT;
 
-		it->momx = arg1 * finecosine[angle];
-		it->momy = arg1 * finesine[angle];
+		it->momx += arg1 * finecosine[angle];
+		it->momy += arg1 * finesine[angle];
+		if (!arg2)
+		{
+			it->momx = clamp<fixed_t> (it->momx, -MAXMOVE, MAXMOVE);
+			it->momy = clamp<fixed_t> (it->momy, -MAXMOVE, MAXMOVE);
+		}
 		return true;
 	}
 	return false;
@@ -842,6 +854,10 @@ FUNC(LS_DamageThing)
 			}
 			P_DamageMobj (it, NULL, NULL, arg0, MOD_UNKNOWN);
 		}
+		else
+		{ // If zero damage, guarantee a kill
+			P_DamageMobj (it, NULL, NULL, 10000, MOD_UNKNOWN);
+		}
 	}
 
 	return it ? true : false;
@@ -850,19 +866,33 @@ FUNC(LS_DamageThing)
 bool P_GiveBody (player_t *, int);
 
 FUNC(LS_HealThing)
-// HealThing (amount)
+// HealThing (amount, max)
 {
 	if (it)
 	{
-		if (it->player)
+		int max = arg1;
+
+		if (max == 0 || it->player == NULL)
 		{
-			P_GiveBody (it->player, arg0);
+			max = it->GetDefault()->health;
 		}
-		else
+		else if (max == 1)
+		{
+			max = deh.MaxSoulsphere;
+		}
+
+		// If health is already above max, do nothing
+		if (it->health < max)
 		{
 			it->health += arg0;
-			if (it->GetDefault()->health < it->health)
-				it->health = it->GetDefault()->health;
+			if (it->health > max && max > 0)
+			{
+				it->health = max;
+			}
+			if (it->player)
+			{
+				it->player->health = it->health;
+			}
 		}
 	}
 
@@ -952,18 +982,133 @@ FUNC(LS_Thing_Destroy)
 	return true;
 }
 
+FUNC(LS_Thing_Damage)
+// Thing_Damage (tid, amount)
+{
+	FActorIterator iterator (arg0);
+	AActor *actor;
+
+	actor = iterator.Next ();
+	while (actor)
+	{
+		AActor *next = iterator.Next ();
+		if (actor->flags & MF_SHOOTABLE)
+		{
+			if (arg1 > 0)
+			{
+				P_DamageMobj (actor, NULL, it, arg1, MOD_UNKNOWN);
+			}
+			else if (actor->health < actor->GetDefault()->health)
+			{
+				actor->health -= arg1;
+				if (actor->health > actor->GetDefault()->health)
+				{
+					actor->health = actor->GetDefault()->health;
+				}
+				if (actor->player != NULL)
+				{
+					actor->player->health = actor->health;
+				}
+			}
+		}
+		actor = next;
+	}
+	return true;
+}
+
 FUNC(LS_Thing_Projectile)
 // Thing_Projectile (tid, type, angle, speed, vspeed)
 {
 	return P_Thing_Projectile (arg0, arg1, BYTEANGLE(arg2), arg3<<(FRACBITS-3),
-		arg4<<(FRACBITS-3), false);
+		arg4<<(FRACBITS-3), 0, NULL, false);
 }
 
 FUNC(LS_Thing_ProjectileGravity)
 // Thing_ProjectileGravity (tid, type, angle, speed, vspeed)
 {
 	return P_Thing_Projectile (arg0, arg1, BYTEANGLE(arg2), arg3<<(FRACBITS-3),
-		arg4<<(FRACBITS-3), true);
+		arg4<<(FRACBITS-3), 0, NULL, true);
+}
+
+FUNC(LS_Thing_Hate)
+// Thing_Hate (hater, hatee)
+{
+	FActorIterator haterIt (arg0);
+	AActor *hater, *hatee;
+
+	if (arg0 == 0)
+	{
+		if (it->player)
+		{
+			// Players cannot have their attitudes set
+			return false;
+		}
+		else
+		{
+			hater = it;
+		}
+	}
+	else
+	{
+		while ((hater = haterIt.Next ()))
+		{
+			if (hater->health > 0 && hater->flags & MF_SHOOTABLE)
+			{
+				break;
+			}
+		}
+	}
+	while (hater != NULL)
+	{
+		if (arg1 == 0)
+		{
+			hatee = it;
+		}
+		else
+		{
+			FActorIterator hateeIt (arg1);
+
+			while ((hatee = hateeIt.Next ()))
+			{
+				if (hatee != hater &&				// can't hate self
+					hatee->flags & MF_SHOOTABLE	&&	// can't hate nonshootable things
+					hatee->health > 0)				// can't hate dead things
+				{
+					break;
+				}
+			}
+		}
+		if (hatee != NULL && hatee != hater)
+		{
+			if (hater->target)
+			{
+				hater->lastenemy = hater->target;
+			}
+			hater->target = hatee;
+			hater->SetState (hater->SeeState);
+		}
+		if (arg0 != 0)
+		{
+			while ((hater = haterIt.Next ()))
+			{
+				if (hater->health > 0 && hater->flags & MF_SHOOTABLE)
+				{
+					break;
+				}
+			}
+		}
+		else
+		{
+			hater = NULL;
+		}
+	}
+	return true;
+}
+
+FUNC(LS_Thing_ProjectileAimed)
+// Thing_ProjectileAimed (tid, type, speed, target)
+{
+	return P_Thing_Projectile (arg0, arg1, 0, arg2<<(FRACBITS-3), 0, arg3, it, false);
 }
 
 // [BC] added newtid for next two
@@ -1224,6 +1369,25 @@ FUNC(LS_Radius_Quake)
 FUNC(LS_UsePuzzleItem)
 // UsePuzzleItem (item, script)
 {
+	player_t *player;
+	int type;
+
+	if (!it) return false;
+	player = it->player;
+	if (!player) return false;
+	type = arti_firstpuzzitem + arg0;
+	if (type >= NUMARTIFACTS) return false;
+
+	// Check player's inventory for puzzle item
+	if (player->inventory[type] > 0)
+	{
+		if (P_PlayerUseArtifact (player, (artitype_t)type))
+		{
+			return true;
+		}
+	}
+	// [RH] Say "hmm" if you don't have the puzzle item
+	S_Sound (it, CHAN_VOICE, "*puzzfail", 1, ATTN_IDLE);
 	return false;
 }
 
@@ -1271,13 +1435,13 @@ void AdjustPusher (int tag, int magnitude, int angle, DPusher::EPusher type)
 		}
 	}
 
-	int numcollected = Collection.Size ();
+	size_t numcollected = Collection.Size ();
 	int secnum = -1;
 
 	// Now create pushers for any sectors that don't already have them.
 	while ((secnum = P_FindSectorFromTag (tag, secnum)) >= 0)
 	{
-		int i;
+		size_t i;
 		for (i = 0; i < numcollected; i++)
 		{
 			if (Collection[i].RefNum == sectors[secnum].tag)
@@ -1312,9 +1476,10 @@ FUNC(LS_Sector_SetCurrent)
 }
 
 FUNC(LS_Sector_SetFriction)
-// Sector_SetFriction ()
+// Sector_SetFriction (tag, amount)
 {
-	return false;
+	P_SetSectorFriction (arg0, arg1, true);
+	return true;
 }
 
 static void SetWallScroller (int id, int sidechoice, fixed_t dx, fixed_t dy)
@@ -1356,13 +1521,13 @@ static void SetWallScroller (int id, int sidechoice, fixed_t dx, fixed_t dy)
 			}
 		}
 
-		int numcollected = Collection.Size ();
+		size_t numcollected = Collection.Size ();
 		int linenum = -1;
 
 		// Now create scrollers for any walls that don't already have them.
 		while ((linenum = P_FindLineFromID (id, linenum)) >= 0)
 		{
-			int i;
+			size_t i;
 			for (i = 0; i < numcollected; i++)
 			{
 				if (Collection[i].RefNum == lines[linenum].sidenum[sidechoice])
@@ -1520,10 +1685,7 @@ FUNC(LS_Sector_SetColor)
 	
 	while ((secnum = P_FindSectorFromTag (arg0, secnum)) >= 0)
 	{
-		sectors[secnum].floorcolormap = GetSpecialLights (
-			color, sectors[secnum].floorcolormap->Fade);
-		sectors[secnum].ceilingcolormap = GetSpecialLights (
-			color, sectors[secnum].ceilingcolormap->Fade);
+		sectors[secnum].ColorMap = GetSpecialLights (color, sectors[secnum].ColorMap->Fade);
 	}
 
 	return true;
@@ -1537,10 +1699,7 @@ FUNC(LS_Sector_SetFade)
 
 	while ((secnum = P_FindSectorFromTag (arg0, secnum)) >= 0)
 	{
-		sectors[secnum].floorcolormap = GetSpecialLights (
-			sectors[secnum].floorcolormap->Color, fade);
-		sectors[secnum].ceilingcolormap = GetSpecialLights (
-			sectors[secnum].ceilingcolormap->Color, fade);
+		sectors[secnum].ColorMap = GetSpecialLights (sectors[secnum].ColorMap->Color, fade);
 	}
 	return true;
 }
@@ -1770,7 +1929,7 @@ FUNC(LS_SetPlayerProperty)
 }
 
 FUNC(LS_TranslucentLine)
-// TranslucentLine (id, amount)
+// TranslucentLine (id, amount, type)
 {
 	if (ln)
 		return false;
@@ -1779,6 +1938,26 @@ FUNC(LS_TranslucentLine)
 	while ((linenum = P_FindLineFromID (arg0, linenum)) >= 0)
 	{
 		lines[linenum].alpha = arg1 & 255;
+		if (arg2 == 0)
+		{
+			sides[lines[linenum].sidenum[0]].Flags &= ~WALLF_ADDTRANS;
+			if (lines[linenum].sidenum[1] != NO_INDEX)
+			{
+				sides[lines[linenum].sidenum[1]].Flags &= ~WALLF_ADDTRANS;
+			}
+		}
+		else if (arg2 == 1)
+		{
+			sides[lines[linenum].sidenum[0]].Flags |= WALLF_ADDTRANS;
+			if (lines[linenum].sidenum[1] != NO_INDEX)
+			{
+				sides[lines[linenum].sidenum[1]].Flags |= WALLF_ADDTRANS;
+			}
+		}
+		else
+		{
+			Printf ("Unknown translucency type used with TranslucentLine\n");
+		}
 	}
 
 	return true;
@@ -1846,7 +2025,7 @@ lnSpecFunc LineSpecials[256] =
 	LS_Floor_RaiseByValueTimes8,
 	LS_Floor_LowerByValueTimes8,
 	LS_NOP,		// 37
-	LS_NOP,		// 38
+	LS_Ceiling_Waggle,
 	LS_NOP,		// 39
 	LS_Ceiling_LowerByValue,
 	LS_Ceiling_RaiseByValue,
@@ -1927,7 +2106,7 @@ lnSpecFunc LineSpecials[256] =
 	LS_Light_Strobe,
 	LS_NOP,		// 117
 	LS_NOP,		// 118
-	LS_NOP,		// 119
+	LS_Thing_Damage,
 	LS_Radius_Quake,
 	LS_NOP,		// Line_SetIdentification
 	LS_NOP,		// Thing_SetGravity			// [BC] Start
@@ -1985,8 +2164,8 @@ lnSpecFunc LineSpecials[256] =
 	LS_NOP,		// 174
 	LS_NOP,		// 175
 	LS_NOP,		// 176
-	LS_NOP,		// 177
-	LS_NOP,		// 178
+	LS_Thing_Hate,
+	LS_Thing_ProjectileAimed,
 	LS_ChangeSkill,
 	LS_Thing_SetTranslation,
 	LS_NOP,		// Plane_Align

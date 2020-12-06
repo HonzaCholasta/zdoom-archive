@@ -58,14 +58,14 @@ extern drawseg_t	*drawsegs;
 extern drawseg_t	*firstdrawseg;
 extern drawseg_t*	ds_p;
 
-extern TArray<int>	InterestingDrawsegs;	// drawsegs that have something drawn on them
-extern int			FirstInterestingDrawseg;
+extern TArray<size_t>	InterestingDrawsegs;	// drawsegs that have something drawn on them
+extern size_t			FirstInterestingDrawseg;
 
 extern int			WindowLeft, WindowRight;
 extern WORD			MirrorFlags;
 extern seg_t*		ActiveWallMirror;
 
-extern TArray<ptrdiff_t> WallMirrors;
+extern TArray<size_t>	WallMirrors;
 
 typedef void (*drawfunc_t) (int start, int stop);
 
@@ -75,6 +75,7 @@ EXTERN_CVAR (Bool, r_drawflat)		// [RH] Don't texture segs?
 void R_ClearClipSegs (short left, short right);
 void R_ClearDrawSegs ();
 void R_RenderBSPNode (int bspnum);
+void R_RenderSubsectors ();
 
 // killough 4/13/98: fake floors/ceilings for deep water / fake ceilings:
 sector_t *R_FakeFlat(sector_t *, sector_t *, int *, int *, BOOL);

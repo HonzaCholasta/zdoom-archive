@@ -75,13 +75,15 @@ void DElevator::Serialize (FArchive &arc)
 		<< m_Speed;
 }
 
+IMPLEMENT_CLASS (DWaggleBase)
 IMPLEMENT_CLASS (DFloorWaggle)
+IMPLEMENT_CLASS (DCeilingWaggle)
 
-DFloorWaggle::DFloorWaggle ()
+DWaggleBase::DWaggleBase ()
 {
 }
 
-void DFloorWaggle::Serialize (FArchive &arc)
+void DWaggleBase::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
 	arc << m_OriginalDist
@@ -154,6 +156,7 @@ void DFloor::Tick ()
 					//fall thru
 				case genFloorChg:
 					m_Sector->floorpic = m_Texture;
+					m_Sector->AdjustFloorClip ();
 					break;
 				default:
 					break;
@@ -161,7 +164,7 @@ void DFloor::Tick ()
 			}
 			else if (m_Direction == -1)
 			{
-				switch(m_Type)
+				switch (m_Type)
 				{
 				case floorLowerAndChange:
 				case genFloorChgT:
@@ -170,6 +173,7 @@ void DFloor::Tick ()
 					//fall thru
 				case genFloorChg:
 					m_Sector->floorpic = m_Texture;
+					m_Sector->AdjustFloorClip ();
 					break;
 				default:
 					break;
@@ -300,7 +304,7 @@ bool EV_DoFloor (DFloor::EFloor floortype, line_t *line, int tag,
 	{
 		if (!line || !(sec = line->backsector))
 			return rtn;
-		secnum = sec-sectors;
+		secnum = (int)(sec-sectors);
 		manual = true;
 		goto manual_floor;
 	}
@@ -444,8 +448,20 @@ manual_floor:
 			floor->m_Direction = 1;
 			newheight = sec->floorplane.ZatPoint (0, 0) + height;
 			floor->m_FloorDestDist = sec->floorplane.PointToDist (0, 0, newheight);
-			sec->floorpic = line->frontsector->floorpic;
-			sec->special = line->frontsector->special;
+			if (line != NULL)
+			{
+				int oldpic = sec->floorpic;
+				sec->floorpic = line->frontsector->floorpic;
+				sec->special = line->frontsector->special;
+				if (oldpic != sec->floorpic)
+				{
+					sec->AdjustFloorClip ();
+				}
+			}
+			else
+			{
+				sec->special = 0;
+			}
 			break;
 		  
 		case DFloor::floorLowerAndChange:
@@ -584,6 +600,8 @@ bool EV_DoChange (line_t *line, EChange changetype, int tag)
 		rtn = true;
 
 		// handle trigger or numeric change type
+		int oldpic = sec->floorpic;
+
 		switch(changetype)
 		{
 		case trigChangeOnly:
@@ -603,6 +621,11 @@ bool EV_DoChange (line_t *line, EChange changetype, int tag)
 			break;
 		default:
 			break;
+		}
+
+		if (oldpic != sec->floorpic)
+		{
+			sec->AdjustFloorClip ();
 		}
 	}
 	return rtn;
@@ -625,14 +648,14 @@ bool EV_BuildStairs (int tag, DFloor::EStair type, line_t *line,
 	int 				height;
 	fixed_t				stairstep;
 	int 				i;
-	int 				newsecnum;
+	int 				newsecnum = -1;
 	int 				texture;
 	int 				ok;
 	int					persteptime;
 	bool 				rtn = false;
 	
 	sector_t*			sec;
-	sector_t*			tsec;
+	sector_t*			tsec = NULL;
 	sector_t*			prev = NULL;
 
 	DFloor*				floor;
@@ -648,7 +671,7 @@ bool EV_BuildStairs (int tag, DFloor::EStair type, line_t *line,
 	{
 		if (!line || !(sec = line->backsector))
 			return rtn;
-		secnum = sec-sectors;
+		secnum = (int)(sec-sectors);
 		manual = true;
 		goto manual_stair;
 	}
@@ -720,7 +743,7 @@ manual_stair:
 						continue;
 					}
 				}
-				newsecnum = tsec - sectors;
+				newsecnum = (int)(tsec - sectors);
 			}
 			else
 			{
@@ -730,14 +753,14 @@ manual_stair:
 						continue;
 
 					tsec = (sec->lines[i])->frontsector;
-					newsecnum = tsec-sectors;
+					newsecnum = (int)(tsec-sectors);
 
 					if (secnum != newsecnum)
 						continue;
 
 					tsec = (sec->lines[i])->backsector;
 					if (!tsec) continue;	//jff 5/7/98 if no backside, continue
-					newsecnum = tsec - sectors;
+					newsecnum = (int)(tsec - sectors);
 
 					if (!igntxt && tsec->floorpic != texture)
 						continue;
@@ -799,8 +822,13 @@ manual_stair:
 		// it can infinite loop when the first sector stops moving.
 		sectors[osecnum].prevsec = -1;	
 		if (manual)
+		{
 			return rtn;
-		secnum = osecnum;	//jff 3/4/98 restore loop index
+		}
+		if (!(compatflags & COMPATF_STAIRINDEX))
+		{
+			secnum = osecnum;	//jff 3/4/98 restore loop index
+		}
 	}
 	return rtn;
 }
@@ -974,7 +1002,7 @@ bool EV_DoElevator (line_t *line, DElevator::EElevator elevtype,
 
 //==========================================================================
 //
-// T_FloorWaggle
+// WaggleBase
 //
 //==========================================================================
 
@@ -982,14 +1010,27 @@ bool EV_DoElevator (line_t *line, DElevator::EElevator elevtype,
 #define WGLSTATE_STABLE 2
 #define WGLSTATE_REDUCE 3
 
-DFloorWaggle::DFloorWaggle (sector_t *sec)
+DWaggleBase::DWaggleBase (sector_t *sec)
 	: Super (sec)
 {
 }
 
-void DFloorWaggle::Tick ()
+void DWaggleBase::DoWaggle (bool ceiling)
 {
+	secplane_t *plane;
+	fixed_t *texz;
 	fixed_t dist;
+
+	if (ceiling)
+	{
+		plane = &m_Sector->ceilingplane;
+		texz = &m_Sector->ceilingtexz;
+	}
+	else
+	{
+		plane = &m_Sector->floorplane;
+		texz = &m_Sector->floortexz;
+	}
 
 	switch (m_State)
 	{
@@ -1000,18 +1041,27 @@ void DFloorWaggle::Tick ()
 			m_State = WGLSTATE_STABLE;
 		}
 		break;
+
 	case WGLSTATE_REDUCE:
 		if ((m_Scale -= m_ScaleDelta) <= 0)
 		{ // Remove
-			dist = FixedMul (m_OriginalDist - m_Sector->floorplane.d, m_Sector->floorplane.ic);
-			m_Sector->floortexz -= m_Sector->floorplane.HeightDiff (m_OriginalDist);
-			m_Sector->floorplane.d = m_OriginalDist;
-			P_ChangeSector (m_Sector, true, dist, 0);
-			m_Sector->floordata = NULL;
+			dist = FixedMul (m_OriginalDist - plane->d, plane->ic);
+			*texz -= plane->HeightDiff (m_OriginalDist);
+			plane->d = m_OriginalDist;
+			P_ChangeSector (m_Sector, true, dist, ceiling);
+			if (ceiling)
+			{
+				m_Sector->ceilingdata = NULL;
+			}
+			else
+			{
+				m_Sector->floordata = NULL;
+			}
 			Destroy ();
 			return;
 		}
 		break;
+
 	case WGLSTATE_STABLE:
 		if (m_Ticker != -1)
 		{
@@ -1023,26 +1073,68 @@ void DFloorWaggle::Tick ()
 		break;
 	}
 	m_Accumulator += m_AccDelta;
-	dist = m_Sector->floorplane.d;
-	m_Sector->floorplane.d = m_OriginalDist + m_Sector->floorplane.PointToDist (0, 0,
+	dist = plane->d;
+	plane->d = m_OriginalDist + plane->PointToDist (0, 0,
 		FixedMul (FloatBobOffsets[(m_Accumulator>>FRACBITS)&63], m_Scale));
-	m_Sector->floortexz += m_Sector->floorplane.HeightDiff (dist);
-	dist = m_Sector->floorplane.HeightDiff (dist);
-	P_ChangeSector (m_Sector, true, dist, 0);
+	*texz += plane->HeightDiff (dist);
+	dist = plane->HeightDiff (dist);
+	P_ChangeSector (m_Sector, true, dist, ceiling);
 }
 
 //==========================================================================
 //
-// EV_StartFloorWaggle
+// FloorWaggle
 //
 //==========================================================================
 
-bool EV_StartFloorWaggle (int tag, int height, int speed, int offset,
-	int timer)
+DFloorWaggle::DFloorWaggle ()
+{
+}
+
+DFloorWaggle::DFloorWaggle (sector_t *sec)
+	: Super (sec)
+{
+	sec->floordata = this;
+}
+
+void DFloorWaggle::Tick ()
+{
+	DoWaggle (false);
+}
+
+//==========================================================================
+//
+// CeilingWaggle
+//
+//==========================================================================
+
+DCeilingWaggle::DCeilingWaggle ()
+{
+}
+
+DCeilingWaggle::DCeilingWaggle (sector_t *sec)
+	: Super (sec)
+{
+	sec->ceilingdata = this;
+}
+
+void DCeilingWaggle::Tick ()
+{
+	DoWaggle (true);
+}
+
+//==========================================================================
+//
+// EV_StartWaggle
+//
+//==========================================================================
+
+bool EV_StartWaggle (int tag, int height, int speed, int offset,
+	int timer, bool ceiling)
 {
 	int sectorIndex;
 	sector_t *sector;
-	DFloorWaggle *waggle;
+	DWaggleBase *waggle;
 	bool retCode;
 
 	retCode = false;
@@ -1050,19 +1142,27 @@ bool EV_StartFloorWaggle (int tag, int height, int speed, int offset,
 	while ((sectorIndex = P_FindSectorFromTag(tag, sectorIndex)) >= 0)
 	{
 		sector = &sectors[sectorIndex];
-		if (sector->floordata)
+		if ((!ceiling && sector->floordata) || (ceiling && sector->ceilingdata))
 		{ // Already busy with another thinker
 			continue;
 		}
 		retCode = true;
-		waggle = new DFloorWaggle (sector);
-		waggle->m_OriginalDist = sector->floorplane.d;
+		if (ceiling)
+		{
+			waggle = new DCeilingWaggle (sector);
+			waggle->m_OriginalDist = sector->ceilingplane.d;
+		}
+		else
+		{
+			waggle = new DFloorWaggle (sector);
+			waggle->m_OriginalDist = sector->floorplane.d;
+		}
 		waggle->m_Accumulator = offset*FRACUNIT;
-		waggle->m_AccDelta = speed<<10;
+		waggle->m_AccDelta = speed << (FRACBITS-6);
 		waggle->m_Scale = 0;
-		waggle->m_TargetScale = height<<10;
+		waggle->m_TargetScale = height << (FRACBITS-6);
 		waggle->m_ScaleDelta = waggle->m_TargetScale
-			/(35+((3*35)*height)/255);
+			/(TICRATE+((3*TICRATE)*height)/255);
 		waggle->m_Ticker = timer ? timer*TICRATE : -1;
 		waggle->m_State = WGLSTATE_EXPAND;
 	}

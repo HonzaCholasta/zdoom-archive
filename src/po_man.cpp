@@ -131,9 +131,8 @@ void DPolyDoor::Serialize (FArchive &arc)
 }
 
 DPolyDoor::DPolyDoor (int polyNum, podoortype_t type)
-	: Super (polyNum)
+	: Super (polyNum), m_Type (type)
 {
-	m_Type = type;
 	m_Direction = 0;
 	m_TotalDist = 0;
 	m_Tics = 0;
@@ -512,7 +511,7 @@ bool EV_OpenPolyDoor (line_t *line, int polyNum, int speed, angle_t angle,
 	else if (type == PODOOR_SWING)
 	{
 		pd->m_WaitTics = delay;
-		pd->m_Direction = 1; // ADD:  PODO'OR_SWINGL, PODOOR_SWINGR
+		pd->m_Direction = 1; // ADD:  PODOOR_SWINGL, PODOOR_SWINGR
 		pd->m_Speed = (speed*pd->m_Direction*(ANGLE_90/64))>>3;
 		pd->m_Dist = pd->m_TotalDist = angle;
 		SN_StartSequence (poly, poly->seqType, SEQ_DOOR);
@@ -613,7 +612,9 @@ void ThrustMobj (AActor *actor, seg_t *seg, polyobj_t *po)
 	{
 		return;
 	}
-	thrustAngle = (seg->angle-ANGLE_90)>>ANGLETOFINESHIFT;
+	thrustAngle =
+		(R_PointToAngle2 (seg->v1->x, seg->v1->y, seg->v2->x, seg->v2->y)
+		 - ANGLE_90) >> ANGLETOFINESHIFT;
 
 	pe = static_cast<DPolyAction *>(po->specialdata);
 	if (pe)
@@ -773,9 +774,9 @@ void DoMovePolyobj (polyobj_t *po, int x, int y)
 			linedef->bbox[BOXBOTTOM] += y;
 			linedef->bbox[BOXLEFT] += x;
 			linedef->bbox[BOXRIGHT] += x;
-			if (linedef->sidenum[0] != -1)
+			if (linedef->sidenum[0] != NO_INDEX)
 				ADecal::MoveChain (sides[linedef->sidenum[0]].BoundActors, x, y);
-			if (linedef->sidenum[1] != -1)
+			if (linedef->sidenum[1] != NO_INDEX)
 				ADecal::MoveChain (sides[linedef->sidenum[1]].BoundActors, x, y);
 			linedef->validcount = validcount;
 		}
@@ -863,13 +864,12 @@ BOOL PO_RotatePolyobj (int num, angle_t angle)
 		{
 			UpdateSegBBox(*segList);
 			line_t *line = (*segList)->linedef;
-			if (line->sidenum[0] != -1)
+			if (line->sidenum[0] != NO_INDEX)
 				ADecal::FixForSide (&sides[line->sidenum[0]]);
-			if (line->sidenum[1] != -1)
+			if (line->sidenum[1] != NO_INDEX)
 				ADecal::FixForSide (&sides[line->sidenum[1]]);
 			line->validcount = validcount;
 		}
-		(*segList)->angle += angle;
 	}
 	if (blocked)
 	{
@@ -888,13 +888,12 @@ BOOL PO_RotatePolyobj (int num, angle_t angle)
 			{
 				UpdateSegBBox(*segList);
 				line_t *line = (*segList)->linedef;
-				if (line->sidenum[0] != -1)
+				if (line->sidenum[0] != NO_INDEX)
 					ADecal::FixForSide (&sides[line->sidenum[0]]);
-				if (line->sidenum[1] != -1)
+				if (line->sidenum[1] != NO_INDEX)
 					ADecal::FixForSide (&sides[line->sidenum[1]]);
 				line->validcount = validcount;
 			}
-			(*segList)->angle -= angle;
 		}
 		LinkPolyobj(po);
 		return false;
@@ -1116,8 +1115,8 @@ static void InitBlockMap (void)
 //
 // IterFindPolySegs
 //
-//              Passing NULL for segList will cause IterFindPolySegs to
-//      count the number of segs in the polyobj
+// Passing NULL for segList will cause IterFindPolySegs to count the
+// number of segs in the polyobj.
 //==========================================================================
 
 static void IterFindPolySegs (int x, int y, seg_t **segList)
@@ -1130,18 +1129,21 @@ static void IterFindPolySegs (int x, int y, seg_t **segList)
 	}
 	for (i = 0; i < numsegs; i++)
 	{
-		if (segs[i].v1->x == x && segs[i].v1->y == y)
+		if (segs[i].linedef != NULL)
 		{
-			if(!segList)
+			if (segs[i].v1->x == x && segs[i].v1->y == y)
 			{
-				PolySegCount++;
+				if (!segList)
+				{
+					PolySegCount++;
+				}
+				else
+				{
+					*segList++ = &segs[i];
+				}
+				IterFindPolySegs (segs[i].v2->x, segs[i].v2->y, segList);
+				return;
 			}
-			else
-			{
-				*segList++ = &segs[i];
-			}
-			IterFindPolySegs (segs[i].v2->x, segs[i].v2->y, segList);
-			return;
 		}
 	}
 	I_Error ("IterFindPolySegs: Non-closed Polyobj located.\n");
@@ -1164,7 +1166,8 @@ static void SpawnPolyobj (int index, int tag, BOOL crush)
 
 	for (i = 0; i < numsegs; i++)
 	{
-		if (segs[i].linedef->special == PO_LINE_START &&
+		if (segs[i].linedef != NULL &&
+			segs[i].linedef->special == PO_LINE_START &&
 			segs[i].linedef->args[0] == tag)
 		{
 			if (polyobjs[index].segs)
@@ -1182,8 +1185,7 @@ static void SpawnPolyobj (int index, int tag, BOOL crush)
 			polyobjs[index].segs = (seg_t **)Z_Malloc (PolySegCount*sizeof(seg_t *),
 				PU_LEVEL, 0);
 			polyobjs[index].segs[0] = &segs[i]; // insert the first seg
-			IterFindPolySegs (segs[i].v2->x, segs[i].v2->y,
-				polyobjs[index].segs+1);
+			IterFindPolySegs (segs[i].v2->x, segs[i].v2->y, polyobjs[index].segs+1);
 			polyobjs[index].crush = crush;
 			polyobjs[index].tag = tag;
 			polyobjs[index].seqType = segs[i].linedef->args[2];
@@ -1203,7 +1205,8 @@ static void SpawnPolyobj (int index, int tag, BOOL crush)
 			psIndexOld = psIndex;
 			for (i = 0; i < numsegs; i++)
 			{
-				if (segs[i].linedef->special == PO_LINE_EXPLICIT &&
+				if (segs[i].linedef != NULL &&
+					segs[i].linedef->special == PO_LINE_EXPLICIT &&
 					segs[i].linedef->args[0] == tag)
 				{
 					if (!segs[i].linedef->args[1])
@@ -1224,11 +1227,11 @@ static void SpawnPolyobj (int index, int tag, BOOL crush)
 				}
 			}
 			// Clear out any specials for these segs...we cannot clear them out
-			// 	in the above loop, since we aren't guaranteed one seg per
-			//		linedef.
+			// 	in the above loop, since we aren't guaranteed one seg per linedef.
 			for (i = 0; i < numsegs; i++)
 			{
-				if (segs[i].linedef->special == PO_LINE_EXPLICIT &&
+				if (segs[i].linedef != NULL &&
+					segs[i].linedef->special == PO_LINE_EXPLICIT &&
 					segs[i].linedef->args[0] == tag && segs[i].linedef->args[1] == j)
 				{
 					segs[i].linedef->special = 0;
@@ -1241,7 +1244,8 @@ static void SpawnPolyobj (int index, int tag, BOOL crush)
 				// lines with the current tag value
 				for (i = 0; i < numsegs; i++)
 				{
-					if(segs[i].linedef->special == PO_LINE_EXPLICIT &&
+					if (segs[i].linedef != NULL &&
+						segs[i].linedef->special == PO_LINE_EXPLICIT &&
 						segs[i].linedef->args[0] == tag)
 					{
 						I_Error ("SpawnPolyobj: Missing explicit line %d for poly %d\n",

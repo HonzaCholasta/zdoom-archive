@@ -77,6 +77,8 @@ typedef enum {
 	Floor_RaiseByValueTimes8 = 35,
 	Floor_LowerByValueTimes8 = 36,
 
+	Ceiling_Waggle = 38,	// [RH] Complement of Floor_Waggle
+
 	Ceiling_LowerByValue = 40,
 	Ceiling_RaiseByValue = 41,
 	Ceiling_CrushAndRaise = 42,
@@ -85,6 +87,8 @@ typedef enum {
 	Ceiling_CrushRaiseAndStay = 45,
 
 	Floor_CrushStop = 46,
+
+	ExtraFloor_LightOnly = 50,
 
 	Plat_PerpetualRaise = 60,
 	Plat_Stop = 61,
@@ -140,6 +144,8 @@ typedef enum {
 	Light_Flicker = 115,
 	Light_Strobe = 116,
 
+	Thing_Damage = 119,
+
 	Radius_Quake = 120,	// Earthquake
 
 	Line_SetIdentification = 121,
@@ -173,6 +179,8 @@ typedef enum {
 	Sector_ChangeSound = 140,
 
 // [RH] Begin new specials for ZDoom
+	Thing_Hate = 177,
+	Thing_ProjectileAimed = 178,
 	ChangeSkill = 179,
 	Thing_SetTranslation = 180,
 	Plane_Align = 181,

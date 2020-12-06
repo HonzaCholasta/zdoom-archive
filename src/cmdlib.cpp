@@ -44,7 +44,7 @@ char *copystring (const char *s)
 	char *b;
 	if (s)
 	{
-		int len = strlen (s) + 1;
+		size_t len = strlen (s) + 1;
 		b = new char[len];
 		memcpy (b, s, len);
 	}
@@ -165,15 +165,25 @@ void ExtractFileBase (const char *path, char *dest)
 
 	src = path + strlen(path) - 1;
 
-//
-// back up until a / or the start
-//
-	while (src != path && *(src-1) != PATHSEPERATOR)
-		src--;
-
-	while (*src && *src != '.')
+	if (src >= path)
 	{
-		*dest++ = *src++;
+		// back up until a / or the start
+		while (src != path && *(src-1) != PATHSEPERATOR)
+			src--;
+
+		// Check for files with drive specification but no path
+#if defined(_WIN32) || defined(DOS)
+		if (src == path && src[0] != 0)
+		{
+			if (src[1] == ':')
+				src += 2;
+		}
+#endif
+
+		while (*src && *src != '.')
+		{
+			*dest++ = *src++;
+		}
 	}
 	*dest = 0;
 }

@@ -114,6 +114,7 @@ void DHUDMessage::ScreenSizeChanged ()
 
 void DHUDMessage::ResetText (const char *text)
 {
+	FFont *oldfont = screen->Font;
 	screen->SetFont (Font);
 
 	Lines = V_BreakLines (con_scaletext ?
@@ -132,7 +133,7 @@ void DHUDMessage::ResetText (const char *text)
 		}
 	}
 
-	screen->SetFont (SmallFont);
+	screen->SetFont (oldfont);
 }
 
 bool DHUDMessage::Tick ()
@@ -152,6 +153,7 @@ void DHUDMessage::Draw (int bottom)
 	int ystep;
 	int i;
 	bool clean;
+	FFont *oldfont = screen->Font;
 
 	screen->SetFont (Font);
 
@@ -200,7 +202,7 @@ void DHUDMessage::Draw (int bottom)
 		y += ystep;
 	}
 
-	screen->SetFont (SmallFont);
+	screen->SetFont (oldfont);
 }
 
 void DHUDMessage::DrawSetup ()
@@ -289,7 +291,7 @@ DHUDMessageTypeOnFadeOut::DHUDMessageTypeOnFadeOut (const char *text, float x, f
 	if (TypeOnTime == 0.f)
 		TypeOnTime = 0.1f;
 	CurrLine = 0;
-	LineLen = strlen (Lines[0].string);
+	LineLen = (int)strlen (Lines[0].string);
 	LineVisible = 0;
 	State = 3;
 }
@@ -318,7 +320,7 @@ bool DHUDMessageTypeOnFadeOut::Tick ()
 				}
 				else
 				{
-					LineLen = strlen (Lines[CurrLine].string);
+					LineLen = (int)strlen (Lines[CurrLine].string);
 				}
 			}
 		}
@@ -333,7 +335,7 @@ void DHUDMessageTypeOnFadeOut::ScreenSizeChanged ()
 
 	for (i = 0; i < CurrLine; ++i)
 	{
-		charCount += strlen (Lines[i].string);
+		charCount += (int)strlen (Lines[i].string);
 	}
 	charCount += LineVisible;
 
@@ -341,7 +343,7 @@ void DHUDMessageTypeOnFadeOut::ScreenSizeChanged ()
 	if (State == 3)
 	{
 		CurrLine = 0;
-		LineLen = strlen (Lines[0].string);
+		LineLen = (int)strlen (Lines[0].string);
 		Tics = (int)(charCount * TypeOnTime) - 1;
 		Tick ();
 	}

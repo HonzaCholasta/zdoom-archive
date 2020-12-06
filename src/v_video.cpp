@@ -58,6 +58,7 @@
 #include "c_dispatch.h"
 #include "cmdlib.h"
 #include "gi.h"
+#include "templates.h"
 
 IMPLEMENT_ABSTRACT_CLASS (DCanvas)
 IMPLEMENT_ABSTRACT_CLASS (DFrameBuffer)
@@ -217,6 +218,11 @@ void DCanvas::Dim () const
 		fixed_t amount;
 
 		amount = (fixed_t)(dimamount * 64);
+		if (gameinfo.gametype == GAME_Hexen && gamestate == GS_DEMOSCREEN)
+		{ // On the Hexen title screen, the default dimming is not
+		  // enough to make the menus readable.
+			amount = MIN<fixed_t> (FRACUNIT, amount*2);
+		}
 		fg2rgb = Col2RGB8[amount];
 		bg2rgb = Col2RGB8[64-amount];
 		fg = fg2rgb[dimcolor.GetIndex ()];
@@ -302,7 +308,7 @@ char *V_GetColorStringByName (const char *name)
 	char descr[5*3];
 	int rgblump;
 	int c[3], step;
-	int namelen;
+	size_t namelen;
 
 	rgblump = W_CheckNumForName ("X11R6RGB");
 	if (rgblump == -1)
@@ -355,7 +361,7 @@ char *V_GetColorStringByName (const char *name)
 			{
 				break;
 			}
-			int checklen = ++endp - rgb;
+			size_t checklen = ++endp - rgb;
 			if (checklen == namelen && strnicmp (rgb, name, checklen) == 0)
 			{
 				sprintf (descr, "%02x %02x %02x", c[0], c[1], c[2]);
@@ -647,6 +653,15 @@ bool V_DoModeSetup (int width, int height, int bits)
 
 	CleanXfac = width / 320;
 	CleanYfac = height / 200;
+
+	if (CleanXfac > 1 && CleanYfac > 1 && CleanXfac != CleanYfac)
+	{
+		if (CleanXfac < CleanYfac)
+			CleanYfac = CleanXfac;
+		else
+			CleanXfac = CleanYfac;
+	}
+
 	CleanWidth = width / CleanXfac;
 	CleanHeight = height / CleanYfac;
 
@@ -686,7 +701,8 @@ bool V_SetResolution (int width, int height, int bits)
 		if (!I_CheckResolution (oldwidth, oldheight, oldbits))
 		{ // Try previous resolution (if any)
 	   		return false;
-		} else
+		}
+		else
 		{
 			width = oldwidth;
 			height = oldheight;

@@ -68,6 +68,9 @@
 // [RH] Needed for sky scrolling
 #include "r_sky.h"
 
+static FRandom pr_playerinspecialsector ("PlayerInSpecialSector");
+static FRandom pr_animatepictures ("AnimatePics");
+
 IMPLEMENT_CLASS (DScroller)
 
 IMPLEMENT_POINTY_CLASS (DPusher)
@@ -424,10 +427,13 @@ bool CheckIfExitIsGood (AActor *self)
 	if (self == NULL)
 		return true;
 
+	if (self->player && self->player->playerstate == PST_DEAD)
+	{
+		return false;
+	}
 	if ((deathmatch || alwaysapplydmflags) && (dmflags & DF_NO_EXIT))
 	{
-		while (self->health > 0)
-			P_DamageMobj (self, self, self, 10000, MOD_EXIT);
+		P_DamageMobj (self, self, self, 10000, MOD_EXIT);
 		return false;
 	}
 	if (deathmatch)
@@ -486,90 +492,139 @@ BOOL P_CheckKeys (player_t *p, keyspecialtype_t lock, BOOL remote)
 	if (p == NULL)
 		return false;
 
-	int msg;
+	int msg = 0;
+	bool keynameonly = false;
 	BOOL equiv = lock & 0x80;
 	int i;
 
 	lock = (keyspecialtype_t)(lock & 0x7f);
 
-	static const struct
+	if (gameinfo.gametype == GAME_Hexen)
 	{
-		keyspecialtype_t Lock;
-		WORD ItemNum;
-		WORD ObjText, EquivText, UniqueText;
-	}
-	KeyChecks[6] =
-	{
-		{ BCard,	it_bluecard,	PD_BLUEO,	PD_BLUEK,	PD_BLUEC },
-		{ BSkull,	it_blueskull,	PD_BLUEO,	PD_BLUEK,	PD_BLUES },
-		{ RCard,	it_redcard,		PD_REDO,	PD_REDK,	PD_REDC },
-		{ RSkull,	it_redskull,	PD_REDO,	PD_REDK,	PD_REDS },
-		{ YCard,	it_yellowcard,	PD_YELLOWO,	PD_YELLOWK,	PD_YELLOWC },
-		{ YSkull,	it_yellowskull,	PD_YELLOWO,	PD_YELLOWK,	PD_YELLOWS }
-	};
-
-	BYTE HaveKeys[6];
-
-	// First, catalog the keys the player has
-	for (i = 0; i < 6; i++)
-	{
-		HaveKeys[i] = p->keys[KeyChecks[i].ItemNum];
-	}
-	if (equiv || gameinfo.gametype == GAME_Heretic)
-	{
-		for (i = 0; i < 3; i++)
+		if (lock == AnyKey)
 		{
-			HaveKeys[2*i] = HaveKeys[2*i+1] = HaveKeys[2*i] | HaveKeys[2*i+1];
+			for (i = 0; i < NUMKEYS; ++i)
+			{
+				if (p->keys[i])
+				{
+					return true;
+				}
+			}
+			msg = PD_ANY;
+		}/* Hexen has so many keys, I don't know if I should allow this
+		else if (lock == AllKeys)
+		{
+			for (i = 0; i < NUMKEYS; ++i)
+			{
+				if (!p->keys[i])
+				{
+					break;
+				}
+			}
+			if (i == NUMKEYS)
+			{
+				return true;
+			}
+			msg = PD_ALL12;
+		}*/
+		else if ((unsigned)lock <= NUMKEYS)
+		{
+			if (p->keys[lock-1])
+			{
+				return true;
+			}
+			msg = TXT_KEY_STEEL+lock-1;
+			keynameonly = true;
 		}
 	}
-	if (gameinfo.gametype != GAME_Doom)
-		remote = false;
-
-	switch (lock)
+	else
 	{
-	case AnyKey:
+		static const struct
+		{
+			keyspecialtype_t Lock;
+			WORD ItemNum;
+			WORD ObjText, EquivText, UniqueText, HereticText;
+		}
+		KeyChecks[6] =
+		{
+			{ BCard,	it_bluecard,	PD_BLUEO,	PD_BLUEK,	PD_BLUEC,	TXT_NEEDBLUEKEY },
+			{ BSkull,	it_blueskull,	PD_BLUEO,	PD_BLUEK,	PD_BLUES,	TXT_NEEDBLUEKEY },
+			{ RCard,	it_redcard,		PD_REDO,	PD_REDK,	PD_REDC,	TXT_NEEDGREENKEY },
+			{ RSkull,	it_redskull,	PD_REDO,	PD_REDK,	PD_REDS,	TXT_NEEDGREENKEY },
+			{ YCard,	it_yellowcard,	PD_YELLOWO,	PD_YELLOWK,	PD_YELLOWC,	TXT_NEEDYELLOWKEY },
+			{ YSkull,	it_yellowskull,	PD_YELLOWO,	PD_YELLOWK,	PD_YELLOWS,	TXT_NEEDYELLOWKEY }
+		};
+
+		BYTE HaveKeys[6];
+
+		// First, catalog the keys the player has
 		for (i = 0; i < 6; i++)
 		{
+			HaveKeys[i] = p->keys[KeyChecks[i].ItemNum];
+		}
+		if (equiv || gameinfo.gametype == GAME_Heretic)
+		{
+			for (i = 0; i < 3; i++)
+			{
+				HaveKeys[2*i] = HaveKeys[2*i+1] = HaveKeys[2*i] | HaveKeys[2*i+1];
+			}
+		}
+		if (gameinfo.gametype != GAME_Doom)
+			remote = false;
+
+		switch (lock)
+		{
+		case AnyKey:
+			for (i = 0; i < 6; i++)
+			{
+				if (HaveKeys[i])
+				{
+					return true;
+				}
+			}
+			msg = PD_ANY;
+			break;
+
+		case AllKeys:
+			for (i = 0; i < 6; i++)
+			{
+				if (!HaveKeys[i])
+				{
+					msg = equiv ? PD_ALL3 : PD_ALL6;
+					break;
+				}
+			}
+			if (i == 6)
+			{ // Got all the keys
+				return true;
+			}
+			break;
+
+		default:
+			for (i = 0; i < 6; i++)
+			{
+				if (KeyChecks[i].Lock == lock)
+					break;
+			}
+			if (i == 6)
+			{ // Unknown key; assume we do not have it
+				return false;
+			}
 			if (HaveKeys[i])
 			{
 				return true;
 			}
-		}
-		msg = PD_ANY;
-		break;
-
-	case AllKeys:
-		for (i = 0; i < 6; i++)
-		{
-			if (!HaveKeys[i])
+			if (gameinfo.gametype == GAME_Heretic)
 			{
-				msg = equiv ? PD_ALL3 : PD_ALL6;
-				break;
+				msg = KeyChecks[i].HereticText;
 			}
+			else
+			{
+				msg = equiv ? (remote ? KeyChecks[i].ObjText : KeyChecks[i].EquivText)
+					: KeyChecks[i].UniqueText;
+			}
+			break;
 		}
-		if (i == 6)
-		{ // Got all the keys
-			return true;
-		}
-		break;
-
-	default:
-		for (i = 0; i < 6; i++)
-		{
-			if (KeyChecks[i].Lock == lock)
-				break;
-		}
-		if (i == 6)
-		{ // Unknown key; assume we do not have it
-			return false;
-		}
-		if (HaveKeys[i])
-		{
-			return true;
-		}
-		msg = equiv ? (remote ? KeyChecks[i].ObjText : KeyChecks[i].EquivText)
-			: KeyChecks[i].UniqueText;
-		break;
 	}
 
 	// If we get here, we don't have the right key,
@@ -577,16 +632,16 @@ BOOL P_CheckKeys (player_t *p, keyspecialtype_t lock, BOOL remote)
 	if (p->mo == players[consoleplayer].camera)
 	{
 		S_Sound (p->mo, CHAN_VOICE, "misc/keytry", 1, ATTN_NORM);
-		if (gameinfo.gametype == GAME_Heretic)
+		if (!keynameonly)
 		{
-			if (msg == PD_REDK)
-				msg = TXT_NEEDGREENKEY;
-			else if (msg == PD_BLUEK)
-				msg = TXT_NEEDBLUEKEY;
-			else if (msg == PD_YELLOWK)
-				msg = TXT_NEEDYELLOWKEY;
+			C_MidPrint (GStrings(msg));
 		}
-		C_MidPrint (GStrings(msg));
+		else
+		{
+			char msg2[256];
+			sprintf (msg2, "YOU NEED THE %s\n", GStrings(msg));
+			C_MidPrint (msg2);
+		}
 	}
 	return false;
 }
@@ -754,7 +809,7 @@ void P_PlayerInSpecialSector (player_t *player)
 		case dLight_Strobe_Hurt:
 			// STROBE HURT
 			if (!player->powers[pw_ironfeet]
-				|| (P_Random (pr_playerinspecialsector)<5) )
+				|| (pr_playerinspecialsector()<5) )
 			{
 				if (!(level.time&0x1f))
 					P_DamageMobj (player->mo, NULL, NULL, 20, MOD_SLIME);
@@ -813,7 +868,7 @@ void P_PlayerInSpecialSector (player_t *player)
 			break;
 		case 0x300: // 10/20 damage per 31 ticks
 			if (!player->powers[pw_ironfeet]
-				|| (P_Random(pr_playerinspecialsector)<5))	// take damage even with suit
+				|| (pr_playerinspecialsector()<5))	// take damage even with suit
 			{
 				if (!(level.time&0x1f))
 					P_DamageMobj (player->mo, NULL, NULL, 20, MOD_SLIME);
@@ -832,7 +887,7 @@ void P_PlayerInSpecialSector (player_t *player)
 		}
 		else if (sector->damage < 50)
 		{
-			if ((!player->powers[pw_ironfeet] || (P_Random(pr_playerinspecialsector)<5))
+			if ((!player->powers[pw_ironfeet] || (pr_playerinspecialsector()<5))
 				 && !(level.time&0x1f))
 			{
 				P_DamageMobj (player->mo, NULL, NULL, sector->damage, sector->mod);
@@ -933,7 +988,7 @@ void P_UpdateSpecials ()
 			if (anim->speedmin[speedframe] == anim->speedmax[speedframe])
 				anim->countdown = anim->speedmin[speedframe];
 			else
-				anim->countdown = P_Random(pr_animatepictures) %
+				anim->countdown = pr_animatepictures() %
 					(anim->speedmax[speedframe] - anim->speedmin[speedframe]) +
 					anim->speedmin[speedframe];
 		}
@@ -1336,10 +1391,7 @@ void P_SpawnSpecials (void)
 		}
 
 	// [RH] Start running any open scripts on this map
-	if (level.behavior != NULL)
-	{
-		level.behavior->StartTypedScripts (SCRIPT_Open, NULL);
-	}
+	FBehavior::StaticStartTypedScripts (SCRIPT_Open, NULL);
 }
 
 // killough 2/28/98:
@@ -1681,8 +1733,7 @@ static void P_SpawnFriction(void)
 	{
 		if (l->special == Sector_SetFriction)
 		{
-			int length, s;
-			fixed_t friction, movefactor;
+			int length;
 
 			if (l->args[1])
 			{	// [RH] Allow setting friction amount from parameter
@@ -1692,44 +1743,69 @@ static void P_SpawnFriction(void)
 			{
 				length = P_AproxDistance(l->dx,l->dy)>>FRACBITS;
 			}
-			friction = (0x1EB8*length)/0x80 + 0xD000;
 
-			// killough 8/28/98: prevent odd situations
-			if (friction > FRACUNIT)
-				friction = FRACUNIT;
-			if (friction < 0)
-				friction = 0;
+			P_SetSectorFriction (l->args[0], length, false);
+			l->special = 0;
+		}
+	}
+}
 
-			// The following check might seem odd. At the time of movement,
-			// the move distance is multiplied by 'friction/0x10000', so a
-			// higher friction value actually means 'less friction'.
+void P_SetSectorFriction (int tag, int amount, bool alterFlag)
+{
+	int s;
+	fixed_t friction, movefactor;
 
-			// [RH] Twiddled these values so that momentum on ice (with
-			//		friction 0xf900) is the same as in Heretic/Hexen.
-			if (friction > ORIG_FRICTION)	// ice
-//				movefactor = ((0x10092 - friction)*(0x70))/0x158;
-				movefactor = ((0x10092 - friction) * 1024) / 4352 + 568;
-			else
-				movefactor = ((friction - 0xDB34)*(0xA))/0x80;
+	// An amount of 100 should result in a friction of
+	// ORIG_FRICTION (0xE800)
+	friction = (0x1EB8*amount)/0x80 + 0xD001;
 
-			// killough 8/28/98: prevent odd situations
-			if (movefactor < 32)
-				movefactor = 32;
+	// killough 8/28/98: prevent odd situations
+	if (friction > FRACUNIT)
+		friction = FRACUNIT;
+	if (friction < 0)
+		friction = 0;
 
-			for (s = -1; (s = P_FindSectorFromTag(l->args[0],s)) >= 0 ; )
+	// The following check might seem odd. At the time of movement,
+	// the move distance is multiplied by 'friction/0x10000', so a
+	// higher friction value actually means 'less friction'.
+
+	// [RH] Twiddled these values so that momentum on ice (with
+	//		friction 0xf900) is the same as in Heretic/Hexen.
+	if (friction > ORIG_FRICTION)	// ice
+//		movefactor = ((0x10092 - friction)*(0x70))/0x158;
+		movefactor = ((0x10092 - friction) * 1024) / 4352 + 568;
+	else
+		movefactor = ((friction - 0xDB34)*(0xA))/0x80;
+
+	// killough 8/28/98: prevent odd situations
+	if (movefactor < 32)
+		movefactor = 32;
+
+	for (s = -1; (s = P_FindSectorFromTag (tag,s)) >= 0; )
+	{
+		// killough 8/28/98:
+		//
+		// Instead of spawning thinkers, which are slow and expensive,
+		// modify the sector's own friction values. Friction should be
+		// a property of sectors, not objects which reside inside them.
+		// Original code scanned every object in every friction sector
+		// on every tic, adjusting its friction, putting unnecessary
+		// drag on CPU. New code adjusts friction of sector only once
+		// at level startup, and then uses this friction value.
+
+		sectors[s].friction = friction;
+		sectors[s].movefactor = movefactor;
+		if (alterFlag)
+		{
+			// [RH] Rats, I forget what this was supposed to be.
+			// I'm keeping this in, so if I get any friction-related
+			// bug reports, this can be a clue for solving them.
+			if (friction == ORIG_FRICTION)
 			{
-				// killough 8/28/98:
-				//
-				// Instead of spawning thinkers, which are slow and expensive,
-				// modify the sector's own friction values. Friction should be
-				// a property of sectors, not objects which reside inside them.
-				// Original code scanned every object in every friction sector
-				// on every tic, adjusting its friction, putting unnecessary
-				// drag on CPU. New code adjusts friction of sector only once
-				// at level startup, and then uses this friction value.
 
-				sectors[s].friction = friction;
-				sectors[s].movefactor = movefactor;
+			}
+			else
+			{
 			}
 		}
 	}
@@ -2091,3 +2167,16 @@ static void P_SpawnPushers ()
 // phares 3/20/98: End of Pusher effects
 //
 ////////////////////////////////////////////////////////////////////////////
+
+void sector_t::AdjustFloorClip () const
+{
+	msecnode_t *node;
+
+	for (node = touching_thinglist; node; node = node->m_snext)
+	{
+		if (node->m_thing->flags2 & MF2_FLOORCLIP)
+		{
+			node->m_thing->AdjustFloorClip();
+		}
+	}
+}
