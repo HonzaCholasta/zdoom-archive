@@ -68,7 +68,7 @@ typedef struct
 typedef struct lumpinfo_s
 {
 	char		name[8];
-	FILE		*handle;	// [RH] Use stdio routines
+	int			handle;
 	int			position;
 	int			size;
 
@@ -107,7 +107,7 @@ void   *W_CacheLumpNum (int lump, int tag);
 #define W_CacheLumpName(name,tag) \
 		W_CacheLumpNum (W_GetNumForName(name), (tag))
 
-void	W_Profile (void);
+void	W_Profile (const char *fname);
 
 int		W_FindLump (const char *name, int *lastlump);	// [RH]	Find lumps with duplication
 BOOL	W_CheckLumpName (int lump, const char *name);	// [RH] True if lump's name == name
@@ -124,8 +124,8 @@ void uppercopy (char *to, const char *from);
 // [RH] Copies the lump name to to using uppercopy
 void W_GetLumpName (char *to, int lump);
 
-// [RH] Returns file ptr for specified lump
-FILE *W_GetLumpFile (int lump);
+// [RH] Returns file handle for specified lump
+int W_GetLumpFile (int lump);
 
 // [RH] Put a lump in a certain namespace
 void W_SetLumpNamespace (int lump, int nmspace);

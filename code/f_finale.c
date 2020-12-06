@@ -26,7 +26,6 @@
 #include <ctype.h>
 #include <math.h>
 
-// Functions.
 #include "i_system.h"
 #include "m_swap.h"
 #include "z_zone.h"
@@ -34,19 +33,12 @@
 #include "v_text.h"
 #include "w_wad.h"
 #include "s_sound.h"
-
-// Data.
 #include "dstrings.h"
-
 #include "doomstat.h"
 #include "r_state.h"
-
 #include "hu_stuff.h"
 
-// ?
-//#include "doomstat.h"
-//#include "r_local.h"
-//#include "f_finale.h"
+#include "gi.h"
 
 // Stage of animation:
 //	0 = text, 1 = art screen, 2 = character cast
@@ -56,7 +48,6 @@ int	finalecount;
 
 #define TEXTSPEED		2
 #define TEXTWAIT		250
-static int TextSpeed;	// [RH] Var for (ha ha) compatibility with old demos
 
 char*	finaletext;
 char*	finaleflat;
@@ -84,20 +75,15 @@ void F_StartFinale (char *music, char *flat, char *text)
 	//  determined in G_WorldDone() based on data in
 	//  a level_info_t and a cluster_info_t.
 
-	if (*music == 0) {
-		if (gamemode == commercial)
-			S_ChangeMusic ("D_READ_M", true);
-		else
-			S_ChangeMusic ("D_VICTOR", true);
-	} else
- 		S_ChangeMusic (music, true);
+	if (*music == 0)
+		S_ChangeMusic (gameinfo.finaleMusic,
+			!(gameinfo.flags & GI_NOLOOPFINALEMUSIC));
+	else
+ 		S_ChangeMusic (music, !(gameinfo.flags & GI_NOLOOPFINALEMUSIC));
 
-	if (*flat == 0) {
-		if (gamemode == commercial)
-			finaleflat = "SLIME16";
-		else
-			finaleflat = "FLOOR4_8";
-	} else
+	if (*flat == 0)
+		finaleflat = gameinfo.finaleFlat;
+	else
 		finaleflat = flat;
 
 	if (text)
@@ -107,12 +93,8 @@ void F_StartFinale (char *music, char *flat, char *text)
 
 	finalestage = 0;
 	finalecount = 0;
-
-	// [RH] Set TextSpeed based on state of olddemo flag
-	if (olddemo)
-		TextSpeed = 3;		// Speed in original Doom
-	else
-		TextSpeed = TEXTSPEED;
+	V_SetBlend (0,0,0,0);
+	S_StopAllChannels ();
 }
 
 
@@ -143,8 +125,8 @@ void F_Ticker (void)
 				break;
 
 		if (i < MAXPLAYERS) {
-			if (finalecount < (signed)(strlen (finaletext)*TextSpeed)) {
-				finalecount = strlen (finaletext)*TextSpeed;
+			if (finalecount < (signed)(strlen (finaletext)*TEXTSPEED)) {
+				finalecount = strlen (finaletext)*TEXTSPEED;
 			} else {
 				if (!strncmp (level.nextmap, "EndGame", 7)) {
 					if (level.nextmap[7] == 'C') {
@@ -193,10 +175,10 @@ void F_TextWrite (void)
 	// erase the entire screen to a tiled background
 	{
 		int lump = R_FlatNumForName (finaleflat) + firstflat;
-		V_FlatFill (0,0,screens[0].width,screens[0].height,&screens[0],
+		V_FlatFill (0,0, screen.width, screen.height, &screen,
 					W_CacheLumpNum (lump, PU_CACHE));
 	}
-	V_MarkRect (0, 0, screens[0].width, screens[0].height);
+	V_MarkRect (0, 0, screen.width, screen.height);
 	
 	// draw some of the text onto the screen
 	cx = 10;
@@ -206,7 +188,7 @@ void F_TextWrite (void)
 	if (finalecount < 11)
 		return;
 
-	count = (finalecount - 10)/TextSpeed;
+	count = (finalecount - 10)/TEXTSPEED;
 	for ( ; count ; count-- )
 	{
 		c = *ch++;
@@ -227,9 +209,9 @@ void F_TextWrite (void)
 		}
 				
 		w = SHORT (hu_font[c]->width);
-		if (cx+w > screens[0].width)
+		if (cx+w > screen.width)
 			break;
-		V_DrawPatchClean(cx, cy, &screens[0], hu_font[c]);
+		V_DrawPatchClean(cx, cy, &screen, hu_font[c]);
 		cx+=w;
 	}
 		
@@ -328,7 +310,7 @@ void F_StartCast (void)
 void F_CastTicker (void)
 {
 	int st;
-	void *origin;
+	int atten;
 
 	if (--casttics > 0)
 		return; 				// not time to change state yet
@@ -341,16 +323,11 @@ void F_CastTicker (void)
 		if (castorder[castnum].name == NULL)
 			castnum = 0;
 		if (mobjinfo[castorder[castnum].type].seesound) {
-			switch (castorder[castnum].type) {
-				case MT_CYBORG:
-				case MT_SPIDER:
-					origin = ORIGIN_SURROUND;
-					break;
-				default:
-					origin = ORIGIN_AMBIENT;
-					break;
-			}
-			S_StartSound (origin, mobjinfo[castorder[castnum].type].seesound, 90);
+			if (mobjinfo[castorder[castnum].type].flags2 & MF2_BOSS)
+				atten = ATTN_SURROUND;
+			else
+				atten = ATTN_NONE;
+			S_Sound (NULL, CHAN_VOICE, mobjinfo[castorder[castnum].type].seesound, 1, atten);
 		}
 		caststate = &states[mobjinfo[castorder[castnum].type].seestate];
 		if (castorder[castnum].type == MT_PLAYER)
@@ -402,8 +379,10 @@ void F_CastTicker (void)
 		  default: sfx = 0; break;
 		}
 				
-		if (sfx)
-			S_StartSound (ORIGIN_AMBIENT, sfx, 90);
+		if (sfx) {
+			S_StopAllChannels ();
+			S_Sound (NULL, CHAN_WEAPON, sfx, 1, ATTN_NONE);
+		}
 	}
 		
 	if (castframes == 12)
@@ -450,7 +429,7 @@ void F_CastTicker (void)
 
 BOOL F_CastResponder (event_t* ev)
 {
-	void *origin;
+	int attn;
 
 	if (ev->type != ev_keydown)
 		return false;
@@ -468,15 +447,15 @@ BOOL F_CastResponder (event_t* ev)
 		switch (castorder[castnum].type) {
 			case MT_CYBORG:
 			case MT_SPIDER:
-				origin = ORIGIN_SURROUND;
+				attn = ATTN_SURROUND;
 				break;
 			default:
-				origin = ORIGIN_AMBIENT;
+				attn = ATTN_NONE;
 				break;
 		}
 		if (castorder[castnum].type == MT_PLAYER) {
 			static const char sndtemplate[] = "player/%s/death1";
-			static const char *genders[] = { "male", "female", "neuter" };
+			static const char *genders[] = { "male", "female", "cyborg" };
 			char nametest[128];
 			int sndnum;
 
@@ -488,24 +467,12 @@ BOOL F_CastResponder (event_t* ev)
 				if (sndnum == -1)
 					sndnum = S_FindSound ("player/male/death1");
 			}
-			S_StartSfx (origin, sndnum, 90);
+			S_SoundID (NULL, CHAN_VOICE, sndnum, 1, ATTN_NONE);
 		} else
-			S_StartSound (origin, mobjinfo[castorder[castnum].type].deathsound, 90);
+			S_Sound (NULL, CHAN_VOICE, mobjinfo[castorder[castnum].type].deathsound, 1, attn);
 	}
 		
 	return true;
-}
-
-
-void F_CastPrint (char *text)
-{
-	char text2[80], *t2 = text2;
-
-	while (*text)
-		*t2++ = *text++ ^ 0x80;
-	*t2 = 0;
-	V_DrawTextClean ((screens[0].width - V_StringWidth (text2) * CleanXfac) >> 1,
-					 (screens[0].height * 180) / 200, text2);
 }
 
 int V_DrawPatchFlipped (int, int, screen_t *, patch_t *);
@@ -521,21 +488,23 @@ void F_CastDrawer (void)
 	patch_t*			patch;
 	
 	// erase the entire screen to a background
-	V_DrawPatchIndirect (0,0,&screens[0], W_CacheLumpName ("BOSSBACK", PU_CACHE));
+	V_DrawPatchIndirect (0,0,&screen, W_CacheLumpName ("BOSSBACK", PU_CACHE));
 
-	F_CastPrint (castorder[castnum].name);
+	V_DrawTextClean (CR_RED,
+		(screen.width - V_StringWidth (castorder[castnum].name) * CleanXfac)/2,
+		(screen.height * 180) / 200, castorder[castnum].name);
 	
 	// draw the current frame in the middle of the screen
 	sprdef = &sprites[castsprite];
-	sprframe = &sprdef->spriteframes[ caststate->frame & FF_FRAMEMASK];
+	sprframe = &sprdef->spriteframes[caststate->frame & FF_FRAMEMASK];
 	lump = sprframe->lump[0];
 	flip = (BOOL)sprframe->flip[0];
 						
 	patch = W_CacheLumpNum (lump, PU_CACHE);
 	if (flip)
-		V_DrawPatchFlipped (160,170,&screens[0],patch);
+		V_DrawPatchFlipped (160,170,&screen,patch);
 	else
-		V_DrawPatchIndirect (160,170,&screens[0],patch);
+		V_DrawPatchIndirect (160,170,&screen,patch);
 }
 
 
@@ -659,7 +628,7 @@ void F_BunnyScroll (void)
 	p1 = W_CacheLumpName ("PFUB2", PU_LEVEL);
 	p2 = W_CacheLumpName ("PFUB1", PU_LEVEL);
 
-	V_MarkRect (0, 0, screens[0].width, screens[0].height);
+	V_MarkRect (0, 0, screen.width, screen.height);
 		
 	scrolled = 320 - (finalecount-230)/2;
 	if (scrolled > 320)
@@ -670,9 +639,9 @@ void F_BunnyScroll (void)
 	for ( x=0 ; x<320 ; x++)
 	{
 		if (x+scrolled < 320)
-			F_DrawPatchCol (x, p1, x+scrolled, &screens[0]);
+			F_DrawPatchCol (x, p1, x+scrolled, &screen);
 		else
-			F_DrawPatchCol (x, p2, x+scrolled - 320, &screens[0]);			
+			F_DrawPatchCol (x, p2, x+scrolled - 320, &screen);			
 	}
 		
 	if (finalecount < 1130)
@@ -680,7 +649,7 @@ void F_BunnyScroll (void)
 	if (finalecount < 1180)
 	{
 		V_DrawPatchIndirect ((320-13*8)/2,
-					 (200-8*8)/2,&screens[0], W_CacheLumpName ("END0",PU_CACHE));
+					 (200-8*8)/2,&screen, W_CacheLumpName ("END0",PU_CACHE));
 		laststage = 0;
 		return;
 	}
@@ -690,12 +659,12 @@ void F_BunnyScroll (void)
 		stage = 6;
 	if (stage > laststage)
 	{
-		S_StartSound (ORIGIN_AMBIENT, "weapons/pistol", 64);
+		S_Sound (NULL, CHAN_WEAPON, "weapons/pistol", 1, ATTN_NONE);
 		laststage = stage;
 	}
 		
 	sprintf (name,"END%i",stage);
-	V_DrawPatchIndirect ((320-13*8)/2, (200-8*8)/2,&screens[0], W_CacheLumpName (name,PU_CACHE));
+	V_DrawPatchIndirect ((320-13*8)/2, (200-8*8)/2,&screen, W_CacheLumpName (name,PU_CACHE));
 }
 
 
@@ -704,7 +673,8 @@ void F_BunnyScroll (void)
 //
 void F_Drawer (void)
 {
-	switch (finalestage) {
+	switch (finalestage)
+	{
 		case 0:
 			F_TextWrite ();
 			break;
@@ -712,25 +682,22 @@ void F_Drawer (void)
 		case 1:
 			switch (level.nextmap[7])
 			{
-			  case '1':
-				if ( gamemode == retail )
-				  V_DrawPatchIndirect (0,0,&screens[0],W_CacheLumpName("CREDIT",PU_CACHE));
-				else
-				  V_DrawPatchIndirect (0,0,&screens[0],W_CacheLumpName("HELP2",PU_CACHE));
-				break;
-			  case '2':
-				V_DrawPatchIndirect (0,0,&screens[0],W_CacheLumpName("VICTORY2",PU_CACHE));
-				break;
-			  case '3':
-				F_BunnyScroll ();
-				break;
-			  case '4':
-				V_DrawPatchIndirect (0,0,&screens[0],W_CacheLumpName("ENDPIC",PU_CACHE));
-				break;
-			  // [RH] sucks
-			  default:
-				  V_DrawPatchIndirect (0,0,&screens[0],W_CacheLumpName("HELP2",PU_CACHE));
-				break;
+				default:
+				case '1':
+					V_DrawPatchIndirect (0, 0, &screen,
+						W_CacheLumpName (gameinfo.finalePage1, PU_CACHE));
+					break;
+				case '2':
+					V_DrawPatchIndirect (0, 0, &screen,
+						W_CacheLumpName (gameinfo.finalePage2, PU_CACHE));
+					break;
+				case '3':
+					F_BunnyScroll ();
+					break;
+				case '4':
+					V_DrawPatchIndirect (0, 0, &screen,
+						W_CacheLumpName (gameinfo.finalePage3, PU_CACHE));
+					break;
 			}
 			break;
 

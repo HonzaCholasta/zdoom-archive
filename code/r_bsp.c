@@ -33,6 +33,7 @@
 
 #include "r_main.h"
 #include "r_plane.h"
+#include "r_draw.h"
 #include "r_things.h"
 
 // State.
@@ -56,6 +57,8 @@ int				doorclosed;
 int				MaxDrawSegs;
 drawseg_t		*drawsegs;
 drawseg_t*		ds_p;
+
+cvar_t*			r_drawflat;		// [RH] Don't texture segs?
 
 
 void R_StoreWallRange (int start, int stop);
@@ -315,13 +318,17 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec,
 
 		if ((underwater && (tempsec->  floorheight = sec->floorheight,
 							tempsec->ceilingheight = s->floorheight-1,
-							!back)) || viewz <= s->floorheight)
+							back)) || viewz <= s->floorheight)
 		{					// head-below-floor hack
 			tempsec->floorpic    = s->floorpic;
 			tempsec->floor_xoffs = s->floor_xoffs;
 			tempsec->floor_yoffs = s->floor_yoffs;
+			tempsec->floorcolormap = s->floorcolormap;
 
-			if (underwater) {
+			if (underwater)
+			{
+				tempsec->ceilingheight = s->floorheight - 1;
+				tempsec->ceilingcolormap = s->ceilingcolormap;
 				if (s->ceilingpic == skyflatnum)
 				{
 					tempsec->floorheight   = tempsec->ceilingheight+1;
@@ -335,6 +342,10 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec,
 					tempsec->ceiling_xoffs = s->ceiling_xoffs;
 					tempsec->ceiling_yoffs = s->ceiling_yoffs;
 				}
+			}
+			else
+			{
+				tempsec->floorheight = sec->floorheight;
 			}
 
 			tempsec->lightlevel  = s->lightlevel;
@@ -387,7 +398,7 @@ sector_t *R_FakeFlat(sector_t *sec, sector_t *tempsec,
 // Clips the given segment
 // and adds any visible pieces to the line list.
 //
-void R_AddLine (seg_t*	line)
+void R_AddLine (seg_t *line)
 {
 	int 			x1;
 	int 			x2;
@@ -398,6 +409,9 @@ void R_AddLine (seg_t*	line)
 	static sector_t tempsec;	// killough 3/8/98: ceiling/water hack
 	
 	curline = line;
+
+	// [RH] Color if not texturing line
+	dc_color = ((line - segs) & 31) * 4;
 
 	// OPTIMIZE: quickly reject orthogonal back sides.
 	angle1 = R_PointToAngle (line->v1->x, line->v1->y);
@@ -438,8 +452,7 @@ void R_AddLine (seg_t*	line)
 		angle2 = (unsigned) (-(int)clipangle);
 	}
 	
-	// The seg is in the view range,
-	// but not necessarily visible.
+	// The seg is in the view range, but not necessarily visible.
 	angle1 = (angle1+ANG90)>>ANGLETOFINESHIFT;
 	angle2 = (angle2+ANG90)>>ANGLETOFINESHIFT;
 
@@ -498,7 +511,8 @@ void R_AddLine (seg_t*	line)
 		&& backsector->ceilinglightsec == frontsector->ceilinglightsec
 
 		// [RH] Also consider colormaps
-		&& backsector->colormap == frontsector->colormap
+		&& backsector->floorcolormap == frontsector->floorcolormap
+		&& backsector->ceilingcolormap == frontsector->ceilingcolormap
 		)
 	{
 		return;
@@ -634,8 +648,7 @@ static BOOL R_CheckBBox (fixed_t *bspcoord)	// killough 1/28/98: static
 	while (start->last < sx2)
 		start++;
 	
-	if (sx1 >= start->first
-		&& sx2 <= start->last)
+	if (sx1 >= start->first && sx2 <= start->last)
 	{
 		// The clippost contains the new span.
 		return false;
@@ -671,44 +684,64 @@ void R_Subsector (int num)
 	count = sub->numlines;
 	line = &segs[sub->firstline];
 
-	basecolormap = frontsector->colormap->maps;	// [RH] set basecolormap
-
 	// killough 3/8/98, 4/4/98: Deep water / fake ceiling effect
 	frontsector = R_FakeFlat(frontsector, &tempsec, &floorlightlevel,
 						   &ceilinglightlevel, false);	// killough 4/11/98
 
-	// killough 3/7/98: Add (x,y) offsets to flats, add deep water check
-	// killough 3/16/98: add floorlightlevel
-
-	floorplane = frontsector->floorheight < viewz || // killough 3/7/98
-		(frontsector->heightsec != -1 &&
-		 sectors[frontsector->heightsec].ceilingpic == skyflatnum) ?
-		R_FindPlane(frontsector->floorheight,
-					frontsector->floorpic,
-					floorlightlevel,				// killough 3/16/98
-					frontsector->floor_xoffs,		// killough 3/7/98
-					frontsector->floor_yoffs
-					) : NULL;
+	basecolormap = frontsector->ceilingcolormap->maps;
 
 	ceilingplane = frontsector->ceilingheight > viewz ||
 		frontsector->ceilingpic == skyflatnum ||
 		(frontsector->heightsec != -1 &&
 		 sectors[frontsector->heightsec].floorpic == skyflatnum) ?
 		R_FindPlane(frontsector->ceilingheight,		// killough 3/8/98
-					frontsector->ceilingpic,
+					frontsector->ceilingpic == skyflatnum &&  // killough 10/98
+						frontsector->sky & PL_SKYFLAT ? frontsector->sky :
+						frontsector->ceilingpic,
 					ceilinglightlevel,				// killough 4/11/98
 					frontsector->ceiling_xoffs,		// killough 3/7/98
 					frontsector->ceiling_yoffs
 					) : NULL;
 
-	// [RH] Fix BOOM bug where things in deep water sectors with
-	//		several subsectors caused massive slowdown.
-	R_AddSprites (sub->sector);
+	basecolormap = frontsector->floorcolormap->maps;	// [RH] set basecolormap
+
+	// killough 3/7/98: Add (x,y) offsets to flats, add deep water check
+	// killough 3/16/98: add floorlightlevel
+	// killough 10/98: add support for skies transferred from sidedefs
+	floorplane = frontsector->floorheight < viewz || // killough 3/7/98
+		(frontsector->heightsec != -1 &&
+		 sectors[frontsector->heightsec].ceilingpic == skyflatnum) ?
+		R_FindPlane(frontsector->floorheight,
+					frontsector->floorpic == skyflatnum &&  // killough 10/98
+						frontsector->sky & PL_SKYFLAT ? frontsector->sky :
+						frontsector->floorpic,
+					floorlightlevel,				// killough 3/16/98
+					frontsector->floor_xoffs,		// killough 3/7/98
+					frontsector->floor_yoffs
+					) : NULL;
+
+	// [RH] set foggy flag
+	foggy = level.fadeto || frontsector->floorcolormap->fade
+						 || frontsector->ceilingcolormap->fade;
+
+	// killough 9/18/98: Fix underwater slowdown, by passing real sector 
+	// instead of fake one. Improve sprite lighting by basing sprite
+	// lightlevels on floor & ceiling lightlevels in the surrounding area.
+	R_AddSprites (sub->sector, (floorlightlevel + ceilinglightlevel) / 2);
+
+	if (sub->poly)
+	{ // Render the polyobj in the subsector first
+		int polyCount = sub->poly->numsegs;
+		seg_t **polySeg = sub->poly->segs;
+		while (polyCount--)
+		{
+			R_AddLine (*polySeg++);
+		}
+	}
 
 	while (count--)
 	{
-		R_AddLine (line);
-		line++;
+		R_AddLine (line++);
 	}
 }
 
@@ -722,7 +755,7 @@ void R_Subsector (int num)
 // Just call with BSP root.
 // killough 5/2/98: reformatted, removed tail recursion
 
-void R_RenderBSPNode(int bspnum)
+void R_RenderBSPNode (int bspnum)
 {
 	while (!(bspnum & NF_SUBSECTOR))  // Found a subsector?
 	{
@@ -735,7 +768,6 @@ void R_RenderBSPNode(int bspnum)
 		R_RenderBSPNode(bsp->children[side]);
 
 		// Possibly divide back space.
-
 		if (!R_CheckBBox(bsp->bbox[side^1]))
 			return;
 

@@ -23,6 +23,8 @@
 #ifndef __I_SYSTEM__
 #define __I_SYSTEM__
 
+#include <io.h>
+
 #include "d_ticcmd.h"
 #include "d_event.h"
 
@@ -54,7 +56,10 @@ byte *I_ZoneBase (int *size);
 // returns current time in tics.
 int (*I_GetTime) (void);
 
-int I_GetTimeReally (void);
+// like I_GetTime, except it waits for a new tic before returning
+int (*I_WaitForTic) (int);
+
+int I_GetTimePolled (void);
 int I_GetTimeFake (void);
 
 
@@ -89,7 +94,7 @@ ticcmd_t *I_BaseTiccmd (void);
 
 // Called by M_Responder when quit is selected.
 // Clean exit, displays sell blurb.
-void I_Quit (void);
+void STACK_ARGS I_Quit (void);
 
 
 // Allocates from low memory under dos,
@@ -99,8 +104,8 @@ byte* I_AllocLow (int length);
 void I_Tactile (int on, int off, int total);
 
 
-void I_Error (char *error, ...);
-void I_FatalError (char *error, ...);
+void STACK_ARGS I_Error (char *error, ...);
+void STACK_ARGS I_FatalError (char *error, ...);
 
 
 // Repaint the pre-game console
@@ -124,6 +129,24 @@ unsigned int I_MSTime (void);
 
 // [RH] Title string to display at bottom of console during startup
 extern char DoomStartupTitle[256];
+
+
+// Directory searching routines
+
+typedef struct _finddata_t findstate_t;
+
+long I_FindFirst (char *filespec, findstate_t *fileinfo);
+int I_FindNext (long handle, findstate_t *fileinfo);
+int I_FindClose (long handle);
+
+#define I_FindName(a)	((a)->name)
+#define I_FindAttr(a)	((a)->attrib)
+
+#define FA_RDONLY	_A_RDONLY
+#define FA_HIDDEN	_A_HIDDEN
+#define FA_SYSTEM	_A_SYSTEM
+#define FA_DIREC	_A_SUBDIR
+#define FA_ARCH		_A_ARCH
 
 #endif
 //-----------------------------------------------------------------------------

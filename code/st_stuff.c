@@ -33,36 +33,24 @@
 #include "z_zone.h"
 #include "m_random.h"
 #include "w_wad.h"
-
 #include "doomdef.h"
-
 #include "g_game.h"
-
 #include "st_stuff.h"
 #include "st_lib.h"
 #include "r_local.h"
-
 #include "p_local.h"
 #include "p_inter.h"
-
 #include "am_map.h"
 #include "m_cheat.h"
-
 #include "s_sound.h"
-
-// Needs access to LFB.
 #include "v_video.h"
-
-// State.
+#include "v_text.h"
 #include "doomstat.h"
-
-// Data.
 #include "dstrings.h"
-
-// Cheats and cvars
 #include "c_cmds.h"
 #include "c_cvars.h"
 #include "c_dispch.h"
+#include "version.h"
 
 cvar_t *idmypos;
 cvar_t *st_scale;		// Stretch status bar to full screen width?
@@ -70,12 +58,13 @@ cvar_t *st_scale;		// Stretch status bar to full screen width?
 // [RH] Needed when status bar scale changes
 BOOL setsizeneeded;
 BOOL automapactive;
-BOOL am_needtodrawstatusbar;
 
 // [RH] Status bar background screen
 screen_t stbarscreen;
 // [RH] Active status bar screen
 screen_t stnumscreen;
+
+BOOL DrawNewHUD;		// [RH] Draw the new HUD?
 
 
 // functions in st_new.c
@@ -116,7 +105,7 @@ float BaseBlendA;
 #define ST_FACESTRIDE \
 		  (ST_NUMSTRAIGHTFACES+ST_NUMTURNFACES+ST_NUMSPECIALFACES)
 
-#define ST_NUMEXTRAFACES				2
+#define ST_NUMEXTRAFACES		2
 
 #define ST_NUMFACES \
 		  (ST_FACESTRIDE*ST_NUMPAINFACES+ST_NUMEXTRAFACES)
@@ -279,6 +268,8 @@ int						ST_WIDTH;
 int						ST_X;
 int						ST_Y;
 
+int						SB_state = -1;
+
 
 // main player in game
 // [RH] not static
@@ -338,7 +329,7 @@ patch_t*		 		tallpercent;
 static patch_t* 		shortnum[10];
 
 // 3 key-cards, 3 skulls, [RH] 3 combined
-static patch_t* 		keys[NUMCARDS+NUMCARDS/2]; 
+patch_t* 				keys[NUMCARDS+NUMCARDS/2]; 
 
 // face status patches [RH] no longer static
 patch_t* 				faces[ST_NUMFACES];
@@ -514,8 +505,8 @@ void ST_refreshBackground(void)
 		// [RH] If screen is wider than the status bar,
 		//      draw stuff around status bar.
 		if (FG.width > ST_WIDTH) {
-			R_VideoErase (0, ST_Y, ST_X, FG.height);
-			R_VideoErase (FG.width - ST_X, ST_Y, FG.width, FG.height);
+			R_DrawBorder (0, ST_Y, ST_X, FG.height);
+			R_DrawBorder (FG.width - ST_X, ST_Y, FG.width, FG.height);
 		}
 
 		V_DrawPatch(0, 0, &BG, sbar);
@@ -633,7 +624,7 @@ BOOL ST_Responder (event_t *ev)
 		  if (CheckCheatmode ())
 			  return false;
 
-		  plyr->message = STSTR_BEHOLD;
+		  Printf (PRINT_HIGH, "%s\n", STSTR_BEHOLD);
 	  }
 
 	  // 'choppers' invulnerability & chainsaw
@@ -865,7 +856,6 @@ void ST_updateFaceWidget(void)
 			st_facecount = 1;
 
 		}
-
 	}
 
 	// look left or look right if the facecount has timed out
@@ -939,7 +929,8 @@ void ST_updateWidgets(void)
 
 void ST_Ticker (void)
 {
-
+//FIXME
+//return;
 	st_clock++;
 	st_randomnumber = M_Random();
 	ST_updateWidgets();
@@ -1084,32 +1075,72 @@ void ST_diffDraw(void)
 	ST_drawWidgets(false);
 }
 
-void ST_Drawer (BOOL fullscreen, BOOL refresh)
+void ST_Drawer (void)
 {
+	if (noisedebug->value)
+		S_NoiseDebug ();
 
-	st_statusbaron = (!fullscreen) || automapactive;
-	st_firsttime = st_firsttime || refresh;
+	if (demoplayback && demover != GAMEVER)
+		V_DrawTextClean (CR_TAN, 0, ST_Y - 40 * CleanYfac,
+			"Demo was recorded with a different version\n"
+			"of ZDoom. Expect it to go out of sync.");
+
+//FIXME
+//return;
+	if (realviewheight == screen.height && viewactive)
+	{
+		if (DrawNewHUD)
+			ST_newDraw ();
+		SB_state = -1;
+	}
+	else
+	{
+		V_LockScreen (&stbarscreen);
+		V_LockScreen (&stnumscreen);
+
+		if (SB_state)
+		{
+			ST_doRefresh ();
+			SB_state = 0;
+		}
+		else
+		{
+			ST_diffDraw ();
+		}
+
+		V_UnlockScreen (&stnumscreen);
+		V_UnlockScreen (&stbarscreen);
+	}
+
+		
+	if (viewheight <= ST_Y)
+		ST_nameDraw (ST_Y - 11 * CleanYfac);
+	else
+		ST_nameDraw (screen.height - 11 * CleanYfac);
 
 	// Do red-/gold-shifts from damage/items
 	ST_doPaletteStuff();
 
-	V_LockScreen (&stbarscreen);
-	V_LockScreen (&stnumscreen);
-
-	// If just after ST_Start(), refresh all
-	if (st_firsttime) ST_doRefresh();
-	// Otherwise, update as little as possible
-	else ST_diffDraw();
-
-	V_UnlockScreen (&stnumscreen);
-	V_UnlockScreen (&stbarscreen);
-
 	// [RH] Hey, it's somewhere to put the idmypos stuff!
 	if (idmypos->value)
-		Printf ("ang=%d;x,y=(%d,%d)\n",
+		Printf (PRINT_HIGH, "ang=%d;x,y=(%d,%d)\n",
 				players[consoleplayer].camera->angle/FRACUNIT,
 				players[consoleplayer].camera->x/FRACUNIT,
 				players[consoleplayer].camera->y/FRACUNIT);
+}
+
+static patch_t *LoadFaceGraphic (char *name, int namespc)
+{
+	char othername[9];
+	int lump;
+
+	lump = (W_CheckNumForName)(name, namespc);
+	if (lump == -1) {
+		strcpy (othername, name);
+		othername[0] = 'S'; othername[1] = 'T'; othername[2] = 'F';
+		lump = W_GetNumForName (othername);
+	}
+	return W_CacheLumpNum (lump, PU_STATIC);
 }
 
 void ST_loadGraphics(void)
@@ -1118,9 +1149,9 @@ void ST_loadGraphics(void)
 	int i, j;
 	int namespc;
 	int facenum;
-	
 	char namebuf[9];
 
+	namebuf[8] = 0;
 	if (plyr)
 		skin = &skins[plyr->userinfo.skin];
 	else
@@ -1189,31 +1220,31 @@ void ST_loadGraphics(void)
 		for (j = 0; j < ST_NUMSTRAIGHTFACES; j++)
 		{
 			sprintf(namebuf+3, "ST%d%d", i, j);
-			faces[facenum++] = W_CacheLumpName(namebuf, PU_STATIC);
+			faces[facenum++] = LoadFaceGraphic (namebuf, namespc);
 		}
 		sprintf(namebuf+3, "TR%d0", i);		// turn right
-		faces[facenum++] = W_CacheLumpNum ((W_CheckNumForName)(namebuf, namespc), PU_STATIC);
+		faces[facenum++] = LoadFaceGraphic (namebuf, namespc);
 		sprintf(namebuf+3, "TL%d0", i);		// turn left
-		faces[facenum++] = W_CacheLumpNum ((W_CheckNumForName)(namebuf, namespc), PU_STATIC);
+		faces[facenum++] = LoadFaceGraphic (namebuf, namespc);
 		sprintf(namebuf+3, "OUCH%d", i);		// ouch!
-		faces[facenum++] = W_CacheLumpNum ((W_CheckNumForName)(namebuf, namespc), PU_STATIC);
+		faces[facenum++] = LoadFaceGraphic (namebuf, namespc);
 		sprintf(namebuf+3, "EVL%d", i);		// evil grin ;)
-		faces[facenum++] = W_CacheLumpNum ((W_CheckNumForName)(namebuf, namespc), PU_STATIC);
+		faces[facenum++] = LoadFaceGraphic (namebuf, namespc);
 		sprintf(namebuf+3, "KILL%d", i);		// pissed off
-		faces[facenum++] = W_CacheLumpNum ((W_CheckNumForName)(namebuf, namespc), PU_STATIC);
+		faces[facenum++] = LoadFaceGraphic (namebuf, namespc);
 	}
 	strcpy (namebuf+3, "GOD0");
-	faces[facenum++] = W_CacheLumpNum ((W_CheckNumForName)(namebuf, namespc), PU_STATIC);
+	faces[facenum++] = LoadFaceGraphic (namebuf, namespc);
 	strcpy (namebuf+3, "DEAD0");
-	faces[facenum++] = W_CacheLumpNum ((W_CheckNumForName)(namebuf, namespc), PU_STATIC);
+	faces[facenum++] = LoadFaceGraphic (namebuf, namespc);
 }
 
-void ST_loadData(void)
+void ST_loadData (void)
 {
 	ST_loadGraphics();
 }
 
-void ST_unloadGraphics(void)
+void ST_unloadGraphics (void)
 {
 
 	int i;
@@ -1457,13 +1488,15 @@ static BOOL	st_stopped = true;
 
 void ST_Start (void)
 {
-
+// FIXME
+//return;
 	if (!st_stopped)
 		ST_Stop();
 
 	ST_initData();
 	ST_createWidgets();
 	st_stopped = false;
+	SB_state = -1;
 
 }
 
@@ -1483,12 +1516,12 @@ void ST_ChangeScale (cvar_t *var)
 	if (var->value) {
 		// Stretch status bar to fill fill width of screen
 
-		ST_WIDTH = screens[0].width;
+		ST_WIDTH = screen.width;
 		if (ST_WIDTH == 320) {
 			// Do not scale height for 320 x 2X0 screens
 			ST_HEIGHT = 32;
 		} else {
-			ST_HEIGHT = (32 * screens[0].height) / 200;
+			ST_HEIGHT = (32 * screen.height) / 200;
 		}
 	} else {
 		// Do not stretch status bar
@@ -1497,17 +1530,17 @@ void ST_ChangeScale (cvar_t *var)
 		ST_HEIGHT = 32;
 	}
 
-	ST_X = (screens[0].width-ST_WIDTH)/2;
-	ST_Y = screens[0].height - ST_HEIGHT;
+	ST_X = (screen.width-ST_WIDTH)/2;
+	ST_Y = screen.height - ST_HEIGHT;
 
 	setsizeneeded = true;
-
-	if (automapactive)
-		am_needtodrawstatusbar = true;
+	SB_state = -1;
 }
 
 void ST_Init (void)
 {
+//FIXME
+//return;
 	veryfirsttime = 0;
 
 	if (!V_AllocScreen (&stbarscreen, 320, 32, 8) ||

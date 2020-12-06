@@ -107,260 +107,166 @@
 // Any questions?
 //
 
-//
-// Misc. mobj flags
-//
-typedef enum
-{
-	// Call P_SpecialThing when touched.
-	MF_SPECIAL			= 0x00000001,
-	// Blocks.
-	MF_SOLID			= 0x00000002,
-	// Can be hit.
-	MF_SHOOTABLE		= 0x00000004,
-	// Don't use the sector links (invisible but touchable).
-	MF_NOSECTOR 		= 0x00000008,
-	// Don't use the blocklinks (inert but displayable)
-	MF_NOBLOCKMAP		= 0x00000010,					 
+// --- mobj.flags ---
 
-	// Not to be activated by sound, deaf monster.
-	MF_AMBUSH			= 0x00000020,
-	// Will try to attack right back.
-	MF_JUSTHIT			= 0x00000040,
-	// Will take at least one step before attacking.
-	MF_JUSTATTACKED 	= 0x00000080,
-	// On level spawning (initial position),
-	//	hang from ceiling instead of stand on floor.
-	MF_SPAWNCEILING 	= 0x00000100,
-	// Don't apply gravity (every tic),
-	//	that is, object will float, keeping current height
-	//	or changing it actively.
-	MF_NOGRAVITY		= 0x00000200,
+#define	MF_SPECIAL		1			// call P_SpecialThing when touched
+#define	MF_SOLID		2
+#define	MF_SHOOTABLE	4
+#define	MF_NOSECTOR		8			// don't use the sector links
+									// (invisible but touchable)
+#define	MF_NOBLOCKMAP	16			// don't use the blocklinks
+									// (inert but displayable)
+#define	MF_AMBUSH		32			// not activated by sound; deaf monster
+#define	MF_JUSTHIT		64			// try to attack right back
+#define	MF_JUSTATTACKED	128			// take at least one step before attacking
+#define	MF_SPAWNCEILING	256			// hang from ceiling instead of floor
+#define	MF_NOGRAVITY	512			// don't apply gravity every tic
 
-	// Movement flags.
-	// This allows jumps from high places.
-	MF_DROPOFF			= 0x00000400,
-	// For players, will pick up items.
-	MF_PICKUP			= 0x00000800,
-	// Player cheat. ???
-	MF_NOCLIP			= 0x00001000,
-	// Player: keep info about sliding along walls.
-	MF_SLIDE			= 0x00002000,
-	// Allow moves to any height, no gravity.
-	// For active floaters, e.g. cacodemons, pain elementals.
-	MF_FLOAT			= 0x00004000,
-	// Don't cross lines
-	//	 ??? or look at heights on teleport.
-	MF_TELEPORT 		= 0x00008000,
-	// Don't hit same species, explode on block.
-	// Player missiles as well as fireballs of various kinds.
-	MF_MISSILE			= 0x00010000,		
-	// Dropped by a demon, not level spawned.
-	// E.g. ammo clips dropped by dying former humans.
-	MF_DROPPED			= 0x00020000,
-	// Use fuzzy draw (shadow demons or spectres),
-	//	temporary player invisibility powerup.
-	MF_SHADOW			= 0x00040000,
-	// Flag: don't bleed when shot (use puff),
-	//	barrels and shootable furniture shall not bleed.
-	MF_NOBLOOD			= 0x00080000,
-	// Don't stop moving halfway off a step,
-	//	that is, have dead bodies slide down all the way.
-	MF_CORPSE			= 0x00100000,
-	// Floating to a height for a move, ???
-	//	don't auto float to target's height.
-	MF_INFLOAT			= 0x00200000,
+// movement flags
+#define	MF_DROPOFF		0x00000400	// allow jumps from high places
+#define	MF_PICKUP		0x00000800	// for players to pick up items
+#define	MF_NOCLIP		0x00001000	// player cheat
+#define	MF_SLIDE		0x00002000	// keep info about sliding along walls
+#define	MF_FLOAT		0x00004000	// allow moves to any height, no gravity
+#define	MF_TELEPORT		0x00008000	// don't cross lines or look at heights
+#define MF_MISSILE		0x00010000	// don't hit same species, explode on block
 
-	// On kill, count this enemy object
-	//	towards intermission kill total.
-	// Happy gathering.
-	MF_COUNTKILL		= 0x00400000,
-	
-	// On picking up, count this item object
-	//	towards intermission item total.
-	MF_COUNTITEM		= 0x00800000,
+#define	MF_DROPPED		0x00020000	// dropped by a demon, not level spawned
+#define	MF_SHADOW		0x00040000	// use fuzzy draw (shadow demons / spectres)
+#define	MF_NOBLOOD		0x00080000	// don't bleed when shot (use puff)
+#define	MF_CORPSE		0x00100000	// don't stop moving halfway off a step
+#define	MF_INFLOAT		0x00200000	// floating to a height for a move, don't
+									// auto float to target's height
 
-	// Special handling: skull in flight.
-	// Neither a cacodemon nor a missile.
-	MF_SKULLFLY 		= 0x01000000,
+#define	MF_COUNTKILL	0x00400000	// count towards intermission kill total
+#define	MF_COUNTITEM	0x00800000	// count towards intermission item total
 
-	// Don't spawn this object
-	//	in death match mode (e.g. key cards).
-	MF_NOTDMATCH		= 0x02000000,
+#define	MF_SKULLFLY		0x01000000	// skull in flight
+#define	MF_NOTDMATCH	0x02000000	// don't spawn in death match (key cards)
 
-	// Player sprites in multiplayer modes are modified
-	//	using an internal color lookup table for re-indexing.
-	// If 0x4 0x8 or 0xc,
-	//	use a translation table for player colormaps
-	MF_TRANSLATION		= 0x0c000000,
-	// Hmm ???.
-	MF_TRANSSHIFT		= 26,
+#define	MF_TRANSLATION	0x0c000000	// if 0x4 0x8 or 0xc, use a translation
+#define	MF_TRANSSHIFT	26			// tablefor player colormaps
 
-	// [RH] Andy Baker's stealth monsters
-	//Stealth Mode - Creatures that dissappear and reappear.
-	MF_STEALTH			= 0x10000000,
+#define	MF_STEALTH		0x40000000	// [RH] Andy Baker's stealth monsters
+#define	MF_ICECORPSE	0x80000000	// a frozen corpse (for blasting) [RH] was 0x800000
 
-	// [RH] 3 (4 counting opaque) levels of translucency
-	MF_TRANSLUCSHIFT	= 29,
-	MF_TRANSLUCBITS		= 0x60000000,
-	MF_TRANSLUC25		= 0x20000000,
-	MF_TRANSLUC50		= 0x40000000,
-	MF_TRANSLUC75		= 0x60000000,
 
-	// [RH] These are all based on Hexen's. Very few are used.
-	MF2_LOWGRAVITY		= 0x00000001,
-	MF2_BLOWN			= 0x00000002,
-	MF2_BOUNCES			= 0x00000004,
-	MF2_PROJECTILEPUSH	= 0x00000008,
-	MF2_DROPUP			= 0x00000010,
-	MF2_INLIQUID		= 0x00000020,
-	MF2_STARTONFLOOR	= 0x00000040,
-	MF2_NOTELEPORT		= 0x00000080,
-	MF2_PIERCING		= 0x00000100,
-	MF2_PUSHABLE		= 0x00000200,
-	MF2_DONTHURTPLAYERS = 0x00000400,
-	MF2_NOADJUST		= 0x00000800,
-	MF2_POTSOMETHING	= 0x00001000,
-	MF2_PARTICLE		= 0x00002000,
-	MF2_DORMANT			= 0x00004000,
-	MF2_BOSS			= 0x00008000,
-	MF2_XDEATHONLY		= 0x00010000,
-	MF2_DOESNOTPUSH		= 0x00020000,
-	MF2_TELEFRAGS		= 0x00040000,
-	MF2_BOB				= 0x00080000,
-	MF2_INVISIBLE		= 0x00100000,
-	MF2_ACTIVATEIMPACT	= 0x00200000,
-	MF2_JUMPING			= 0x00400000,
-	MF2_ACTIVATEMCROSS	= 0x00800000,
-	MF2_ACTIVATEPCROSS	= 0x01000000,
-	MF2_PASSPROJECTILES	= 0x02000000,
-	MF2_STALKERSOMETHING= 0x04000000,
-	MF2_INVULNERABLE	= 0x08000000,
-	MF2_INDESTRUCTABLE	= 0x10000000,
-	MF2_ICYDEATH		= 0x20000000,
-	MF2_HOMINGSOMETHING	= 0x40000000,
-	MF2_REFLECTIVE		= 0x80000000
 
-} mobjflag_t;
 
+// --- mobj.flags2 ---
+
+#define MF2_LOGRAV			0x00000001	// alternate gravity setting
+#define MF2_WINDTHRUST		0x00000002	// gets pushed around by the wind
+										// specials
+#define MF2_FLOORBOUNCE		0x00000004	// bounces off the floor
+#define MF2_BLASTED			0x00000008	// missile will pass through ghosts
+#define MF2_FLY				0x00000010	// fly mode is active
+#define MF2_FLOORCLIP		0x00000020	// if feet are allowed to be clipped
+#define MF2_SPAWNFLOAT		0x00000040	// spawn random float z
+#define MF2_NOTELEPORT		0x00000080	// does not teleport
+#define MF2_RIP				0x00000100	// missile rips through solid
+										// targets
+#define MF2_PUSHABLE		0x00000200	// can be pushed by other moving
+										// mobjs
+#define MF2_SLIDE			0x00000400	// slides against walls
+#define MF2_ONMOBJ			0x00000800	// mobj is resting on top of another
+										// mobj
+#define MF2_PASSMOBJ		0x00001000	// Enable z block checking.  If on,
+										// this flag will allow the mobj to
+										// pass over/under other mobjs.
+#define MF2_CANNOTPUSH		0x00002000	// cannot push other pushable mobjs
+//#define MF2_DROPPED			0x00004000	// dropped by a demon [RH] use MF_DROPPED instead
+#define MF2_THRUGHOST		0x00004000	// missile will pass through ghosts [RH] was 8
+#define MF2_BOSS			0x00008000	// mobj is a major boss
+#define MF2_FIREDAMAGE		0x00010000	// does fire damage
+#define MF2_NODMGTHRUST		0x00020000	// does not thrust target when
+										// damaging
+#define MF2_TELESTOMP		0x00040000	// mobj can stomp another
+#define MF2_FLOATBOB		0x00080000	// use float bobbing z movement
+#define MF2_DONTDRAW		0x00100000	// don't generate a vissprite
+#define MF2_IMPACT			0x00200000 	// an MF_MISSILE mobj can activate
+								 		// SPAC_IMPACT
+#define MF2_PUSHWALL		0x00400000 	// mobj can push walls
+#define MF2_MCROSS			0x00800000	// can activate monster cross lines
+#define MF2_PCROSS			0x01000000	// can activate projectile cross lines
+#define MF2_CANTLEAVEFLOORPIC 0x02000000 // stay within a certain floor type
+#define MF2_NONSHOOTABLE	0x04000000	// mobj is totally non-shootable, 
+										// but still considered solid
+#define MF2_INVULNERABLE	0x08000000	// mobj is invulnerable
+#define MF2_DORMANT			0x10000000	// thing is dormant
+#define MF2_ICEDAMAGE		0x20000000  // does ice damage
+#define MF2_SEEKERMISSILE	0x40000000	// is a seeker (for reflection)
+#define MF2_REFLECTIVE		0x80000000	// reflects missiles
+
+
+#define TRANSLUC25			(FRACUNIT/4)
+#define TRANSLUC33			(FRACUNIT/3)
+#define TRANSLUC50			(FRACUNIT/2)
+#define TRANSLUC66			((FRACUNIT*2)/3)
+#define TRANSLUC75			((FRACUNIT*3)/4)
 
 // Map Object definition.
 typedef struct mobj_s
 {
-	// List: thinker links.
-	thinker_t			thinker;
+	thinker_t		thinker;			// thinker node
 
-	// Info for drawing: position.
-	fixed_t	 			x;
-	fixed_t	 			y;
-	fixed_t	 			z;
+// info for drawing
+	fixed_t	 		x,y,z;
+	struct mobj_s	*snext, **sprev;	// links in sector (if needed)
+	angle_t			angle;
+	spritenum_t		sprite;				// used to find patch_t and flip value
+	int				frame;				// might be ord with FF_FULLBRIGHT
+	int				effects;			// [RH] see p_effect.h
 
-	int					tid;	// [RH] Thing ID
-	struct mobj_s*		inext;	// [RH] links to other mobjs whose
-	struct mobj_s*		iprev;	//		tid hash to the same value.
+// interaction info
+	fixed_t			pitch, roll;
+	struct mobj_s	*bnext, **bprev;	// links in blocks (if needed)
+	struct subsector_s	*subsector;
+	fixed_t			floorz, ceilingz;	// closest together of contacted secs
+//	fixed_t			floorpic;			// contacted sec floorpic
+	fixed_t			radius, height;		// for movement checking
+	fixed_t			momx, momy, momz;	// momentums
+	int				validcount;			// if == validcount, already checked
+	mobjtype_t		type;
+	mobjinfo_t		*info;				// &mobjinfo[mobj->type]
+	int				tics;				// state tic counter
+	state_t			*state;
+	int				damage;			// For missiles
+	int				flags;
+	int				flags2;			// Heretic flags
+	int				special1;		// Special info
+	int				special2;		// Special info
+	int 			health;
+	byte			movedir;		// 0-7
+	char			visdir;
+	short			pad;			// hack for 1.17a saves. to be removed
+	int				movecount;		// when 0, select a new dir
+	struct mobj_s	*target;		// thing being chased/attacked (or NULL)
+									// also the originator for missiles
+	struct mobj_s	*lastenemy;		// Last known enemy -- killogh 2/15/98
+	int				reactiontime;	// if non 0, don't attack yet
+									// used by player to freeze a bit after
+									// teleporting
+	int				threshold;		// if > 0, the target will be chased
+									// no matter what (even if shot)
+	struct player_s	*player;		// only valid if type == MT_PLAYER
+	int				lastlook;		// player number last looked for
+	mapthing2_t		spawnpoint; 	// For nightmare respawn
+	struct mobj_s	*tracer;		// Thing being chased/attacked for tracers
+//	fixed_t			floorclip;		// value to use for floor clipping
+//	int				archiveNum;		// Identity during archive
+	short			tid;			// thing identifier
+	byte			special;		// special
+	byte			args[5];		// special arguments
 
-	// More list: links in sector (if needed)
-	struct mobj_s*		snext;
-	struct mobj_s*		sprev;
-
-	//More drawing info: to determine current sprite.
-	angle_t 			angle;	// orientation
-	fixed_t				pitch;	// [RH] for freelook
-	fixed_t				roll;	// [RH] for future enhancement
-	spritenum_t 		sprite; // used to find patch_t and flip value
-	int 				frame;	// might be ORed with FF_FULLBRIGHT
-
-	// Interaction info, by BLOCKMAP.
-	// Links in blocks (if needed).
-	struct mobj_s*		bnext;
-	struct mobj_s*		bprev;
-	
-	struct subsector_s* subsector;
-
-	// The closest interval over all contacted Sectors.
-	fixed_t 			floorz;
-	fixed_t 			ceilingz;
-
-	// For movement checking.
-	fixed_t 			radius;
-	fixed_t 			height; 
-
-	// Momentums, used to update position.
-	fixed_t				momx;
-	fixed_t				momy;
-	fixed_t	 			momz;
-
-	// If == validcount, already checked.
-	int 				validcount;
-
-	mobjtype_t			type;
-	mobjinfo_t* 		info;	// &mobjinfo[mobj->type]
-	
-	int 				tics;	// state tic counter
-	state_t*			state;
-	int 				flags;
-	int					flags2;	// [RH] more flags
-	int 				health;
-
-	// Movement direction, movement generation (zig-zagging).
-	int 				movedir;		// 0-7
-	int 				movecount;		// when 0, select a new dir
-
-	// Thing being chased/attacked (or NULL),
-	// also the originator for missiles.
-	struct mobj_s*		target;
-
-	// Reaction time: if non 0, don't attack yet.
-	// Used by player to freeze a bit after teleporting.
-	int 				reactiontime;
-
-	// If >0, the target will be chased
-	// no matter what (even if shot)
-	int 				threshold;
-
-	// Additional info record for player avatars only.
-	// Only valid if type == MT_PLAYER
-	struct player_s*	player;
-
-	// Player number last looked for.
-	int 				lastlook;		
-
-	// For nightmare respawn.
-	mapthing2_t			spawnpoint; 	
-
-	// Thing being chased/attacked for tracers.
-	struct mobj_s*		tracer; 
-
-	// new field: last known enemy -- killough 2/15/98
-	struct mobj_s*      lastenemy;
-
-	// [RH] The goal this monster is moving toward (if target is NULL)
-	struct mobj_s*		goal;
-
-	// [RH] Z-Check
-	// Time until a missile will be able to impact
-	// whoever shot it. Used to prevent the missile
-	// from blowing up in the shooter's face before
-	// it gets anywhere.
-	unsigned			targettic;
-
-	// [RH] Thing's palette.
-	// This is currently just a quick hack and actually
-	// points to an ordinary translation table rather
-	// than a full-fledged palette.
-	struct palette_s	*palette;
-
-	// Friction values for the sector the object is in
-	int friction;											// phares 3/17/98
-	int movefactor;
+	struct mobj_s	*inext, *iprev;	// Links to other mobjs in same bucket
+	struct mobj_s	*goal;			// Monster's goal if not chasing anything
+	unsigned		targettic;		// Avoid missiles blowing up in your face
+	byte			*translation;	// Translation table (or NULL)
+	fixed_t			translucency;	// 65536=fully opaque, 0=fully invisible
 
 	// a linked list of sectors where this object appears
 	struct msecnode_s	*touching_sectorlist;				// phares 3/14/98
-
-	// [RH] Thing special
-	byte				special;
-	byte				args[5];
-
 } mobj_t;
 
 

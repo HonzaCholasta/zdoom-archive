@@ -56,32 +56,22 @@ fixed_t P_AproxDistance (fixed_t dx, fixed_t dy)
 
 //
 // P_PointOnLineSide
-// Returns 0 or 1
+// Returns 0 (front) or 1 (back)
 //
 int P_PointOnLineSide (fixed_t x, fixed_t y, const line_t *line)
 {
 	if (!line->dx)
 	{
-		if (x <= line->v1->x)
-			return line->dy > 0;
-		
-		return line->dy < 0;
+		return (x <= line->v1->x) ? (line->dy > 0) : (line->dy < 0);
 	}
 	else if (!line->dy)
 	{
-		if (y <= line->v1->y)
-			return line->dx < 0;
-		
-		return line->dx > 0;
+		return (y <= line->v1->y) ? (line->dx < 0) : (line->dx > 0);
 	}
 	else
 	{
-		fixed_t left = FixedMul ( line->dy>>FRACBITS , (x - line->v1->x) );
-		fixed_t right = FixedMul ( (y - line->v1->y) , line->dx>>FRACBITS );
-
-		if (right < left)
-			return 0;				// front side
-		return 1;					// back side
+		return FixedMul (line->dy >> FRACBITS, x - line->v1->x)
+			   <= FixedMul (y - line->v1->y , line->dx >> FRACBITS);
 	}
 }
 
@@ -130,31 +120,23 @@ int P_BoxOnLineSide (const fixed_t *tmbox, const line_t *ld)
 		break;
 	}
 
-	if (p1 == p2)
-		return p1;
-	return -1;
+	return (p1 == p2) ? p1 : -1;
 }
 
 
 //
 // P_PointOnDivlineSide
-// Returns 0 or 1.
+// Returns 0 (front) or 1 (back).
 //
 int P_PointOnDivlineSide (fixed_t x, fixed_t y, const divline_t *line)
 {
 	if (!line->dx)
 	{
-		if (x <= line->x)
-			return line->dy > 0;
-		
-		return line->dy < 0;
+		return (x <= line->x) ? (line->dy > 0) : (line->dy < 0);
 	}
 	else if (!line->dy)
 	{
-		if (y <= line->y)
-			return line->dx < 0;
-
-		return line->dx > 0;
+		return (y <= line->y) ? (line->dx < 0) : (line->dx > 0);
 	}
 	else
 	{
@@ -162,20 +144,13 @@ int P_PointOnDivlineSide (fixed_t x, fixed_t y, const divline_t *line)
 		fixed_t dy = (y - line->y);
 		
 		// try to quickly decide by looking at sign bits
-		if ( (line->dy ^ line->dx ^ dx ^ dy)&0x80000000 )
-		{
-			if ( (line->dy ^ dx) & 0x80000000 )
-				return 1;			// (left is negative)
-			return 0;
+		if ((line->dy ^ line->dx ^ dx ^ dy) & 0x80000000)
+		{	// (left is negative)
+			return ((line->dy ^ dx) & 0x80000000) ? 1 : 0;
 		}
 		else
-		{
-			fixed_t left = FixedMul ( line->dy>>8, dx>>8 );
-			fixed_t right = FixedMul ( dy>>8 , line->dx>>8 );
-				
-			if (right < left)
-				return 0;				// front side
-			return 1;					// back side
+		{	// if (left >= right), return 1, 0 otherwise
+			return FixedMul (dy >> 8, line->dx >> 8) >= FixedMul (line->dy >> 8, dx >> 8);
 		}
 	}
 }
@@ -221,26 +196,17 @@ fixed_t P_InterceptVector (const divline_t *v2, const divline_t *v1)
 
 	return frac;
 #else	// UNUSED, float debug.
-	float		frac;
-	float		num;
-	float		den;
-	float		v1x;
-	float		v1y;
-	float		v1dx;
-	float		v1dy;
-	float		v2x;
-	float		v2y;
-	float		v2dx;
-	float		v2dy;
-
-	v1x = (float)v1->x/FRACUNIT;
-	v1y = (float)v1->y/FRACUNIT;
-	v1dx = (float)v1->dx/FRACUNIT;
-	v1dy = (float)v1->dy/FRACUNIT;
-	v2x = (float)v2->x/FRACUNIT;
-	v2y = (float)v2->y/FRACUNIT;
-	v2dx = (float)v2->dx/FRACUNIT;
-	v2dy = (float)v2->dy/FRACUNIT;
+	float frac;
+	float num;
+	float den;
+	float v1x = (float)v1->x/FRACUNIT;
+	float v1y = (float)v1->y/FRACUNIT;
+	float v1dx = (float)v1->dx/FRACUNIT;
+	float v1dy = (float)v1->dy/FRACUNIT;
+	float v2x = (float)v2->x/FRACUNIT;
+	float v2y = (float)v2->y/FRACUNIT;
+	float v2dx = (float)v2->dx/FRACUNIT;
+	float v2dy = (float)v2->dy/FRACUNIT;
 		
 	den = v1dy*v2dx - v1dx*v2dy;
 
@@ -266,21 +232,20 @@ fixed_t openbottom;
 fixed_t openrange;
 fixed_t lowfloor;
 
-
 void P_LineOpening (const line_t *linedef)
 {
 	sector_t *front, *back;
-		
+
 	if (linedef->sidenum[1] == -1)
 	{
 		// single sided line
 		openrange = 0;
 		return;
 	}
-		 
+
 	front = linedef->frontsector;
 	back = linedef->backsector;
-		
+
 	opentop = (front->ceilingheight < back->ceilingheight) ?
 		opentop = front->ceilingheight :
 		back->ceilingheight;
@@ -295,7 +260,7 @@ void P_LineOpening (const line_t *linedef)
 		openbottom = back->floorheight;
 		lowfloor = front->floorheight;
 	}
-		
+
 	openrange = opentop - openbottom;
 }
 
@@ -316,15 +281,15 @@ void P_UnsetThingPosition (mobj_t *thing)
 {
 	if (!(thing->flags & MF_NOSECTOR))
 	{
-		// inert things don't need to be in blockmap?
+		// invisible things don't need to be in sector list
 		// unlink from subsector
-		if (thing->snext)
-			thing->snext->sprev = thing->sprev;
 
-		if (thing->sprev)
-			thing->sprev->snext = thing->snext;
-		else
-			thing->subsector->sector->thinglist = thing->snext;
+		// killough 8/11/98: simpler scheme using pointers-to-pointers for prev
+		// pointers, allows head node pointers to be treated like everything else
+		mobj_t **sprev = thing->sprev;
+		mobj_t  *snext = thing->snext;
+		if ((*sprev = snext))  // unlink from sector list
+			snext->sprev = sprev;
 
 		// phares 3/14/98
 		//
@@ -343,61 +308,48 @@ void P_UnsetThingPosition (mobj_t *thing)
 		thing->touching_sectorlist = NULL; //to be restored by P_SetThingPosition
 	}
 		
-	if ( ! (thing->flags & MF_NOBLOCKMAP) )
+	if ( !(thing->flags & MF_NOBLOCKMAP) )
 	{
-		// inert things don't need to be in blockmap
-		// unlink from block map
-		if (thing->bnext)
-			thing->bnext->bprev = thing->bprev;
-		
-		if (thing->bprev)
-			thing->bprev->bnext = thing->bnext;
-		else
-		{
-			int blockx = (thing->x - bmaporgx)>>MAPBLOCKSHIFT;
-			int blocky = (thing->y - bmaporgy)>>MAPBLOCKSHIFT;
+		// killough 8/11/98: simpler scheme using pointers-to-pointers for prev
+		// pointers, allows head node pointers to be treated like everything else
+		//
+		// Also more robust, since it doesn't depend on current position for
+		// unlinking. Old method required computing head node based on position
+		// at time of unlinking, assuming it was the same position as during
+		// linking.
 
-			if (blockx>=0 && blockx < bmapwidth
-				&& blocky>=0 && blocky <bmapheight)
-			{
-				blocklinks[blocky*bmapwidth+blockx] = thing->bnext;
-			}
-		}
+		mobj_t *bnext, **bprev = thing->bprev;
+		if (bprev && (*bprev = bnext = thing->bnext))	// unlink from block map
+			bnext->bprev = bprev;
 	}
 }
 
 
 //
 // P_SetThingPosition
-// Links a thing into both a block and a subsector
-// based on it's x y.
+// Links a thing into both a block and a subsector based on it's x y.
 // Sets thing->subsector properly
 //
 void P_SetThingPosition (mobj_t *thing)
 {
-	subsector_t*		ss;
-	sector_t*			sec;
-	int 				blockx;
-	int 				blocky;
-	mobj_t**			link;
-
-	
 	// link into subsector
+	subsector_t *ss;
+	
 	ss = R_PointInSubsector (thing->x,thing->y);
 	thing->subsector = ss;
 	
-	if ( ! (thing->flags & MF_NOSECTOR) )
+	if ( !(thing->flags & MF_NOSECTOR) )
 	{
 		// invisible things don't go into the sector links
-		sec = ss->sector;
-		
-		thing->sprev = NULL;
-		thing->snext = sec->thinglist;
+		// killough 8/11/98: simpler scheme using pointer-to-pointer prev
+		// pointers, allows head nodes to be treated like everything else
 
-		if (sec->thinglist)
-			sec->thinglist->sprev = thing;
-
-		sec->thinglist = thing;
+		mobj_t **link = &ss->sector->thinglist;
+		mobj_t *snext = *link;
+		if ((thing->snext = snext))
+			snext->sprev = &thing->snext;
+		thing->sprev = link;
+		*link = thing;
 
 		// phares 3/16/98
 		//
@@ -419,30 +371,27 @@ void P_SetThingPosition (mobj_t *thing)
 
 	
 	// link into blockmap
-	if ( ! (thing->flags & MF_NOBLOCKMAP) )
+	if ( !(thing->flags & MF_NOBLOCKMAP) )
 	{
-		// inert things don't need to be in blockmap			
-		blockx = (thing->x - bmaporgx)>>MAPBLOCKSHIFT;
-		blocky = (thing->y - bmaporgy)>>MAPBLOCKSHIFT;
+		// inert things don't need to be in blockmap
+		int blockx = (thing->x - bmaporgx)>>MAPBLOCKSHIFT;
+		int blocky = (thing->y - bmaporgy)>>MAPBLOCKSHIFT;
 
-		if (blockx>=0
-			&& blockx < bmapwidth
-			&& blocky>=0
-			&& blocky < bmapheight)
-		{
-			link = &blocklinks[blocky*bmapwidth+blockx];
-			thing->bprev = NULL;
-			thing->bnext = *link;
-			if (*link)
-				(*link)->bprev = thing;
+		if (blockx>=0 && blockx < bmapwidth && blocky>=0 && blocky < bmapheight)
+        {
+			// killough 8/11/98: simpler scheme using pointer-to-pointer prev
+			// pointers, allows head nodes to be treated like everything else
 
+			mobj_t **link = &blocklinks[blocky*bmapwidth+blockx];
+			mobj_t *bnext = *link;
+
+			if ((thing->bnext = bnext))
+				bnext->bprev = &thing->bnext;
+			thing->bprev = link;
 			*link = thing;
 		}
-		else
-		{
-			// thing is off the map
-			thing->bnext = thing->bprev = NULL;
-		}
+		else		// thing is off the map
+			thing->bnext = NULL, thing->bprev = NULL;
 	}
 }
 
@@ -465,19 +414,47 @@ void P_SetThingPosition (mobj_t *thing)
 // to P_BlockLinesIterator, then make one or more calls
 // to it.
 //
+extern polyblock_t **PolyBlockMap;
+
 BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*))
 {
 	if (x<0 || y<0 || x>=bmapwidth || y>=bmapheight)
 		return true;
 	else
 	{
-		int	offset = *(blockmap+(y*bmapwidth+x));
-		int *list = blockmaplump + offset;
+		int	offset;
+		int *list;
 
+		/* [RH] Polyobj stuff from Hexen --> */
+		polyblock_t *polyLink;
+
+		offset = y*bmapwidth + x;
+		if (PolyBlockMap) {
+			polyLink = PolyBlockMap[offset];
+			while (polyLink) {
+				if (polyLink->polyobj && polyLink->polyobj->validcount != validcount) {
+					int i;
+					seg_t **tempSeg = polyLink->polyobj->segs;
+					polyLink->polyobj->validcount = validcount;
+
+					for (i = polyLink->polyobj->numsegs; i; i--, tempSeg++) {
+						if ((*tempSeg)->linedef->validcount != validcount) {
+							(*tempSeg)->linedef->validcount = validcount;
+							if (!func ((*tempSeg)->linedef))
+								return false;
+						}
+					}
+				}
+				polyLink = polyLink->next;
+			}
+		}
+		/* <-- Polyobj stuff from Hexen */
+
+		offset = *(blockmap + offset);
+		list = blockmaplump + offset;
 
 		// [RH] Get past starting 0 (from BOOM)
-		if (!olddemo)
-			list++;
+		list++;
 
 		for (; *list != -1; list++)
 		{
@@ -510,7 +487,7 @@ BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(mobj_t*))
 			 mobj ;
 			 mobj = mobj->bnext)
 		{
-			if (!func( mobj ))
+			if (!func (mobj))
 				return false;
 		}
 	}

@@ -26,17 +26,11 @@
 #include "z_zone.h"
 #include "doomdef.h"
 #include "p_local.h"
-
 #include "s_sound.h"
-
-
-// State.
+#include "s_sndseq.h"
 #include "doomstat.h"
 #include "r_state.h"
-
-// Data.
 #include "dstrings.h"
-
 #include "c_consol.h"
 
 
@@ -49,12 +43,20 @@ static void DoorSound (vldoor_t *door, fixed_t speed, BOOL raise)
 {
 	char *snd;
 
-	if (raise)
-		snd = (speed >= FRACUNIT*8) ? "doors/dr2_open" : "doors/dr1_open";
+	if (door->sector->seqType >= 0)
+	{
+		SN_StartSequence ((mobj_t *)&door->sector->soundorg,
+			door->sector->seqType, SEQ_DOOR);
+	}
 	else
-		snd = (speed >= FRACUNIT*8) ? "doors/dr2_clos" : "doors/dr1_clos";
+	{
+		if (raise)
+			snd = (speed >= FRACUNIT*8) ? "DoorOpenBlazing" : "DoorOpenNormal";
+		else
+			snd = (speed >= FRACUNIT*8) ? "DoorCloseBlazing" : "DoorCloseNormal";
 
-	S_StartSound ((mobj_t *)&door->sector->soundorg, snd, 100);
+		SN_StartSequenceName ((mobj_t *)&door->sector->soundorg, snd);
+	}
 }
 
 //
@@ -70,7 +72,7 @@ void T_VerticalDoor (vldoor_t *door)
 		// WAITING
 		if (!--door->topcountdown)
 		{
-			switch(door->type)
+			switch (door->type)
 			{
 			  case doorRaise:
 				door->direction = -1; // time to go back down
@@ -92,7 +94,7 @@ void T_VerticalDoor (vldoor_t *door)
 		//	INITIAL WAIT
 		if (!--door->topcountdown)
 		{
-			switch(door->type)
+			switch (door->type)
 			{
 			  case doorRaiseIn5Mins:
 				door->direction = 1;
@@ -114,7 +116,8 @@ void T_VerticalDoor (vldoor_t *door)
 						  -1,1,door->direction);
 		if (res == pastdest)
 		{
-			switch(door->type)
+			SN_StopSequence ((mobj_t *)&door->sector->soundorg);
+			switch (door->type)
 			{
 			  case doorRaise:
 			  case doorClose:
@@ -133,7 +136,7 @@ void T_VerticalDoor (vldoor_t *door)
 		}
 		else if (res == crushed)
 		{
-			switch(door->type)
+			switch (door->type)
 			{
 			  case doorClose:				// DO NOT GO BACK UP!
 				break;
@@ -155,7 +158,8 @@ void T_VerticalDoor (vldoor_t *door)
 		
 		if (res == pastdest)
 		{
-			switch(door->type)
+			SN_StopSequence ((mobj_t *)&door->sector->soundorg);
+			switch (door->type)
 			{
 			  case doorRaise:
 				door->direction = 0; // wait at top
@@ -238,7 +242,7 @@ BOOL EV_DoDoor (vldoor_e type, line_t *line, mobj_t *thing,
 		// if the wrong side of door is pushed, give oof sound
 		if (line->sidenum[1]==-1)				// killough
 		{
-			S_StartSound (thing, "*grunt1", 78);
+			S_Sound (thing, CHAN_VOICE, "*grunt1", 1, ATTN_NORM);
 			return false;
 		}
 
@@ -250,12 +254,19 @@ BOOL EV_DoDoor (vldoor_e type, line_t *line, mobj_t *thing,
 		if (sec->ceilingdata)			//jff 2/22/98
 		{
 			vldoor_t *door = sec->ceilingdata;	//jff 2/22/98
-			if (type == doorRaise) {
-				// ONLY FOR "RAISE" DOORS, NOT "OPEN"s
-				if (door->direction == -1) {
+
+			// [RH] Make sure it really is a door
+			if (door->thinker.function.acp1 != (actionf_p1) T_VerticalDoor)
+				return false;
+
+			// ONLY FOR "RAISE" DOORS, NOT "OPEN"s
+			if (door->type == doorRaise && type == doorRaise)
+			{
+				if (door->direction == -1)
+				{
 					door->direction = 1;	// go back up
 				}
-				else if ((line->flags & ML_ACTIVATIONMASK) != ML_ACTIVATEPUSH)
+				else if (GET_SPAC(line->flags) != SPAC_PUSH)
 					// [RH] activate push doors don't go back down when you
 					//		run into them (otherwise opening them would be
 					//		a real pain).
@@ -264,6 +275,12 @@ BOOL EV_DoDoor (vldoor_e type, line_t *line, mobj_t *thing,
 						return false;		// JDC: bad guys never close doors
 					
 					door->direction = -1;	// start going down immediately
+
+					// [RH] If this sector doesn't have a specific sound
+					// attached to it, start the door close sequence.
+					// Otherwise, just let the current one continue.
+					if (sec->seqType == -1)
+						DoorSound (door, door->speed, false);
 				}
 				return true;
 			}
@@ -277,7 +294,7 @@ BOOL EV_DoDoor (vldoor_e type, line_t *line, mobj_t *thing,
 		{
 			sec = &sectors[secnum];
 			// if the ceiling already moving, don't start the door action
-			if (P_SectorActive (ceiling_special,sec)) //jff 2/22/98
+			if (sec->ceilingdata)
 				continue;
 
 			rtn |= SpawnDoor (sec, type, speed, delay);

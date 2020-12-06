@@ -85,6 +85,9 @@ extern	BOOL			netgame;
 // Flag: true only if started as net deathmatch.
 extern	cvar_t			*deathmatch;
 
+// [RH] Pretend as deathmatch for purposes of dmflags
+extern	cvar_t			*fakedmatch;
+
 // [RH] Teamplay mode
 extern	cvar_t			*teamplay;
 		
@@ -154,9 +157,9 @@ extern level_locals_t level;
 // Disable save/end game?
 extern	BOOL			usergame;
 
-//?
 extern	BOOL			demoplayback;
 extern	BOOL			demorecording;
+extern	int				demover;
 
 // Quit after playing a demo from cmdline.
 extern	BOOL			singledemo; 	
@@ -164,7 +167,6 @@ extern	BOOL			singledemo;
 
 
 
-//?
 extern	gamestate_t 	gamestate;
 
 
@@ -222,9 +224,19 @@ extern	FILE*			debugfile;
 extern	BOOL	 		precache;
 
 
+//-------
+//REFRESH
+//-------
+
 // wipegamestate can be set to -1
 //	to force a wipe on the next draw
-extern	gamestate_t 	wipegamestate;
+extern gamestate_t wipegamestate;
+extern BOOL setsizeneeded;
+extern BOOL setmodeneeded;
+
+extern BOOL BorderNeedRefresh;
+extern BOOL BorderTopRefresh;
+
 
 extern	cvar_t 			*mouseSensitivity;
 //?
@@ -265,9 +277,6 @@ extern	cvar_t			*developer;
 
 // Use MMX routines? (Only if USEASM is defined)
 extern	BOOL			UseMMX;
-
-// True if ZDoom should try to behave like Doom 1.9
-extern	BOOL			olddemo;
 
 
 #ifdef USEASM

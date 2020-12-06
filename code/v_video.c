@@ -61,23 +61,23 @@
 #include "c_dispch.h"
 #include "cmdlib.h"
 
-
 extern void STACK_ARGS DimScreenPLoop (byte *colormap, byte *screen, int width, int modulo, int height);
 
 extern char *IdStrings[22];
 extern int DisplayID;
 
+unsigned int Col2RGB8[65][256];
+byte RGB32k[32][32][32];
 
 
-// [RH] Screens are no longer mere byte arrays.
-screen_t screens[2];
+// [RH] The framebuffer is no longer a mere byte array.
+// There's also only one, not four.
+screen_t screen;
 
 int 	dirtybox[4];
 
 cvar_t *vid_defwidth, *vid_defheight, *vid_defid;
 cvar_t *dimamount, *dimcolor;
-
-byte	*TransTable;
 
 palette_t *DefaultPalette;
 
@@ -202,44 +202,40 @@ void V_Clear (int left, int top, int right, int bottom, screen_t *scrn, int colo
 
 void V_DimScreen (screen_t *screen)
 {
-	byte *fadetable;
+	if (dimamount->value < 0)
+		SetCVarFloat (dimamount, 0);
+	else if (dimamount->value > 1)
+		SetCVarFloat (dimamount, 1);
 
-	if (dimamount->value < 0.0)
-		SetCVarFloat (dimamount, 0.0);
-	else if (dimamount->value > 3.0)
-		SetCVarFloat (dimamount, 3.0);
-
-	if (dimamount->value == 0.0)
+	if (dimamount->value == 0)
 		return;
 
 	if (screen->is8bit) {
-		if (!TransTable)
-			fadetable = DefaultPalette->maps.colormaps + (NUMCOLORMAPS/2) * 256;
-		else
-			fadetable = TransTable + 65536*(4-(int)dimamount->value) +
-						256*V_GetColorFromString (DefaultPalette->basecolors, dimcolor->string);
+		unsigned int *bg2rgb;
+		unsigned int fg;
+		int gap;
+		byte *spot;
+		int x, y;
 
 		{
-#ifdef	USEASM
-			DimScreenPLoop (fadetable, screen->buffer, screen->width, screen->pitch-screen->width, screen->height);
-#else
-			unsigned int *spot, s;
-			int x, y;
-			byte a, b, c, d;
+			unsigned int *fg2rgb;
+			fixed_t amount;
 
-			spot = (unsigned int *)(screen->buffer);
-			for (y = 0; y < screen->height; y++) {
-				for (x = 0; x < (screen->width >> 2); x++) {
-					s = *spot;
-					a = fadetable[s & 0xff];
-					b = fadetable[(s >> 8) & 0xff];
-					c = fadetable[(s >> 16) & 0xff];
-					d = fadetable[s >> 24];
-					*spot++ = a | (b << 8) | (c << 16) | (d << 24);
-				}
-				spot += (screen->pitch - screen->width) >> 2;
+			amount = (fixed_t)(dimamount->value * 64);
+			fg2rgb = Col2RGB8[amount];
+			bg2rgb = Col2RGB8[64-amount];
+			fg = fg2rgb[V_GetColorFromString (DefaultPalette->basecolors, dimcolor->string)];
+		}
+
+		spot = screen->buffer;
+		gap = screen->pitch - screen->width;
+		for (y = 0; y < screen->height; y++) {
+			for (x = 0; x < screen->width; x++) {
+				unsigned int bg = bg2rgb[*spot];
+				bg = (fg+bg) | 0x1f07c1f;
+				*spot++ = RGB32k[0][0][bg&(bg>>15)];
 			}
-#endif
+			spot += gap;
 		}
 	} else {
 		int x, y;
@@ -358,7 +354,7 @@ char *V_GetColorStringByName (const char *name)
 	int c[3], step;
 
 	if (!(rgbNames = W_CacheLumpName ("X11R6RGB", PU_CACHE))) {
-		Printf ("X11R6RGB lump not found\n");
+		Printf (PRINT_HIGH, "X11R6RGB lump not found\n");
 		return NULL;
 	}
 
@@ -397,7 +393,7 @@ void Cmd_SetColor (void *plyr, int argc, char **argv)
 	char *desc, setcmd[256], *name;
 
 	if (argc < 3) {
-		Printf ("Usage: setcolor <cvar> <color>\n");
+		Printf (PRINT_HIGH, "Usage: setcolor <cvar> <color>\n");
 		return;
 	}
 
@@ -411,66 +407,49 @@ void Cmd_SetColor (void *plyr, int argc, char **argv)
 	}
 }
 
-void BuildTransTable (byte *transtab, unsigned int *palette)
+// Build the tables necessary for translucency
+void BuildTransTable (unsigned int *palette)
 {
-	int a, b, c;
-	byte *trans25, *trans50, *trans75, *mtrans, *trans;
-	
-	trans25 = transtab;
-	trans50 = transtab + 65536;
-	trans75 = transtab + 131072;
+	{
+		int r, g, b;
 
-	// Build the 50% translucency table
-	trans = trans50;
-	for (a = 0; a < 256; a++) {
-		mtrans = trans50 + a;
-		for (b = 0; b < a; b++) {
-			c = BestColor (palette,
-							(RPART(palette[a]) + RPART(palette[b])) >> 1,
-							(GPART(palette[a]) + GPART(palette[b])) >> 1,
-							(BPART(palette[a]) + BPART(palette[b])) >> 1,
-							256);
-			*trans++ = c;
-			*mtrans = c;
-			mtrans += 256;
-		}
-		*trans = a;
-		trans += 256 - a;
+		// create the small RGB table
+		for (r = 0; r < 32; r++)
+			for (g = 0; g < 32; g++)
+				for (b = 0; b < 32; b++)
+					RGB32k[r][g][b] = BestColor (palette,
+						(r<<3)|(r>>2), (g<<3)|(g>>2), (b<<3)|(b>>2), 256);
 	}
 
-	// Build the 25% and 75% tables
-	trans = trans75;
-	for (a = 0; a < 256; a++) {
-		for (b = 0; b < 256; b++) {
-			c = BestColor (palette,
-							(RPART(palette[a]) + RPART(palette[b]) * 3) >> 2,
-							(GPART(palette[a]) + GPART(palette[b]) * 3) >> 2,
-							(BPART(palette[a]) + BPART(palette[b]) * 3) >> 2,
-							256);
-			*trans++ = c;
-			trans25[(b << 8) | a] = c;
-		}
+	{
+		int x, y;
+
+		for (x = 0; x < 65; x++)
+			for (y = 0; y < 256; y++)
+				Col2RGB8[x][y] = (((RPART(palette[y])*x)>>4)<<20)  |
+								  ((GPART(palette[y])*x)>>4) |
+								 (((BPART(palette[y])*x)>>4)<<10);
 	}
 }
 
-void V_LockScreen (screen_t *screen)
+void V_LockScreen (screen_t *scrn)
 {
-	screen->lockcount++;
-	if (screen->lockcount == 1) {
-		I_LockScreen (screen);
+	scrn->lockcount++;
+	if (scrn->lockcount == 1) {
+		I_LockScreen (scrn);
 
-		if (screen == &screens[0]) {
-			if (dc_pitch != screen->pitch << detailyshift) {
-				dc_pitch = screen->pitch << detailyshift;
+		if (scrn == &screen) {
+			if (dc_pitch != scrn->pitch << detailyshift) {
+				dc_pitch = scrn->pitch << detailyshift;
 				R_InitFuzzTable ();
 #ifdef USEASM
 				ASM_PatchPitch ();
 #endif
 			}
 
-			if ((screen->is8bit ? 1 : 4) << detailxshift != ds_colsize) {
-				ds_colsize = (screen->is8bit ? 1 : 4) << detailxshift;
-				ds_colshift = (screen->is8bit ? 0 : 2) + detailxshift;
+			if ((scrn->is8bit ? 1 : 4) << detailxshift != ds_colsize) {
+				ds_colsize = (scrn->is8bit ? 1 : 4) << detailxshift;
+				ds_colshift = (scrn->is8bit ? 0 : 2) + detailxshift;
 #ifdef USEASM
 				ASM_PatchColSize ();
 #endif
@@ -498,7 +477,6 @@ void V_Blit (screen_t *src, int srcx, int srcy, int srcwidth, int srcheight,
 //
 BOOL V_DoModeSetup (int width, int height, int id)
 {
-	int i;
 	int bpp;
 
 	CleanXfac = width / 320;
@@ -506,24 +484,20 @@ BOOL V_DoModeSetup (int width, int height, int id)
 	CleanWidth = width / CleanXfac;
 	CleanHeight = height / CleanYfac;
 
-	// [RH] Screens are no longer byte arrays
-	for (i = 0; i < 2; i++)
-		if (screens[i].impdata)
-			V_FreeScreen (&screens[i]);
+	// Free the virtual framebuffer
+	V_FreeScreen (&screen);
 
 	I_SetMode (width, height, id);
 	bpp = (id == 1010) ? 8 : 32;
 
-	for (i = 0; i < 2; i++) {
-		if (!I_AllocateScreen (&screens[i], width, height, bpp))
-			return false;
-	}
+	// Allocate a new virtual framebuffer
+	I_AllocateScreen (&screen, width, height, bpp);
 
 	V_ForceBlend (0,0,0,0);
 	if (bpp == 8)
 		RefreshPalettes ();
 
-	R_InitColumnDrawers (screens[0].is8bit);
+	R_InitColumnDrawers (screen.is8bit);
 	R_MultiresInit ();
 
 	return true;
@@ -534,12 +508,12 @@ BOOL V_SetResolution (int width, int height, int id)
 	int oldwidth, oldheight;
 	int oldID;
 
-	if (screens[0].impdata) {
-		oldwidth = screens[0].width;
-		oldheight = screens[0].height;
+	if (screen.impdata) {
+		oldwidth = screen.width;
+		oldheight = screen.height;
 		oldID = DisplayID;
 	} else {
-		// Harmless if screens[0] wasn't allocated
+		// Harmless if screen wasn't allocated
 		oldwidth = width;
 		oldheight = height;
 		oldID = id;
@@ -573,7 +547,7 @@ BOOL V_SetResolution (int width, int height, int id)
 void Cmd_Vid_SetMode (void *plyr, int argc, char **argv)
 {
 	BOOL	goodmode = false;
-	int		width = 0, height = screens[0].height;
+	int		width = 0, height = screen.height;
 	int		id = DisplayID;
 
 	if (argc > 1) {
@@ -608,9 +582,9 @@ void Cmd_Vid_SetMode (void *plyr, int argc, char **argv)
 			NewID = id;
 		}
 	} else if (width) {
-		Printf ("Unknown resolution %d x %d (%s)\n", width, height, IdStrings[id-1000]);
+		Printf (PRINT_HIGH, "Unknown resolution %d x %d (%s)\n", width, height, IdStrings[id-1000]);
 	} else {
-		Printf ("Usage: vid_setmode <width> <height> <mode>\n");
+		Printf (PRINT_HIGH, "Usage: vid_setmode <width> <height> <mode>\n");
 	}
 }
 
@@ -637,7 +611,6 @@ static int IdNameToId (char *name)
 
 void V_Init (void) 
 { 
-	static const char tag[] = "LZO-Compressed ZDoom Translucency Cache File v01";
 	int i;
 	int width, height, id;
 
@@ -681,154 +654,15 @@ void V_Init (void)
 	if (!V_SetResolution (width, height, id)) {
 		I_FatalError ("Could not set resolution to %d x %d (%s)", width, height, IdStrings[id-1000]);
 	} else {
-		Printf ("Resolution: %d x %d (%s)\n", screens[0].width, screens[0].height, IdStrings[id-1000]);
+		Printf (PRINT_HIGH, "Resolution: %d x %d (%s)\n", screen.width, screen.height, IdStrings[id-1000]);
 	}
 
 	V_InitConChars (0xf7);
-	C_InitConsole (screens[0].width, screens[0].height, true);
+	C_InitConsole (screen.width, screen.height, true);
 
-	{/*
-		static int palpoop[256];
-		byte *palette = W_CacheLumpName ("PLAYPAL", PU_CACHE);
-		int i;
+	V_Palette = DefaultPalette->colors;
 
-		for (i = 0; i < 256; i++) {
-			palpoop[i] = (palette[0] << 16) |
-						 (palette[1] << 8) |
-						 (palette[2]);
-			palette += 3;
-		}
-*/
-		V_Palette = DefaultPalette->colors;
-	}
-
-	if (!M_CheckParm ("-notrans")) {
-		char cachename[256];
-		byte *palette;
-		FILE *cache;
-		int i;
-
-		// Align TransTable on a 64k boundary
-		TransTable = Malloc (65536*3+65535);
-		TransTable = (byte *)(((unsigned int)TransTable + 0xffff) & 0xffff0000);
-
-		i = M_CheckParm("-transfile");
-		if (i && i < myargc - 1) {
-			strcpy (cachename, myargv[i+1]);
-			FixPathSeperator (cachename);
-			DefaultExtension (cachename, ".tch");
-		} else {
-			sprintf (cachename, "%stranstab.tch", progdir);
-		}
-		palette = W_CacheLumpName ("PLAYPAL", PU_CACHE);
-
-		{	// Check for cached translucency table
-			byte *cachemem;
-			byte *out;
-			int newlen;
-			int cachelen;
-			int insidelen;
-			int r;
-
-			cache = fopen (cachename, "rb");
-			if (cache) {
-				fseek (cache, 0, SEEK_END);
-				cachelen = ftell (cache);
-				fseek (cache, 0, SEEK_SET);
-
-				if (cachelen <= strlen(tag) + sizeof(int)) {
-					fclose (cache);
-					cache = NULL;
-					goto maketable;
-				}
-
-				cachemem = Z_Malloc (cachelen, PU_STATIC, 0);
-				if (fread (cachemem, 1, cachelen, cache) != cachelen) {
-					fclose (cache);
-					cache = NULL;
-					Printf ("Trouble reading tranlucency cache\n");
-					goto maketable;
-				}
-
-				fclose (cache);
-
-				if (strncmp (tag, cachemem, strlen(tag)) != 0) {
-					Printf ("Regenerating old translucency cache\n");
-					cache = NULL;
-					goto maketable;
-				}
-
-				// So far, so good. Try expanding the cached data.
-				memcpy (&insidelen, cachemem + strlen(tag), sizeof(int));
-				if (insidelen != cachelen - strlen(tag) - sizeof(int)) {
-					Printf ("Translucency cache wrong size\n");
-					cache = NULL;
-					goto maketable;
-				}
-
-				out = Z_Malloc (65536*3+768, PU_STATIC, 0);
-
-				r = lzo1x_decompress (cachemem + strlen(tag) + sizeof(int),
-									  insidelen, out, &newlen, NULL);
-
-				if (r != LZO_E_OK || newlen != 65536*3+768) {
-					Printf ("Bad translucency cache\n");
-					cache = NULL;
-					Z_Free (out);
-					goto maketable;
-				}
-
-				// Check to make sure if the cache was generated from the
-				// current PLAYPAL. If not, we need to generate it, but
-				// don't bother replacing this one.
-				if (memcmp (out, palette, 768)) {
-					Printf ("Translucency cache was generated with a different palette\n");
-					Z_Free (out);
-					goto maketable;
-				}
-
-				// Everything's good. Use the cached data.
-				memcpy (TransTable, out+768, 65536*3);
-				TransTable -= 65536;
-				Z_Free (out);
-				return;
-			}
-		}
-
-	maketable:
-		Printf ("Creating translucency tables\n");
-		BuildTransTable (TransTable, DefaultPalette->basecolors);
-		if (!cache) {
-			byte *out, *wrkmem, *in;
-			int outlen, r;
-
-			wrkmem = Z_Malloc (LZO1X_1_MEM_COMPRESS, PU_STATIC, 0);
-			in = Z_Malloc (768 + 65536*3, PU_STATIC, 0);
-			out = Z_Malloc (768 + 65536*3, PU_STATIC, 0);
-
-			strncpy (in, tag, strlen (tag));
-			memcpy (in, palette, 768);
-			memcpy (in+768, TransTable, 65536*3);
-
-			r = lzo1x_1_compress (in, 768+65536*3, out, &outlen, wrkmem);
-
-			Z_Free (wrkmem);
-			Z_Free (in);
-
-			if (r == LZO_E_OK) {
-				cache = fopen (cachename, "wb");
-
-				if (cache) {
-					fwrite (tag, 1, strlen(tag), cache);
-					fwrite (&outlen, sizeof(outlen), 1, cache);
-					fwrite (out, 1, outlen, cache);
-					fclose (cache);
-				}
-			}
-		}
-
-		TransTable -= 65536;
-	}
+	BuildTransTable (DefaultPalette->basecolors);
 }
 
 void V_AttachPalette (screen_t *scrn, palette_t *pal)

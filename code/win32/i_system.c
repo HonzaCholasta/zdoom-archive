@@ -55,21 +55,18 @@
 BOOL STACK_ARGS CheckMMX (char *vendorid);
 #endif
 
-static void Cmd_Dir (void *plyr, int argc, char **argv);
+extern HWND Window;
 
-extern HWND 			Window;
-extern HDC				WinDC;
-extern LONG 			OemWidth, OemHeight;
-extern LONG 			WinWidth, WinHeight;
-extern int				ConRows, ConCols, PhysRows;
-extern char 			*Lines, *Last;
+BOOL UseMMX;
+BOOL fastdemo;
+UINT TimerPeriod;
+UINT TimerEventID;
+HANDLE NewTicArrived;
 
-BOOL	UseMMX;
-BOOL	fastdemo;
-
-float 	mb_used = 8.0;
+float mb_used = 8.0;
 
 int (*I_GetTime) (void);
+int (*I_WaitForTic) (int);
 
 os_t OSPlatform;
 
@@ -79,19 +76,18 @@ void I_Tactile (int on, int off, int total)
   on = off = total = 0;
 }
 
-ticcmd_t		emptycmd;
-ticcmd_t*		I_BaseTiccmd(void)
+ticcmd_t emptycmd;
+ticcmd_t *I_BaseTiccmd(void)
 {
 	return &emptycmd;
 }
 
-
-int  I_GetHeapSize (void)
+int I_GetHeapSize (void)
 {
 	return (int)(mb_used*1024*1024);
 }
 
-byte* I_ZoneBase (int *size)
+byte *I_ZoneBase (int *size)
 {
 	int i;
 
@@ -110,7 +106,7 @@ void I_EndRead(void)
 {
 }
 
-byte*	I_AllocLow(int length)
+byte *I_AllocLow(int length)
 {
 	byte*		mem;
 
@@ -140,7 +136,7 @@ unsigned int I_MSTime (void)
 // I_GetTime
 // returns time in 1/35th second tics
 //
-int I_GetTimeReally (void)
+int I_GetTimePolled (void)
 {
 	DWORD tm;
 
@@ -151,20 +147,59 @@ int I_GetTimeReally (void)
 	return ((tm-basetime)*TICRATE)/1000;
 }
 
+int I_WaitForTicPolled (int prevtic)
+{
+	int time;
+
+	while ((time = I_GetTimePolled()) <= prevtic)
+		;
+
+	return time;
+}
+
+
+static int tics;
+
+int I_GetTimeEventDriven (void)
+{
+	return tics;
+}
+
+int I_WaitForTicEvent (int prevtic)
+{
+	if (prevtic >= tics)
+		do
+		{
+			WaitForSingleObject (NewTicArrived, INFINITE);
+		} while (prevtic >= tics);
+
+	return tics;
+}
+
+void CALLBACK TimerTicked (UINT id, UINT msg, DWORD user, DWORD dw1, DWORD dw2)
+{
+	tics++;
+	SetEvent (NewTicArrived);
+}
+
 // [RH] Increments the time count every time it gets called.
 //		Used only by -fastdemo (just like BOOM).
+static int faketic = 0;
+
 int I_GetTimeFake (void)
 {
-	static int tic = 0;
+	return faketic++;
+}
 
-	return tic++;
+int I_WaitForTicFake (int whocares)
+{
+	return faketic++;
 }
 
 void I_WaitVBL (int count)
 {
 	// I_WaitVBL is never used to actually synchronize to the
 	// vertical blank. Instead, it's used for delay purposes.
-
 	Sleep (1000 * count / 70);
 }
 
@@ -196,20 +231,20 @@ void I_DetectOS (void)
 			break;
 	}
 
-	Printf ("Detected OS: %s %u.%u (build %u)\n",
+	Printf (PRINT_HIGH, "OS: %s %u.%u (build %u)\n",
 			osname,
 			info.dwMajorVersion, info.dwMinorVersion,
 			info.dwBuildNumber & (OSPlatform == os_Win95 ? 0xffff : 0xfffffff),
 			info.szCSDVersion);
 	if (info.szCSDVersion[0])
-		Printf ("  %s\n", info.szCSDVersion);
+		Printf (PRINT_HIGH, "  %s\n", info.szCSDVersion);
 
 	if (OSPlatform == os_Win32s) {
 		I_FatalError ("Sorry, Win32s is not currently supported.\n"
 					  "(And probably never will be.)\n"
 					  "Upgrade to a newer version of Windows.");
 	} else if (OSPlatform == os_unknown) {
-		Printf ("(Assuming Windows 95)\n");
+		Printf (PRINT_HIGH, "(Assuming Windows 95)\n");
 		OSPlatform = os_Win95;
 	}
 }
@@ -230,23 +265,48 @@ void I_Init (void)
 		UseMMX = 0;
 
 	if (vendorid[0])
-		Printf ("CPU Vendor ID: %s\n", vendorid);
+		Printf (PRINT_HIGH, "CPUID: %s  (", vendorid);
 
 	if (UseMMX)
-		Printf (" - MMX detected\n");
+		Printf (PRINT_HIGH, "using MMX)\n");
 	else
-		Printf (" - MMX not detected\n");
+		Printf (PRINT_HIGH, "not using MMX)\n");
 #endif
 
 	// [RH] Support for BOOM's -fastdemo
 	if (fastdemo)
+	{
 		I_GetTime = I_GetTimeFake;
+		I_WaitForTic = I_WaitForTicFake;
+	}
 	else
-		I_GetTime = I_GetTimeReally;
+	{	// Use a timer event if possible
+		NewTicArrived = CreateEvent (NULL, FALSE, FALSE, NULL);
+		if (NewTicArrived)
+		{
+			TimerEventID = timeSetEvent
+				(
+					1000/TICRATE,
+					0,
+					TimerTicked,
+					0,
+					TIME_PERIODIC
+				);
+		}
+		if (TimerEventID != 0)
+		{
+			I_GetTime = I_GetTimeEventDriven;
+			I_WaitForTic = I_WaitForTicEvent;
+		}
+		else
+		{	// Otherwise, busy-loop with timeGetTime
+			I_GetTime = I_GetTimePolled;
+			I_WaitForTic = I_WaitForTicPolled;
+		}
+	}
 
 	I_InitSound();
 	I_InitInput (Window);
-	C_RegisterCommand ("dir", Cmd_Dir);
 }
 
 //
@@ -254,9 +314,16 @@ void I_Init (void)
 //
 static int has_exited;
 
-void I_Quit (void)
+void STACK_ARGS I_Quit (void)
 {
 	has_exited = 1;		/* Prevent infinitely recursive exits -- killough */
+
+	if (TimerEventID)
+		timeKillEvent (TimerEventID);
+	if (NewTicArrived)
+		CloseHandle (NewTicArrived);
+
+	timeEndPeriod (TimerPeriod);
 
 	if (demorecording)
 		G_CheckDemoStatus();
@@ -276,7 +343,7 @@ void I_Quit (void)
 extern FILE *Logfile;
 BOOL gameisdead;
 
-void I_FatalError (char *error, ...)
+void STACK_ARGS I_FatalError (char *error, ...)
 {
 	gameisdead = true;
 
@@ -302,7 +369,7 @@ void I_FatalError (char *error, ...)
 	}
 }
 
-void I_Error (char *error, ...)
+void STACK_ARGS I_Error (char *error, ...)
 {
 	va_list argptr;
 
@@ -318,40 +385,6 @@ void I_Error (char *error, ...)
 
 char DoomStartupTitle[256] = { 0 };
 
-/*
-void I_PaintConsole (void)
-{
-	PAINTSTRUCT paint;
-	HDC dc;
-
-	if (dc = BeginPaint (Window, &paint)) {
-		if (paint.rcPaint.top < OemHeight) {
-			SetTextColor (dc, RGB(255,0,0));
-			SetBkColor (dc, RGB(195,195,195));
-			SetBkMode (dc, OPAQUE);
-
-			TextOut (dc, 0, 0, Title, ConCols);
-		}
-		if (Last && paint.rcPaint.bottom > OemHeight) {
-			char *row;
-			int line, last, top, bottom;
-
-			SetTextColor (dc, RGB(0,255,255));
-			SetBkMode (dc, TRANSPARENT);
-
-			top = (paint.rcPaint.top >= OemHeight) ? paint.rcPaint.top - OemHeight : 0;
-			bottom = paint.rcPaint.bottom - OemHeight - 1;
-			line = top / OemHeight;
-			last = bottom / OemHeight;
-			for (row = Last - (PhysRows - 2 - line) * (ConCols + 2); line <= last; line++) {
-				TextOut (dc, 0, (line + 1) * OemHeight, row + 2, row[1]);
-				row += ConCols + 2;
-			}
-		}
-		EndPaint (Window, &paint);
-	}
-}
-*/
 void I_SetTitleString (const char *title)
 {
 	int i;
@@ -361,74 +394,19 @@ void I_SetTitleString (const char *title)
 }
 
 void I_PrintStr (int xp, const char *cp, int count, BOOL scroll) {
-/*	MSG mess;
-	RECT rect;
-
-	if (count)
-		TextOut (WinDC, xp * OemWidth, WinHeight - OemHeight, cp, count);
-	if (scroll) {
-		rect.left = 0;
-		rect.top = OemHeight;
-		rect.right = WinWidth;
-		rect.bottom = WinHeight;
-		ScrollWindowEx (Window, 0, -OemHeight, NULL, &rect, NULL, NULL, SW_ERASE|SW_INVALIDATE);
-		UpdateWindow (Window);
-	}
-	while (PeekMessage (&mess, Window, 0, 0, PM_REMOVE)) {
-		if (mess.message == WM_QUIT)
-			exit (mess.wParam);
-		TranslateMessage (&mess);
-		DispatchMessage (&mess);
-	}
-*/
+	// used in the DOS version
 }
 
-static void Cmd_Dir (void *plyr, int argc, char **argv)
+long I_FindFirst (char *filespec, findstate_t *fileinfo)
 {
-	char dir[256], curdir[256];
-	char *match;
-	struct _finddata_t c_file;
-	long file;
+	return _findfirst (filespec, fileinfo);
+}
+int I_FindNext (long handle, findstate_t *fileinfo)
+{
+	return _findnext (handle, fileinfo);
+}
 
-	if (!getcwd (curdir, 256)) {
-		Printf ("Current path too long\n");
-		return;
-	}
-
-	if (argc == 1 || chdir (argv[1])) {
-		match = argc == 1 ? "./*" : argv[1];
-
-		ExtractFilePath (match, dir);
-		if (dir[0]) {
-			match += strlen (dir);
-		} else {
-			dir[0] = '.';
-			dir[1] = '/';
-			dir[2] = '\0';
-		}
-		if (!match[0])
-			match = "*";
-
-		if (chdir (dir)) {
-			Printf ("%s not found\n", dir);
-			return;
-		}
-	} else {
-		match = "*";
-		strcpy (dir, argv[1]);
-		if (dir[strlen(dir) - 1] != '/')
-			strcat (dir, "/");
-	}
-
-	if ( (file = _findfirst (match, &c_file)) == -1)
-		Printf ("Nothing matching %s%s\n", dir, match);
-	else {
-		Printf ("Listing of %s%s:\n", dir, match);
-		do {
-			Printf ("%s%s\n", c_file.name, c_file.attrib & _A_SUBDIR ? " <dir>" : "");
-		} while (_findnext (file, &c_file) == 0);
-		_findclose (file);
-	}
-
-	chdir (curdir);
+int I_FindClose (long handle)
+{
+	return _findclose (handle);
 }

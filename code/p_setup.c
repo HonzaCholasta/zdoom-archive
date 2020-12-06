@@ -27,25 +27,20 @@
 
 #include "m_alloc.h"
 #include "m_argv.h"
-
 #include "z_zone.h"
-
 #include "m_swap.h"
 #include "m_bbox.h"
-
 #include "g_game.h"
-
 #include "i_system.h"
 #include "w_wad.h"
-
 #include "doomdef.h"
 #include "p_local.h"
-
+#include "p_effect.h"
 #include "s_sound.h"
-
 #include "doomstat.h"
 #include "p_lnspec.h"
 #include "v_palett.h"
+#include "c_consol.h"
 
 
 extern void P_SpawnMapThing (mapthing2_t *mthing, int position);
@@ -54,6 +49,7 @@ extern void P_TranslateLineDef (line_t *ld, maplinedef_t *mld);
 extern void P_TranslateTeleportThings (void);
 extern int	P_TranslateSectorSpecial (int);
 
+extern unsigned int R_OldBlend;
 
 //
 // MAP related Lookup tables.
@@ -113,6 +109,7 @@ mobj_t**		blocklinks;		// for thing chains
 //	used as a PVS lookup as well.
 //
 byte*			rejectmatrix;
+BOOL			rejectempty;
 
 
 // Maintain single and multi player starting spots.
@@ -318,11 +315,17 @@ void P_LoadSectors (int lump)
 	int 				i;
 	mapsector_t*		ms;
 	sector_t*			ss;
-		
+	int					defSeqType;
+
 	numsectors = W_LumpLength (lump) / sizeof(mapsector_t);
 	sectors = Z_Malloc (numsectors*sizeof(sector_t), PU_LEVEL, 0);		
 	memset (sectors, 0, numsectors*sizeof(sector_t));
 	data = W_CacheLumpNum (lump, PU_STATIC);
+
+	if (level.flags & LEVEL_SNDSEQTOTALCTRL)
+		defSeqType = 0;
+	else
+		defSeqType = -1;
 
 	ms = (mapsector_t *)data;
 	ss = sectors;
@@ -340,7 +343,7 @@ void P_LoadSectors (int lump)
 		ss->tag = SHORT(ms->tag);
 		ss->thinglist = NULL;
 		ss->touching_thinglist = NULL;		// phares 3/14/98
-
+		ss->seqType = defSeqType;
 		ss->nextsec = -1;	//jff 2/26/98 add fields to support locking out
 		ss->prevsec = -1;	// stair retriggering until build completes
 
@@ -361,11 +364,13 @@ void P_LoadSectors (int lump)
 		// [RH] Sectors default to white light with the default fade.
 		//		If they are outside (have a sky ceiling), they use the outside fog.
 		if (level.outsidefog != 0xff000000 && ss->ceilingpic == skyflatnum)
-			ss->colormap = GetSpecialLights (255,255,255,
+			ss->ceilingcolormap = ss->floorcolormap = GetSpecialLights (255,255,255,
 				RPART(level.outsidefog),GPART(level.outsidefog),BPART(level.outsidefog));
 		else
-			ss->colormap = GetSpecialLights (255,255,255,
+			ss->ceilingcolormap = ss->floorcolormap = GetSpecialLights (255,255,255,
 				RPART(level.fadeto),GPART(level.fadeto),BPART(level.fadeto));
+
+		ss->sky = 0;
 	}
 		
 	Z_Free (data);
@@ -442,7 +447,7 @@ void P_LoadThings (int lump)
 		mt2.y = SHORT(mt->y);
 		mt2.angle = SHORT(mt->angle);
 		mt2.type = SHORT(mt->type);
-		
+
 		P_SpawnMapThing (&mt2, 0);
 	}
 		
@@ -541,17 +546,25 @@ void P_AdjustLine (line_t *ld)
 		ld->id = ld->args[0];
 	}
 	// killough 4/4/98: support special sidedef interpretation below
-	if (ld->sidenum[0] != -1 && ld->special)
-		sides[*ld->sidenum].special = ld->special;
+	if ((ld->sidenum[0] != -1)
+
+		// [RH] Save Static_Init only if it's interested in the textures
+		&& ( (ld->special == Static_Init && ld->args[1] == Init_Color)
+			|| ld->special != Static_Init) ) {
+			sides[*ld->sidenum].special = ld->special;
+			sides[*ld->sidenum].tag = ld->args[0];
+		}
+	else
+		sides[*ld->sidenum].special = 0;
 }
 
 // killough 4/4/98: delay using sidedefs until they are loaded
 void P_FinishLoadingLineDefs (void)
 {
-	int i = numlines;
+	int i;
 	register line_t *ld = lines;
 
-	for (; i--; ld++) {
+	for (i = numlines; i--; ld++) {
 		ld->frontsector = ld->sidenum[0]!=-1 ? sides[ld->sidenum[0]].sector : 0;
 		ld->backsector  = ld->sidenum[1]!=-1 ? sides[ld->sidenum[1]].sector : 0;
 
@@ -629,7 +642,7 @@ void P_LoadLineDefs2 (int lump)
 		
 	mld = (maplinedef2_t *)data;
 	ld = lines;
-	for (i=0 ; i<numlines ; i++, mld++, ld++)
+	for (i = 0; i < numlines; i++, mld++, ld++)
 	{
 		int j;
 
@@ -682,6 +695,18 @@ static void SetTexture (short *texture, unsigned int *blend, char *name)
 	}
 }
 
+static void SetTextureNoErr (short *texture, unsigned int *color, char *name)
+{
+	if ((*texture = R_CheckTextureNumForName (name)) == -1) {
+		char name2[9];
+		char *stop;
+		strncpy (name2, name, 8);
+		name2[8] = 0;
+		*color = strtoul (name2, &stop, 16);
+		*texture = 0;
+	}
+}
+
 // killough 4/4/98: delay using texture names until
 // after linedefs are loaded, to allow overloading.
 // killough 5/3/98: reformatted, cleaned up
@@ -716,6 +741,33 @@ void P_LoadSideDefs2 (int lump)
 			SetTexture (&sd->midtexture, &sec->midmap, msd->midtexture);
 			SetTexture (&sd->toptexture, &sec->topmap, msd->toptexture);
 			break;
+
+		  case Static_Init:
+			// [RH] Set sector color and fog
+			// upper "texture" is light color
+			// lower "texture" is fog color
+			{
+				unsigned int color = 0xffffff, fog = 0x000000;
+
+				SetTextureNoErr (&sd->bottomtexture, &fog, msd->bottomtexture);
+				SetTextureNoErr (&sd->toptexture, &color, msd->toptexture);
+				sd->midtexture = R_TextureNumForName (msd->midtexture);
+
+				if (fog != 0x000000 || color != 0xffffff) {
+					int s;
+					dyncolormap_t *colormap = GetSpecialLights
+						(RPART(color),	GPART(color),	BPART(color),
+						 RPART(fog),	GPART(fog),		BPART(fog));
+
+					for (s = 0; s < numsectors; s++) {
+						if (sectors[s].tag == sd->tag)
+							sectors[s].ceilingcolormap =
+								sectors[s].floorcolormap = colormap;
+					}
+				}
+			}
+			break;
+
 /*
 		  case TranslucentLine:	// killough 4/11/98: apply translucency to 2s normal texture
 			sd->midtexture = strncasecmp("TRANMAP", msd->midtexture, 8) ?
@@ -1184,7 +1236,7 @@ void P_GroupLines (void)
 //
 // [RH] P_LoadBehavior
 //
-static int sortscripts (const void *a, const void *b)
+static int STACK_ARGS sortscripts (const void *a, const void *b)
 {
 	return ((*(int *)a)%1000 - (*(int *)b)%1000);
 }
@@ -1213,6 +1265,7 @@ void P_LoadBehavior (int lumpnum)
 //
 extern dyncolormap_t NormalLight;
 extern mobj_t *bodyquesize[];
+extern polyblock_t **PolyBlockMap;
 
 // [RH] position indicates the start spot to spawn at
 void P_SetupLevel (char *lumpname, int position)
@@ -1223,20 +1276,27 @@ void P_SetupLevel (char *lumpname, int position)
 		level.killed_monsters = level.found_items = level.found_secrets =
 		wminfo.maxfrags = 0;
 	wminfo.partime = 180;
-	for (i=0 ; i<MAXPLAYERS ; i++)
-	{
-		players[i].killcount = players[i].secretcount 
-			= players[i].itemcount = 0;
-	}
+
+	if (!savegamerestore)
+		for (i=0 ; i<MAXPLAYERS ; i++)
+		{
+			players[i].killcount = players[i].secretcount 
+				= players[i].itemcount = 0;
+		}
 
 	// Initial height of PointOfView will be set by player think.
 	players[consoleplayer].viewz = 1; 
 
 	// Make sure all sounds are stopped before Z_FreeTags.
-	S_Start (); 				
+	S_Start ();
 
 	// [RH] Clear all ThingID hash chains.
 	P_ClearTidHashes ();
+
+	// [RH] clear out the mid-screen message
+	C_MidPrint (NULL);
+
+	PolyBlockMap = NULL;
 
 #if 0 // UNUSED
 	if (debugfile)
@@ -1252,10 +1312,6 @@ void P_SetupLevel (char *lumpname, int position)
 	// UNUSED W_Profile ();
 	P_InitThinkers ();
 
-	// if working with a devlopment map, reload it
-	// [RH] Not present
-	// W_Reload ();
-		   
 	// find map num
 	lumpnum = W_GetNumForName (lumpname);
 
@@ -1281,6 +1337,19 @@ void P_SetupLevel (char *lumpname, int position)
 	P_LoadSegs (lumpnum+ML_SEGS);
 		
 	rejectmatrix = W_CacheLumpNum (lumpnum+ML_REJECT, PU_LEVEL);
+	{
+		// [RH] Scan the rejectmatrix and see if it actually contains anything
+		int i, end = (W_LumpLength (lumpnum+ML_REJECT)-3) / 4;
+		for (i = 0; i < end; i++)
+			if (((int *)rejectmatrix)[i]) {
+				rejectempty = false;
+				break;
+			}
+		if (i >= end) {
+			DPrintf ("Reject matrix is empty\n");
+			rejectempty = true;
+		}
+	}
 	P_GroupLines ();
 
 	bodyqueslot = 0;
@@ -1293,6 +1362,8 @@ void P_SetupLevel (char *lumpname, int position)
 		for (i = 0; i < BODYQUESIZE; i++)
 			bodyque[i] = 0;
 
+	po_NumPolyobjs = 0;
+
 	if (!deathmatchstarts) {
 		MaxDeathmatchStarts = 10;	// [RH] Default. Increased as needed.
 		deathmatchstarts = Malloc (MaxDeathmatchStarts * sizeof(mapthing2_t));
@@ -1303,10 +1374,12 @@ void P_SetupLevel (char *lumpname, int position)
 		P_LoadThings (lumpnum+ML_THINGS);
 	else
 		P_LoadThings2 (lumpnum+ML_THINGS, position);	// [RH] Load Hexen-style things
-	
-	if (!HasBehavior)
-		P_TranslateTeleportThings();	// [RH] Assign teleport destination TIDs
 
+	if (!HasBehavior)
+		P_TranslateTeleportThings ();	// [RH] Assign teleport destination TIDs
+
+	PO_Init ();	// Initialize the polyobjs
+	
 	// [RH] Load in the BEHAVIOR lump
 	level.behavior = NULL;
 	level.scripts = level.strings = NULL;
@@ -1327,8 +1400,7 @@ void P_SetupLevel (char *lumpname, int position)
 	}
 
 	// killough 3/26/98: Spawn icon landings:
-	if (gamemode == commercial)
-		P_SpawnBrainTargets();
+	P_SpawnBrainTargets();
 
 	// clear special respawning que
 	iquehead = iquetail = 0;			
@@ -1339,6 +1411,7 @@ void P_SetupLevel (char *lumpname, int position)
 	// build subsector connect matrix
 	//	UNUSED P_ConnectSubsectors ();
 
+	R_OldBlend = ~0;
 	// preload graphics
 	if (precache)
 		R_PrecacheLevel ();
@@ -1360,6 +1433,7 @@ void P_Init (void)
 	splashfactor->u.callback = SplashFactorCallback;
 	SplashFactorCallback (splashfactor);
 
+	P_InitEffects ();		// [RH]
 	P_InitSwitchList ();
 	P_InitPicAnims ();
 	R_InitSprites (sprnames);

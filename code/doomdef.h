@@ -67,12 +67,14 @@ typedef enum
 } Language_t;
 
 
-// If rangecheck is undefined,
-// most parameter validation debugging code will not be compiled
+// If rangecheck is undefined, most parameter validation debugging code
+// will not be compiled
+#ifndef NORANGECHECKING
 #define RANGECHECK
+#endif
 
 // The maximum number of players, multiplayer/networking.
-#define MAXPLAYERS				8
+#define MAXPLAYERS		8
 
 // State updates, number of tics / second.
 #define TICRATE 		35
@@ -312,6 +314,7 @@ typedef enum
 #define DF_FAST_MONSTERS	32768	// Monsters are fast (replaces -fast parm)
 #define DF_NO_JUMP			65536	// Don't allow jumping
 #define DF_NO_FREELOOK		131072	// Don't allow freelook
+#define DF_RESPAWN_SUPER	262144	// Respawn invulnerability and invisibility
 
 // phares 3/20/98:
 //

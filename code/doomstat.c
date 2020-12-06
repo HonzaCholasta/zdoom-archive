@@ -40,12 +40,10 @@ BOOL			modifiedgame;
 // Show developer messages if true.
 cvar_t			*developer;
 
-// True if an old demo is being played back.
-BOOL			olddemo;
-
 // [RH] Feature control cvars
 cvar_t *boom_friction, *boom_pushers;
 
 // [RH] Deathmatch flags
 cvar_t			*dmflagsvar;
 int				dmflags;		// Copy of dmflagsvar->value, but as an integer.
+cvar_t			*fakedmatch;

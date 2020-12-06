@@ -116,23 +116,53 @@ void V_DrawPatchSP (byte *source, byte *dest, int count, int pitch, int yinc)
 // Translucent patch drawers (always 50%)
 void V_DrawLucentPatchP (byte *source, byte *dest, int count, int pitch)
 {
-	byte *map = TransTable + 65536 * 2;
+	unsigned int *fg2rgb, *bg2rgb;
+
+	{
+		fixed_t fglevel, bglevel;
+
+		fglevel = 0x8000 & ~0x3ff;
+		bglevel = FRACUNIT-fglevel;
+		fg2rgb = Col2RGB8[fglevel>>10];
+		bg2rgb = Col2RGB8[bglevel>>10];
+	}
 
 	do
 	{
-		*dest = map[(*dest)|((*source++)<<8)];
+		unsigned int fg = *source++;
+		unsigned int bg = *dest;
+
+		fg = fg2rgb[fg];
+		bg = bg2rgb[bg];
+		fg = (fg+bg) | 0x1f07c1f;
+		*dest = RGB32k[0][0][fg & (fg>>15)];
 		dest += pitch; 
 	} while (--count);
 }
 
 void V_DrawLucentPatchSP (byte *source, byte *dest, int count, int pitch, int yinc)
 {
-	byte *map = TransTable + 65536 * 2;
+	unsigned int *fg2rgb, *bg2rgb;
 	int c = 0;
+
+	{
+		fixed_t fglevel, bglevel;
+
+		fglevel = 0x8000 & ~0x3ff;
+		bglevel = FRACUNIT-fglevel;
+		fg2rgb = Col2RGB8[fglevel>>10];
+		bg2rgb = Col2RGB8[bglevel>>10];
+	}
 
 	do
 	{
-		*dest = map[(*dest)|((source[c >> 16])<<8)];
+		unsigned int fg = source[c >> 16];
+		unsigned int bg = *dest;
+
+		fg = fg2rgb[fg];
+		bg = bg2rgb[bg];
+		fg = (fg+bg) | 0x1f07c1f;
+		*dest = RGB32k[0][0][fg & (fg>>15)];
 		dest += pitch;
 		c += yinc;
 	} while (--count);
@@ -165,23 +195,55 @@ void V_DrawTranslatedPatchSP (byte *source, byte *dest, int count, int pitch, in
 // Translated, translucent patch drawers
 void V_DrawTlatedLucentPatchP (byte *source, byte *dest, int count, int pitch)
 {
-	byte *map = TransTable + 65536 * 2;
+	unsigned int *fg2rgb, *bg2rgb;
+	byte *colormap = V_ColorMap;
+
+	{
+		fixed_t fglevel, bglevel;
+
+		fglevel = 0x8000 & ~0x3ff;
+		bglevel = FRACUNIT-fglevel;
+		fg2rgb = Col2RGB8[fglevel>>10];
+		bg2rgb = Col2RGB8[bglevel>>10];
+	}
 
 	do
 	{
-		*dest = map[(*dest)|(V_ColorMap[*source++]<<8)];
+		unsigned int fg = colormap[*source++];
+		unsigned int bg = *dest;
+
+		fg = fg2rgb[fg];
+		bg = bg2rgb[bg];
+		fg = (fg+bg) | 0x1f07c1f;
+		*dest = RGB32k[0][0][fg & (fg>>15)];
 		dest += pitch; 
 	} while (--count);
 }
 
 void V_DrawTlatedLucentPatchSP (byte *source, byte *dest, int count, int pitch, int yinc)
 {
-	byte *map = TransTable + 65536 * 2;
 	int c = 0;
+	unsigned int *fg2rgb, *bg2rgb;
+	byte *colormap = V_ColorMap;
+
+	{
+		fixed_t fglevel, bglevel;
+
+		fglevel = 0x8000 & ~0x3ff;
+		bglevel = FRACUNIT-fglevel;
+		fg2rgb = Col2RGB8[fglevel>>10];
+		bg2rgb = Col2RGB8[bglevel>>10];
+	}
 
 	do
 	{
-		*dest = map[(*dest)|(V_ColorMap[source[c >> 16]]<<8)];
+		unsigned int fg = colormap[source[c >> 16]];
+		unsigned int bg = *dest;
+
+		fg = fg2rgb[fg];
+		bg = bg2rgb[bg];
+		fg = (fg+bg) | 0x1f07c1f;
+		*dest = RGB32k[0][0][fg & (fg>>15)];
 		dest += pitch;
 		c += yinc;
 	} while (--count);
@@ -210,12 +272,26 @@ void V_DrawColoredPatchP (byte *source, byte *dest, int count, int pitch)
 // care about the patch's actual contents, just it's outline.
 void V_DrawColorLucentPatchP (byte *source, byte *dest, int count, int pitch)
 {
-	byte *map = TransTable + 65536 * 2;
-	int fill = V_ColorFill << 8;
+	unsigned int *bg2rgb;
+	unsigned int fg;
+	byte *colormap = V_ColorMap;
+
+	{
+		unsigned int *fg2rgb;
+		fixed_t fglevel, bglevel;
+
+		fglevel = 0x8000 & ~0x3ff;
+		bglevel = FRACUNIT-fglevel;
+		fg2rgb = Col2RGB8[fglevel>>10];
+		bg2rgb = Col2RGB8[bglevel>>10];
+		fg = fg2rgb[V_ColorFill];
+	}
 
 	do
 	{
-		*dest = map[(*dest)|fill];
+		unsigned int bg = bg2rgb[*dest];
+		bg = (bg+bg) | 0x1f07c1f;
+		*dest = RGB32k[0][0][bg & (bg>>15)];
 		dest += pitch; 
 	} while (--count);
 }
@@ -383,7 +459,7 @@ void V_DrawWrapper (int drawer, int x, int y, screen_t *scrn, patch_t *patch)
 		|| y<0
 		|| y+SHORT(patch->height)>scrn->height)
 	{
-	  // Printf ("Patch at %d,%d exceeds LFB\n", x,y );
+	  // Printf (PRINT_HIGH, "Patch at %d,%d exceeds LFB\n", x,y );
 	  // No I_Error abort - what is up with TNT.WAD?
 	  DPrintf ("V_DrawWrapper: bad patch (ignored)\n");
 	  return;
@@ -400,7 +476,7 @@ void V_DrawWrapper (int drawer, int x, int y, screen_t *scrn, patch_t *patch)
 
 	pitch = scrn->pitch;
 
-	if (scrn == &screens[0])
+	if (scrn == &screen)
 		V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height));
 
 	col = 0;
@@ -486,7 +562,7 @@ void V_DrawSWrapper (int drawer, int x0, int y0, screen_t *scrn, patch_t *patch,
 		colstep = 4;
 	}
 
-	if (scrn == &screens[0])
+	if (scrn == &screen)
 		V_MarkRect (x0, y0, destwidth, destheight);
 
 	col = 0;
@@ -594,14 +670,77 @@ void V_CopyRect (int srcx, int srcy, screen_t *srcscrn, int width, int height,
 // Masks a column based masked pic to the screen.
 // Flips horizontally, e.g. to mirror face.
 //
-// [RH] This is only called in f_finale.c, so I changed it to behave
-// much like V_DrawPatchIndirect() instead of adding yet another function
-// solely to handle virtual stretching of this function.
+// Like V_DrawIWrapper except it only uses one drawing function and draws
+// the patch flipped horizontally.
 //
 void V_DrawPatchFlipped (int x0, int y0, screen_t *scrn, patch_t *patch)
 {
-	// I must be dumb or something...
-	V_DrawPatchIndirect (x0, y0, scrn, patch);
+	column_t*	column; 
+	byte*		desttop;
+	int			pitch;
+	vdrawsfunc	drawfunc;
+	int			colstep;
+	int			destwidth, destheight;
+
+	int			xinc, yinc, col, w, ymul, xmul;
+
+	x0 = (scrn->width * x0) / 320;
+	y0 = (scrn->height * y0) / 200;
+	destwidth = (scrn->width * SHORT(patch->width)) / 320;
+	destheight = (scrn->height * SHORT(patch->height)) / 200;
+
+	xinc = (SHORT(patch->width) << 16) / destwidth;
+	yinc = (SHORT(patch->height) << 16) / destheight;
+	xmul = (destwidth << 16) / SHORT(patch->width);
+	ymul = (destheight << 16) / SHORT(patch->height);
+
+	y0 -= (SHORT(patch->topoffset) * ymul) >> 16;
+	x0 -= (SHORT(patch->leftoffset) * xmul) >> 16;
+
+#ifdef RANGECHECK 
+	if (x0<0
+		|| x0+destwidth > scrn->width
+		|| y0<0
+		|| y0+destheight> scrn->height)
+	{
+		//Printf ("Patch at %d,%d exceeds LFB\n", x0,y0 );
+		DPrintf ("V_DrawPatchFlipped: bad patch (ignored)\n");
+		return;
+	}
+#endif
+
+	if (scrn->is8bit) {
+		drawfunc = vdrawsPfuncs[V_DRAWPATCH];
+		colstep = 1;
+	} else {
+		drawfunc = vdrawsDfuncs[V_DRAWPATCH];
+		colstep = 4;
+	}
+
+	if (scrn == &screen)
+		V_MarkRect (x0, y0, destwidth, destheight);
+
+	w = destwidth * xinc;
+	col = w - xinc;
+	pitch = scrn->pitch;
+	desttop = scrn->buffer + y0*scrn->pitch + x0 * colstep;
+
+	for ( ; col >= 0 ; col -= xinc, desttop += colstep)
+	{
+		column = (column_t *)((byte *)patch + LONG(patch->columnofs[col >> 16]));
+
+		// step through the posts in a column
+		while (column->topdelta != 0xff )
+		{
+			drawfunc ((byte *)column + 3,
+					  desttop + (((column->topdelta * ymul)) >> 16) * pitch,
+					  (column->length * ymul) >> 16,
+					  pitch,
+					  yinc);
+			column = (column_t *)(	(byte *)column + column->length
+									+ 4 );
+		}
+	}
 }
 
 

@@ -62,16 +62,17 @@ typedef struct screen_s screen_t;
 
 extern palette_t *DefaultPalette;
 
-// Screen 0 is the screen updated by I_Update screen.
-// Screen 1 is an extra buffer.
-extern	screen_t screens[2];
+// This is the screen updated by I_FinishUpdate.
+extern	screen_t screen;
 
 extern	int 	dirtybox[4];
 
 extern	byte	newgamma[256];
 extern	cvar_t	*gammalevel;
 
-extern	byte*	TransTable;			// Translucency tables (minus 65536)
+// translucency tables
+extern unsigned int Col2RGB8[65][256];
+extern byte RGB32k[32][32][32];
 
 extern	int		CleanWidth, CleanHeight, CleanXfac, CleanYfac;
 

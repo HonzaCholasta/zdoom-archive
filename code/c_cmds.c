@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "version.h"
 #include "c_consol.h"
 #include "c_cmds.h"
@@ -11,7 +17,7 @@
 #include "i_system.h"
 
 #include "doomstat.h"
-#include "d_englsh.h"
+#include "dstrings.h"
 #include "s_sound.h"
 #include "g_game.h"
 #include "d_items.h"
@@ -19,12 +25,20 @@
 #include "z_zone.h"
 #include "w_wad.h"
 #include "g_level.h"
+#include "gi.h"
 
 extern FILE *Logfile;
 
 cvar_t *sv_cheats;
 
+static void cmd_toggleconsole (player_t *plyr, int argc, char **argv)
+{
+	C_ToggleConsole();
+}
+
 struct CmdDispatcher CmdList[] = {
+	{ "playdemo",				Cmd_PlayDemo },
+	{ "timedemo",				Cmd_TimeDemo },
 	{ "error",					Cmd_Error },
 	{ "endgame",				Cmd_Endgame },
 	{ "mem",					Cmd_Mem },
@@ -44,7 +58,7 @@ struct CmdDispatcher CmdList[] = {
 	{ "togglemap",				Cmd_Togglemap },
 	{ "echo",					Cmd_Echo },
 	{ "clear",					Cmd_Clear },
-	{ "toggleconsole",			C_ToggleConsole },
+	{ "toggleconsole",			cmd_toggleconsole },
 	{ "centerview",				Cmd_CenterView },
 	{ "pause",					Cmd_Pause },
 	{ "setcolor",				Cmd_SetColor },
@@ -69,6 +83,7 @@ struct CmdDispatcher CmdList[] = {
 	{ "toggle",					Cmd_Toggle },
 	{ "cvarlist",				Cmd_CvarList },
 	{ "give",					Cmd_Give },
+	{ "chase",					Cmd_Chase },
 	{ "god",					Cmd_God },
 	{ "history",				Cmd_History },
 	{ "idclev",					Cmd_idclev },
@@ -105,6 +120,7 @@ struct CmdDispatcher CmdList[] = {
 	{ "stop",					Cmd_Stop },
 	{ "soundlist",				Cmd_Soundlist },
 	{ "soundlinks",				Cmd_Soundlinks },
+	{ "dir",					Cmd_Dir },
 	{ NULL }
 };
 
@@ -116,7 +132,7 @@ void C_InstallCommands (void)
 BOOL CheckCheatmode (void)
 {
 	if (((gameskill->value == sk_nightmare) || netgame) && (sv_cheats->value == 0.0)) {
-		Printf ("You must run the server with '+set cheats 1' to enable this command.\n");
+		Printf (PRINT_HIGH, "You must run the server with '+set cheats 1' to enable this command.\n");
 		return true;
 	} else {
 		return false;
@@ -181,6 +197,31 @@ void Cmd_Noclip (player_t *plyr, int argc, char **argv)
 	Net_WriteByte (CHT_NOCLIP);
 }
 
+extern cvar_t *chasedemo;
+
+void Cmd_Chase (player_t *plyr, int argc, char **argv)
+{
+	if (demoplayback) {
+		int i;
+
+		if (chasedemo->value) {
+			SetCVarFloat (chasedemo, 0);
+			for (i = 0; i < MAXPLAYERS; i++)
+				players[i].cheats &= ~CF_CHASECAM;
+		} else {
+			SetCVarFloat (chasedemo, 1);
+			for (i = 0; i < MAXPLAYERS; i++)
+				players[i].cheats |= CF_CHASECAM;
+		}
+	} else {
+		if (CheckCheatmode ())
+			return;
+
+		Net_WriteByte (DEM_GENERICCHEAT);
+		Net_WriteByte (CHT_CHASECAM);
+	}
+}
+
 void Cmd_idclev (player_t *plyr, int argc, char **argv)
 {
 	if (CheckCheatmode ())
@@ -189,11 +230,12 @@ void Cmd_idclev (player_t *plyr, int argc, char **argv)
 	if ((argc > 1) && (*(argv[1] + 2) == 0) && *(argv[1] + 1) && *argv[1]) {
 		int epsd, map;
 		char *buf = argv[1];
+		char *mapname;
 
 		buf[0] -= '0';
 		buf[1] -= '0';
 
-		if (gamemode == commercial) {
+		if (gameinfo.flags & GI_MAPxx) {
 			epsd = 1;
 			map = buf[0]*10 + buf[1];
 		} else {
@@ -202,41 +244,26 @@ void Cmd_idclev (player_t *plyr, int argc, char **argv)
 		}
 
 		// Catch invalid maps.
-		if (epsd < 1)
-			return;
-
-		if (map < 1)
-			return;
-  
-		if ((gamemode == retail) && ((epsd > 4) || (map > 9)))
-			return;
-
-		if ((gamemode == registered) && ((epsd > 3) || (map > 9)))
-			return;
-
-		if ((gamemode == shareware) && ((epsd > 1) || (map > 9)))
-			return;
-
-		if ((gamemode == commercial) && (( epsd > 1) || (map > 34)))
+		mapname = CalcMapName (epsd, map);
+		if (W_CheckNumForName (mapname) == -1)
 			return;
 
 		// So be it.
-		Printf ("%s\n", STSTR_CLEV);
-      
-		G_DeferedInitNew (CalcMapName (epsd, map));
+		Printf (PRINT_HIGH, "%s\n", STSTR_CLEV);
+      	G_DeferedInitNew (mapname);
 	}
 }
 
 void Cmd_ChangeMap (player_t *plyr, int argc, char **argv)
 {
 	if (plyr != players && netgame) {
-		Printf ("Only player 1 can change the map.\n");
+		Printf (PRINT_HIGH, "Only player 1 can change the map.\n");
 		return;
 	}
 
 	if (argc > 1) {
 		if (W_CheckNumForName (argv[1]) == -1) {
-			Printf ("No map %s\n", argv[1]);
+			Printf (PRINT_HIGH, "No map %s\n", argv[1]);
 		} else {
 			Net_WriteByte (DEM_CHANGEMAP);
 			Net_WriteString (argv[1]);
@@ -250,25 +277,33 @@ void Cmd_idmus (player_t *plyr, int argc, char **argv)
 	char *map;
 	int l;
 
-	plyr->message = STSTR_NOMUS;
-	if (argc > 1) {
-		if (gamemode == commercial) {
+	if (argc > 1)
+	{
+		if (gameinfo.flags & GI_MAPxx)
+		{
 			l = atoi (argv[1]);
 			if (l <= 99)
 				map = CalcMapName (0, l);
-			else {
+			else
+			{
+				Printf (PRINT_HIGH, "%s\n", STSTR_NOMUS);
 				return;
 			}
-		} else {
+		}
+		else
+		{
 			map = CalcMapName (argv[1][0] - '0', argv[1][1] - '0');
 		}
 
-		if ( (info = FindLevelInfo (map)) ) {
-			if (info->music[0]) {
+		if ( (info = FindLevelInfo (map)) )
+		{
+			if (info->music[0])
+			{
 				S_ChangeMusic (info->music, 1);
-				plyr->message = STSTR_MUS;
+				Printf (PRINT_HIGH, "%s\n", STSTR_MUS);
 			}
-		}
+		} else
+			Printf (PRINT_HIGH, "%s\n", STSTR_NOMUS);
 	}
 }
 
@@ -291,7 +326,7 @@ void Cmd_Give (player_t *plyr, int argc, char **argv)
 
 void Cmd_Gameversion (player_t *plyr, int argc, char **argv)
 {
-	Printf ("%d.%d : " __DATE__ "\n", VERSION / 100, VERSION % 100);
+	Printf (PRINT_HIGH, "%d.%d : " __DATE__ "\n", VERSION / 100, VERSION % 100);
 }
 
 void Cmd_Exec (player_t *plyr, int argc, char **argv)
@@ -315,11 +350,11 @@ void Cmd_Exec (player_t *plyr, int argc, char **argv)
 			AddCommandString (cmd);
 		}
 		if (!feof (f))
-			Printf ("Error parsing \"%s\"\n", argv[1]);
+			Printf (PRINT_HIGH, "Error parsing \"%s\"\n", argv[1]);
 
 		fclose (f);
 	} else
-		Printf ("Could not open \"%s\"\n", argv[1]);
+		Printf (PRINT_HIGH, "Could not open \"%s\"\n", argv[1]);
 }
 
 void Cmd_DumpHeap (player_t *plyr, int argc, char **argv)
@@ -345,16 +380,16 @@ void Cmd_Logfile (player_t *plyr, int argc, char **argv)
 	timestr = asctime (localtime (&clock));
 
 	if (Logfile) {
-		Printf ("Log stopped: %s\n", timestr);
+		Printf (PRINT_HIGH, "Log stopped: %s\n", timestr);
 		fclose (Logfile);
 		Logfile = NULL;
 	}
 
 	if (argc >= 2) {
 		if ( (Logfile = fopen (argv[1], "w")) ) {
-			Printf ("Log started: %s\n", timestr);
+			Printf (PRINT_HIGH, "Log started: %s\n", timestr);
 		} else {
-			Printf ("Could not start log\n");
+			Printf (PRINT_HIGH, "Could not start log\n");
 		}
 	}
 }
@@ -368,14 +403,14 @@ void Cmd_Limits (player_t *plyr, int argc, char **argv)
 	extern int MaxVisSprites;
 	extern int maxopenings;
 
-	Printf_Bold ("Note that the following values are\n"
-				 "dynamic and will increase as needed.\n\n");
-	Printf ("MaxDeathmatchStarts: %u\n", MaxDeathmatchStarts);
-	Printf ("MaxDrawSegs: %u\n", MaxDrawSegs);
-	Printf ("MaxSegs: %u\n", MaxSegs);
-	Printf ("MaxSpecialCross: %u\n", MaxSpecialCross);
-	Printf ("MaxVisSprites: %u\n", MaxVisSprites);
-	Printf ("MaxOpeninings: %u\n", maxopenings);
+	Printf (PRINT_HIGH, "Note that the following values are\n"
+						"dynamic and will increase as needed.\n\n");
+	Printf (PRINT_HIGH, "MaxDeathmatchStarts: %u\n", MaxDeathmatchStarts);
+	Printf (PRINT_HIGH, "MaxDrawSegs: %u\n", MaxDrawSegs);
+	Printf (PRINT_HIGH, "MaxSegs: %u\n", MaxSegs);
+	Printf (PRINT_HIGH, "MaxSpecialCross: %u\n", MaxSpecialCross);
+	Printf (PRINT_HIGH, "MaxVisSprites: %u\n", MaxVisSprites);
+	Printf (PRINT_HIGH, "MaxOpeninings: %u\n", maxopenings);
 }
 
 BOOL P_StartScript (void *who, void *where, int script, char *map, int lineSide,
@@ -383,7 +418,7 @@ BOOL P_StartScript (void *who, void *where, int script, char *map, int lineSide,
 void Cmd_Puke (player_t *plyr, int argc, char **argv)
 {
 	if (argc < 2 || argc > 5) {
-		Printf (" puke <script> [arg1] [arg2] [arg3]\n");
+		Printf (PRINT_HIGH, " puke <script> [arg1] [arg2] [arg3]\n");
 	} else {
 		int script = atoi (argv[1]);
 		int arg0=0, arg1=0, arg2=0;
@@ -408,4 +443,57 @@ void Cmd_Error (player_t *plyr, int argc, char **argv)
 	strcpy (textcopy, text);
 	free (text);
 	I_Error (textcopy);
+}
+
+void Cmd_Dir (player_t *plyr, int argc, char **argv)
+{
+	char dir[256], curdir[256];
+	char *match;
+	findstate_t c_file;
+	long file;
+
+	if (!getcwd (curdir, 256)) {
+		Printf (PRINT_HIGH, "Current path too long\n");
+		return;
+	}
+
+	if (argc == 1 || chdir (argv[1])) {
+		match = argc == 1 ? "./*" : argv[1];
+
+		ExtractFilePath (match, dir);
+		if (dir[0]) {
+			match += strlen (dir);
+		} else {
+			dir[0] = '.';
+			dir[1] = '/';
+			dir[2] = '\0';
+		}
+		if (!match[0])
+			match = "*";
+
+		if (chdir (dir)) {
+			Printf (PRINT_HIGH, "%s not found\n", dir);
+			return;
+		}
+	} else {
+		match = "*";
+		strcpy (dir, argv[1]);
+		if (dir[strlen(dir) - 1] != '/')
+			strcat (dir, "/");
+	}
+
+	if ( (file = I_FindFirst (match, &c_file)) == -1)
+		Printf (PRINT_HIGH, "Nothing matching %s%s\n", dir, match);
+	else {
+		Printf (PRINT_HIGH, "Listing of %s%s:\n", dir, match);
+		do {
+			if (I_FindAttr (&c_file) & FA_DIREC)
+				Printf_Bold ("%s <dir>\n", I_FindName (&c_file));
+			else
+				Printf (PRINT_HIGH, "%s\n", I_FindName (&c_file));
+		} while (I_FindNext (file, &c_file) == 0);
+		I_FindClose (file);
+	}
+
+	chdir (curdir);
 }
