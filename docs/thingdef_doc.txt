@@ -584,3 +584,14 @@ A_SeekerMissile threshold maxturnangle
                             in the range [0, 90].
                             Example: The flaming skull of Heretic's mummy uses an equivalent
                             of A_SeekerMisile 20 30
+A_Jump (chance, distance)       Randomly advances to different state. Like painchance, the chance
+                                value can range between 0 and 255. A chance of 0 will never advance,
+                                while a chance of 255 will almost always advance. If the state is
+                                not advanced, then the one immediately following the A_Jump will
+                                be used as if A_Jump had not been present.
+A_CustomMissile ("missiletype", spawnheight, spawnofs_xy, angle)
+                                Spawns a missile attack where "missiletype" is the type of missile
+                                to shoot, spawnheight is how high from the monster's feet to shoot
+                                the missile, spawnofs_xy is how far the monster's center to shoot
+                                the missile, and angle is the direction relative to the monster's
+                                facing angle in which to shoot the missile.
