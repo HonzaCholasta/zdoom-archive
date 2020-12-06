@@ -41,7 +41,7 @@ fixed_t FixedMul_C				(fixed_t a, fixed_t b);
 fixed_t FixedDiv_C				(fixed_t a, fixed_t b);
 
 #ifdef USEASM
-#if defined(DJGPP)
+#if defined(__GNUG__)
 
 // killough 5/10/98: In djgpp, use inlined assembly for performance
 
@@ -49,9 +49,9 @@ __inline__ static fixed_t FixedMul(fixed_t a, fixed_t b)
 {
   fixed_t result;
 
-  asm("  imull %2 ;"
-      "  shrdl $16,%%edx,%0 ;"
-      : "=a,=a" (result)           // eax is always the result
+  asm("\timull %2\n"
+      "\tshrdl $16,%%edx,%0"
+      : "=a,a" (result)           // eax is always the result
       : "0,0" (a),                 // eax is also first operand
         "m,r" (b)                  // second operand can be mem or reg
       : "%edx", "%cc"              // edx and condition codes clobbered
@@ -71,7 +71,7 @@ __inline__ static fixed_t FixedDiv(fixed_t a, fixed_t b)
       " sall $16,%%eax ;"
       " sarl $16,%%edx ;"
       " idivl %2 ;"
-      : "=a,=a" (result)    // eax is always the result
+      : "=a,a" (result)     // eax is always the result
       : "0,0" (a),          // eax is also the first operand
         "m,r" (b)           // second operand can be mem or reg (not imm)
       : "%edx", "%cc"       // edx and condition codes are clobbered

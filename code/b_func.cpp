@@ -30,7 +30,7 @@ static fixed_t last_z;
 static sector_t *last_s;
 static fixed_t estimated_dist;
 
-static PTR_Reachable (intercept_t *in)
+static int PTR_Reachable (intercept_t *in)
 {
 	fixed_t frac;
 	line_t *line;
@@ -120,7 +120,7 @@ bool DCajunMaster::Reachable (AActor *actor, AActor *target)
 //Check if mo1 has free line to mo2
 //and if mo2 is within mo1 viewangle (vangle) given with normal degrees.
 //if these conditions are true, the function returns true.
-//GOOD TO KNOW is that the players view angle
+//GOOD TO KNOW is that the player's view angle
 //in doom is 90 degrees infront.
 bool DCajunMaster::Check_LOS (AActor *from, AActor *to, angle_t vangle)
 {
@@ -301,13 +301,11 @@ AActor *DCajunMaster::Choose_Mate (AActor *bot)
 		p_leader[count] = false;
 		for (count2 = 0; count2 < MAXPLAYERS; count2++)
 		{
-			if (players[count].isbot)
+			if (players[count].isbot
+				&& players[count2].mate == players[count].mo)
 			{
-				if (players[count2].mate == players[count].mo)
-				{
-					p_leader[count] = true;
-					break;
-				}
+				p_leader[count] = true;
+				break;
 			}
 		}
 	}
@@ -322,25 +320,27 @@ AActor *DCajunMaster::Choose_Mate (AActor *bot)
 	//Check for player friends
 	for (count = 0; count < MAXPLAYERS; count++)
 	{
+		player_t *client = &players[count];
+
 		if (playeringame[count]
-			&& players[count].mo
-			&& bot != players[count].mo
-			&& (bot->IsTeammate (players[count].mo) || !deathmatch.value)
-			&& players[count].mo->health > 0
-			&& players[count].mo != observer
-			&& ((bot->health/2) <= players[count].mo->health || !deathmatch.value)
+			&& client->mo
+			&& bot != client->mo
+			&& (bot->IsTeammate (client->mo) || !deathmatch.value)
+			&& client->mo->health > 0
+			&& client->mo != observer
+			&& ((bot->health/2) <= client->mo->health || !deathmatch.value)
 			&& !p_leader[count]) //taken?
 		{
 
-			if (P_CheckSight (bot, players[count].mo, true))
+			if (P_CheckSight (bot, client->mo, true))
 			{
-				test = P_AproxDistance (players[count].mo->x-bot->x,
-										players[count].mo->y-bot->y);
+				test = P_AproxDistance (client->mo->x - bot->x,
+										client->mo->y - bot->y);
 
 				if (test < closest_dist)
 				{
 					closest_dist = test;
-					target = players[count].mo;
+					target = client->mo;
 				}
 			}
 		}
@@ -394,27 +394,29 @@ AActor *DCajunMaster::Find_enemy (AActor *bot)
 
 	for (count = 0; count < MAXPLAYERS; count++)
 	{
-		if (playeringame[count] && !bot->IsTeammate (players[count].mo)
-			&& players[count].mo != observer
-			&& players[count].mo->health > 0
-			&& bot != players[count].mo)
+		player_t *client = &players[count];
+		if (playeringame[count]
+			&& !bot->IsTeammate (client->mo)
+			&& client->mo != observer
+			&& client->mo->health > 0
+			&& bot != client->mo)
 		{
-			if (Check_LOS (bot, players[count].mo, vangle)) //Here's a strange one, when bot is standing still, the P_CheckSight within Check_LOS almost always returns false. tought it should be the same checksight as below but.. (below works) something must be fuckin wierd screded up. 
+			if (Check_LOS (bot, client->mo, vangle)) //Here's a strange one, when bot is standing still, the P_CheckSight within Check_LOS almost always returns false. tought it should be the same checksight as below but.. (below works) something must be fuckin wierd screded up. 
 			//if(P_CheckSight( bot, players[count].mo))
 			{
-				temp = P_AproxDistance (players[count].mo->x-bot->x,
-										players[count].mo->y-bot->y);
+				temp = P_AproxDistance (client->mo->x - bot->x,
+										client->mo->y - bot->y);
 
 				//Too dark?
 				if (temp > DARK_DIST &&
-					players[count].mo->subsector->sector->lightlevel < WHATS_DARK &&
+					client->mo->subsector->sector->lightlevel < WHATS_DARK &&
 					bot->player->powers[pw_infrared])
 					continue;
 
 				if (temp < closest_dist)
 				{
 					closest_dist = temp;
-					target = players[count].mo;
+					target = client->mo;
 				}
 			}
 		}
@@ -481,7 +483,7 @@ pos_t DCajunMaster::FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd)
 			pos.x = th->x;
 			pos.y = th->y;
 			pos.z = th->z;
-			delete th;
+			th->Destroy ();
 			return pos;
 		}
 	}
@@ -500,7 +502,7 @@ angle_t DCajunMaster::FireRox (AActor *bot, AActor *enemy, ticcmd_t *cmd)
 
 	dist = P_AproxDistance (actor->x-enemy->x, actor->y-enemy->y);
 	if (dist < SAFE_SELF_MISDIST)
-		return NULL;
+		return 0;
 	//Predict.
 	m = (((dist+1)/FRACUNIT)/mobjinfo[MT_ROCKET].speed);
 
@@ -530,7 +532,7 @@ angle_t DCajunMaster::FireRox (AActor *bot, AActor *enemy, ticcmd_t *cmd)
 			return ang;
 		}
 	}
-	return NULL;
+	return 0;
 }
 
 // [RH] We absolutely do not want to pick things up here. The bot code is

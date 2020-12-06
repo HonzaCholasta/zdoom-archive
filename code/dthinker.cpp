@@ -6,24 +6,17 @@
 static cycle_t ThinkCycles;
 extern cycle_t BotSupportCycles;
 
-// Cap is both the head and tail of the thinker list
-DThinker DThinker::Cap;
-
 IMPLEMENT_SERIAL (DThinker, DObject)
+
+DThinker *DThinker::FirstThinker = NULL;
+DThinker *DThinker::LastThinker = NULL;
 
 void DThinker::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
 
-	// We do not serialize the m_Next and m_Prev members here, because
-	// the DThinker constructor sets those for us, and because the thinker
-	// list contains an entry that should never be saved (Cap). We rely on
-	// SerializeAll to be smart enough to serialize all the thinkers for us.
-
-	if (arc.IsStoring ())
-		arc << m_RemoveMe;
-	else
-		arc >> m_RemoveMe;
+	// We do not serialize m_Next or m_Prev, because the DThinker
+	// constructor handles them for us.
 }
 
 void DThinker::SerializeAll (FArchive &arc, bool hubLoad)
@@ -32,21 +25,8 @@ void DThinker::SerializeAll (FArchive &arc, bool hubLoad)
 
 	if (arc.IsStoring ())
 	{
-		// Before saving any thinkers, first clear out the ones that want
-		// to be destroyed, because they no longer retain their type
-		// information and will try to save themselves as DObjects.
-
-		thinker = Cap.m_Next;
-		while (thinker != &Cap)
-		{
-			DThinker *next = thinker->m_Next;
-			if (thinker->m_RemoveMe)
-				thinker->Remove ();
-			thinker = next;
-		}
-
-		thinker = Cap.m_Next;
-		while (thinker != &Cap)
+		thinker = FirstThinker;
+		while (thinker)
 		{
 			arc << (BYTE)1;
 			arc << thinker;
@@ -77,48 +57,60 @@ void DThinker::SerializeAll (FArchive &arc, bool hubLoad)
 
 DThinker::DThinker ()
 {
-	m_RemoveMe = false;
-	if (this != &Cap)
-	{
-		// Add a new thinker at the end of the list.
-		Cap.m_Prev->m_Next = this;
-		m_Next = &Cap;
-		m_Prev = Cap.m_Prev;
-		Cap.m_Prev = this;
-	}
-	else
-		InitThinkers ();
+	// Add a new thinker at the end of the list.
+	m_Prev = LastThinker;
+	m_Next = NULL;
+	if (LastThinker)
+		LastThinker->m_Next = this;
+	if (!FirstThinker)
+		FirstThinker = this;
+	LastThinker = this;
 }
 
 DThinker::~DThinker ()
 {
+	if (FirstThinker == this)
+		FirstThinker = m_Next;
+	if (LastThinker == this)
+		LastThinker = m_Prev;
+	if (m_Next)
+		m_Next->m_Prev = m_Prev;
+	if (m_Prev)
+		m_Prev->m_Next = m_Next;
 }
 
-bool DThinker::IsValid () const
+void DThinker::Destroy ()
 {
-	return !m_RemoveMe;
+	if (FirstThinker == this)
+		FirstThinker = m_Next;
+	if (LastThinker == this)
+		LastThinker = m_Prev;
+	if (m_Next)
+		m_Next->m_Prev = m_Prev;
+	if (m_Prev)
+		m_Prev->m_Next = m_Next;
+	m_Next = m_Prev = NULL;
+	Super::Destroy ();
 }
 
 // Destroy every thinker
 void DThinker::DestroyAllThinkers ()
 {
-	DThinker *currentthinker = Cap.m_Next;
-	while (currentthinker != &Cap)
+	DThinker *currentthinker = FirstThinker;
+	while (currentthinker)
 	{
 		DThinker *next = currentthinker->m_Next;
-		currentthinker->~DThinker ();
-		currentthinker->m_Next->m_Prev = currentthinker->m_Prev;
-		currentthinker->m_Prev->m_Next = currentthinker->m_Next;
-		Z_Free (currentthinker);
+		currentthinker->Destroy ();
 		currentthinker = next;
 	}
+	DObject::EndFrame ();
 }
 
 // Destroy all thinkers except for player-controlled actors
 void DThinker::DestroyMostThinkers ()
 {
-	DThinker *thinker = Cap.m_Next;
-	while (thinker != &Cap)
+	DThinker *thinker = FirstThinker;
+	while (thinker)
 	{
 		DThinker *next = thinker->m_Next;
 		if (!thinker->IsKindOf (RUNTIME_CLASS (AActor)) ||
@@ -126,25 +118,11 @@ void DThinker::DestroyMostThinkers ()
 			static_cast<AActor *>(thinker)->player->mo
 			 != static_cast<AActor *>(thinker))
 		{
-			thinker->~DThinker ();
-			thinker->m_Next->m_Prev = thinker->m_Prev;
-			thinker->m_Prev->m_Next = thinker->m_Next;
-			Z_Free (thinker);
+			thinker->Destroy ();
 		}
 		thinker = next;
 	}
-}
-
-void DThinker::Remove ()
-{
-	m_Next->m_Prev = m_Prev;
-	m_Prev->m_Next = m_Next;
-	Z_Free (this);
-}
-
-void DThinker::InitThinkers ()
-{
-	Cap.m_Prev = Cap.m_Next = &Cap;
+	DObject::EndFrame ();
 }
 
 void DThinker::RunThinkers ()
@@ -154,21 +132,12 @@ void DThinker::RunThinkers ()
 	ThinkCycles = BotSupportCycles = 0;
 
 	clock (ThinkCycles);
-	currentthinker = Cap.m_Next;
-	while (currentthinker != &Cap)
+	currentthinker = FirstThinker;
+	while (currentthinker)
 	{
-		if (currentthinker->m_RemoveMe)
-		{
-			// time to remove it
-			DThinker *nextthinker = currentthinker->m_Next;
-			currentthinker->Remove ();
-			currentthinker = nextthinker;
-		}
-		else
-		{
-			currentthinker->RunThink ();
-			currentthinker = currentthinker->m_Next;
-		}
+		DThinker *next = currentthinker->m_Next;
+		currentthinker->RunThink ();
+		currentthinker = next;
 	}
 	unclock (ThinkCycles);
 }
@@ -182,7 +151,7 @@ void *DThinker::operator new (size_t size)
 // until its thinking turn comes up.
 void DThinker::operator delete (void *mem)
 {
-	static_cast<DThinker *>(mem)->m_RemoveMe = true;
+	Z_Free (mem);
 }
 
 BEGIN_STAT (think)

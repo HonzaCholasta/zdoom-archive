@@ -41,7 +41,6 @@
 #include "c_dispatch.h"
 #include "d_main.h"
 #include "i_system.h"
-#include "i_input.h"
 #include "i_video.h"
 #include "z_zone.h"
 #include "v_video.h"
@@ -536,13 +535,13 @@ BEGIN_COMMAND (bumpgamma)
 	// on the fly for *any* gamma level.
 	// Q: What are reasonable limits to use here?
 
-	float newgamma = gamma.value + 0.1;
+	float newgamma = Gamma.value + 0.1;
 
 	if (newgamma > 3.0)
 		newgamma = 1.0;
 
-	gamma.Set (newgamma);
-	Printf (PRINT_HIGH, "Gamma correction level %g\n", gamma.value);
+	Gamma.Set (newgamma);
+	Printf (PRINT_HIGH, "Gamma correction level %g\n", Gamma.value);
 }
 END_COMMAND (bumpgamma)
 
@@ -1315,7 +1314,7 @@ static void M_ChangeSkin (int choice)
 	if (!choice)
 		skin = (skin == 0) ? numskins - 1 : skin - 1;
 	else
-		skin = (skin < numskins - 1) ? skin + 1 : 0;
+		skin = (skin < (int)numskins - 1) ? skin + 1 : 0;
 
 	cvar_set ("skin", skins[skin].name);
 }
@@ -1827,7 +1826,8 @@ void M_ClearMenus (void)
 	drawSkull = true;
 	M_DemoNoPlay = false;
 	C_HideConsole ();		// [RH] Hide the console if we can.
-	I_ResumeMouse ();		// [RH] Recapture the mouse in windowed modes.
+	if (gamestate != GS_FULLCONSOLE)
+		I_ResumeMouse ();	// [RH] Recapture the mouse in windowed modes.
 	BorderNeedRefresh = true;
 	// if (!netgame && usergame && paused)
 	//		 sendpause = true;
@@ -1855,6 +1855,7 @@ void M_PopMenuStack (void)
 {
 	M_DemoNoPlay = false;
 	if (MenuStackDepth > 1) {
+		I_PauseMouse ();
 		MenuStackDepth -= 2;
 		if (MenuStack[MenuStackDepth].isNewStyle) {
 			OptionsActive = true;

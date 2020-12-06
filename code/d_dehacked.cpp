@@ -734,8 +734,10 @@ static int GetLine (void)
 	}
 }
 
-static int PatchThing (int thingNum)
+static int PatchThing (int thingy)
 {
+    size_t thingNum = (size_t)thingy;
+
 	static const struct Key keys[] = {
 		{ "ID #",				myoffsetof(mobjinfo_t,doomednum) },
 		{ "Initial frame",		myoffsetof(mobjinfo_t,spawnstate) },
@@ -851,7 +853,7 @@ static int PatchThing (int thingNum)
 	}
 
 	while ((result = GetLine ()) == 1) {
-		int sndmap = atoi (Line2);
+		size_t sndmap = atoi (Line2);
 
 		if (sndmap >= sizeof(SoundMap))
 			sndmap = 0;
@@ -875,7 +877,7 @@ static int PatchThing (int thingNum)
 
 				for (strval = Line2; (strval = strtok (strval, ",+| \t\f\r")); strval = NULL)
 				{
-					int iy;
+					size_t iy;
 
 					if (IsNum (strval))
 					{
@@ -1427,7 +1429,7 @@ donewithtext:
 
 static int PatchStrings (int dummy)
 {
-	static int maxstrlen = 128;
+	static size_t maxstrlen = 128;
 	static char *holdstring;
 	int result;
 

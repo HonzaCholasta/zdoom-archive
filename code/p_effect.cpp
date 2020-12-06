@@ -55,7 +55,7 @@ static const struct ColorList {
 void P_InitEffects (void)
 {
 	const struct ColorList *color = Colors;
-	unsigned int *palette = DefaultPalette->basecolors;
+	DWORD *palette = DefaultPalette->basecolors;
 	int numcolors = DefaultPalette->numcolors;
 
 	while (color->color) {

@@ -781,7 +781,7 @@ FUNC(LS_Thing_Remove)
 	while (mobj)
 	{
 		AActor *temp = mobj->FindByTID (arg0);
-		delete mobj;
+		mobj->Destroy ();
 		mobj = temp;
 	}
 

@@ -1696,24 +1696,28 @@ void A_PainDie (AActor *actor)
 
 void A_Scream (AActor *actor)
 {
-	char sound[MAX_SNDNAME];
-
-	strcpy (sound, actor->info->deathsound);
-
-	if (sound[strlen(sound)-1] == '1') {
-		sound[strlen(sound)-1] = P_Random(pr_look)%3 + '1';
-		if (S_FindSound (sound) == -1)
-			sound[strlen(sound)-1] = '1';
-	}
-
-	// Check for bosses.
-	if (actor->flags2 & MF2_BOSS)
+	if (actor->info->deathsound)
 	{
-		// full volume
-		S_Sound (actor, CHAN_VOICE, sound, 1, ATTN_SURROUND);
+		char sound[MAX_SNDNAME];
+
+		strcpy (sound, actor->info->deathsound);
+
+		if (sound[strlen(sound)-1] == '1')
+		{
+			sound[strlen(sound)-1] = P_Random(pr_look)%3 + '1';
+			if (S_FindSound (sound) == -1)
+				sound[strlen(sound)-1] = '1';
+		}
+
+		// Check for bosses.
+		if (actor->flags2 & MF2_BOSS)
+		{
+			// full volume
+			S_Sound (actor, CHAN_VOICE, sound, 1, ATTN_SURROUND);
+		}
+		else
+			S_Sound (actor, CHAN_VOICE, sound, 1, ATTN_NORM);
 	}
-	else
-		S_Sound (actor, CHAN_VOICE, sound, 1, ATTN_NORM);
 }
 
 
@@ -2161,7 +2165,7 @@ void A_SpawnFly (AActor *mo)
 	P_TeleportMove (newmobj, newmobj->x, newmobj->y, newmobj->z, true);
 
 	// remove self (i.e., cube).
-	delete mo;
+	mo->Destroy ();
 }
 
 

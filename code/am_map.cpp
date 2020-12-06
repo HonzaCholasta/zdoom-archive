@@ -353,10 +353,13 @@ void AM_restoreScaleAndLoc(void)
 {
 	m_w = old_m_w;
 	m_h = old_m_h;
-	if (!followplayer) {
+	if (!followplayer)
+	{
 		m_x = old_m_x;
 		m_y = old_m_y;
-    } else {
+    }
+	else
+	{
 		m_x = players[consoleplayer].camera->x - m_w/2;
 		m_y = players[consoleplayer].camera->y - m_h/2;
     }
@@ -471,8 +474,8 @@ void AM_initVariables(void)
 			if (playeringame[pnum])
 				break;
   
-	m_x = players[consoleplayer].camera->x - m_w/2;
-	m_y = players[consoleplayer].camera->y - m_h/2;
+	m_x = players[pnum].camera->x - m_w/2;
+	m_y = players[pnum].camera->y - m_h/2;
 	AM_changeWindowLoc();
 
 	// for saving & restoring
@@ -485,7 +488,7 @@ void AM_initVariables(void)
 	ST_Responder (&st_notify);
 }
 
-static void GetComponents (int color, unsigned int *palette, float &r, float &g, float &b)
+static void GetComponents (int color, DWORD *palette, float &r, float &g, float &b)
 {
 	if (palette)
 		color = palette[color];
@@ -497,7 +500,7 @@ static void GetComponents (int color, unsigned int *palette, float &r, float &g,
 
 void AM_initColors (BOOL overlayed)
 {
-	unsigned int *palette;
+	DWORD *palette;
 	
 	if (screen->is8bit)
 		palette = DefaultPalette->colors;
@@ -1741,6 +1744,7 @@ AM_drawLineCharacter
 void AM_drawPlayers(void)
 {
 	angle_t angle;
+	int i;
 
 	if (!multiplayer)
 	{
@@ -1760,17 +1764,17 @@ void AM_drawPlayers(void)
 		return;
 	}
 
-	for (int i = 0; i < MAXPLAYERS; i++)
+	for (i = 0; i < MAXPLAYERS; i++)
 	{
 		player_t *p = &players[i];
 		int color;
 		mpoint_t pt;
 
-		if ((deathmatch.value && !demoplayback) && p != players[consoleplayer].camera->player)
+		if (!playeringame[i] ||
+			(deathmatch.value && !demoplayback) && p != players[consoleplayer].camera->player)
+		{
 			continue;
-
-		if (!playeringame[i])
-			continue;
+		}
 
 		if (p->powers[pw_invisibility])
 			color = AlmostBackground;

@@ -49,7 +49,7 @@ char *sprnames[NUMSPRITES] = {
 	"GIB1","GIB2","GIB3","GIB4","GIB5","GIB6","GIB7","UNKN","TLGL"
 };
 
-player_s;
+class player_s;
 struct pspdef_s;
 
 // Doesn't work with g++, needs actionf_p1

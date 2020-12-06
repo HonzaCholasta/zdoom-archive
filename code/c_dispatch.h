@@ -34,6 +34,7 @@ public:
 	char *m_Name;
 
 protected:
+	DConsoleCommand ();
 	bool AddToHash (DConsoleCommand **table);
 
 	AActor *m_Instigator;

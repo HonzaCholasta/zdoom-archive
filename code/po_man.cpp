@@ -39,7 +39,6 @@ void PO_Init (void);
 
 static polyobj_t *GetPolyobj (int polyNum);
 static int GetPolyobjMirror (int poly);
-static void ThrustMobj (AActor *mobj, seg_t *seg, polyobj_t *po);
 static void UpdateSegBBox (seg_t *seg);
 static void RotatePt (int an, fixed_t *x, fixed_t *y, fixed_t startSpotX,
 	fixed_t startSpotY);
@@ -181,7 +180,7 @@ void DRotatePoly::RunThink ()
 				poly->specialdata = NULL;
 			}
 			SN_StopSequence (poly);
-			delete this;
+			Destroy ();
 		}
 		else if (m_Dist < (unsigned)absSpeed)
 		{
@@ -220,7 +219,7 @@ BOOL EV_RotatePoly (line_t *line, int polyNum, int speed, int byteAngle,
 	{
 		if (byteAngle == 255)
 		{
-			pe->m_Dist = -1;
+			pe->m_Dist = ~0;
 		}
 		else
 		{
@@ -248,7 +247,7 @@ BOOL EV_RotatePoly (line_t *line, int polyNum, int speed, int byteAngle,
 		{
 			if (byteAngle == 255)
 			{
-				pe->m_Dist = -1;
+				pe->m_Dist = ~0;
 			}
 			else
 			{
@@ -297,7 +296,7 @@ void DMovePoly::RunThink ()
 				poly->specialdata = NULL;
 			}
 			SN_StopSequence (poly);
-			delete this;
+			Destroy ();
 		}
 		else if (m_Dist < (unsigned)absSpeed)
 		{
@@ -413,7 +412,7 @@ void DPolyDoor::RunThink ()
 					{
 						poly->specialdata = NULL;
 					}
-					delete this;
+					Destroy ();
 				}
 			}
 		}
@@ -462,7 +461,7 @@ void DPolyDoor::RunThink ()
 					{
 						poly->specialdata = NULL;
 					}
-					delete this;
+					Destroy ();
 				}
 			}
 		}

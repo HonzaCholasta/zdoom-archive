@@ -253,7 +253,6 @@ void DCanvas::DrawColorLucentPatchP (const byte *source, byte *dest, int count, 
 {
 	unsigned int *bg2rgb;
 	unsigned int fg;
-	byte *colormap = V_ColorMap;
 
 	{
 		unsigned int *fg2rgb;

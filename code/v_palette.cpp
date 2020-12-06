@@ -12,14 +12,14 @@
 #include "st_stuff.h"
 
 void BuildColoredLights (byte *maps, int lr, int lg, int lb, int fr, int fg, int fb);
-static void DoBlending (unsigned *from, unsigned *to, unsigned count, int tor, int tog, int tob, int toa);
+static void DoBlending (DWORD *from, DWORD *to, unsigned count, int tor, int tog, int tob, int toa);
 
 dyncolormap_t NormalLight;
 
 palette_t DefPal;
 palette_t *FirstPal;
 
-unsigned IndexedPalette[256];
+DWORD IndexedPalette[256];
 
 
 /* Current color blending values */
@@ -31,7 +31,7 @@ int		BlendR, BlendG, BlendB, BlendA;
 /**************************/
 
 byte newgamma[256];
-BEGIN_CUSTOM_CVAR (gamma, "1", CVAR_ARCHIVE)
+BEGIN_CUSTOM_CVAR (Gamma, "1", CVAR_ARCHIVE)
 {
 	static float lastgamma = 0;
 	double invgamma;
@@ -90,7 +90,7 @@ BOOL InternalCreatePalette (palette_t *palette, char *name, byte *colors,
 	palette->flags = flags;
 	palette->usecount = 1;
 	palette->maps.colormaps = NULL;
-	palette->basecolors = (unsigned int *)Malloc (numcolors * 2 * sizeof(unsigned));
+	palette->basecolors = (DWORD *)Malloc (numcolors * 2 * sizeof(DWORD));
 	palette->colors = palette->basecolors + numcolors;
 	palette->numcolors = numcolors;
 
@@ -250,7 +250,7 @@ palette_t *FindPalette (char *name, unsigned flags)
 
 // This is based (loosely) on the ColorShiftPalette()
 // function from the dcolors.c file in the Doom utilities.
-static void DoBlending (unsigned *from, unsigned *to, unsigned count, int tor, int tog, int tob, int toa)
+static void DoBlending (DWORD *from, DWORD *to, unsigned count, int tor, int tog, int tob, int toa)
 {
 	unsigned i;
 
@@ -279,8 +279,8 @@ static void DoBlending (unsigned *from, unsigned *to, unsigned count, int tor, i
 
 void RefreshPalette (palette_t *pal)
 {
-	unsigned l,c,r,g,b;
-	unsigned colors[256];
+	DWORD l,c,r,g,b;
+	DWORD colors[256];
 
 	if (screen->is8bit) {
 		if (pal->flags & PALETTEF_SHADE) {
@@ -331,7 +331,7 @@ void RefreshPalette (palette_t *pal)
 				free (pal->colormapsbase);
 				pal->colormapsbase = NULL;
 			}
-			pal->maps.shades = (unsigned int *)Realloc (pal->colormapsbase, (NUMCOLORMAPS + 1)*256*sizeof(unsigned int) + 255);
+			pal->maps.shades = (DWORD *)Realloc (pal->colormapsbase, (NUMCOLORMAPS + 1)*256*sizeof(DWORD) + 255);
 
 			// build normal light mappings
 			for (l = 0; l < NUMCOLORMAPS; l++) {
@@ -344,7 +344,7 @@ void RefreshPalette (palette_t *pal)
 
 			// build special maps (e.g. invulnerability)
 			{
-				unsigned *shade = pal->maps.shades + (NUMCOLORMAPS << pal->shadeshift);
+				DWORD *shade = pal->maps.shades + (NUMCOLORMAPS << pal->shadeshift);
 				int grayint;
 
 				for (c = 0; c < pal->numcolors; c++) {
@@ -562,7 +562,7 @@ void HSVtoRGB (float *r, float *g, float *b, float h, float s, float v)
 void BuildColoredLights (byte *maps, int lr, int lg, int lb, int r, int g, int b)
 {
 	unsigned int l,c;
-	unsigned int colors[256];
+	DWORD colors[256];
 	byte *shade;
 
 	// The default palette is assumed to contain the maps for white light.

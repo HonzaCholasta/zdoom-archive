@@ -717,7 +717,7 @@ void WI_End (void)
 	background = NULL;
 
 	//Added by mc
-	bglobal.RemoveAllBots (false);
+	bglobal.RemoveAllBots (consoleplayer != Net_Arbitrator);
 }
 
 void WI_initNoState (void)
@@ -936,7 +936,7 @@ void WI_updateDeathmatchStats (void)
 		{
 			S_Sound (CHAN_VOICE, "players/male/gibbed", 1, ATTN_NONE);
 
-			if ( gamemode == commercial)
+			if (gamemode == commercial)
 				WI_initNoState();
 			else
 				WI_initShowNextLoc();
@@ -962,7 +962,7 @@ void WI_drawDeathmatchStats (void)
 	WI_drawLF();
 
 	// [RH] Draw heads-up scores display
-	HU_DrawScores (players + me);
+	HU_DrawScores (&players[me]);
 	
 /*
 	int 		i;

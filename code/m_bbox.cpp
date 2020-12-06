@@ -28,7 +28,6 @@
 
 IMPLEMENT_CLASS (DBoundingBox, DObject)
 
-
 DBoundingBox::DBoundingBox ()
 {
 	ClearBox ();

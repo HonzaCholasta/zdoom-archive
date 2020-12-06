@@ -36,6 +36,7 @@
 #include <windows.h>
 #include <mmsystem.h>
 
+#include "hardware.h"
 #include "errors.h"
 #include <math.h>
 
@@ -107,13 +108,18 @@ int I_GetHeapSize (void)
 byte *I_ZoneBase (unsigned int *size)
 {
 	char *p;
+	void *zone;
 
 	p = Args.CheckValue ("-heapsize");
 	if (p)
 		mb_used = (float)atof (p);
 	*size = (int)(mb_used*1024*1024);
-	return (byte *) malloc (*size);
-}
+
+	while (NULL == (zone = malloc (*size)) && *size >= 2*1024*1024)
+		*size -= 1024*1024;
+
+	return (byte *)zone;
+}	
 
 void I_BeginRead(void)
 {
@@ -319,8 +325,9 @@ void I_Init (void)
 		I_WaitForTic = I_WaitForTicPolled;
 	}
 
-	I_InitSound();
+	I_InitSound ();
 	I_InitInput (Window);
+	I_InitHardware ();
 }
 
 void I_FinishClockCalibration ()
@@ -360,7 +367,6 @@ void STACK_ARGS I_Quit (void)
 
 	if (demorecording)
 		G_CheckDemoStatus();
-	M_SaveDefaults ();
 	G_ClearSnapshots ();
 }
 

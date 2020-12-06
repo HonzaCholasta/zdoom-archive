@@ -66,7 +66,7 @@ EXTERN_CVAR (st_scale)
 
 void STlib_scaleRect (int x, int y, int w, int h)
 {
-	if (st_scale.value && ST_WIDTH != 320)
+	if (st_scale.value)
 		stbarscreen->CopyRect (x, y, w, h, x, y, stnumscreen);
 	else
 		stbarscreen->CopyRect (x, y, w, h, x + ST_X, y + ST_Y, FG);
@@ -74,7 +74,7 @@ void STlib_scaleRect (int x, int y, int w, int h)
 
 void STlib_scalePatch (int x, int y, patch_t *p)
 {
-	if (st_scale.value && ST_WIDTH != 320)
+	if (st_scale.value)
 		stnumscreen->DrawPatch (p, x, y);
 	else
 		FG->DrawPatch (p, x + ST_X, y + ST_Y);

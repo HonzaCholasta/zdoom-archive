@@ -35,17 +35,17 @@ cvar_t &cvar_t::operator= (const cvar_t &var)
 	return *this;
 }
 
-cvar_t::cvar_t (const char *var_name, const char *def, unsigned int flags)
+cvar_t::cvar_t (const char *var_name, const char *def, DWORD flags)
 {
 	InitSelf (var_name, def, flags, NULL);
 }
 
-cvar_t::cvar_t (const char *var_name, const char *def, unsigned int flags, void (*callback)(cvar_t &))
+cvar_t::cvar_t (const char *var_name, const char *def, DWORD flags, void (*callback)(cvar_t &))
 {
 	InitSelf (var_name, def, flags, callback);
 }
 
-void cvar_t::InitSelf (const char *var_name, const char *def, unsigned int var_flags, void (*callback)(cvar_t &))
+void cvar_t::InitSelf (const char *var_name, const char *def, DWORD var_flags, void (*callback)(cvar_t &))
 {
 	cvar_t *var, *dummy;
 
@@ -214,7 +214,7 @@ void C_WriteCVars (byte **demo_p, DWORD filter, bool compact)
 	byte *ptr = *demo_p;
 
 	if (compact)
-		ptr += sprintf ((char *)ptr, "\\\\%x", filter);
+		ptr += sprintf ((char *)ptr, "\\\\%lux", filter);
 
 	while (cvar)
 	{

@@ -59,15 +59,7 @@ BEGIN_CUSTOM_CVAR (st_scale, "0", CVAR_ARCHIVE)		// Stretch status bar to full s
 		// Stretch status bar to fill width of screen
 
 		ST_WIDTH = screen->width;
-		if (ST_WIDTH == 320)
-		{
-			// Do not scale height for 320 x 2X0 screens
-			ST_HEIGHT = 32;
-		}
-		else
-		{
-			ST_HEIGHT = (32 * screen->height) / 200;
-		}
+   		ST_HEIGHT = (32 * screen->height) / 200;
 	}
 	else
 	{
@@ -546,13 +538,13 @@ void ST_refreshBackground(void)
 		{
 			// [RH] Always draw faceback with the player's color
 			//		using a translation rather than a different patch.
-			V_ColorMap = translationtables + (plyr - players)*256;
+			V_ColorMap = translationtables + (plyr - players) * 256;
 			BG->DrawTranslatedPatch (faceback, ST_FX, 0);
 		}
 
 		BG->Blit (0, 0, 320, 32, stnumscreen, 0, 0, 320, 32);
 
-		if (!st_scale.value || ST_WIDTH == 320)
+		if (!st_scale.value)
 			stnumscreen->Blit (0, 0, 320, 32,
 				FG, ST_X, ST_Y, ST_WIDTH, ST_HEIGHT);
 	}
@@ -1079,7 +1071,7 @@ void ST_drawWidgets(BOOL refresh)
 
 	STlib_updateNum (&w_frags, refresh);
 
-	if (st_scale.value && ST_WIDTH != 320 && st_statusbaron)
+	if (st_scale.value && st_statusbaron)
 		stnumscreen->Blit (0, 0, 320, 32,
 			FG, ST_X, ST_Y, ST_WIDTH, ST_HEIGHT);
 }

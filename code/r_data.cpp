@@ -229,7 +229,7 @@ void R_GenerateComposite (int texnum)
 					j++;
 				if (j >= texture->height) 				// if at end of column
 				{
-					col->topdelta = -1; 				// end-of-column marker
+					col->topdelta = 255; 				// end-of-column marker
 					break;
 				}
 				col->topdelta = j;						// starting offset of post
@@ -464,8 +464,6 @@ void R_InitTextures (void)
 	textureheight = new fixed_t[numtextures];
 
 	totalwidth = 0;
-
-	// [RH] Removd the complex printing shit
 
 	for (i = 0; i < numtextures; i++, directory++)
 	{

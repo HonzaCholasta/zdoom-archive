@@ -71,7 +71,9 @@ typedef enum
 // If rangecheck is undefined, most parameter validation debugging code
 // will not be compiled
 #ifndef NORANGECHECKING
+#ifndef RANGECHECK
 #define RANGECHECK
+#endif
 #endif
 
 // The maximum number of players, multiplayer/networking.

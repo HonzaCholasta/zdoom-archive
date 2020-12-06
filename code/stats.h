@@ -41,7 +41,7 @@ class FStat
 {
 public:
 	FStat (const char *name);
-	~FStat ();
+	virtual ~FStat ();
 
 	virtual void GetStats (char *out) = 0;
 	static void PrintStat ();

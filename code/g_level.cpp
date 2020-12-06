@@ -454,7 +454,7 @@ static void zapDefereds (acsdefered_t *def)
 {
 	while (def) {
 		acsdefered_t *next = def->next;
-		Z_Free (def);
+		delete def;
 		def = next;
 	}
 }
@@ -1292,8 +1292,6 @@ void G_SerializeSnapshots (FArchive &arc)
 
 static void writeDefereds (FArchive &arc, level_info_t *i)
 {
-	acsdefered_t *def = i->defered;
-
 	arc.Write (i->mapname, 8);
 	arc << i->defered;
 }

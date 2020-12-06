@@ -222,7 +222,8 @@ int P_GetFriction (const AActor *mo, int *frictionfactor)
 
 	if (mo->flags2 & MF2_FLY)
 		friction = FRICTION_FLY;
-	else if (!(mo->flags & MF_NOGRAVITY) && mo->waterlevel && mo->z > mo->floorz + 6*FRACUNIT)
+	else if (!(mo->flags & MF_NOGRAVITY) && mo->waterlevel > 1 ||
+		(mo->waterlevel == 1 && mo->z > mo->floorz + 6*FRACUNIT))
 	{
 		friction = mo->subsector->sector->friction;
 		movefactor = mo->subsector->sector->movefactor >> 1;
@@ -775,7 +776,7 @@ AActor *P_CheckOnmobj (AActor *thing)
 	int	xl,xh,yl,yh,bx,by;
 	subsector_t *newsubsec;
 	fixed_t x, y;
-	byte oldmo[sizeof AActor];
+	byte oldmo[sizeof(AActor)];
 	//AActor oldmo (*thing);	// save the old mobj before the fake zmovement
 
 	memcpy (oldmo, &thing->x, (byte *)&thing[1] - (byte *)&thing->x);
@@ -2498,7 +2499,7 @@ BOOL PIT_ChangeSector (AActor *thing)
 	// crunch dropped items
 	if (thing->flags & MF_DROPPED)
 	{
-		delete thing;
+		thing->Destroy ();
 		
 		// keep checking
 		return true;

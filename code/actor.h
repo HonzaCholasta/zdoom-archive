@@ -214,6 +214,7 @@ public:
 	AActor (const AActor &other);
 	AActor &operator= (const AActor &other);
 	AActor (fixed_t x, fixed_t y, fixed_t z, mobjtype_t type);
+	void Destroy ();
 	~AActor ();
 
 	virtual void RunThink ();
@@ -268,7 +269,6 @@ public:
 
 	AActor			*inext, *iprev;	// Links to other mobjs in same bucket
 	AActor			*goal;			// Monster's goal if not chasing anything
-	unsigned		targettic;		// Avoid missiles blowing up in your face
 	byte			*translation;	// Translation table (or NULL)
 	fixed_t			translucency;	// 65536=fully opaque, 0=fully invisible
 	byte			waterlevel;		// 0=none, 1=feet, 2=waist, 3=eyes

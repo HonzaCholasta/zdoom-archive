@@ -60,7 +60,7 @@ char DefBindings[] =
 	"bind \\ +showscores; "				// <- Another new command
 	"bind f12 spynext";
 
-static const char *KeyNames[NUM_KEYS] = {
+const char *KeyNames[NUM_KEYS] = {
 	// This array is dependant on the particular keyboard input
 	// codes generated in i_input.c. If they change there, they
 	// also need to change here. In this case, we use the
@@ -72,7 +72,7 @@ static const char *KeyNames[NUM_KEYS] = {
 	"q",	"w",	"e",	"r",	"t",	"y",	"u",		"i",		//10
 	"o",	"p",	"[",	"]",	"enter","ctrl",	"a",		"s",		//18
 	"d",	"f",	"g",	"h",	"j",	"k",	"l",		";",		//20
-	"-",	"`",	"shift","\\",	"z",	"x",	"c",		"v",		//28
+	"'",	"`",	"shift","\\",	"z",	"x",	"c",		"v",		//28
 	"b",	"n",	"m",	",",	".",	"/",	NULL,		"kp*",		//30
 	"alt",	"space","capslock","f1","f2",	"f3",	"f4",		"f5",		//38
 	"f6",	"f7",	"f8",	"f9",	"f10",	"numlock","scroll",	"kp7",		//40

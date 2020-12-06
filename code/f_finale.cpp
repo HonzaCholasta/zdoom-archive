@@ -469,7 +469,7 @@ BOOL F_CastResponder (event_t* ev)
 			sprintf (nametest, sndtemplate, skins[players[consoleplayer].userinfo.skin].name);
 			sndnum = S_FindSound (nametest);
 			if (sndnum == -1) {
-				sprintf (nametest, sndtemplate, genders);
+				sprintf (nametest, sndtemplate, genders[players[consoleplayer].userinfo.gender]);
 				sndnum = S_FindSound (nametest);
 				if (sndnum == -1)
 					sndnum = S_FindSound ("player/male/death1");

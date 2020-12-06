@@ -74,17 +74,17 @@ void M_ClearMenus (void);
 
 
 
-static value_t YesNo[2] = {
+value_t YesNo[2] = {
 	{ 0.0, "No" },
 	{ 1.0, "Yes" }
 };
 
-static value_t NoYes[2] = {
+value_t NoYes[2] = {
 	{ 0.0, "Yes" },
 	{ 1.0, "No" }
 };
 
-static value_t OnOff[2] = {
+value_t OnOff[2] = {
 	{ 0.0, "Off" },
 	{ 1.0, "On" }
 };
@@ -113,25 +113,25 @@ EXTERN_CVAR (snd_midivolume)
 static void SetVidMode (void);
 
 static menuitem_t OptionItems[] =
- {
-	{ more,		"Customize Controls",	NULL,					0.0, 0.0,	0.0, (value_t *)CustomizeControls },
-	{ more,		"Go to console",		NULL,					0.0, 0.0,	0.0, (value_t *)GoToConsole },
-	{ more,		"Gameplay Options",		NULL,					0.0, 0.0,	0.0, (value_t *)GameplayOptions },
-	{ more,		"Display Options",		NULL,					0.0, 0.0,	0.0, (value_t *)VideoOptions },
-	{ more,		"Set video mode",		NULL,					0.0, 0.0,	0.0, (value_t *)SetVidMode },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ slider,	"Mouse speed",			&mouse_sensitivity,		0.5, 2.5,	0.1, NULL },
-	{ slider,	"MIDI music volume",	&snd_midivolume,		0.0, 1.0,	0.05, NULL },
-	{ slider,	"MOD music volume",		&snd_musicvolume,		0.0, 64.0,	1.0, NULL },
-	{ slider,	"Sound volume",			&snd_sfxvolume,			0.0, 15.0,	1.0, NULL },
-	{ discrete,	"Always Run",			&cl_run,				2.0, 0.0,	0.0, OnOff },
-	{ discrete, "Always Mouselook",		&freelook,				2.0, 0.0,	0.0, OnOff },
-	{ discrete, "Invert Mouse",			&invertmouse,			2.0, 0.0,	0.0, OnOff },
-	{ discrete, "Lookspring",			&lookspring,			2.0, 0.0,	0.0, OnOff },
-	{ discrete, "Lookstrafe",			&lookstrafe,			2.0, 0.0,	0.0, OnOff },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ more,		"Reset to defaults",	NULL,					0.0, 0.0,	0.0, (value_t *)Reset2Defaults },
-	{ more,		"Reset to last saved",	NULL,					0.0, 0.0,	0.0, (value_t *)Reset2Saved }
+{
+	{ more,		"Customize Controls",	{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)CustomizeControls} },
+	{ more,		"Go to console",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)GoToConsole} },
+	{ more,		"Gameplay Options",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)GameplayOptions} },
+	{ more,		"Display Options",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)VideoOptions} },
+	{ more,		"Set video mode",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)SetVidMode} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ slider,	"Mouse speed",			{&mouse_sensitivity},	{0.5}, {2.5},	{0.1}, {NULL} },
+	{ slider,	"MIDI music volume",	{&snd_midivolume},		{0.0}, {1.0},	{0.05}, {NULL} },
+	{ slider,	"MOD music volume",		{&snd_musicvolume},		{0.0}, {64.0},	{1.0}, {NULL} },
+	{ slider,	"Sound volume",			{&snd_sfxvolume},		{0.0}, {15.0},	{1.0}, {NULL} },
+	{ discrete,	"Always Run",			{&cl_run},				{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Always Mouselook",		{&freelook},			{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Invert Mouse",			{&invertmouse},			{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Lookspring",			{&lookspring},			{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Lookstrafe",			{&lookstrafe},			{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ more,		"Reset to defaults",	{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)Reset2Defaults} },
+	{ more,		"Reset to last saved",	{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)Reset2Saved} }
 };
 
 menu_t OptionMenu = {
@@ -150,27 +150,27 @@ menu_t OptionMenu = {
  *=======================================*/
 
 static menuitem_t ControlsItems[] = {
-	{ whitetext,"ENTER to change, BACKSPACE to clear", NULL, 0.0, 0.0, 0.0, NULL },
-	{ control,	"Attack",				NULL, 0.0, 0.0, 0.0, (value_t *)"+attack" },
-	{ control,	"Next Weapon",			NULL, 0.0, 0.0, 0.0, (value_t *)"weapnext" },	// Was already here
-	{ control,	"Previous Weapon",		NULL, 0.0, 0.0, 0.0, (value_t *)"weapprev" },	// TIJ
-	{ control,	"Use / Open",			NULL, 0.0, 0.0, 0.0, (value_t *)"+use" },
-	{ control,	"Jump",					NULL, 0.0, 0.0, 0.0, (value_t *)"+jump" },
-	{ control,	"Walk forward",			NULL, 0.0, 0.0, 0.0, (value_t *)"+forward" },
-	{ control,	"Backpedal",			NULL, 0.0, 0.0, 0.0, (value_t *)"+back" },
-	{ control,	"Turn left",			NULL, 0.0, 0.0, 0.0, (value_t *)"+left" },
-	{ control,	"Turn right",			NULL, 0.0, 0.0, 0.0, (value_t *)"+right" },
-	{ control,	"Run",					NULL, 0.0, 0.0, 0.0, (value_t *)"+speed" },
-	{ control,	"Step left",			NULL, 0.0, 0.0, 0.0, (value_t *)"+moveleft" },
-	{ control,	"Step right",			NULL, 0.0, 0.0, 0.0, (value_t *)"+moveright" },
-	{ control,	"Sidestep",				NULL, 0.0, 0.0, 0.0, (value_t *)"+strafe" },
-	{ control,	"Look up",				NULL, 0.0, 0.0, 0.0, (value_t *)"+lookup" },
-	{ control,	"Look down",			NULL, 0.0, 0.0, 0.0, (value_t *)"+lookdown" },
-	{ control,	"Center view",			NULL, 0.0, 0.0, 0.0, (value_t *)"centerview" },
-	{ control,	"Mouse look",			NULL, 0.0, 0.0, 0.0, (value_t *)"+mlook" },
-	{ control,	"Keyboard look",		NULL, 0.0, 0.0, 0.0, (value_t *)"+klook" },
-	{ control,	"Toggle automap",		NULL, 0.0, 0.0, 0.0, (value_t *)"togglemap" },
-	{ control,	"Chasecam",				NULL, 0.0, 0.0, 0.0, (value_t *)"chase" }
+	{ whitetext,"ENTER to change, BACKSPACE to clear", {NULL}, {0.0}, {0.0}, {0.0}, {NULL} },
+	{ control,	"Attack",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+attack"} },
+	{ control,	"Next Weapon",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"weapnext"} },	// Was already here
+	{ control,	"Previous Weapon",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"weapprev"} },	// TIJ
+	{ control,	"Use / Open",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+use"} },
+	{ control,	"Jump",					{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+jump"} },
+	{ control,	"Walk forward",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+forward"} },
+	{ control,	"Backpedal",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+back"} },
+	{ control,	"Turn left",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+left"} },
+	{ control,	"Turn right",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+right"} },
+	{ control,	"Run",					{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+speed"} },
+	{ control,	"Step left",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+moveleft"} },
+	{ control,	"Step right",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+moveright"} },
+	{ control,	"Sidestep",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+strafe"} },
+	{ control,	"Look up",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+lookup"} },
+	{ control,	"Look down",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+lookdown"} },
+	{ control,	"Center view",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"centerview"} },
+	{ control,	"Mouse look",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+mlook"} },
+	{ control,	"Keyboard look",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+klook"} },
+	{ control,	"Toggle automap",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"togglemap"} },
+	{ control,	"Chasecam",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"chase"} }
 };
 
 menu_t ControlsMenu = {
@@ -249,28 +249,28 @@ static value_t Wipes[] = {
 };
 
 static menuitem_t VideoItems[] = {
-	{ more,		"Messages",				NULL,					0.0, 0.0,	0.0, (value_t *)StartMessagesMenu },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ slider,	"Screen size",			&screenblocks,			3.0, 12.0,	1.0, NULL },
-	{ slider,	"Brightness",			&gamma,					1.0, 3.0,	0.1, NULL },
-	{ discrete,	"Crosshair",			&crosshair,				9.0, 0.0,	0.0, Crosshairs },
-	{ discrete, "Column render mode",	&r_columnmethod,		2.0,0.0,	0.0, ColumnMethods },
-	{ discrete, "Detail mode",			&r_detail,				4.0, 0.0,	0.0, DetailModes },
-	{ discrete, "Stretch short skies",	&r_stretchsky,			2.0,0.0,	0.0, OnOff },
-	{ discrete, "Stretch status bar",	&st_scale,				2.0, 0.0,	0.0, OnOff },
-	{ discrete, "Screen wipe style",	&wipetype,				4.0, 0.0,	0.0, Wipes },
+	{ more,		"Messages",				{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)StartMessagesMenu} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ slider,	"Screen size",			{&screenblocks},	   	{3.0}, {12.0},	{1.0}, {NULL} },
+	{ slider,	"Brightness",			{&Gamma},			   	{1.0}, {3.0},	{0.1}, {NULL} },
+	{ discrete,	"Crosshair",			{&crosshair},		   	{9.0}, {0.0},	{0.0}, {Crosshairs} },
+	{ discrete, "Column render mode",	{&r_columnmethod},		{2.0}, {0.0},	{0.0}, {ColumnMethods} },
+	{ discrete, "Detail mode",			{&r_detail},		   	{4.0}, {0.0},	{0.0}, {DetailModes} },
+	{ discrete, "Stretch short skies",	{&r_stretchsky},	   	{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Stretch status bar",	{&st_scale},			{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Screen wipe style",	{&wipetype},			{4.0}, {0.0},	{0.0}, {Wipes} },
 #ifdef _WIN32
-	{ discrete, "DirectDraw palette hack", &vid_palettehack,	2.0,0.0,0.0,OnOff },
+	{ discrete, "DirectDraw palette hack", {&vid_palettehack},	{2.0}, {0.0},	{0.0}, {OnOff} },
 #endif
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ discrete, "Use fuzz effect",		&r_drawfuzz,			2.0, 0.0, 0.0, YesNo },
-	{ discrete, "Rocket Trails",		&cl_rockettrails,		2.0, 0.0, 0.0, OnOff },
-	{ discrete, "Blood Type",			&cl_bloodtype,			3.0, 0.0, 0.0, BloodTypes },
-	{ discrete, "Bullet Puff Type",		&cl_pufftype,			2.0, 0.0,  0.0, PuffTypes },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ discrete, "Rotate automap",		&am_rotate,				2.0, 0.0,	0.0, OnOff },
-	{ discrete, "Overlay automap",		&am_overlay,			2.0, 0.0,	0.0, OnOff },
-	{ discrete, "Standard map colors",	&am_usecustomcolors,	2.0, 0.0, 0.0, NoYes },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ discrete, "Use fuzz effect",		{&r_drawfuzz},			{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete, "Rocket Trails",		{&cl_rockettrails},		{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Blood Type",			{&cl_bloodtype},	   	{3.0}, {0.0},	{0.0}, {BloodTypes} },
+	{ discrete, "Bullet Puff Type",		{&cl_pufftype},			{2.0}, {0.0},	{0.0}, {PuffTypes} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ discrete, "Rotate automap",		{&am_rotate},		   	{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Overlay automap",		{&am_overlay},			{2.0}, {0.0},	{0.0}, {OnOff} },
+	{ discrete, "Standard map colors",	{&am_usecustomcolors},	{2.0}, {0.0},	{0.0}, {NoYes} },
 };
 
 menu_t VideoMenu = {
@@ -318,17 +318,17 @@ static value_t MessageLevels[] = {
 };
 
 static menuitem_t MessagesItems[] = {
-	{ discrete,	"Scale text in high res", &con_scaletext,		2.0,0.0, 0.0, OnOff },
-	{ discrete, "Minimum message level", &msglevel,				3.0, 0.0,   0.0, MessageLevels },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ whitetext, "Message Colors",		NULL,					0.0, 0.0,	0.0, NULL },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ cdiscrete, "Item Pickup",			&msg0color,				8.0, 0.0,	0.0, TextColors },
-	{ cdiscrete, "Obituaries",			&msg1color,				8.0, 0.0,	0.0, TextColors },
-	{ cdiscrete, "Critical Messages",	&msg2color,				8.0, 0.0,	0.0, TextColors },
-	{ cdiscrete, "Chat Messages",		&msg3color,				8.0, 0.0,	0.0, TextColors },
-	{ cdiscrete, "Team Messages",		&msg4color,				8.0, 0.0,	0.0, TextColors },
-	{ cdiscrete, "Centered Messages",	&msgmidcolor,			8.0, 0.0,	0.0, TextColors }
+	{ discrete,	"Scale text in high res", {&con_scaletext},		{2.0}, {0.0}, 	{0.0}, {OnOff} },
+	{ discrete, "Minimum message level", {&msglevel},		   	{3.0}, {0.0},   {0.0}, {MessageLevels} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ whitetext, "Message Colors",		{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ cdiscrete, "Item Pickup",			{&msg0color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Obituaries",			{&msg1color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Critical Messages",	{&msg2color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Chat Messages",		{&msg3color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Team Messages",		{&msg4color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Centered Messages",	{&msgmidcolor},			{8.0}, {0.0},	{0.0}, {TextColors} }
 };
 
 menu_t MessagesMenu = {
@@ -352,15 +352,10 @@ extern int DisplayBits;
 
 int testingmode;		// Holds time to revert to old mode
 int OldWidth, OldHeight, OldBits;
-float OldFS;
 
 static void BuildModesList (int hiwidth, int hiheight, int hi_id);
 static BOOL GetSelectedSize (int line, int *width, int *height);
 static void SetModesMenu (int w, int h, int bits);
-
-// Found in i_video.c.
-void I_StartModeIterator (int bits);
-BOOL I_NextMode (int *width, int *height);
 
 EXTERN_CVAR (vid_defwidth)
 EXTERN_CVAR (vid_defheight)
@@ -368,10 +363,7 @@ EXTERN_CVAR (vid_defbits)
 
 static cvar_t DummyDepthCvar (NULL, NULL, 0);
 
-#ifndef DJGPP
 EXTERN_CVAR (fullscreen)
-static cvar_t DummyFSCvar (NULL, NULL, 0);
-#endif
 
 static value_t Depths[22];
 
@@ -379,30 +371,26 @@ static char VMEnterText[] = "Press ENTER to set mode";
 static char VMTestText[] = "T to test mode for 5 seconds";
 
 static menuitem_t ModesItems[] = {
-	{ discrete, "Screen mode",			&DummyDepthCvar,		0.0, 0.0,0.0, Depths },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-#ifdef DJGPP
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-#else
-	{ discrete, "Fullscreen",			&DummyFSCvar,			2.0, 0.0,	0.0, YesNo },
-#endif
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ screenres,NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ whitetext,"Note: Only 8 bpp modes are supported",NULL,	0.0, 0.0,	0.0, NULL },
-	{ redtext,  VMEnterText,			NULL,					0.0, 0.0,	0.0, NULL },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ redtext,  VMTestText,				NULL,					0.0, 0.0,	0.0, NULL },
-	{ redtext,	" ",					NULL,					0.0, 0.0,	0.0, NULL },
-	{ redtext,  NULL,					NULL,					0.0, 0.0,	0.0, NULL },
-	{ redtext,  NULL,					NULL,					0.0, 0.0,	0.0, NULL }
+	{ discrete, "Screen mode",			{&DummyDepthCvar},		{0.0}, {0.0},	{0.0}, {Depths} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ discrete, "Fullscreen",			{&fullscreen},			{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ screenres,{NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ whitetext,"Note: Only 8 bpp modes are supported",{NULL},	{0.0}, {0.0},	{0.0}, {NULL} },
+	{ redtext,  VMEnterText,			{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ redtext,  VMTestText,				{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ redtext,  {NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
+	{ redtext,  {NULL},					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} }
 };
 
 #define VM_DEPTHITEM	0
@@ -433,25 +421,25 @@ menu_t ModesMenu = {
 static cvar_t *flagsvar;
 
 static menuitem_t DMFlagsItems[] = {
-	{ bitflag,	"Falling damage",		(cvar_t *)DF_YES_FALLING,		0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Weapons stay (DM)",	(cvar_t *)DF_WEAPONS_STAY,		0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Allow powerups (DM)",	(cvar_t *)DF_NO_ITEMS,			1, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Allow health (DM)",	(cvar_t *)DF_NO_HEALTH,			1, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Allow armor (DM)",		(cvar_t *)DF_NO_ARMOR,			1, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Spawn farthest (DM)",	(cvar_t *)DF_SPAWN_FARTHEST,	0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Same map (DM)",		(cvar_t *)DF_SAME_LEVEL,		0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Force respawn (DM)",	(cvar_t *)DF_FORCE_RESPAWN,		0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Allow exit (DM)",		(cvar_t *)DF_NO_EXIT,			1, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Infinite ammo",		(cvar_t *)DF_INFINITE_AMMO,		0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"No monsters",			(cvar_t *)DF_NO_MONSTERS,		0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Monsters respawn",		(cvar_t *)DF_MONSTERS_RESPAWN,	0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Items respawn",		(cvar_t *)DF_ITEMS_RESPAWN,		0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Fast monsters",		(cvar_t *)DF_FAST_MONSTERS,		0, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Allow jump",			(cvar_t *)DF_NO_JUMP,			1, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Allow freelook",		(cvar_t *)DF_NO_FREELOOK,		1, 0, 0, (value_t *)&dmflags },
-	{ bitflag,	"Friendly fire",		(cvar_t *)DF_NO_FRIENDLY_FIRE,	1, 0, 0, (value_t *)&dmflags },
-	{ redtext,	" ",					NULL,							0.0, 0.0,	0.0, NULL },
-	{ discrete, "Teamplay",				&teamplay,						2.0, 0.0,	0.0, OnOff }
+	{ bitflag,	"Falling damage",		{(cvar_t *)DF_YES_FALLING},			{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Weapons stay (DM)",	{(cvar_t *)DF_WEAPONS_STAY},		{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Allow powerups (DM)",	{(cvar_t *)DF_NO_ITEMS},			{1}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Allow health (DM)",	{(cvar_t *)DF_NO_HEALTH},			{1}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Allow armor (DM)",		{(cvar_t *)DF_NO_ARMOR},			{1}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Spawn farthest (DM)",	{(cvar_t *)DF_SPAWN_FARTHEST},		{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Same map (DM)",		{(cvar_t *)DF_SAME_LEVEL},			{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Force respawn (DM)",	{(cvar_t *)DF_FORCE_RESPAWN},		{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Allow exit (DM)",		{(cvar_t *)DF_NO_EXIT},				{1}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Infinite ammo",		{(cvar_t *)DF_INFINITE_AMMO},		{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"No monsters",			{(cvar_t *)DF_NO_MONSTERS},			{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Monsters respawn",		{(cvar_t *)DF_MONSTERS_RESPAWN},	{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Items respawn",		{(cvar_t *)DF_ITEMS_RESPAWN},		{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Fast monsters",		{(cvar_t *)DF_FAST_MONSTERS},		{0}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Allow jump",			{(cvar_t *)DF_NO_JUMP},				{1}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Allow freelook",		{(cvar_t *)DF_NO_FREELOOK},			{1}, {0}, {0}, {(value_t *)&dmflags} },
+	{ bitflag,	"Friendly fire",		{(cvar_t *)DF_NO_FRIENDLY_FIRE},	{1}, {0}, {0}, {(value_t *)&dmflags} },
+	{ redtext,	" ",					{NULL},								{0.0}, {0.0},	{0.0}, {NULL} },
+	{ discrete, "Teamplay",				{&teamplay},						{2.0}, {0.0},	{0.0}, {OnOff} }
 };
 
 static menu_t DMFlagsMenu = {
@@ -503,6 +491,20 @@ void M_OptInit (void)
 	}
 
 	ModesItems[VM_DEPTHITEM].b.min = (float)currval;
+
+	switch (I_DisplayType ())
+	{
+	case DISPLAY_FullscreenOnly:
+		ModesItems[2].type = nochoice;
+		ModesItems[2].b.min = 1.f;
+		break;
+	case DISPLAY_WindowOnly:
+		ModesItems[2].type = nochoice;
+		ModesItems[2].b.min = 0.f;
+		break;
+	default:
+		break;
+	}
 }
 
 
@@ -529,7 +531,7 @@ BEGIN_COMMAND (togglemessages)
 }
 END_COMMAND (togglemessages)
 
-void M_SizeDisplay (float diff)
+	void M_SizeDisplay (float diff)
 {
 	// changing screenblocks automatically resizes the display
 	screenblocks.Set (screenblocks.value + diff);
@@ -542,14 +544,14 @@ BEGIN_COMMAND (sizedown)
 }
 END_COMMAND (sizedown)
 
-BEGIN_COMMAND (sizeup)
+	BEGIN_COMMAND (sizeup)
 {
 	M_SizeDisplay(1.0);
 	S_Sound (CHAN_VOICE, "plats/pt1_mid", 1, ATTN_NONE);
 }
 END_COMMAND (sizeup)
 
-void M_BuildKeyList (menuitem_t *item, int numitems)
+	void M_BuildKeyList (menuitem_t *item, int numitems)
 {
 	int i;
 
@@ -572,6 +574,9 @@ void M_SwitchMenu (menu_t *menu)
 
 	CurrentMenu = menu;
 	CurrentItem = menu->lastOn;
+
+	if (menu == &ControlsMenu)
+		I_ResumeMouse ();
 
 	if (!menu->indent)
 	{
@@ -651,91 +656,97 @@ void M_OptDrawer (void)
 			width = V_StringWidth (item->label);
 			switch (item->type)
 			{
-				case more:
-					x = CurrentMenu->indent - width;
-					color = CR_GREY;
-					break;
+			case more:
+				x = CurrentMenu->indent - width;
+				color = CR_GREY;
+				break;
 
-				case redtext:
-					x = 160 - width / 2;
-					color = CR_RED;
-					break;
+			case redtext:
+				x = 160 - width / 2;
+				color = CR_RED;
+				break;
 
-				case whitetext:
-					x = 160 - width / 2;
-					color = CR_GREY;
-					break;
+			case whitetext:
+				x = 160 - width / 2;
+				color = CR_GREY;
+				break;
 
-				case listelement:
-					x = CurrentMenu->indent + 14;
-					color = CR_RED;
-					break;
+			case listelement:
+				x = CurrentMenu->indent + 14;
+				color = CR_RED;
+				break;
 
-				default:
-					x = CurrentMenu->indent - width;
-					color = CR_RED;
-					break;
+			default:
+				x = CurrentMenu->indent - width;
+				color = CR_RED;
+				break;
 			}
 			screen->DrawTextCleanMove (color, x, y, item->label);
 
 			switch (item->type)
 			{
-				case discrete:
-				case cdiscrete:
-					{
-						int v, vals;
+			case discrete:
+			case cdiscrete:
+			{
+				int v, vals;
 
-						vals = (int)item->b.min;
-						v = M_FindCurVal (item->a.cvar->value, item->e.values, vals);
+				vals = (int)item->b.min;
+				v = M_FindCurVal (item->a.cvar->value, item->e.values, vals);
 
-						if (v == vals)
-						{
-							screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, "Unknown");
-						}
-						else
-						{
-							if (item->type == cdiscrete)
-								screen->DrawTextCleanMove (v, CurrentMenu->indent + 14, y, item->e.values[v].name);
-							else
-								screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, item->e.values[v].name);
-						}
-					}
-					break;
+				if (v == vals)
+				{
+					screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, "Unknown");
+				}
+				else
+				{
+					if (item->type == cdiscrete)
+						screen->DrawTextCleanMove (v, CurrentMenu->indent + 14, y, item->e.values[v].name);
+					else
+						screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, item->e.values[v].name);
+				}
 
-				case slider:
-					M_DrawSlider (CurrentMenu->indent + 14, y, item->b.min, item->c.max, item->a.cvar->value);
-					break;
+			}
+			break;
 
-				case control:
-					{
-						char description[64];
+			case nochoice:
+				screen->DrawTextCleanMove (CR_GOLD, CurrentMenu->indent + 14, y,
+										   (item->e.values[(int)item->b.min]).name);
+				break;
 
-						C_NameKeys (description, item->b.key1, item->c.key2);
-						screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, description);
-					}
-					break;
+			case slider:
+				M_DrawSlider (CurrentMenu->indent + 14, y, item->b.min, item->c.max, item->a.cvar->value);
+				break;
 
-				case bitflag:
-					{
-						value_t *value;
-						char *str;
+			case control:
+			{
+				char description[64];
 
-						if (item->b.min)
-							value = NoYes;
-						else
-							value = YesNo;
+				C_NameKeys (description, item->b.key1, item->c.key2);
+				screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, description);
+			}
+			break;
 
-						if (*item->e.flagint & item->a.flagmask)
-							str = value[1].name;
-						else
-							str = value[0].name;
+			case bitflag:
+			{
+				value_t *value;
+				char *str;
 
-						screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, str);
-					}
-					break;
+				if (item->b.min)
+					value = NoYes;
+				else
+					value = YesNo;
 
-				default:
-					break;
+				if (*item->e.flagint & item->a.flagmask)
+					str = value[1].name;
+				else
+					str = value[0].name;
+
+				screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, str);
+			}
+			break;
+
+			default:
+				break;
 			}
 
 			if (i == CurrentItem && (skullAnimCounter < 6 || WaitingForKey))
@@ -745,21 +756,21 @@ void M_OptDrawer (void)
 		}
 		else
 		{
-			char *str;
+			char *str = NULL;
 
 			for (x = 0; x < 3; x++)
 			{
 				switch (x)
 				{
-					case 0:
-						str = item->b.res1;
-						break;
-					case 1:
-						str = item->c.res2;
-						break;
-					case 2:
-						str = item->d.res3;
-						break;
+				case 0:
+					str = item->b.res1;
+					break;
+				case 1:
+					str = item->c.res2;
+					break;
+				case 2:
+					str = item->d.res3;
+					break;
 				}
 				if (str)
 				{
@@ -1031,9 +1042,6 @@ void M_OptResponder (event_t *ev)
 		case KEY_ENTER:
 			if (CurrentMenu == &ModesMenu)
 			{
-#ifndef DJGPP
-				fullscreen.Set (DummyFSCvar.value);
-#endif
 				if (!(item->type == screenres && GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
 				{
 					NewWidth = screen->width;
@@ -1098,11 +1106,8 @@ void M_OptResponder (event_t *ev)
 				// Test selected resolution
 				if (CurrentMenu == &ModesMenu)
 				{
-#ifndef DJGPP
-					OldFS = fullscreen.value;
-					fullscreen.Set (DummyFSCvar.value);
-#endif
-					if (!(item->type == screenres && GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
+					if (!(item->type == screenres &&
+						GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
 					{
 						NewWidth = screen->width;
 						NewHeight = screen->height;
@@ -1258,6 +1263,11 @@ static void BuildModesList (int hiwidth, int hiheight, int hi_bits)
 	}
 }
 
+void M_RefreshModesList ()
+{
+	BuildModesList (screen->width, screen->height, DisplayBits);
+}
+
 static BOOL GetSelectedSize (int line, int *width, int *height)
 {
 	int i, stopat;
@@ -1298,9 +1308,6 @@ static void SetModesMenu (int w, int h, int bits)
 	char strtemp[64];
 
 	DummyDepthCvar.Set ((float)FindBits (bits));
-#ifndef DJGPP
-	DummyFSCvar.Set (fullscreen.value);
-#endif
 
 	if (!testingmode)
 	{
@@ -1337,9 +1344,6 @@ void M_RestoreMode (void)
 	NewBits = OldBits;
 	setmodeneeded = true;
 	testingmode = 0;
-#ifndef DJGPP
-	fullscreen.Set (OldFS);
-#endif
 	SetModesMenu (OldWidth, OldHeight, OldBits);
 }
 

@@ -533,7 +533,7 @@ void P_TranslateLineDef (line_t *ld, maplinedef_t *mld)
 				case 0x0018:	ld->args[1] = D_TURBO;	break;
 			}
 			ld->args[2] = (special & 0x0020) >> 5;
-			ld->args[3] = 0;
+			ld->args[3] = (special & 0x0020) ? 0 : 34;
 			ld->args[4] = (special & 0x01c0) >> 6;
 			if (ld->args[4] == 0)
 				ld->args[4] = AnyKey;

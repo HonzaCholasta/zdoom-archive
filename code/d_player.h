@@ -93,6 +93,7 @@ class player_s
 {
 public:
 	void Serialize (FArchive &arc);
+	void FixPointers (const DObject *obj);
 
 	AActor		*mo;
 	BYTE		playerstate;
@@ -194,29 +195,30 @@ public:
 	char c_target[256];		// Target for chat.
 	botchat_t chat;			// What bot will say one a tic.
 };
+
 typedef player_s player_t;
 
 // Bookkeeping on players - state.
-extern	player_s		players[MAXPLAYERS];
+extern player_s		players[MAXPLAYERS];
 
 inline FArchive &operator<< (FArchive &arc, player_s *p)
 {
 	if (p)
 		return arc << (BYTE)(p - players);
 	else
-		return arc << (BYTE)255;
+		return arc << (BYTE)0xff;
 }
-inline FArchive &operator>> (FArchive &arc, player_s* &p)
+
+inline FArchive &operator>> (FArchive &arc, player_s *&p)
 {
 	BYTE ofs;
 	arc >> ofs;
-	if (ofs != 255)
-		p = players + ofs;
-	else
+	if (ofs == 0xff)
 		p = NULL;
+	else
+		p = players + ofs;
 	return arc;
 }
-
 
 //
 // INTERMISSION

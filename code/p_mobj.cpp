@@ -82,7 +82,18 @@ fixed_t FloatBobOffsets[64] =
 
 // CODE --------------------------------------------------------------------
 
-IMPLEMENT_SERIAL (AActor, DThinker)
+IMPLEMENT_POINTY_SERIAL (AActor, DThinker)
+ DECLARE_POINTER (target)
+ DECLARE_POINTER (lastenemy)
+ DECLARE_POINTER (tracer)
+ DECLARE_POINTER (goal)
+END_POINTERS
+
+AActor::~AActor ()
+{
+	// Please avoid calling the destructor directly (or through delete)!
+	// Use Destroy() instead.
+}
 
 void AActor::Serialize (FArchive &arc)
 {
@@ -128,7 +139,7 @@ void AActor::Serialize (FArchive &arc)
 			<< special
 			<< args[0] << args[1] << args[2] << args[3] << args[4]
 			<< goal
-			<< targettic
+			<< (unsigned)0
 			<< translucency
 			<< waterlevel;
 
@@ -140,6 +151,7 @@ void AActor::Serialize (FArchive &arc)
 	}
 	else
 	{
+		unsigned dummy;
 		arc >> x
 			>> y
 			>> z
@@ -183,7 +195,7 @@ void AActor::Serialize (FArchive &arc)
 			>> args[3]
 			>> args[4]
 			>> goal
-			>> targettic
+			>> dummy
 			>> translucency
 			>> waterlevel;
 
@@ -260,7 +272,7 @@ BOOL P_SetMobjState (AActor *mobj, statenum_t state)
 		if (state == S_NULL)
 		{
 			mobj->state = (state_t *) S_NULL;
-			delete mobj;
+			mobj->Destroy ();
 			ret = false;
 			break;					// killough 4/9/98
 		}
@@ -344,7 +356,7 @@ void P_FloorBounceMissile (AActor *mo)
 			case MT_SORCBALL3:
 				break;
 			default:
-				delete mo;
+				mo->Destroy ();
 				return;
 		}
 	}
@@ -562,7 +574,7 @@ void P_XYMovement (AActor *mo)
 				{
 					// Hack to prevent missiles exploding against the sky.
 					// Does not handle sky floors.
-					delete mo;
+					mo->Destroy ();
 					return;
 				}
 				P_ExplodeMissile (mo);
@@ -720,7 +732,7 @@ void P_ZMovement (AActor *mo)
 				{
 					// [RH] Just remove the missile without exploding it
 					//		if this is a sky floor.
-					delete mo;
+					mo->Destroy ();
 					return;
 				}
 				P_HitFloor (mo);
@@ -830,7 +842,7 @@ void P_ZMovement (AActor *mo)
 		{
 			if (mo->subsector->sector->ceilingpic == skyflatnum)
 			{
-				delete mo;
+				mo->Destroy ();
 				return;
 			}
 			P_ExplodeMissile (mo);
@@ -919,7 +931,7 @@ void P_NightmareRespawn (AActor *mobj)
 	mo->reactiontime = 18;
 
 	// remove the old monster,
-	delete mobj;
+	mobj->Destroy ();
 }
 
 
@@ -1063,10 +1075,6 @@ void AActor::RunThink ()
 	AActor *onmo;
 	int i;
 
-	// [RH] Decrement targettic
-	if (targettic)
-		targettic--;
-
 	// [RH] Pulse in and out of visibility
 	if (effects & FX_VISIBILITYPULSE)
 	{
@@ -1142,26 +1150,30 @@ void AActor::RunThink ()
 			if (!playeringame[i] || !players[i].isbot)
 				continue;
 
-			if ((flags & MF_COUNTKILL)
-				&& health > 0
-				&& !players[i].enemy
-				&& player ? !IsTeammate (players[i].mo) : true
-				&& P_AproxDistance (players[i].mo->x-x, players[i].mo->y-y) < MAX_MONSTER_TARGET_DIST
-				&& P_CheckSight (players[i].mo, this))
-			{ //Probably a monster, so go kill it.
-				players[i].enemy = this;
+			if (flags & MF_COUNTKILL)
+			{
+				if (health > 0
+					&& !players[i].enemy
+					&& player ? !IsTeammate (players[i].mo) : true
+					&& P_AproxDistance (players[i].mo->x-x, players[i].mo->y-y) < MAX_MONSTER_TARGET_DIST
+					&& P_CheckSight (players[i].mo, this))
+				{ //Probably a monster, so go kill it.
+					players[i].enemy = this;
+				}
 			}
 			else if (flags & MF_SPECIAL)
 			{ //Item pickup time
 				bglobal.WhatToGet (players[i].mo, this);
 			}
-			else if ((flags & MF_MISSILE)
-				&& !players[i].missile
-				&& type != MT_PLASMA
-				&& type != MT_ARACHPLAZ)
-			{ //warn for incoming missiles.
-				if (target != players[i].mo && bglobal.Check_LOS (players[i].mo, this, ANGLE_90))
-					players[i].missile = this;
+			else if (flags & MF_MISSILE)
+			{
+				if (!players[i].missile
+					&& type != MT_PLASMA
+					&& type != MT_ARACHPLAZ)
+				{ //warn for incoming missiles.
+					if (target != players[i].mo && bglobal.Check_LOS (players[i].mo, this, ANGLE_90))
+						players[i].missile = this;
+				}
 			}
 		}
 		bglobal.m_Thinking = false;
@@ -1176,11 +1188,11 @@ void AActor::RunThink ()
 	{
 		P_XYMovement (this);
 
-		if (!IsValid ())
-			return; 			// mobj was removed
+		if (ObjectFlags & OF_MassDestruction)
+			return;		// actor was destroyed
 	}
 
-	if (flags2&MF2_FLOATBOB)
+	if (flags2 & MF2_FLOATBOB)
 	{ // Floating item bobbing motion (special1 is height)
 		z = floorz + special1 + FloatBobOffsets[(health++)&63];
 	}
@@ -1227,12 +1239,12 @@ void AActor::RunThink ()
 		{
 			P_ZMovement (this);
 		}
-		
-		if (!IsValid ())
-			return; 			// mobj was removed
+
+		if (ObjectFlags & OF_MassDestruction)
+			return;		// actor was destroyed
 	}
 
-	byte lastwaterlevel = waterlevel;
+	//byte lastwaterlevel = waterlevel;
 
 	waterlevel = 0;
 	if (subsector->sector->waterzone)
@@ -1333,6 +1345,8 @@ AActor::AActor (fixed_t ix, fixed_t iy, fixed_t iz, mobjtype_t itype)
 	case MT_ROCKET:
 		effects = FX_ROCKET;
 		break;
+	default:
+	    break;
 	}
 
 	if (gameskill.value != sk_nightmare)
@@ -1395,7 +1409,7 @@ int 			itemrespawntime[ITEMQUESIZE];
 int 			iquehead;
 int 			iquetail;
 
-AActor::~AActor ()
+void AActor::Destroy ()
 {
 	if ((flags & MF_SPECIAL) && !(flags & MF_DROPPED))
 	{
@@ -1426,6 +1440,8 @@ AActor::~AActor ()
 
 	// stop any playing sound
 	S_RelinkSound (this, NULL);
+
+	Super::Destroy ();
 }
 
 
@@ -1954,26 +1970,26 @@ CVAR (cl_bloodtype, "0", CVAR_ARCHIVE)
 
 void P_SpawnPuff (fixed_t x, fixed_t y, fixed_t z, angle_t dir, int updown)
 {
-	AActor *th;
+	AActor *puff;
 	int t;
 
-	if (!cl_pufftype.value || (updown == 3)) {
-		t = P_Random (pr_spawnpuff);
-		z += (t - P_Random (pr_spawnpuff)) << 10;
+	t = P_Random (pr_spawnpuff);
+	z += (t - P_Random (pr_spawnpuff)) << 10;
 
-		th = new AActor (x, y, z, MT_PUFF);
-		th->momz = FRACUNIT;
-		th->tics -= P_Random (pr_spawnpuff) & 3;
+	puff = new AActor (x, y, z, MT_PUFF);
+	puff->momz = FRACUNIT;
+	puff->tics -= P_Random (pr_spawnpuff) & 3;
 
-		if (th->tics < 1)
-			th->tics = 1;
-			
-		// don't make punches spark on the wall
-		if (attackrange == MELEERANGE)
-			P_SetMobjState (th, S_PUFF3);
-	} else {
-		if (attackrange != MELEERANGE)
-			P_DrawSplash2 (32, x, y, z, dir, updown, 1);
+	if (puff->tics < 1)
+		puff->tics = 1;
+		
+	// don't make punches spark on the wall
+	if (attackrange == MELEERANGE)
+		P_SetMobjState (puff, S_PUFF3);
+	else if (cl_pufftype.value && updown != 3)
+	{
+		P_DrawSplash2 (32, x, y, z, dir, updown, 1);
+		puff->flags2 |= MF2_DONTDRAW;
 	}
 }
 
@@ -2120,9 +2136,6 @@ BOOL P_CheckMissileSpawn (AActor* th)
 	if (th->tics < 1)
 		th->tics = 1;
 
-	// [RH] Give the missile time to get away from the shooter
-	th->targettic = 10;
-	
 	// move a little forward so an angle can
 	// be computed if it immediately explodes
 	th->x += th->momx>>1;

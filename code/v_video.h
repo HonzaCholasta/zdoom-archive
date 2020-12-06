@@ -36,6 +36,8 @@
 
 extern int CleanWidth, CleanHeight, CleanXfac, CleanYfac;
 
+extern int DisplayWidth, DisplayHeight, DisplayBits;
+
 //
 // VIDEO
 //
@@ -74,6 +76,10 @@ public:
 	int height;
 	int pitch;
 	bool is8bit;
+
+	int m_LockCount;
+	palette_t *m_Palette;
+	void *m_Private;
 
 	// Copy blocks from one canvas to another
 	void Blit (int srcx, int srcy, int srcwidth, int srcheight, DCanvas *dest, int destx, int desty, int destwidth, int destheight);
@@ -213,21 +219,6 @@ protected:
 	// The current set of column drawers (set in V_SetResolution)
 	static vdrawfunc *m_Drawfuncs;
 	static vdrawsfunc *m_Drawsfuncs;
-
-private:
-	int m_LockCount;
-	palette_t *m_Palette;
-	void *m_Private;
-
-	friend bool I_AllocateScreen (DCanvas *canvas, int width, int height, int bits);
-	friend void I_FreeScreen (DCanvas *canvas);
-
-	friend void I_FinishUpdate ();
-
-	friend void I_LockScreen (DCanvas *canvas);
-	friend void I_UnlockScreen (DCanvas *canvas);
-	friend void I_Blit (DCanvas *from, int srcx, int srcy, int srcwidth, int srcheight,
-						DCanvas *to, int destx, int desty, int destwidth, int destheight);
 };
 
 inline void DCanvas::DrawText (int normalcolor, int x, int y, const byte *string) const
@@ -436,7 +427,7 @@ extern	DCanvas *screen;
 extern	DBoundingBox 	dirtybox;
 
 extern	byte	newgamma[256];
-EXTERN_CVAR (gamma)
+EXTERN_CVAR (Gamma)
 
 // Translucency tables
 extern unsigned int Col2RGB8[65][256];
@@ -457,10 +448,10 @@ extern unsigned int *V_Palette;
 void V_MarkRect (int x, int y, int width, int height);
 
 // BestColor
-byte BestColor (const unsigned int *palette, const int r, const int g, const int b, const int numcolors);
+byte BestColor (const DWORD *palette, const int r, const int g, const int b, const int numcolors);
 // Returns the closest color to the one desired. String
-// should be of the form "rrrr gggg bbbb".
-int V_GetColorFromString (const unsigned int *palette, const char *colorstring);
+// should be of the form "rr gg bb".
+int V_GetColorFromString (const DWORD *palette, const char *colorstring);
 // Scans through the X11R6RGB lump for a matching color
 // and returns a color string suitable for V_GetColorFromString.
 char *V_GetColorStringByName (const char *name);

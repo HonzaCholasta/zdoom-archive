@@ -11,6 +11,7 @@
 #include "i_system.h"
 #include "m_swap.h"
 #include "st_stuff.h"
+#include "c_cvars.h"
 
 static int		widestnum, numheight;
 static const patch_t	*medi;
@@ -26,6 +27,8 @@ extern int		st_faceindex;
 extern player_t *plyr;
 extern patch_t	*keys[NUMCARDS+NUMCARDS/2];
 extern byte		*Ranges;
+
+CVAR (hud_scale, "0", CVAR_ARCHIVE)
 
 void ST_unloadNew (void)
 {
@@ -80,8 +83,16 @@ void ST_DrawNum (int x, int y, DCanvas *scrn, int num)
 
 	if (num < 0)
 	{
-		scrn->DrawPatchCleanNoMove (sttminus, x, y);
-		x += CleanXfac * SHORT(sttminus->width);
+		if (hud_scale.value)
+		{
+			scrn->DrawPatchCleanNoMove (sttminus, x, y);
+			x += CleanXfac * SHORT(sttminus->width);
+		}
+		else
+		{
+			scrn->DrawPatch (sttminus, x, y);
+			x += SHORT(sttminus->width);
+		}
 		num = -num;
 	}
 
@@ -92,8 +103,16 @@ void ST_DrawNum (int x, int y, DCanvas *scrn, int num)
 	{
 		if (*d >= '0' && *d <= '9')
 		{
-			scrn->DrawPatchCleanNoMove (tallnum[*d - '0'], x, y);
-			x += CleanXfac * SHORT(tallnum[*d - '0']->width);
+			if (hud_scale.value)
+			{
+				scrn->DrawPatchCleanNoMove (tallnum[*d - '0'], x, y);
+				x += CleanXfac * SHORT(tallnum[*d - '0']->width);
+			}
+			else
+			{
+				scrn->DrawPatch (tallnum[*d - '0'], x, y);
+				x += SHORT(tallnum[*d - '0']->width);
+			}
 		}
 		d++;
 	}
@@ -102,13 +121,14 @@ void ST_DrawNum (int x, int y, DCanvas *scrn, int num)
 void ST_DrawNumRight (int x, int y, DCanvas *scrn, int num)
 {
 	int d = abs(num);
+	int xscale = hud_scale.value ? CleanXfac : 1;
 
 	do {
-		x -= SHORT(tallnum[d%10]->width) * CleanXfac;
+		x -= SHORT(tallnum[d%10]->width) * xscale;
 	} while (d /= 10);
 
 	if (num < 0)
-		x -= SHORT(sttminus->width) * CleanXfac;
+		x -= SHORT(sttminus->width) * xscale;
 
 	ST_DrawNum (x, y, scrn, num);
 }
@@ -117,20 +137,36 @@ void ST_newDraw (void)
 {
 	int y, i;
 	ammotype_t ammo = weaponinfo[plyr->readyweapon].ammo;
+	int xscale = hud_scale.value ? CleanXfac : 1;
+	int yscale = hud_scale.value ? CleanYfac : 1;
 
-	y = screen->height - (numheight + 4) * CleanYfac;
+	y = screen->height - (numheight + 4) * yscale;
 
 	// Draw health
-	screen->DrawPatchCleanNoMove (medi, 20 * CleanXfac, screen->height-2*CleanYfac);
-	ST_DrawNum (40 * CleanXfac, y, screen, plyr->health);
+	if (hud_scale.value)
+		screen->DrawPatchCleanNoMove (medi, 20 * CleanXfac,
+									  screen->height - 2*CleanYfac);
+	else
+		screen->DrawPatch (medi, 20, screen->height - 2);
+	ST_DrawNum (40 * xscale, y, screen, plyr->health);
 
 	// Draw armor
 	if (plyr->armortype && plyr->armorpoints)
 	{
 		if (armors[plyr->armortype])
-			screen->DrawPatchCleanNoMove (plyr->armortype > 2 ? armors[1] : armors[plyr->armortype-1],
-				20 * CleanXfac, y - 4*CleanYfac);
-		ST_DrawNum (40*CleanXfac, y - (SHORT(armors[0]->height)+3)*CleanYfac,
+		{
+			if (hud_scale.value)
+				screen->DrawPatchCleanNoMove (plyr->armortype > 2 ?
+											  armors[1] :
+											  armors[plyr->armortype-1],
+											  20 * CleanXfac,
+											  y - 4*CleanYfac);
+			else
+				screen->DrawPatch (plyr->armortype > 2 ? armors[1] :
+								   armors[plyr->armortype - 1],
+								   20, y - 4);
+		}
+		ST_DrawNum (40*xscale, y - (SHORT(armors[0]->height)+3)*yscale,
 					 screen, plyr->armorpoints);
 	}
 
@@ -139,10 +175,15 @@ void ST_newDraw (void)
 	{
 		const patch_t *ammopatch = ammos[weaponinfo[plyr->readyweapon].ammo];
 
-		screen->DrawPatchCleanNoMove (ammopatch,
-			screen->width - 14 * CleanXfac,
-			screen->height - 4 * CleanYfac);
-		ST_DrawNumRight (screen->width - 25 * CleanXfac, y, screen, plyr->ammo[ammo]);
+		if (hud_scale.value)
+			screen->DrawPatchCleanNoMove (ammopatch,
+										  screen->width - 14 * CleanXfac,
+										  screen->height - 4 * CleanYfac);
+		else
+			screen->DrawPatch (ammopatch, screen->width - 14,
+							   screen->height - 4);
+		ST_DrawNumRight (screen->width - 25 * xscale, y, screen,
+						 plyr->ammo[ammo]);
 	}
 
 	if (deathmatch.value)
@@ -154,10 +195,15 @@ void ST_newDraw (void)
 	{
 		// Draw keys (not DM)
 		y = CleanYfac;
-		for (i = 0; i < 6; i++) {
-			if (plyr->cards[i]) {
-				screen->DrawPatchCleanNoMove (keys[i], screen->width - 10*CleanXfac, y);
-				y += (8 + (i < 3 ? 0 : 2)) * CleanYfac;
+		for (i = 0; i < 6; i++)
+		{
+			if (plyr->cards[i])
+			{
+				if (hud_scale.value)
+					screen->DrawPatchCleanNoMove (keys[i], screen->width - 10*CleanXfac, y);
+				else
+					screen->DrawPatch (keys[i], screen->width - 10, y);
+				y += (8 + (i < 3 ? 0 : 2)) * yscale;
 			}
 		}
 	}

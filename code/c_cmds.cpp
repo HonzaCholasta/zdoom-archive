@@ -411,7 +411,7 @@ BEGIN_COMMAND (dir)
 
 	if (argc == 1 || chdir (argv[1]))
 	{
-		match = argc == 1 ? "./*" : argv[1];
+		match = argc == 1 ? (char *)"./*" : argv[1];
 
 		ExtractFilePath (match, dir);
 		if (dir[0])

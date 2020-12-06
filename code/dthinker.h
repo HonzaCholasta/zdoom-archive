@@ -56,27 +56,23 @@ class DThinker : public DObject
 
 public:
 	DThinker ();
+	void Destroy ();
 	virtual ~DThinker ();
 	virtual void RunThink () {}
-	bool IsValid () const;
 
 	void *operator new (size_t size);
 	void operator delete (void *block);
 
 	// Both the head and tail of the thinker list.
-	static DThinker Cap;
-	static void InitThinkers ();
+	static DThinker *FirstThinker;
+	static DThinker *LastThinker;
 	static void RunThinkers ();
 	static void DestroyAllThinkers ();
 	static void DestroyMostThinkers ();
 	static void SerializeAll (FArchive &arc, bool keepPlayers);
 
 private:
-	DThinker *m_Prev;
-	DThinker *m_Next;
-	bool m_RemoveMe;
-
-	void Remove ();
+	DThinker *m_Next, *m_Prev;
 
 	friend class FThinkerIterator;
 };
@@ -91,11 +87,11 @@ public:
 	FThinkerIterator (TypeInfo *type)
 	{
 		m_ParentType = type;
-		m_CurrThinker = DThinker::Cap.m_Next;
+		m_CurrThinker = DThinker::FirstThinker;
 	}
 	DThinker *Next ()
 	{
-		while (m_CurrThinker != &DThinker::Cap)
+		while (m_CurrThinker)
 		{
 			if (m_CurrThinker->IsKindOf (m_ParentType))
 			{
@@ -105,7 +101,7 @@ public:
 			}
 			m_CurrThinker = m_CurrThinker->m_Next;
 		}
-		m_CurrThinker = m_CurrThinker->m_Next;
+		m_CurrThinker = DThinker::FirstThinker;
 		return NULL;
 	}
 };

@@ -47,9 +47,12 @@ static void SetCursorState (int visible);
 static BOOL mousepaused;
 static BOOL WindowActive;
 static BOOL MakeMouseEvents;
+
 extern BOOL menuactive;
 extern BOOL vidactive;
 extern HWND Window;
+
+EXTERN_CVAR (fullscreen)
 
 
 // [RH] As of 1.14, ZDoom no longer needs to be linked with dinput.lib.
@@ -126,7 +129,7 @@ BEGIN_CUSTOM_CVAR (in_mouse, "0", CVAR_ARCHIVE)
 			else
 				if (!I_GetDIMouse ())
 					I_GetWin32Mouse ();
-			if (!Fullscreen && mousepaused)
+			if (!fullscreen.value && mousepaused)
 				I_PauseMouse ();
 		}
 	}
@@ -222,7 +225,7 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (g_pKey)
 				DI_Acquire (g_pKey);
 			havefocus = TRUE;
-			if (g_pMouse && (Fullscreen || !mousepaused))
+			if (g_pMouse && (fullscreen.value || !mousepaused))
 				I_ResumeMouse ();
 			if (!paused)
 				S_ResumeSound ();
@@ -232,7 +235,7 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (LOWORD(wParam)) {
 				WindowActive = TRUE;
 				if (mousemode == win32 && MakeMouseEvents &&
-					(!mousepaused || Fullscreen)) {
+					(!mousepaused || fullscreen.value)) {
 					GrabMouse_Win32 ();
 				}
 			} else {
@@ -519,7 +522,7 @@ static void DI_Unacquire (LPDIRECTINPUTDEVICE mouse)
 
 void I_PauseMouse (void)
 {
-	if (Fullscreen)
+	if (fullscreen.value)
 		return;
 
 	mousepaused = TRUE;
@@ -532,7 +535,7 @@ void I_PauseMouse (void)
 
 void I_ResumeMouse (void)
 {
-	if (!Fullscreen && gamestate == GS_FULLCONSOLE)
+	if (!fullscreen.value && gamestate == GS_FULLCONSOLE)
 		return;
 
 	mousepaused = FALSE;

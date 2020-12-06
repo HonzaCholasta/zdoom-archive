@@ -76,7 +76,6 @@ BOOL DCajunMaster::Move (AActor *actor, ticcmd_t *cmd)
 	fixed_t tryx, tryy;
 	bool try_ok;
 	BOOL good;
-	line_t *ld = NULL;
 
 	if (actor->movedir == DI_NODIR)
 		return false;

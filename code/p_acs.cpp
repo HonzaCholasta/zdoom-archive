@@ -46,7 +46,7 @@ DACSThinker::~DACSThinker ()
 	while (script)
 	{
 		DLevelScript *next = script->next;
-		delete script;
+		script->Destroy ();
 		script = next;
 	}
 	Scripts = NULL;
@@ -157,42 +157,28 @@ DLevelScript::DLevelScript ()
 		new DACSThinker;
 }
 
+// Find a script using binary search
+
 static int *P_FindScript (int script)
 {
-	// This is based on what I did for GetActionBit().
-	// There's probably a better way that doesn't need
-	// to use smalltimes, but I don't really care right now.
-
 	if (!level.scripts)
 		return NULL;
 
 	int min = 0;
 	int max = level.scripts[0] - 1;
-	int mid = level.scripts[0] / 2;
-	int smalltimes = 0;
 
-	do {
+	while (min <= max)
+	{
+		int mid = (min + max) / 2;
 		int thisone = level.scripts[mid*3+1] % 1000;
 
-		if (thisone == script) {
+		if (thisone == script)
 			return level.scripts + mid*3 + 1;
-		} else if (thisone < script) {
-			min = mid;
-		} else if (thisone > script) {
-			max = mid;
-		}
-		if (max - min > 1) {
-			mid = (max - min) / 2 + min;
-		} else if (!smalltimes) {
-			smalltimes++;
-			mid = (max - mid) + min;
-		} else {
-			break;
-		}
-	} while (max - min > 0);
-
-	if ((level.scripts[mid*3+1] % 1000) == script) 
-		return level.scripts + mid*3 + 1;
+		else if (thisone < script)
+			min = mid + 1;
+		else
+			max = mid - 1;
+	}
 
 	return NULL;
 }
@@ -391,50 +377,53 @@ void DLevelScript::RunScript ()
 
 	switch (state)
 	{
-		case SCRIPT_Delayed:
-			// Decrement the delay counter and enter state running
-			// if it hits 0
-			if (--statedata == 0)
-				state = SCRIPT_Running;
-			break;
-
-		case SCRIPT_TagWait:
-			// Wait for tagged sector(s) to go inactive, then enter
-			// state running
-			{
-				int secnum = -1;
-
-				while ((secnum = P_FindSectorFromTag (statedata, secnum)) >= 0)
-					if (sectors[secnum].floordata || sectors[secnum].ceilingdata)
-						return;
-
-				// If we got here, none of the tagged sectors were busy
-				state = SCRIPT_Running;
-			}
-			break;
-
-		case SCRIPT_PolyWait:
-			// Wait for polyobj(s) to stop moving, then enter state running
-			if (!PO_Busy (statedata))
-			{
-				state = SCRIPT_Running;
-			}
-			break;
-
-		case SCRIPT_ScriptWaitPre:
-			// Wait for a script to start running, then enter state scriptwait
-			if (controller->RunningScripts[statedata])
-				state = SCRIPT_ScriptWait;
-			break;
-
-		case SCRIPT_ScriptWait:
-			// Wait for a script to stop running, then enter state running
-			if (controller->RunningScripts[statedata])
-				return;
-
+	case SCRIPT_Delayed:
+		// Decrement the delay counter and enter state running
+		// if it hits 0
+		if (--statedata == 0)
 			state = SCRIPT_Running;
-			PutFirst ();
-			break;
+		break;
+
+	case SCRIPT_TagWait:
+		// Wait for tagged sector(s) to go inactive, then enter
+		// state running
+	{
+		int secnum = -1;
+
+		while ((secnum = P_FindSectorFromTag (statedata, secnum)) >= 0)
+			if (sectors[secnum].floordata || sectors[secnum].ceilingdata)
+				return;
+		
+		// If we got here, none of the tagged sectors were busy
+		state = SCRIPT_Running;
+	}
+	break;
+
+	case SCRIPT_PolyWait:
+		// Wait for polyobj(s) to stop moving, then enter state running
+		if (!PO_Busy (statedata))
+		{
+			state = SCRIPT_Running;
+		}
+		break;
+
+	case SCRIPT_ScriptWaitPre:
+		// Wait for a script to start running, then enter state scriptwait
+		if (controller->RunningScripts[statedata])
+			state = SCRIPT_ScriptWait;
+		break;
+
+	case SCRIPT_ScriptWait:
+		// Wait for a script to stop running, then enter state running
+		if (controller->RunningScripts[statedata])
+			return;
+
+		state = SCRIPT_Running;
+		PutFirst ();
+		break;
+
+	default:
+		break;
 	}
 
 	while (state == SCRIPT_Running)
@@ -1135,7 +1124,7 @@ void DLevelScript::RunScript ()
 		Unlink ();
 		if (controller->RunningScripts[script] == this)
 			controller->RunningScripts[script] = NULL;
-		delete this;
+		this->Destroy ();
 	}
 }
 
@@ -1389,13 +1378,10 @@ FArchive &operator<< (FArchive &arc, acsdefered_s *defer)
 {
 	while (defer)
 	{
+		arc << (BYTE)1;
 		arc << (BYTE)defer->type << defer->script
 			<< defer->arg0 << defer->arg1 << defer->arg2;
-		if (defer->next)
-		{
-			arc << (BYTE)1;
-			defer = defer->next;
-		}
+		defer = defer->next;
 	}
 	arc << (BYTE)0;
 	return arc;

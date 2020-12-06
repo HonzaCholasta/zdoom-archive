@@ -1327,7 +1327,6 @@ void P_SetupLevel (char *lumpname, int position)
 	NormalLight.next = NULL;	// [RH] Z_FreeTags frees all the custom colormaps
 
 	// UNUSED W_Profile ();
-	DThinker::InitThinkers ();
 
 	// find map num
 	lumpnum = W_GetNumForName (lumpname);

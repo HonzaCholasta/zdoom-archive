@@ -64,7 +64,10 @@
 #include "r_sky.h"
 
 IMPLEMENT_SERIAL (DScroller, DThinker)
-IMPLEMENT_SERIAL (DPusher, DThinker)
+
+IMPLEMENT_POINTY_SERIAL (DPusher, DThinker)
+ DECLARE_POINTER (m_Source)
+END_POINTERS
 
 DScroller::DScroller ()
 {
@@ -162,8 +165,6 @@ static size_t	maxanims;
 // (This is so scrolling floors and objects on them can move at same speed.)
 #define CARRYFACTOR ((fixed_t)(FRACUNIT*.09375))
 
-static void Add_Scroller(int type, fixed_t dx, fixed_t dy,
-						 int control, int affectee, int accel);
 // killough 3/7/98: Initialize generalized scrolling
 static void P_SpawnScrollers(void);
 

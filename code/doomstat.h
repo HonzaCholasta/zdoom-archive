@@ -189,7 +189,7 @@ extern	int 			gametic;
 
 
 // Alive? Disconnected?
-extern	BOOL	 		playeringame[MAXPLAYERS];
+extern	bool	 		playeringame[MAXPLAYERS];
 
 
 // Player spawn spots for deathmatch.
@@ -282,7 +282,7 @@ extern	BOOL			UseMMX;
 
 
 #ifdef USEASM
-void EndMMX (void);
+extern "C" void EndMMX (void);
 
 #ifdef _MSC_VER
 #define ENDMMX if (UseMMX) __asm emms;

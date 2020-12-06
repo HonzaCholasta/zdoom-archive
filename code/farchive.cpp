@@ -21,8 +21,12 @@
 #else
 #define SWAP_WORD(x)		{ x = (((x)<<8) | ((x)>>8)); }
 #define SWAP_DWORD(x)		{ x = (((x)>>24) | (((x)>>8)&0xff00) | ((x)<<8)&0xff0000 | ((x)<<24)); }
+#if 0
 #define SWAP_QWORD(x)		{ x = (((x)>>56) | (((x)>>40)&(0xff<<8)) | (((x)>>24)&(0xff<<16)) | (((x)>>8)&(0xff<<24)) |\
-								   (((x)<<8)&(0xff<<32)) | (((x)<<24)&(0xff<<40) | (((x)<<40)&(0xff<<48)) | ((x)<<56))); }
+								   (((x)<<8)&(QWORD)0xff00000000) | (((x)<<24)&(QWORD)0xff0000000000) | (((x)<<40)&(QWORD)0xff000000000000) | ((x)<<56))); }
+#else
+#define SWAP_QWORD(x)		{ DWORD *y = (DWORD *)&x; DWORD t=y[0]; y[0]=y[1]; y[1]=t; SWAP_DWORD(y[0]); SWAP_DWORD(y[1]); }
+#endif
 #define SWAP_FLOAT(x)		{ DWORD dw = *(DWORD *)&x; SWAP_DWORD(dw); x = *(float *)&dw; }
 #define SWAP_DOUBLE(x)		{ QWORD qw = *(QWORD *)&x; SWAP_QWORD(qw); x = *(double *)&qw; }
 #endif
@@ -39,6 +43,7 @@ void FLZOFile::BeEmpty ()
 	m_MaxBufferSize = 0;
 	m_Buffer = NULL;
 	m_File = NULL;
+	m_NoCompress = false;
 }
 
 static const char LZOSig[4] = { 'F', 'L', 'Z', 'O' };
@@ -48,17 +53,19 @@ FLZOFile::FLZOFile ()
 	BeEmpty ();
 }
 
-FLZOFile::FLZOFile (const char *name, EOpenMode mode)
+FLZOFile::FLZOFile (const char *name, EOpenMode mode, bool dontCompress)
 {
 	BeEmpty ();
 	Open (name, mode);
+	m_NoCompress = dontCompress;
 }
 
-FLZOFile::FLZOFile (FILE *file, EOpenMode mode)
+FLZOFile::FLZOFile (FILE *file, EOpenMode mode, bool dontCompress)
 {
 	BeEmpty ();
 	m_Mode = mode;
 	m_File = file;
+	m_NoCompress = dontCompress;
 	PostOpen ();
 }
 
@@ -202,7 +209,7 @@ FFile &FLZOFile::Seek (int pos, ESeekPos ofs)
 
 	if (pos < 0)
 		m_Pos = 0;
-	else if (pos > m_BufferSize)
+	else if ((unsigned)pos > m_BufferSize)
 		m_Pos = m_BufferSize;
 	else
 		m_Pos = pos;
@@ -221,7 +228,7 @@ void FLZOFile::Implode ()
 	byte *oldbuf = m_Buffer;
 	int r;
 
-	if (!nofilecompression.value)
+	if (!nofilecompression.value && !m_NoCompress)
 	{
 		compressed = new lzo_byte[OUT_LEN(len)];
 		wrkmem = new lzo_byte[LZO1X_1_MEM_COMPRESS];
@@ -388,7 +395,7 @@ void FLZOMemFile::Serialize (FArchive &arc)
 	{
 		if (m_ImplodedBuffer == NULL)
 		{
-			//I_Error ("FLZOMemFile must be imploded before storing\n");
+			I_Error ("FLZOMemFile must be imploded before storing\n");
 			// Q: How do we get here without closing FLZOMemFile first?
 			Close ();
 		}
@@ -423,7 +430,9 @@ void FLZOMemFile::Serialize (FArchive &arc)
 		((DWORD *)m_Buffer)[0] = sizes[0];
 		((DWORD *)m_Buffer)[1] = sizes[1];
 		arc.Read (m_Buffer+8, len);
-		Explode ();
+		m_ImplodedBuffer = m_Buffer;
+		m_Buffer = NULL;
+		m_Mode = EWriting;
 	}
 }
 
@@ -440,6 +449,8 @@ bool FLZOMemFile::IsOpen () const
 
 FArchive::FArchive (FFile &file)
 {
+	int i;
+
 	m_HubTravel = false;
 	m_File = &file;
 	m_MaxObjectCount = m_ObjectCount = 0;
@@ -457,9 +468,9 @@ FArchive::FArchive (FFile &file)
 	m_Persistent = file.IsPersistent();
 	m_TypeMap = NULL;
 	m_TypeMap = new TypeMap[TypeInfo::m_NumTypes];
-	for (int i = 0; i < TypeInfo::m_NumTypes; i++)
+	for (i = 0; i < TypeInfo::m_NumTypes; i++)
 	{
-		m_TypeMap[i].toArchive = -1;
+		m_TypeMap[i].toArchive = ~0;
 		m_TypeMap[i].toCurrent = NULL;
 	}
 	m_ClassCount = 0;
@@ -541,7 +552,7 @@ FArchive &FArchive::operator<< (const char *str)
 	return *this;
 }
 
-FArchive &FArchive::operator>> (const char *&str)
+FArchive &FArchive::operator>> (char *&str)
 {
 	DWORD size = ReadCount ();
 	if (size == 0)
@@ -664,7 +675,7 @@ FArchive &FArchive::operator<< (DObject *obj)
 			//		 "This should not happen.\n");
 			operator<< (NULL_OBJ);
 		}
-		else if (m_TypeMap[type->TypeIndex].toArchive == -1)
+		else if (m_TypeMap[type->TypeIndex].toArchive == ~0)
 		{
 			// No instances of this class have been written out yet.
 			// Write out the class, then write out the object. If this
@@ -694,7 +705,7 @@ FArchive &FArchive::operator<< (DObject *obj)
 			// controlled actor, remember that.
 			DWORD index = FindObjectIndex (obj);
 
-			if (index == -1)
+			if (index == ~0)
 			{
 				if (obj->IsKindOf (RUNTIME_CLASS (AActor)) &&
 					(player = static_cast<AActor *>(obj)->player) &&
@@ -758,7 +769,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 			// stored in the archive.
 			DObject *tempobj = type->CreateNew ();
 			tempobj->Serialize (*this);
-			delete tempobj;
+			tempobj->Destroy ();
 			break;
 		}
 		/* fallthrough */
@@ -779,7 +790,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 
 			DObject *tempobj = type->CreateNew ();
 			tempobj->Serialize (*this);
-			delete tempobj;
+			tempobj->Destroy ();
 			break;
 		}
 		/* fallthrough */
@@ -803,7 +814,7 @@ DWORD FArchive::WriteClass (const TypeInfo *info)
 		I_Error ("Too many unique classes have been written.\nOnly %u were registered\n",
 			TypeInfo::m_NumTypes);
 	}
-	if (m_TypeMap[info->TypeIndex].toArchive != -1)
+	if (m_TypeMap[info->TypeIndex].toArchive != ~0)
 	{
 		I_Error ("Attempt to write '%s' twice.\n", info->Name);
 	}
@@ -873,11 +884,13 @@ const TypeInfo *FArchive::ReadStoredClass (const TypeInfo *wanttype)
 
 DWORD FArchive::MapObject (const DObject *obj)
 {
+	DWORD i;
+
 	if (m_ObjectCount >= m_MaxObjectCount)
 	{
 		m_MaxObjectCount = m_MaxObjectCount ? m_MaxObjectCount * 2 : 1024;
 		m_ObjectMap = (ObjectMap *)Realloc (m_ObjectMap, sizeof(ObjectMap)*m_MaxObjectCount);
-		for (int i = m_ObjectCount; i < m_MaxObjectCount; i++)
+		for (i = m_ObjectCount; i < m_MaxObjectCount; i++)
 		{
 			m_ObjectMap[i].hashNext = ~0;
 			m_ObjectMap[i].object = NULL;

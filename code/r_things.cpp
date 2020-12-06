@@ -149,8 +149,6 @@ void R_CacheSprite (spritedef_t *sprite)
 //
 static void R_InstallSpriteLump (int lump, unsigned frame, unsigned rotation, BOOL flipped)
 {
-	static unsigned int called;
-
 	if (frame >= MAX_SPRITE_FRAMES || rotation > 8)
 		I_FatalError ("R_InstallSpriteLump: Bad frame characters in lump %i", lump);
 
@@ -404,7 +402,7 @@ void R_InitSkins (void)
 		}
 
 		if (skins[i].name[0] == 0)
-			sprintf (skins[i].name, "skin%ld", i);
+			sprintf (skins[i].name, "skin%d", i);
 
 		// Register any sounds this skin provides
 		for (j = 0; j < 8; j++) {
@@ -499,7 +497,7 @@ int R_FindSkin (const char *name)
 {
 	int i;
 
-	for (i = 0; i < numskins; i++)
+	for (i = 0; i < (int)numskins; i++)
 		if (!strnicmp (skins[i].name, name, 16))
 			return i;
 
@@ -511,7 +509,7 @@ BEGIN_COMMAND (skins)
 {
 	int i;
 
-	for (i = 0; i < numskins; i++)
+	for (i = 0; i < (int)numskins; i++)
 		Printf (PRINT_HIGH, "% 3d %s\n", i, skins[i].name);
 }
 END_COMMAND (skins)
@@ -561,7 +559,7 @@ void R_InitSprites (char **namelist)
 	// [RH] Do some preliminary setup
 	skins = (playerskin_t *)Z_Malloc (sizeof(*skins) * numskins, PU_STATIC, 0);
 	memset (skins, 0, sizeof(*skins) * numskins);
-	for (i = 1; i < numskins; i++)
+	for (i = 1; i < (int)numskins; i++)
 	{
 		skins[i].namespc = i + ns_skinbase;
 	}
@@ -1078,7 +1076,9 @@ void R_AddSprites (sector_t *sec, int lightlevel)
 
 	// Handle all things in sector.
 	for (thing = sec->thinglist ; thing ; thing = thing->snext)
+	{
 		R_ProjectSprite (thing);
+	}
 }
 
 
@@ -1210,7 +1210,7 @@ void R_DrawPlayerSprites (void)
 	
 	if (!r_drawplayersprites.value ||
 		!camera->player ||
-		(camera->player->cheats & CF_CHASECAM))
+		(players[consoleplayer].cheats & CF_CHASECAM))
 		return;
 
 	sec = R_FakeFlat (camera->subsector->sector, &tempsec, &floorlight,

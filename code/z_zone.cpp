@@ -103,6 +103,8 @@ void Z_Init (void)
 	memblock_t *block;
 
 	mainzone = (memzone_t *)I_ZoneBase (&zonesize);
+	if (mainzone == NULL)
+		I_FatalError ("Could not allocate zone heap\n");
 	mainzone->size = zonesize;
 
 // set the entire zone to one free block
@@ -248,7 +250,6 @@ void *Z_Malloc (size_t size, int tag, void *user)
 			rover = rover->next;
 	} while (base->user || base->size < size);
 
-	
 	// found a block big enough
 	extra = base->size - size;
 	
@@ -413,23 +414,22 @@ void Z_CheckHeap (void)
 {
 	memblock_t *block;
 
-	for (block = mainzone->blocklist.next ; ; block = block->next)
+	for (block = mainzone->blocklist.next;
+		block->next != &mainzone->blocklist;
+		block = block->next)
 	{
-		if (block->next == &mainzone->blocklist)
-		{
-			// all blocks have been hit
-			break;
-		}
-
-		if ( (byte *)block + block->size != (byte *)block->next)
+		if ((byte *)block + block->size != (byte *)block->next)
 			I_FatalError ("Z_CheckHeap: block size does not touch the next block\n");
 
-		if ( block->next->prev != block)
+		if (block->next->prev != block)
 			I_FatalError ("Z_CheckHeap: next block doesn't have proper back link\n"
 						  "(Next is %p, Back is %p, This is %p", block->next, block->next->prev, block);
 
 		if (!block->user && !block->next->user)
 			I_FatalError ("Z_CheckHeap: two consecutive free blocks\n");
+
+		if (block->user && block->id != ZONEID)
+			I_FatalError ("Z_CheckHeap: block does not have zone id\n");
 	}
 }
 

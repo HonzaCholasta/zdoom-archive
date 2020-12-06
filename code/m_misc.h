@@ -36,16 +36,14 @@ void M_ScreenShot (char *filename);
 
 void M_LoadDefaults (void);
 
-void M_SaveDefaults (void);
+void STACK_ARGS M_SaveDefaults (void);
 
 char *GetConfigPath (void);
 
 char *GetAutoexecPath (void);
 
+#ifdef UNIX
+char *GetUserFile (const char *path);
+#endif
 
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------

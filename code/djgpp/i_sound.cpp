@@ -46,6 +46,10 @@ typedef unsigned long DWORD;
 #include "doomtype.h"
 #endif
 
+#ifdef UNIX
+#include <unistd.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -56,8 +60,8 @@ typedef unsigned long DWORD;
 
 
 /* We'll need to go below the MIDAS API level a bit */
-#include "../midas/src/midas/midas.h"
-#include "../midas/include/midasdll.h"
+#include <midas/src/midas/midas.h>
+#include <midas/include/midasdll.h>
 
 #include "wave.h"
 #include "m_swap.h"
@@ -101,7 +105,7 @@ static struct ChanMap
 static int wavonly = 0;
 static int primarysound = 0;
 #endif
-static int nosound = 0;
+int _nosound = 0;
 static int numChannels;
 static float volmul;
 
@@ -325,6 +329,9 @@ void I_SetChannels (int numchannels)
 {
 	int i;
 
+	if (_nosound)
+		return;
+
 	if (!MIDASopenChannels (numchannels + (Args.CheckParm ("-nomusic") ? 0 : 64)))
 		MIDASerror();
 
@@ -367,6 +374,9 @@ void I_SetSfxVolume (int volume)
 //
 int I_StartSound (sfxinfo_t *sfx, int vol, int sep, int pitch, int channel, BOOL looping)
 {
+	if (_nosound)
+		return 0;
+
 	int id = sfx - S_sfx;
 	int volume;
 	int pan;
@@ -403,6 +413,9 @@ int I_StartSound (sfxinfo_t *sfx, int vol, int sep, int pitch, int channel, BOOL
 
 void I_StopSound (int handle)
 {
+	if (_nosound)
+		return;
+
 	handle--;
 	if (ChannelMap[handle].playHandle)
 	{
@@ -418,6 +431,9 @@ int I_SoundIsPlaying (int handle)
 {
 	int is;
 
+	if (_nosound)
+		return 0;
+
 	handle--;
 	if (!ChannelMap[handle].playHandle)
 		return 0;
@@ -432,6 +448,9 @@ void I_UpdateSoundParams (int handle, int vol, int sep, int pitch)
 {
 	int mvol, mpan;
 	
+	if (_nosound)
+		return;
+
 	handle--;
 	if (!ChannelMap[handle].playHandle)
 		return;
@@ -460,9 +479,12 @@ void I_UpdateSoundParams (int handle, int vol, int sep, int pitch)
 
 void I_LoadSound (struct sfxinfo_struct *sfx)
 {
-	if (!sfx->data) {
-		int i = sfx - S_sfx;
+	if (_nosound)
+		return;
 
+	if (!sfx->data)
+	{
+		int i = sfx - S_sfx;
 		DPrintf ("loading sound \"%s\" (%d)\n", sfx->name, i);
 		getsfx (sfx);
 	}
@@ -484,26 +506,28 @@ BOOL CALLBACK InitBoxCallback (HWND hwndDlg, UINT message, WPARAM wParam, LPARAM
 		"ZDoom without sound or click \"Quit\" if you don't "
 		"really want to play ZDoom.";
 
-	switch (message) {
-		case WM_INITDIALOG:
-			{
-				char *midaserr = MIDASgetErrorMessage (MIDASgetLastError ());
-				char messyText[2048];
+	switch (message)
+	{
+	case WM_INITDIALOG:
+		{
+			char *midaserr = MIDASgetErrorMessage (MIDASgetLastError ());
+			char messyText[2048];
 
-				sprintf (messyText, messyTemplate, midaserr);
+			sprintf (messyText, messyTemplate, midaserr);
 
-				SetDlgItemText (hwndDlg, IDC_ERRORMESSAGE, messyText);
-			}
+			SetDlgItemText (hwndDlg, IDC_ERRORMESSAGE, messyText);
+		}
+		return TRUE;
+
+	case WM_COMMAND:
+		if (wParam == IDOK ||
+			wParam == IDC_NOSOUND ||
+			wParam == IDQUIT)
+		{
+			EndDialog (hwndDlg, wParam);
 			return TRUE;
-
-		case WM_COMMAND:
-			if (wParam == IDOK ||
-				wParam == IDC_NOSOUND ||
-				wParam == IDQUIT) {
-				EndDialog (hwndDlg, wParam);
-				return TRUE;
-			}
-			break;
+		}
+		break;
 	}
 	return FALSE;
 }
@@ -511,98 +535,122 @@ BOOL CALLBACK InitBoxCallback (HWND hwndDlg, UINT message, WPARAM wParam, LPARAM
 
 void I_InitSound (void)
 {
-	I_InitMusic();
-
 	/* Get command line options: */
 #ifdef _WIN32
 	wavonly = !!Args.CheckParm ("-wavonly");
 	primarysound = !!Args.CheckParm ("-primarysound");
 #endif
-	nosound = !!Args.CheckParm ("-nosfx") || !!Args.CheckParm ("-nosound");
-	
-	Printf (PRINT_HIGH, "I_InitSound: Initializing MIDAS\n");
-	
-	MIDASstartup();
-	
-	MIDASsetOption(MIDAS_OPTION_MIXRATE, (int)snd_samplerate.value);
-	MIDASsetOption(MIDAS_OPTION_MIXBUFLEN, 200);
+	_nosound = !!Args.CheckParm ("-nosfx") || !!Args.CheckParm ("-nosound");
+
+#ifdef UNIX
+	seteuid (0);
+	if (geteuid ())
+	    _nosound = true;
+#endif
+#ifndef DJGPP
+	if (!_nosound)	// DOS requires MIDAS for its timer
+#endif
+	{
+		Printf (PRINT_HIGH, "I_InitSound: Initializing MIDAS\n");
+
+		MIDASstartup();
+		
+		MIDASsetOption(MIDAS_OPTION_MIXRATE, (int)snd_samplerate.value);
+		MIDASsetOption(MIDAS_OPTION_MIXBUFLEN, 50);
 
 #ifdef _WIN32
-	if ( !wavonly )
-	{
-		MIDASsetOption(MIDAS_OPTION_DSOUND_HWND, (DWORD)Window);
-		if ( primarysound )
-			MIDASsetOption(MIDAS_OPTION_DSOUND_MODE, MIDAS_DSOUND_PRIMARY);
-		else
-			MIDASsetOption(MIDAS_OPTION_DSOUND_MODE, MIDAS_DSOUND_STREAM);
-	}
+		if (!wavonly)
+		{
+			MIDASsetOption (MIDAS_OPTION_DSOUND_HWND, (DWORD)Window);
+			MIDASsetOption (MIDAS_OPTION_DSOUND_MODE,
+				primarysound ? MIDAS_DSOUND_PRIMARY : MIDAS_DSOUND_STREAM);
+		}
 #endif
 
-	if ( nosound )
-		MIDASsetOption(MIDAS_OPTION_FORCE_NO_SOUND, TRUE);	
+		//if (_nosound)
+		//	MIDASsetOption(MIDAS_OPTION_FORCE_NO_SOUND, TRUE);	
 
 #ifdef DJGPP
-	if (Args.CheckParm ("-m"))
-		MIDASconfig ();
+		if (Args.CheckParm ("-m"))
+			MIDASconfig ();
 #endif
 
-	while (!MIDASinit()) {
+		while (!MIDASinit())
+		{
 #ifdef _WIN32
-		// If MIDAS can't be initialized, give the user some
-		// choices other than quit.
-		switch (DialogBox (hInstance,
-						   MAKEINTRESOURCE(IDD_MIDASINITERROR),
-						   (HWND)Window,
-						   (DLGPROC)InitBoxCallback)) {
-			case IDC_NOSOUND:
-				MIDASsetOption (MIDAS_OPTION_FORCE_NO_SOUND, TRUE);
-				nosound = true;
-				break;
+			// If MIDAS can't be initialized, give the user some
+			// choices other than quit.
+			switch (DialogBox (hInstance,
+							   MAKEINTRESOURCE(IDD_MIDASINITERROR),
+							   (HWND)Window,
+							   (DLGPROC)InitBoxCallback))
+			{
+				case IDC_NOSOUND:
+					MIDASclose ();
+					_nosound = true;
+					break;
 
-			case IDQUIT:
-				exit (0);
-				break;
-		}
+				case IDQUIT:
+					exit (0);
+					break;
+			}
 #else
-		static int errorcount = 0;
-		if (!errorcount)
-		{
-			errorcount++;
-			Printf (PRINT_HIGH, "Sound init error: %s\nUsing no sound\n",
-				MIDASgetErrorMessage (MIDASgetLastError ()));
-			MIDASsetOption (MIDAS_OPTION_FORCE_NO_SOUND, TRUE);
-			if (Args.CheckParm ("-m") == 0)
-				Printf (PRINT_HIGH, "(Try running with the -m parameter.)\n");
-		}
-		else
-		{
-			exit (0);
-		}
+			static int errorcount = 0;
+			if (!errorcount)
+			{
+				errorcount++;
+				Printf (PRINT_HIGH, "Sound init error: %s\nUsing no sound\n",
+					MIDASgetErrorMessage (MIDASgetLastError ()));
+				MIDASsetOption (MIDAS_OPTION_FORCE_NO_SOUND, TRUE);
+				_nosound = true;
+				if (Args.CheckParm ("-m") == 0)
+					Printf (PRINT_HIGH, "(Try running with the -m parameter.)\n");
+			}
+			else
+			{
+				exit (0);
+			}
 #endif
+		}
 	}
 
-	MidasInited = true;
-	atterm (I_ShutdownSound);
+	if (!_nosound)
+	{
+		MidasInited = true;
+	}
+#ifdef _WIN32
+	if (!_nosound)
+#endif
+	{
+		atterm (I_ShutdownSound);
+	}
 
-	if ( !MIDASstartBackgroundPlay(100) )
-		MIDASerror();
+	I_InitMusic();
+
+	if (!_nosound && !MIDASstartBackgroundPlay(100))
+		MIDASerror ();
+
+#ifdef UNIX
+	seteuid (getuid ());
+#endif
 
 	// Finished initialization.
 	Printf (PRINT_HIGH, "I_InitSound: sound module ready\n");	
 }
-
-
-
 
 void STACK_ARGS I_ShutdownSound (void)
 {
 	int i, c = 0;
 	size_t len = 0;
 
-	if (MidasInited) {
-		if (ChannelMap) {
-			for (i = 0; i < numChannels; i++ ) {
-				if (ChannelMap[i].playHandle) {
+	if (MidasInited)
+	{
+		if (ChannelMap)
+		{
+			for (i = 0; i < numChannels; i++ )
+			{
+				if (ChannelMap[i].playHandle)
+				{
 					if (!MIDASstopSample (ChannelMap[i].playHandle))
 						MIDASerror ();
 				}
@@ -611,20 +659,23 @@ void STACK_ARGS I_ShutdownSound (void)
 			ChannelMap = NULL;
 		}
 
-		I_ShutdownMusic();
-
 		// [RH] Free all loaded samples
-		for (i = 0; i < numsfx; i++) {
-			if (!S_sfx[i].link) {
-				if (S_sfx[i].normal) {
+		for (i = 0; i < numsfx; i++)
+		{
+			if (!S_sfx[i].link)
+			{
+				if (S_sfx[i].normal)
+				{
 					MIDASfreeSample ((MIDASsample)S_sfx[i].normal);
 					len += S_sfx[i].length;
 					c++;
 				}
-				if (S_sfx[i].looping) {
+				if (S_sfx[i].looping)
+				{
 					MIDASfreeSample ((MIDASsample)S_sfx[i].looping);
 				}
-				if (S_sfx[i].data) {
+				if (S_sfx[i].data)
+				{
 					free (S_sfx[i].data);
 				}
 			}
@@ -638,6 +689,6 @@ void STACK_ARGS I_ShutdownSound (void)
 //		if ( !MIDAScloseChannels() )
 //			MIDASerror();
 	}
-	if ( !MIDASclose() )
+	if (!MIDASclose())
 		MIDASerror();
 }

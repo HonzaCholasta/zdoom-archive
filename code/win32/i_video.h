@@ -31,17 +31,11 @@
 extern BOOL Fullscreen;
 
 
-// Called by D_DoomMain,
-// Sets up the video mode
-void I_InitGraphics (void);
-
 // [RH] Set the display mode
-void I_SetMode (int width, int height, int Bpp);
-
-void STACK_ARGS I_ShutdownGraphics(void);
+void I_SetMode (int &width, int &height, int &bits);
 
 // Takes full 8 bit values.
-void I_SetPalette (unsigned int *palette);
+void I_SetPalette (DWORD *palette);
 
 void I_BeginUpdate (void);		// [RH] Locks screen[0]
 void I_FinishUpdate (void);
@@ -55,7 +49,28 @@ void I_ReadScreen (byte *scr);
 void I_BeginRead (void);
 void I_EndRead (void);
 
-BOOL I_CheckResolution (int width, int height, int bpp);
-BOOL I_SetResolution (int width, int height, int bpp);
+bool I_CheckResolution (int width, int height, int bpp);
+void I_ClosestResolution (int *width, int *height, int bits);
+bool I_SetResolution (int width, int height, int bpp);
+
+void I_StartModeIterator (int bits);
+bool I_NextMode (int *width, int *height);
+
+bool I_AllocateScreen (DCanvas *canvas, int width, int height, int bits);
+void I_FreeScreen (DCanvas *canvas);
+
+void I_LockScreen (DCanvas *canvas);
+void I_UnlockScreen (DCanvas *canvas);
+void I_Blit (DCanvas *from, int srcx, int srcy, int srcwidth, int srcheight,
+			 DCanvas *to, int destx, int desty, int destwidth, int destheight);
+
+enum EDisplayType
+{
+	DISPLAY_WindowOnly,
+	DISPLAY_FullscreenOnly,
+	DISPLAY_Both
+};
+
+EDisplayType I_DisplayType ();
 
 #endif // __I_VIDEO_H__

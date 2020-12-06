@@ -686,7 +686,7 @@ void P_TouchSpecialThing (AActor *special, AActor *toucher)
 		player->itemcount++;
 		level.found_items++;
 	}
-	delete special;
+	special->Destroy ();
 	player->bonuscount = BONUSADD;
 
 	{
@@ -959,7 +959,7 @@ void ClientObituary (AActor *self, AActor *inflictor, AActor *attacker)
 			int rnum = P_Random (pr_obituary);
 
 			attacker->player->fragcount -= 2;
-			attacker->player->frags[attacker->player-players]++;
+			attacker->player->frags[attacker->player - players]++;
 			self = attacker;
 			gender = self->player->userinfo.gender;
 
@@ -1125,7 +1125,7 @@ void P_KillMobj (AActor *source, AActor *target, AActor *inflictor)
 		// count environment kills against you
 		if (!source)
 		{
-			target->player->frags[target->player-players]++;
+			target->player->frags[target->player - players]++;
 			target->player->fragcount--;	// [RH] Cumulative frag count
 		}
 						
@@ -1276,7 +1276,9 @@ void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage
 	{
         //Added by MC: Lets bots look allround for enemies if they survive an ambush.
         if (player->isbot)
+		{
             player->allround = true;
+		}
 
 		// end of game hell hack
 		if ((target->subsector->sector->special & 255) == dDamage_End

@@ -107,7 +107,7 @@ extern void A_PainDie(AActor *);
 
 void cht_DoCheat (player_t *player, int cheat)
 {
-	char *msg;
+	char *msg = "";
 	char msgbuild[32];
 
 	switch (cheat) {

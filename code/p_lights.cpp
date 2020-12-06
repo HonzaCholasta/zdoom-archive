@@ -503,7 +503,7 @@ void DGlow2::RunThink ()
 		if (m_OneShot)
 		{
 			m_Sector->lightlevel = m_End;
-			delete this;
+			Destroy ();
 			return;
 		}
 		else

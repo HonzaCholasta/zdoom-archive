@@ -13,6 +13,7 @@
 #include "d_player.h"
 
 IMPLEMENT_CLASS (DConsoleCommand, DObject)
+
 IMPLEMENT_CLASS (DConsoleAlias, DConsoleCommand)
 
 CVAR (lookspring, "1", CVAR_ARCHIVE);	// Generate centerview when -mlook encountered?
@@ -72,51 +73,27 @@ unsigned int MakeKey (const char *s)
 }
 
 // GetActionBit scans through the actionbits[] array
-// for a matching key and returns a bit mask for it
-// or 0x0000 if the key could not be found.
-// actionbits[] must be sorted in ascending order for
-// this function to work properly.
-//
-// Question: is this worth the trouble?
+// for a matching key and returns an index or -1 if
+// the key could not be found. This uses binary search,
+// actionbits[] must be sorted in ascending order.
 
 int GetActionBit (unsigned int key)
 {
 	int min = 0;
 	int max = NUM_ACTIONS - 1;
-	int mid = NUM_ACTIONS / 2;
-	int smalltimes = 0;
 
-	do
+	while (min <= max)
 	{
-		if (actionbits[mid].key == key)
-		{
-			return actionbits[mid].index;
-		}
-		else if (actionbits[mid].key < key)
-		{
-			min = mid;
-		}
-		else if (actionbits[mid].key > key)
-		{
-			max = mid;
-		}
-		if (max - min > 1)
-		{
-			mid = (max - min) / 2 + min;
-		}
-		else if (!smalltimes)
-		{
-			smalltimes++;
-			mid = (max - mid) + min;
-		}
-		else
-		{
-			break;
-		}
-	} while (max - min > 0);
+		int mid = (min + max) / 2;
+		unsigned int seekey = actionbits[mid].key;
 
-	if (actionbits[min].key == key) 
-		return actionbits[mid].index;
+		if (seekey == key)
+			return actionbits[mid].index;
+		else if (seekey < key)
+			min = mid + 1;
+		else
+			max = mid - 1;
+	}
 	
 	return -1;
 }

@@ -33,6 +33,7 @@
 #include <new.h>
 
 #include "errors.h"
+#include "hardware.h"
 
 #include "doomtype.h"
 #include "m_argv.h"
@@ -73,6 +74,12 @@ void atterm (void (STACK_ARGS *func)(void))
 	if (NumTerms == MAX_TERMS)
 		I_FatalError ("Too many exit functions registered.\nIncrease MAX_TERMS in i_main.cpp");
 	TermFuncs[NumTerms++] = func;
+}
+
+void popterm ()
+{
+	if (NumTerms)
+		NumTerms--;
 }
 
 static void STACK_ARGS call_terms (void)
@@ -128,20 +135,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 		Z_Init ();					// 1/18/98 killough: start up memory stuff first
 		atterm (I_Quit);
 
-#ifdef USEASM
-		{
-			// Disable write-protection of code segment
-			// (from Win32 Demo Programming FAQ)
-			DWORD OldRights;
-			BYTE *pBaseOfImage = (BYTE *)GetModuleHandle(0);
-			IMAGE_OPTIONAL_HEADER *pHeader = (IMAGE_OPTIONAL_HEADER *)
-				(pBaseOfImage + ((IMAGE_DOS_HEADER*)pBaseOfImage)->e_lfanew +
-				sizeof(IMAGE_NT_SIGNATURE) + sizeof(IMAGE_FILE_HEADER));
-			if (!VirtualProtect(pBaseOfImage+pHeader->BaseOfCode,pHeader->SizeOfCode,PAGE_EXECUTE_READWRITE,&OldRights))
-				I_FatalError ("Could not make code writable\n");
-		}
-#endif
-
 		// Figure out what directory the program resides in.
 		GetModuleFileName (NULL, progdir, 1024);
 		*(strrchr (progdir, '\\') + 1) = 0;
@@ -192,7 +185,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 	}
 	catch (CDoomError &error)
 	{
-		I_ShutdownGraphics ();
+		I_ShutdownHardware ();
 		SetWindowPos (Window, NULL, 0, 0, 0, 0, SWP_HIDEWINDOW);
 		if (error.GetMessage ())
 			MessageBox (Window, error.GetMessage(),
@@ -207,7 +200,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 		// because the OS will only show the alert box if we are in
 		// windowed mode. Graphics gets shut down first in case something
 		// goes wrong calling the cleanup functions.
-		I_ShutdownGraphics ();
+		I_ShutdownHardware ();
 		SetWindowPos (Window, NULL, 0, 0, 0, 0, SWP_HIDEWINDOW);
 		call_terms ();
 		// Now let somebody who understands the exception deal with it.

@@ -1,4 +1,8 @@
-This is the source code for ZDoom 1.18b released on 15 September 1999.
+This is the source code for ZDoom 1.20 released on 25 November 1999.
+
+If you want to compile this under linux, you should have gotten the
+archive zdoom-1.19.tar.gz instead. It contains everything included here,
+plus the files necessary for supporting Linux.
 
 It is based on the Linux DOOM sources that were prepared by B. Krenheimer
 and generously released by John Carmack shortly before Christmas, 1997. If
@@ -31,7 +35,7 @@ packages if you don't already have them. These are:
     MIDAS! I use a hack from NTDOOM that crashes with the DLL but not the
     static library.
 
-  OpenPTC 1.0.17
+  OpenPTC 1.0.18
     http://www.gaffer.org/ptc
 
   NASM (for the assembly files)

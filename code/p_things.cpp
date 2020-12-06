@@ -210,7 +210,7 @@ BOOL P_Thing_Spawn (int tid, int type, angle_t angle, BOOL fog)
 			}
 			else
 			{
-				delete mobj;
+				mobj->Destroy ();
 				rtn = false;
 			}
 		}
@@ -265,7 +265,7 @@ BOOL P_Thing_Projectile (int tid, int type, angle_t angle,
 			if (mobj->flags & MF_MISSILE)
 				rtn = P_CheckMissileSpawn (mobj);
 			else if (!P_TestMobjLocation (mobj))
-				delete mobj;
+				mobj->Destroy ();
 		} 
 	}
 
@@ -315,7 +315,7 @@ BOOL P_ActivateMobj (AActor *mobj, AActor *activator)
 					}
 				}
 				level.found_secrets++;
-				delete mobj;
+				mobj->Destroy ();
 				break;
 
 			default:

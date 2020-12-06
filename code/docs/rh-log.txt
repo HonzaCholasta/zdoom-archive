@@ -1,3 +1,68 @@
+November 26, 1999
+- Added the hud_scale cvar to control scaling of the fullscreen hud.
+- Removed targettic from AActor, because it's no longer meaningful (and
+  hasn't been for quite a while). Replaced it with dummies in the
+  AActor serializer so that savegame compatibility can be retained.
+- Fixed a next thinker determination problem in DThinker::RunThinkers().
+  A thinker can destroy itself during its RunThink(), so the next thinker
+  to run needs to be determined before we run the current thinker, not
+  after.
+- Added calls to I_FinishUpdateNoBlit() and I_BeginUpdate() at
+  strategic locations in R_RenderPlayerView().
+
+November 25, 1999
+- Removed the outer layer of compression from savegames. Since all
+  the snapshots in the savegame are already compressed, compressing
+  them again will do little good.
+- Fixed archiving of defered ACS scripts. There were actually two
+  problems here. One, if there were any, it would get stuck in an
+  infinite loop. Two, they were being saved in a format different
+  from what they were being loaded as.
+- Fixed the operation of FLZOMemFile's serializer so that it restores
+  to the state it was archived in (e.g. an imploded file stored in
+  m_ImplodedBuffer, as opposed to an uncompressed file stored in
+  m_BUffer).
+
+November 24, 1999
+- Fixed BOOM generalized locked doors so that the open/close type will
+  actually close.
+
+November 23, 1999
+- Machines that use -join will now select their port automatically.
+- Here's another problem the bots helped me catch: DThinker::
+  DestroyAllThinkers() was still deleting each thinker. The correct
+  approach now is to call Destroy() on each thinker, and then call
+  DObject::EndFrame() to perform the actual deletion.
+- Those bots are great for stress testing. Thanks to them, I was able to
+  find and correct a problem with my Destroy() implementation: DThinker
+  also needs to implement Destroy() to get the object out of the thinker
+  list. Otherwise, you can do things like destroy an actor, then have
+  the thinking code move it before it gets removed from the thinker list,
+  which leaves the block and/or sector pointers messed up and causes all
+  sorts of odd and nasty behavior.
+
+October 27, 1999
+- Added my own fixes for -host and -join to handle aborts better.
+- Tweaked underwater friction in P_GetFriction().
+- Added Jeffrey Cuenco's fixes for the -host and -join parameters.
+
+October 26, 1999
+- Added a check in A_Scream() to make sure the actor has a death sound.
+- Fixed demo sync problems caused by playing demos back with a cl_pufftype
+  different from what they were recorded with. I have no idea why it should
+  make a difference, since the puffs are supposed to be inert, but spawning
+  them and keeping them hidden when cl_pufftype is 1 fixes the problem.
+- Implemented stale pointer cleaning. If you want to remove an object now,
+  call its Destroy() method instead of deleting it. The object will be
+  placed in a queue. At the end of the frame, all objects will be scanned
+  for references to objects in the queue, and any references that are found
+  will be NULLed. Then the objects will be deleted.
+
+  Any objects that have (DObject *) (or some subclass of DObject) members
+  need to be implemented with the IMPLEMENT_POINTY_SERIAL or
+  IMPLEMENT_POINTY_CLASS macros. See the implementation of AActor in
+  p_mobj.cpp for an example of their use.
+
 September 15, 1999
 - Fixed a nasty bug when saving big games. FArchive used pointers into the
   m_ObjectMap array when mapping objects to indices. Now it uses indices

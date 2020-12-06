@@ -188,7 +188,7 @@ BOOL FileExists (const char *filename)
 	return true;
 }
 
-void DefaultExtension (char *path, char *extension)
+void DefaultExtension (char *path, const char *extension)
 {
 	char *src;
 //

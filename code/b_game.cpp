@@ -54,6 +54,7 @@ Everything that is changed is marked (maybe commented) with "Added by MC"
 #include "cmdlib.h"
 #include "sc_man.h"
 #include "stats.h"
+#include "m_misc.h"
 
 //Externs
 DCajunMaster bglobal;
@@ -107,7 +108,7 @@ void DCajunMaster::Main (int buf)
 		clock (BotThinkCycles);
 		for (i = 0; i < MAXPLAYERS; i++)
 		{
-			if (playeringame[i] && players[i].isbot && players[i].mo && !freeze)
+			if (playeringame[i] && players[i].mo && !freeze && players[i].isbot)
 				Think (players[i].mo, &netcmds[i][buf]);
 		}
 		unclock (BotThinkCycles);
@@ -168,10 +169,10 @@ void DCajunMaster::Init ()
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
 		waitingforspawn[i] = false;
-		if (playeringame[i])
+		if (playeringame[i] && players[i].isbot)
 		{
 			playernumber++;
-			CleanBotstuff (players + i);
+			CleanBotstuff (&players[i]);
 			players[i].isbot = false;
 			botingame[i] = false;
 		}
@@ -201,7 +202,7 @@ void DCajunMaster::Init ()
 		combatdst[wp_pistol]       = 15000000;
 		combatdst[wp_shotgun]      = 14000000;
 		combatdst[wp_chaingun]     = 17000000;
-		combatdst[wp_missile]      = (SAFE_SELF_MISDIST*1.5);
+		combatdst[wp_missile]      = (SAFE_SELF_MISDIST*3/2);
 		combatdst[wp_plasma]       = 17000000;
 		combatdst[wp_bfg]          = 6000000;
 		combatdst[wp_chainsaw]     = 1       ;
@@ -227,7 +228,7 @@ void DCajunMaster::End ()
 		if (playeringame[i] && players[i].isbot)
 		{
 			getspawned->AppendArg (players[i].userinfo.netname);
-			CleanBotstuff (players + i);
+			CleanBotstuff (&players[i]);
 		}
 	}
 	wanted_botnum = botnum;
@@ -387,7 +388,6 @@ void DCajunMaster::DoAddBot (int bnum, char *info)
 void DCajunMaster::RemoveAllBots (bool fromlist)
 {
 	int i;
-	int removed = 0;
 
 	if (players[consoleplayer].camera &&
 		players[consoleplayer].camera->player &&
@@ -403,7 +403,6 @@ void DCajunMaster::RemoveAllBots (bool fromlist)
 		if (playeringame[i] && botingame[i])
 		{
 			ClearPlayer (i);
-			removed++;
 		}
 	}
 
@@ -499,13 +498,32 @@ bool DCajunMaster::LoadBots ()
 {
 	bglobal.ForgetBots ();
 
-	if (!FileExists (BOTFILENAME))
+#ifndef UNIX
+	if (!FileExists ("zcajun/" BOTFILENAME))
 	{
 		DPrintf ("No " BOTFILENAME ", so no bots\n");
 		return false;
 	}
-
-	SC_OpenFile (BOTFILENAME);
+	else
+		SC_OpenFile ("zcajun/" BOTFILENAME);
+#else
+	char *tmp = GetUserFile (BOTFILENAME);
+	if (!FileExists (tmp))
+	{
+		if (!FileExists (SHARE_DIR BOTFILENAME))
+		{
+			DPrintf ("No " BOTFILENAME ", so no bots\n");
+			return false;
+		}
+		else
+			SC_OpenFile (SHARE_DIR BOTFILENAME);
+	}
+	else
+	{
+		SC_OpenFile (tmp);
+		delete[] tmp;
+	}
+#endif
 
 	while (SC_GetString ())
 	{

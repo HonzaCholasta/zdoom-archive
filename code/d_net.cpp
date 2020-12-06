@@ -165,50 +165,50 @@ static struct TicSpecial
 
 	void NewMakeTic ()
 	{
-		if (specials.lastmaketic != -1)
-			specials.used[specials.lastmaketic%BACKUPTICS] = specials.streamoffs;
+		if (lastmaketic != -1)
+			used[lastmaketic%BACKUPTICS] = streamoffs;
 
-		specials.lastmaketic = maketic;
-		specials.streamptr = specials.streams[maketic%BACKUPTICS];
-		specials.streamoffs = 0;
+		lastmaketic = maketic;
+		streamptr = streams[maketic%BACKUPTICS];
+		streamoffs = 0;
 	}
 
 	TicSpecial &operator << (byte it)
 	{
-		if (specials.streamptr)
+		if (streamptr)
 		{
 			CheckSpace (1);
-			WriteByte (it, &specials.streamptr);
+			WriteByte (it, &streamptr);
 		}
 		return *this;
 	}
 
 	TicSpecial &operator << (short it)
 	{
-		if (specials.streamptr)
+		if (streamptr)
 		{
 			CheckSpace (2);
-			WriteWord (it, &specials.streamptr);
+			WriteWord (it, &streamptr);
 		}
 		return *this;
 	}
 
 	TicSpecial &operator << (int it)
 	{
-		if (specials.streamptr)
+		if (streamptr)
 		{
 			CheckSpace (4);
-			WriteLong (it, &specials.streamptr);
+			WriteLong (it, &streamptr);
 		}
 		return *this;
 	}
 
 	TicSpecial &operator << (const char *it)
 	{
-		if (specials.streamptr)
+		if (streamptr)
 		{
 			CheckSpace (strlen (it) + 1);
-			WriteString (it, &specials.streamptr);
+			WriteString (it, &streamptr);
 		}
 		return *this;
 	}
@@ -445,7 +445,7 @@ void GetPackets (void)
 
 			// [RH] Make the player disappear
 			P_DisconnectEffect (players[netconsole].mo);
-			delete players[netconsole].mo;
+			players[netconsole].mo->Destroy ();
 			players[netconsole].mo = NULL;
 			if (netconsole == Net_Arbitrator)
 			{
@@ -1040,6 +1040,7 @@ void TryRunTics (void)
 	}
 
 	// run the count * ticdup tics
+	DObject::BeginFrame ();
 	while (counts--)
 	{
 		for (i = 0; i < ticdup; i++)
@@ -1071,6 +1072,7 @@ void TryRunTics (void)
 		}
 		NetUpdate ();	// check for new console commands
 	}
+	DObject::EndFrame ();
 }
 
 void Net_NewMakeTic (void)
@@ -1197,11 +1199,11 @@ void Net_DoCommand (int type, byte **stream, int player)
 		break;
 
 	case DEM_GIVECHEAT:
-		cht_Give (players + player, s = ReadString (stream));
+		cht_Give (&players[player], s = ReadString (stream));
 		break;
 
 	case DEM_GENERICCHEAT:
-		cht_DoCheat (players + player, ReadByte (stream));
+		cht_DoCheat (&players[player], ReadByte (stream));
 		break;
 
 	case DEM_CHANGEMAP:
@@ -1214,7 +1216,7 @@ void Net_DoCommand (int type, byte **stream, int player)
 		break;
 
 	case DEM_SUICIDE:
-		cht_Suicide (players + player);
+		cht_Suicide (&players[player]);
 		break;
 
 	case DEM_ADDBOT:

@@ -130,7 +130,7 @@ void DCeiling::RunThink ()
 				m_Sector->ceilingpic = m_Texture;
 				// fall through
 			default:
-				delete this;
+				Destroy ();
 				break;
 			}
 			
@@ -162,7 +162,7 @@ void DCeiling::RunThink ()
 				m_Sector->ceilingpic = m_Texture;
 				// fall through
 			default:
-				delete this;
+				Destroy ();
 				break;
 			}
 		}

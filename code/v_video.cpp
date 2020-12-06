@@ -50,7 +50,9 @@
 #include "m_argv.h"
 #include "m_bbox.h"
 #include "m_swap.h"
+#include "m_menu.h"
 
+#include "i_video.h"
 #include "v_video.h"
 #include "v_text.h"
 
@@ -63,9 +65,7 @@
 
 IMPLEMENT_CLASS (DCanvas, DObject)
 
-extern void STACK_ARGS DimScreenPLoop (byte *colormap, byte *screen, int width, int modulo, int height);
-
-extern int DisplayBits;
+int DisplayWidth, DisplayHeight, DisplayBits;
 
 unsigned int Col2RGB8[65][256];
 byte RGB32k[32][32][32];
@@ -326,7 +326,7 @@ BestColor
 (borrowed from Quake2 source: utils3/qdata/images.c)
 ===============
 */
-byte BestColor (const unsigned int *palette, const int r, const int g, const int b, const int numcolors)
+byte BestColor (const DWORD *palette, const int r, const int g, const int b, const int numcolors)
 {
 	int		i;
 	int		dr, dg, db;
@@ -358,7 +358,7 @@ byte BestColor (const unsigned int *palette, const int r, const int g, const int
 	return bestcolor;
 }
 
-int V_GetColorFromString (const unsigned int *palette, const char *cstr)
+int V_GetColorFromString (const DWORD *palette, const char *cstr)
 {
 	int c[3], i, p;
 	char val[5];
@@ -460,7 +460,7 @@ BEGIN_COMMAND (setcolor)
 END_COMMAND (setcolor)
 
 // Build the tables necessary for translucency
-void BuildTransTable (unsigned int *palette)
+static void BuildTransTable (DWORD *palette)
 {
 	{
 		int r, g, b;
@@ -532,10 +532,16 @@ void DCanvas::Blit (int srcx, int srcy, int srcwidth, int srcheight,
 //
 BOOL V_DoModeSetup (int width, int height, int bits)
 {
+	I_SetMode (width, height, bits);
+
 	CleanXfac = width / 320;
 	CleanYfac = height / 200;
 	CleanWidth = width / CleanXfac;
 	CleanHeight = height / CleanYfac;
+
+	DisplayWidth = width;
+	DisplayHeight = height;
+	DisplayBits = bits;
 
 	// Free the virtual framebuffer
 	if (screen)
@@ -543,8 +549,6 @@ BOOL V_DoModeSetup (int width, int height, int bits)
 		delete screen;
 		screen = NULL;
 	}
-
-	I_SetMode (width, height, bits);
 
 	// Allocate a new virtual framebuffer
 	screen = new DCanvas (width, height, bits);
@@ -555,6 +559,8 @@ BOOL V_DoModeSetup (int width, int height, int bits)
 
 	R_InitColumnDrawers (screen->is8bit);
 	R_MultiresInit ();
+
+	M_RefreshModesList ();
 
 	return true;
 }
@@ -575,21 +581,10 @@ BOOL V_SetResolution (int width, int height, int bits)
 		oldbits = bits;
 	}
 
+	I_ClosestResolution (&width, &height, bits);
 	if (!I_CheckResolution (width, height, bits)) {				// Try specified resolution
 		if (!I_CheckResolution (oldwidth, oldheight, oldbits)) {// Try previous resolution (if any)
-			if (!I_CheckResolution (320, 200, 8)) {				// Try "standard" resolution
-				if (!I_CheckResolution (640, 480, 8)) {			// Try a resolution that *should* be available
-					return false;
-				} else {
-					width = 640;
-					height = 480;
-					bits = 8;
-				}
-			} else {
-				width = 320;
-				height = 200;
-				bits = 8;
-			}
+	   		return false;
 		} else {
 			width = oldwidth;
 			height = oldheight;
@@ -682,6 +677,8 @@ void V_Init (void)
 	{
 		bits = (int)(vid_defbits.value);
 	}
+
+	I_ClosestResolution (&width, &height, bits);
 
 	if (!V_SetResolution (width, height, bits))
 		I_FatalError ("Could not set resolution to %d x %d x %d", width, height, bits);

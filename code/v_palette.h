@@ -18,15 +18,15 @@ struct palette_s {
 		// Which of these is used is determined by screen.is8bit
 
 		byte		*colormaps;		// Colormaps for 8-bit graphics
-		unsigned	*shades;		// ARGB8888 values for 32-bit graphics
+		DWORD		*shades;		// ARGB8888 values for 32-bit graphics
 	} maps;
 	byte			*colormapsbase;
 	union {
 		char		name[8];
 		int			nameint[2];
 	} name;
-	unsigned		*colors;		// gamma corrected colors
-	unsigned		*basecolors;	// non-gamma corrected colors
+	DWORD			*colors;		// gamma corrected colors
+	DWORD			*basecolors;	// non-gamma corrected colors
 	unsigned		numcolors;
 	unsigned		flags;
 	unsigned		shadeshift;
@@ -160,10 +160,5 @@ void RGBtoHSV (float r, float g, float b, float *h, float *s, float *v);
 void HSVtoRGB (float *r, float *g, float *b, float h, float s, float v);
 
 dyncolormap_t *GetSpecialLights (int lr, int lg, int lb, int fr, int fg, int fb);
-
-struct cvar_s;
-
-// Called whenever the gamma cvar changes.
-void GammaCallback (struct cvar_s *var);
 
 #endif //__V_PALETTE_H__

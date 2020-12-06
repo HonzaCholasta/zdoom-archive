@@ -223,7 +223,7 @@ void DFloor::RunThink ()
 			}
 
 			m_Sector->floordata = NULL; //jff 2/22/98
-			delete this;
+			Destroy ();
 
 			//jff 2/26/98 implement stair retrigger lockout while still building
 			// note this only applies to the retriggerable generalized stairs
@@ -291,7 +291,7 @@ void DElevator::RunThink ()
 
 		m_Sector->floordata = NULL;		//jff 2/22/98
 		m_Sector->ceilingdata = NULL;	//jff 2/22/98
-		delete this;	// remove elevator from actives
+		Destroy ();		// remove elevator from actives
 	}
 }
 
@@ -571,7 +571,7 @@ BOOL EV_FloorCrushStop (int tag)
 			static_cast<DFloor *>(sec->floordata)->m_Type == DFloor::floorRaiseAndCrush)
 		{
 			SN_StopSequence (sec);
-			delete sec->floordata;
+			sec->floordata->Destroy ();
 			sec->floordata = NULL;
 		}
 	}
@@ -1008,7 +1008,7 @@ void DFloorWaggle::RunThink ()
 			m_Sector->floorheight = m_OriginalHeight;
 			P_ChangeSector (m_Sector, true);
 			m_Sector->floordata = NULL;
-			delete this;
+			Destroy ();
 			return;
 		}
 		break;

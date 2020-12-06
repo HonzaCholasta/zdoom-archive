@@ -287,10 +287,10 @@ void AActor::UnlinkFromWorld ()
 
 		// killough 8/11/98: simpler scheme using pointers-to-pointers for prev
 		// pointers, allows head node pointers to be treated like everything else
-		AActor **_sprev = sprev;
-		AActor  *_snext = snext;
-		if ((*_sprev = _snext))  // unlink from sector list
-			_snext->sprev = _sprev;
+		AActor **prev = sprev;
+		AActor  *next = snext;
+		if ((*prev = next))  // unlink from sector list
+			next->sprev = prev;
 
 		// phares 3/14/98
 		//
@@ -344,9 +344,9 @@ void AActor::LinkToWorld ()
 		// pointers, allows head nodes to be treated like everything else
 
 		AActor **link = &ss->sector->thinglist;
-		AActor *_snext = *link;
-		if ((snext = _snext))
-			_snext->sprev = &snext;
+		AActor *next = *link;
+		if ((snext = next))
+			next->sprev = &snext;
 		sprev = link;
 		*link = this;
 

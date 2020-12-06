@@ -109,6 +109,7 @@ void STACK_ARGS I_Error (const char *error, ...);
 void STACK_ARGS I_FatalError (const char *error, ...);
 
 void atterm (void (STACK_ARGS *func)(void));
+void popterm ();
 
 // Repaint the pre-game console
 void I_PaintConsole (void);

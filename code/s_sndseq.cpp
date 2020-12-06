@@ -18,7 +18,7 @@
 
 #define MAX_SEQSIZE			256
 #define GetCommand(a)		((a)>>24)
-#define GetData(a)			( ((a) & 0xffffff) == 0xffffff ? -1 : ((a) & 0xffffff) )
+#define GetData(a)			( ((a) & 0xffffff) == 0xffffff ? ~0 : ((a) & 0xffffff) )
 #define MakeCommand(a,b)	(((a) << 24)|((b) & 0xffffff))
 #define HexenPlatSeq(a)		(a)
 #define HexenDoorSeq(a)		((a) | 0x40)
@@ -248,7 +248,9 @@ void DSeqNode::Serialize (FArchive &arc)
 }
 
 
-IMPLEMENT_SERIAL (DSeqActorNode, DSeqNode)
+IMPLEMENT_POINTY_SERIAL (DSeqActorNode, DSeqNode)
+ DECLARE_POINTER (m_Actor)
+END_POINTERS
 
 void DSeqActorNode::Serialize (FArchive &arc)
 {
@@ -701,7 +703,7 @@ void SN_DoStop (void *source)
 		DSeqNode *next = node->NextSequence();
 		if (node->Source() == source)
 		{
-			delete node;
+			node->Destroy ();
 		}
 		node = next;
 	}
@@ -814,7 +816,7 @@ void DSeqNode::RunThink ()
 		break;
 
 	case SS_CMD_END:
-		delete this;
+		Destroy ();
 		break;
 
 	default:	
@@ -850,7 +852,7 @@ void SN_StopAllSequences (void)
 	{
 		DSeqNode *next = node->NextSequence();
 		node->m_StopSound = -1; // don't play any stop sounds
-		delete node;
+		node->Destroy ();
 		node = next;
 	}
 }

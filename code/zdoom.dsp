@@ -779,6 +779,10 @@ SOURCE=.\Tables.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\tarray.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\v_palette.h
 # End Source File
 # Begin Source File
@@ -932,6 +936,14 @@ SOURCE=.\win32\dxcrap.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\win32\hardware.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\win32\hardware.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\win32\i_input.cpp
 # End Source File
 # Begin Source File
@@ -976,10 +988,6 @@ SOURCE=.\win32\I_system.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\win32\I_video.cpp
-# End Source File
-# Begin Source File
-
 SOURCE=.\win32\I_video.h
 # End Source File
 # Begin Source File
@@ -1005,6 +1013,14 @@ SOURCE=.\win32\mus2strm.h
 # Begin Source File
 
 SOURCE=.\win32\resource.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\win32\win32iface.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\win32\win32video.cpp
 # End Source File
 # Begin Source File
 

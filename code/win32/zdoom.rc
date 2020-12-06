@@ -100,13 +100,13 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,18,0,9
- PRODUCTVERSION 1,18,0,0
+ FILEVERSION 1,21,0,0
+ PRODUCTVERSION 1,19,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
- FILEFLAGS 0x9L
+ FILEFLAGS 0x1L
 #else
- FILEFLAGS 0x8L
+ FILEFLAGS 0x0L
 #endif
  FILEOS 0x40004L
  FILETYPE 0x1L
@@ -116,17 +116,17 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "Comments", "Thanks to id Software for creating DOOM and then releasing the source code. Thanks also to TeamTNT for creating BOOM, which ZDoom is partially based on. Includes code based on the Cajun Bot 0.71 by Martin Collberg.\0"
+            VALUE "Comments", "Thanks to id Software for creating DOOM and then releasing the source code. Thanks also to TeamTNT for creating BOOM, which ZDoom is partially based on. Includes code based on the Cajun Bot 0.97 by Martin Collberg.\0"
             VALUE "CompanyName", " \0"
             VALUE "FileDescription", "ZDoom\0"
-            VALUE "FileVersion", "1.18\0"
+            VALUE "FileVersion", "1.21\0"
             VALUE "InternalName", "ZDoom\0"
             VALUE "LegalCopyright", "Copyright © 1999, id Software & Randy Heit\0"
             VALUE "LegalTrademarks", "Doom® is a Registered Trademark of id Software, Inc.\0"
             VALUE "OriginalFilename", "zdoom.exe\0"
-            VALUE "PrivateBuild", "Test release for new C++ architecture and various fixes\0"
+            VALUE "PrivateBuild", "\0"
             VALUE "ProductName", "ZDoom\0"
-            VALUE "ProductVersion", "1.18\0"
+            VALUE "ProductVersion", "1.19\0"
             VALUE "SpecialBuild", "\0"
         END
     END

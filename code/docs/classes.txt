@@ -1,4 +1,4 @@
-ZDoom 1.18 offers a partial conversion of the Doom code to C++. As such, some
+ZDoom 1.19 offers a partial conversion of the Doom code to C++. As such, some
 functions and classes have been encapsulated in classes. This document tries
 to give an overview of those classes and how to use them.
 
@@ -184,6 +184,48 @@ IMPLEMENT_SERIAL. For a class that won't be saved to disk, do this:
 	is not the same as DThinker, but (anActor->IsKindOf
 	(RUNTIME_CLASS(DThinker))) will return true because AActor is a
 	descendant of DThinker.
+
+Pointer cleanup
+===============
+
+Whenever an object is destroyed, ZDoom will attempt to NULL any pointers that
+pointed to that object. This eliminates various anomalies caused by trying to
+reference stale pointers. This mechanism is not entirely transparent and
+requires some work on your part. When you create a subclass of DObject that
+contains pointers, you should use the IMPLEMENT_POINTY_SERIAL or
+IMPLEMENT_POINTY_CLASS macros instead of IMPLEMENT_SERIAL or IMPLEMENT_CLASS.
+Following the macro, you list each element of the class that points to a
+DObject (or a subclass of it). If the pointer points to something that is not
+a DObject (such as a char *), you do not need to include it in this list.
+After you list all the pointers, use the END_POINTERS macro.
+
+The implementation for the AActor class looks like this:
+
+IMPLEMENT_POINTY_SERIAL (AActor, DThinker)
+ DECLARE_POINTER (target)
+ DECLARE_POINTER (lastenemy)
+ DECLARE_POINTER (tracer)
+ DECLARE_POINTER (goal)
+END_POINTERS
+
+If you add pointers to any class, you need to update this list accordingly.
+The player class uses a hack, because it is not derived from DObject, to
+clear pointers. See player_s::FixPointers() in p_user.cpp if you add any
+pointers to player_s.
+
+When you want to destroy any object derived from DThinker (this includes all
+actors), call that object's Destroy() method. Do not use delete, because it
+is not guaranteed to perform all necessary cleanup. If the object is not
+derived from DThinker, however, you can safely call delete on it.
+
+As an example, if you have an instance of AActor called actor, and you want
+to get rid of it, use:
+	actor->Destroy ();
+
+If you have an instance of DCanvas called canvas and want to get rid of it,
+either of the following will work (but not both):
+	canvas->Destroy ();		or
+	delete canvas;
 
 Thinkers
 ========

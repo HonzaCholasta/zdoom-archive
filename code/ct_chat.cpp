@@ -362,32 +362,29 @@ END_COMMAND (say_team)
 
 static int STACK_ARGS compare (const void *arg1, const void *arg2)
 {
-	return players[*(int *)arg2].fragcount - players[*(int *)arg1].fragcount;
+	return (*(player_t **)arg2)->fragcount - (*(player_t **)arg1)->fragcount;
 }
 
 EXTERN_CVAR (timelimit)
 
-void HU_DrawScores (player_t *plyr)
+void HU_DrawScores (player_t *player)
 {
 	char str[80];
-	int sortedplayers[MAXPLAYERS];
+	player_t *sortedplayers[MAXPLAYERS];
 	int i, j, x, y, maxwidth, margin;
-	int player;
 
-	if (plyr->camera->player)
-		player = plyr->camera->player - players;
-	else
-		player = plyr - players;
+	if (player->camera->player)
+		player = player->camera->player;
 
 	sortedplayers[MAXPLAYERS-1] = player;
 	for (i = 0, j = 0; j < MAXPLAYERS - 1; i++, j++)
 	{
-		if (i == player)
+		if (&players[i] == player)
 			i++;
-		sortedplayers[j] = i;
+		sortedplayers[j] = &players[i];
 	}
 
-	qsort (sortedplayers, MAXPLAYERS, sizeof(int), compare);
+	qsort (sortedplayers, MAXPLAYERS, sizeof(player_t *), compare);
 
 	maxwidth = 0;
 	for (i = 0; i < MAXPLAYERS; i++)
@@ -432,9 +429,9 @@ void HU_DrawScores (player_t *plyr)
 
 	for (i = 0; i < MAXPLAYERS && y < ST_Y - 12 * CleanYfac; i++)
 	{
-		int color = players[sortedplayers[i]].userinfo.color;
+		int color = sortedplayers[i]->userinfo.color;
 
-		if (playeringame[sortedplayers[i]])
+		if (playeringame[sortedplayers[i] - players])
 		{
 			if (screen->is8bit)
 				color = BestColor (DefaultPalette->basecolors,
@@ -443,19 +440,19 @@ void HU_DrawScores (player_t *plyr)
 
 			screen->Clear (x, y, x + 24 * CleanXfac, y + SHORT(hu_font[0]->height) * CleanYfac, color);
 
-			sprintf (str, "%d", players[sortedplayers[i]].fragcount);
+			sprintf (str, "%d", sortedplayers[i]->fragcount);
 			screen->DrawTextClean (sortedplayers[i] == player ? CR_GREEN : CR_BRICK,
 							 margin, y, str);
 
-			if (teamplay.value && players[sortedplayers[i]].userinfo.team[0])
-				sprintf (str, "%s (%s)", players[sortedplayers[i]].userinfo.netname,
-						 players[sortedplayers[i]].userinfo.team);
+			if (teamplay.value && sortedplayers[i]->userinfo.team[0])
+				sprintf (str, "%s (%s)", sortedplayers[i]->userinfo.netname,
+						 sortedplayers[i]->userinfo.team);
 			else
-				strcpy (str, players[sortedplayers[i]].userinfo.netname);
+				strcpy (str, sortedplayers[i]->userinfo.netname);
 
 			if (sortedplayers[i] != player)
 			{
-				color = (demoplayback && sortedplayers[i] == consoleplayer) ? CR_GOLD : CR_GREY;
+				color = (demoplayback && sortedplayers[i] == &players[consoleplayer]) ? CR_GOLD : CR_GREY;
 			}
 			else
 			{

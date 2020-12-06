@@ -24,7 +24,9 @@ private:
 	DEarthquake () {}
 };
 
-IMPLEMENT_SERIAL (DEarthquake, DThinker)
+IMPLEMENT_POINTY_SERIAL (DEarthquake, DThinker)
+ DECLARE_POINTER (m_Spot)
+END_POINTERS
 
 void DEarthquake::Serialize (FArchive &arc)
 {
@@ -76,7 +78,7 @@ void DEarthquake::RunThink ()
 	}
 	if (--m_Countdown == 0)
 	{
-		delete this;
+		Destroy ();
 	}
 }
 

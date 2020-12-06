@@ -26,9 +26,9 @@ CVARS (console variables)
 class cvar_t
 {
 public:
-	cvar_t (const char *name, const char *def, unsigned int flags);
-	cvar_t (const char *name, const char *def, unsigned int flags, void (*callback)(cvar_t &));
-	~cvar_t ();
+	cvar_t (const char *name, const char *def, DWORD flags);
+	cvar_t (const char *name, const char *def, DWORD flags, void (*callback)(cvar_t &));
+	virtual ~cvar_t ();
 
 #if CVAR_IMPLEMENTOR
 	char *name;
@@ -60,7 +60,7 @@ private:
 	cvar_t (const cvar_t &var);
 	cvar_t &operator= (const cvar_t &var);
 
-	void InitSelf (const char *name, const char *def, unsigned int flags, void (*callback)(cvar_t &));
+	void InitSelf (const char *name, const char *def, DWORD flags, void (*callback)(cvar_t &));
 	void (*m_Callback)(cvar_t &);
 	cvar_t *m_Next;
 	char *m_LatchedString;
@@ -95,6 +95,13 @@ private:
 	friend void C_SetCVarsToDefaults (void);
 
 	friend BOOL SetServerVar (char *name, char *value);
+
+ protected:
+#if CVAR_IMPLEMENTOR
+	cvar_t () {}
+#else
+	cvar_t () : name(0), string(0), value(0.f), flags(0) {}
+#endif
 };
 
 // console variable interaction

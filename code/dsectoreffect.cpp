@@ -38,6 +38,7 @@ void DSectorEffect::Serialize (FArchive &arc)
 }
 
 IMPLEMENT_SERIAL (DMover, DSectorEffect)
+
 DMover::DMover ()
 {
 }

@@ -27,7 +27,9 @@
 #define NOCOLOR     11
 #define MAXTHINGNODES 100 //Path stuff (paths created between items).
 #define SPAWN_DELAY 80  //Used to determine how many tics there are between each bot spawn when bot's are being spawned in a row (like when entering a new map).
-#define BOTFILENAME "zcajun/bots.cfg"
+
+#define BOTFILENAME "bots.cfg"
+
 #define MAX_TRAVERSE_DIST 100000000 //10 meters, used within b_func.c
 #define AVOID_DIST   45000000 //Try avoid incoming missiles once they reached this close
 #define SAFE_SELF_MISDIST 11000000    //Distance from self to target where it's safe to pull a rocket.
@@ -178,7 +180,7 @@ public:
 	botinfo_t *botinfo;
 	int spawn_tries;
 	int wanted_botnum;
-	bool itemsdone; //When array filled. bot's can start to think, prevent's lock after level completion.
+	bool itemsdone; //When array filled. bots can start to think, prevents lock after level completion.
 	AActor *firstthing;
 
 	int		 thingnum;

@@ -118,7 +118,7 @@ void DCajunMaster::ThinkForMove (AActor *actor, ticcmd_t *cmd)
 		//Check if it's more important to get an item than fight.
 		if (b->dest && (b->dest->flags&MF_SPECIAL)) //Must be an item, that is close enough.
 		{
-#define is b->dest->type==
+#define is b->dest->type==(mobjtype_t)
 			if (((actor->health<b->skill.isp && (is Medikit || is Stimpack || is Soul || is Mega)) || (is Invul || is Invis || is Mega) || dist<(GETINCOMBAT/4) || (b->readyweapon==wp_pistol || b->readyweapon==wp_fist))
 				&& (dist<GETINCOMBAT || (b->readyweapon==wp_pistol || b->readyweapon==wp_fist))
 				&& Reachable(actor, b->dest))
@@ -256,7 +256,7 @@ void DCajunMaster::WhatToGet (AActor *actor, AActor *item)
 {
 	player_t *b = actor->player;
 
-#define typeis item->type==
+#define typeis item->type==(mobjtype_t)
     if (!item //Under respawn and away. (handled in P_Mobj.c)
 		|| item == b->prev)
 	{
@@ -291,24 +291,25 @@ void DCajunMaster::WhatToGet (AActor *actor, AActor *item)
 void DCajunMaster::Set_enemy (AActor *actor)
 {
 	AActor *oldenemy;
+	AActor **enemy = &actor->player->enemy;
 
-	if (actor->player->enemy
-		&& actor->player->enemy->health > 0
-		&& P_CheckSight (actor, actor->player->enemy))
+	if (*enemy
+		&& (*enemy)->health > 0
+		&& P_CheckSight (actor, *enemy))
 	{
-		oldenemy = actor->player->enemy;
+		oldenemy = *enemy;
 	}
 	else
 	{
 		oldenemy = NULL;
 	}
 
-	actor->player->allround = !!actor->player->enemy;
-	actor->player->enemy = NULL;
-	actor->player->enemy = Find_enemy(actor);
-	if (!actor->player->enemy)
-		actor->player->enemy = oldenemy; //Try go for last (it will be NULL if there wasn't anyone)
+	actor->player->allround = !!*enemy;
+	*enemy = NULL;
+	*enemy = Find_enemy(actor);
+	if (!*enemy)
+		*enemy = oldenemy; //Try go for last (it will be NULL if there wasn't anyone)
 	//Verify that that enemy is really something alive that bot can kill.
-	if (!actor->player->enemy || actor->player->enemy->health < 0 || !(actor->player->enemy->flags&MF_SHOOTABLE))
-		actor->player->enemy = NULL;
+	if (*enemy && ((*enemy)->health < 0 || !((*enemy)->flags&MF_SHOOTABLE)))
+		*enemy = NULL;
 }

@@ -13,7 +13,9 @@
 // HEADER FILES ------------------------------------------------------------
 
 #include <stdlib.h>
+#ifndef UNIX
 #include <io.h>
+#endif
 #include <ctype.h>
 #include <sys/types.h>
 #include <string.h>
@@ -40,7 +42,10 @@
 #ifdef NeXT
 // NeXT doesn't need a binary flag in open call
 #define O_BINARY 0
-#define strcmpi strcasecmp
+#endif
+
+#ifndef O_BINARY
+#define O_BINARY 0
 #endif
 
 // TYPES -------------------------------------------------------------------
@@ -63,18 +68,19 @@ void **lumpcache;
 
 // CODE --------------------------------------------------------------------
 
-#ifdef NeXT
 //==========================================================================
 //
 // strupr
 //
 //==========================================================================
 
+#ifdef NO_STRUPR
 void strupr (char *s)
 {
     while (*s)
 	*s++ = toupper (*s);
 }
+#endif
 
 //==========================================================================
 //
@@ -82,6 +88,7 @@ void strupr (char *s)
 //
 //==========================================================================
 
+#ifdef NO_FILELENGTH
 int filelength (int handle)
 {
     struct stat fileinfo;

@@ -66,16 +66,15 @@ typedef int SOCKET;
 #define INVALID_SOCKET -1
 #define closesocket close
 #define ioctlsocket ioctl
+#define Sleep(x)	usleep (x * 1000)
 #endif
 
 #ifdef __WIN32__
-#	define IPPORT_USERRESERVED 5000
+#define IPPORT_USERRESERVED 5000
+typedef int socklen_t;
 #endif
 
 extern BOOL CheckAbort (void);
-
-static void	NetSend (void);
-static BOOL	NetListen (void);
 
 
 //
@@ -84,7 +83,7 @@ static BOOL	NetListen (void);
 
 static u_short DOOMPORT = (IPPORT_USERRESERVED + 0x1d);
 static SOCKET mysocket = INVALID_SOCKET;
-static struct sockaddr_in sendaddress[MAXNETNODES];
+static sockaddr_in sendaddress[MAXNETNODES];
 
 void (*netget) (void);
 void (*netsend) (void);
@@ -103,13 +102,16 @@ enum
 	PRE_CONACK,
 	PRE_ALLHEREACK,
 	PRE_GO,
-	PRE_GOACK
+	PRE_GOACK,
+	PRE_CONSOLENUM,
+	PRE_CONNUMACK
 };
 
 struct PreGamePacket
 {
 	u_short message;
 	u_short numnodes;
+	u_short consolenum;
 	struct
 	{
 		u_long address;
@@ -138,8 +140,8 @@ SOCKET UDPsocket (void)
 void BindToLocalPort (SOCKET s, u_short port)
 {
 	int v;
-	struct sockaddr_in address;
-		
+	sockaddr_in address;
+
 	memset (&address, 0, sizeof(address));
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
@@ -150,7 +152,7 @@ void BindToLocalPort (SOCKET s, u_short port)
 		I_FatalError ("BindToPort: %s", neterror ());
 }
 
-int FindNode (struct sockaddr_in *address)
+int FindNode (sockaddr_in *address)
 {
 	int i;
 
@@ -190,12 +192,13 @@ void PacketSend (void)
 //
 void PacketGet (void)
 {
-	int c, fromlen;
-	struct sockaddr_in fromaddress;
+	int c;
+	socklen_t fromlen;
+	sockaddr_in fromaddress;
 
 	fromlen = sizeof(fromaddress);
 	c = recvfrom (mysocket, (char*)netbuffer, sizeof(doomdata_t), 0
-				  , (struct sockaddr *)&fromaddress, &fromlen);
+				  , (sockaddr *)&fromaddress, &fromlen);
 
 	if (c == SOCKET_ERROR)
 	{
@@ -214,16 +217,15 @@ void PacketGet (void)
 	doomcom->datalength = (short)c;
 }
 
-/*
-struct sockaddr_in *PreGet (void *buffer, int bufferlen)
+sockaddr_in *PreGet (void *buffer, int bufferlen)
 {
-	static struct sockaddr_in fromaddress;
-	int fromlen;
+	static sockaddr_in fromaddress;
+	socklen_t fromlen;
 	int c;
 
 	fromlen = sizeof(fromaddress);
-	c = recvfrom (mysocket, buffer, bufferlen, 0,
-		(struct sockaddr *)&fromaddress, &fromlen);
+	c = recvfrom (mysocket, (char *)buffer, bufferlen, 0,
+		(sockaddr *)&fromaddress, &fromlen);
 
 	if (c == SOCKET_ERROR)
 	{
@@ -239,24 +241,23 @@ struct sockaddr_in *PreGet (void *buffer, int bufferlen)
 	return &fromaddress;
 }
 
-void PreSend (void *buffer, int bufferlen, struct sockaddr_in *to)
+void PreSend (const void *buffer, int bufferlen, sockaddr_in *to)
 {
-	sendto (mysocket, buffer, bufferlen, 0, (void *)to, sizeof(*to));
+	sendto (mysocket, (const char *)buffer, bufferlen, 0, (sockaddr *)to, sizeof(*to));
 }
-*/
 
-void BuildAddress (struct sockaddr_in *address, char *name)
+void BuildAddress (sockaddr_in *address, char *name)
 {
-	struct hostent *hostentry;		// host information entry
+	hostent *hostentry;		// host information entry
 	u_short port;
 	char *portpart;
-	BOOL isnamed = false;
+	bool isnamed = false;
 	int curchar;
 	char c;
 
 	address->sin_family = AF_INET;
 
-	if (portpart = strchr (name, ':'))
+	if ( (portpart = strchr (name, ':')) )
 	{
 		*portpart = 0;
 		port = atoi (portpart + 1);
@@ -272,7 +273,7 @@ void BuildAddress (struct sockaddr_in *address, char *name)
 	}
 	address->sin_port = htons(port);
 
-	for (curchar = 0; c = name[curchar]; curchar++)
+	for (curchar = 0; (c = name[curchar]) ; curchar++)
 	{
 		if ((c < '0' || c > '9') && c != '.')
 		{
@@ -312,7 +313,7 @@ void STACK_ARGS CloseNetwork (void)
 #endif
 }
 
-void StartNetwork (void)
+void StartNetwork (bool autoPort)
 {
 	u_long trueval = 1;
 #ifdef __WIN32__
@@ -333,9 +334,8 @@ void StartNetwork (void)
 	
 	// create communication socket
 	mysocket = UDPsocket ();
-	BindToLocalPort (mysocket, DOOMPORT);
+	BindToLocalPort (mysocket, autoPort ? 0 : DOOMPORT);
 	ioctlsocket (mysocket, FIONBIO, &trueval);
-
 }
 
 void WaitForPlayers (int i)
@@ -343,7 +343,7 @@ void WaitForPlayers (int i)
 	if (i == Args.NumArgs() - 1)
 		I_FatalError ("Not enough parameters after -net");
 
-	StartNetwork ();
+	StartNetwork (false);
 
 	// parse player number and host list
 	doomcom->consoleplayer = (short)(Args.GetArg (i+1)[0]-'1');
@@ -364,39 +364,44 @@ void WaitForPlayers (int i)
 	doomcom->numplayers = doomcom->numnodes;
 }
 
-/*
-void SendAbort (void)
+void STACK_ARGS SendAbort (void)
 {
 	u_short dis = htons (PRE_DISCONNECT);
 
-	doomcom->numnodes--;
-	while (doomcom->numnodes)
+	while (--doomcom->numnodes > 0)
 	{
-		PreSend (&dis, 2, &sendaddress[--doomcom->numnodes]);
+		PreSend (&dis, 2, &sendaddress[doomcom->numnodes]);
 		PreSend (&dis, 2, &sendaddress[doomcom->numnodes]);
 		PreSend (&dis, 2, &sendaddress[doomcom->numnodes]);
 		PreSend (&dis, 2, &sendaddress[doomcom->numnodes]);
 	}
-	I_FatalError ("Network game synchronization aborted.");
 }
 
 void HostGame (int i)
 {
-	struct PreGamePacket packet;
+	PreGamePacket packet;
 	int numplayers;
-	BOOL gotack[MAXNETNODES];
+	bool gotack[MAXNETNODES];
 	int ackcount;
-	struct sockaddr_in *from;
+	sockaddr_in *from;
 	int node;
 
-	if ((i == myargc - 1) || !(numplayers = atoi (myargv[i+1])))
+	if ((i == Args.NumArgs() - 1) || !(numplayers = atoi (Args.GetArg(i+1))))
 	{	// No player count specified, assume 2
 		numplayers = 2;
 	}
 
-	StartNetwork ();
+	StartNetwork (false);
+
+	// [JC] - this computer is starting the game, therefore it should
+	// be the Net Arbitrator.
+	doomcom->consoleplayer = 0;
+	Printf (PRINT_HIGH, "Console player number: %d\n", doomcom->consoleplayer);
+
 	doomcom->numnodes = 1;
 	Printf (PRINT_HIGH, "Waiting for players...\n");
+
+	atterm (SendAbort);
 
 	// Wait for numplayers-1 different connections
 	while (doomcom->numnodes < numplayers)
@@ -406,9 +411,10 @@ void HostGame (int i)
 			if (CheckAbort ())
 			{
 				SendAbort ();
+				I_FatalError ("Network game synchronization aborted.");
 			}
 
-			while (from = PreGet (&packet, sizeof(packet)))
+			while ( (from = PreGet (&packet, sizeof(packet))) )
 			{
 				switch (ntohs (packet.message))
 				{
@@ -421,7 +427,8 @@ void HostGame (int i)
 						}
 						Printf (PRINT_HIGH, "Got connect from node %d\n", node);
 						packet.message = htons (PRE_CONACK);
-						PreSend (&packet, 2, from);
+						packet.consolenum = node;
+						PreSend (&packet, sizeof(packet), from);
 						break;
 					case PRE_DISCONNECT:
 						node = FindNode (from);
@@ -469,14 +476,14 @@ void HostGame (int i)
 	while (ackcount < doomcom->numnodes - 1)
 	{
 		packet.message = htons (PRE_ALLHERE);
-		packet.numnodes = htons ((u_short)(doomcom->numnodes - 1));
-		for (node = 0; node < doomcom->numnodes - 1; node++)
+		packet.numnodes = htons ((u_short)(doomcom->numnodes - 2));
+		for (node = 1; node < doomcom->numnodes; node++)
 		{
 			int machine, spot;
 
 			if (!gotack[node])
 			{
-				for (spot = machine = 0; machine < doomcom->numnodes; machine++)
+				for (spot = 0, machine = 1; machine < doomcom->numnodes; machine++)
 				{
 					if (node != machine)
 					{
@@ -484,15 +491,22 @@ void HostGame (int i)
 							sendaddress[machine].sin_addr.s_addr;
 						packet.machines[spot].port =
 							sendaddress[machine].sin_port;
+
+						spot++;	// fixes problem of new address replacing existing address in
+								// array, it's supposed to increment the index before getting
+								// and storing in the packet the next address.
 					}
 				}
 			}
 			PreSend (&packet, sizeof(packet), &sendaddress[node]);
 		}
 		if (CheckAbort ())
+		{
 			SendAbort ();
+			I_FatalError ("Network game synchronization aborted.");
+		}
 
-		while (from = PreGet (&packet, sizeof(packet)))
+		while ( (from = PreGet (&packet, sizeof(packet))) )
 		{
 			if (ntohs (packet.message) == PRE_ALLHEREACK)
 			{
@@ -510,70 +524,93 @@ void HostGame (int i)
 		}
 	}
 
+	popterm ();
+
 	// Now go
 	Printf (PRINT_HIGH, "Go\n");
 	packet.message = htons (PRE_GO);
-	for (node = 0; node < doomcom->numnodes - 1; node++)
+	for (node = 0; node < doomcom->numnodes; node++)
 	{
 		PreSend (&packet, sizeof(packet), &sendaddress[node]);
 		PreSend (&packet, sizeof(packet), &sendaddress[node]);
 		PreSend (&packet, sizeof(packet), &sendaddress[node]);
 		PreSend (&packet, sizeof(packet), &sendaddress[node]);
 	}
+
+	Printf (PRINT_HIGH, "Total players: %d\n", doomcom->numnodes);
+
+	doomcom->id = DOOMCOM_ID;
+	doomcom->numplayers = doomcom->numnodes;
 }
 
-void SendToHost (u_short message, u_short ackmess, BOOL abortable)
+void SendToHost (u_short message, u_short ackmess, bool abortable)
 {
-	struct sockaddr_in *from;
-	BOOL waiting = true;
-	u_short packet;
+	sockaddr_in *from;
+	bool waiting = true;
+	PreGamePacket packet;
 
 	message = htons (message);
 	ackmess = htons (ackmess);
 	while (waiting)
 	{
 		if (abortable && CheckAbort ())
+		{
 			SendAbort ();
+			I_FatalError ("Network game synchronization aborted.");
+		}
 
 		// Let host know we are here
-		PreSend (&message, 2, &sendaddress[0]);
+		PreSend (&message, sizeof(message), &sendaddress[1]);
 
 		Sleep (300);
 		// Listen for acknowledgement
 		while ( (from = PreGet (&packet, sizeof(packet))) )
 		{
-			if (packet == ackmess)
+			if (packet.message == ackmess)
+			{
 				waiting = false;
+
+				doomcom->consoleplayer = packet.consolenum;
+				Printf (PRINT_HIGH, "Console player number: %d\n", doomcom->consoleplayer);
+			}
 		}
 	}
 }
 
 void JoinGame (int i)
 {
-	struct sockaddr_in *from;
-	BOOL waiting;
-	struct PreGamePacket packet;
+	sockaddr_in *from;
+	bool waiting;
+	PreGamePacket packet;
 
-	if ((i == myargc - 1) || (myargv[i+1][0] == '-') || (myargv[i+1][0] == '+'))
+	if ((i == Args.NumArgs() - 1) ||
+		(Args.GetArg(i+1)[0] == '-') ||
+		(Args.GetArg(i+1)[0] == '+'))
 		I_FatalError ("You need to specify the host machine's address");
 
-	StartNetwork ();
+	StartNetwork (true);
 
-	// Host is always node 0
-	BuildAddress (&sendaddress[0], myargv[i+1]);
+	// Host is always node 1
+	BuildAddress (&sendaddress[1], Args.GetArg(i+1));
 
 	// Let host know we are here
 	SendToHost (PRE_CONNECT, PRE_CONACK, true);
 
 	// Wait for everyone else to connect
 	waiting = true;
-	doomcom->numnodes = 0;
+	//doomcom->numnodes = 2;
+	atterm (SendAbort);
+
 	while (waiting)
 	{
 		if (CheckAbort ())
+		{
 			SendAbort ();
+			I_FatalError ("Network game synchronization aborted.");
+		}
+
 		Sleep (300);
-		while (from = PreGet (&packet, sizeof(packet)))
+		while (waiting && (from = PreGet (&packet, sizeof(packet))) )
 		{
 			switch (ntohs (packet.message))
 			{
@@ -583,19 +620,27 @@ void JoinGame (int i)
 						int node;
 
 						packet.numnodes = ntohs (packet.numnodes);
-						doomcom->numnodes = packet.numnodes + 1;
+						doomcom->numnodes = packet.numnodes + 2;
 						for (node = 0; node < packet.numnodes; node++)
 						{
-							sendaddress[node+1].sin_addr.s_addr =
+							sendaddress[node+2].sin_addr.s_addr =
 								packet.machines[node].address;
-							sendaddress[node+1].sin_port =
+							sendaddress[node+2].sin_port =
 								packet.machines[node].port;
+
+							// [JC] - fixes problem of games not starting due to
+							// no address family being assigned to nodes stored in
+							// sendaddress[] from the All Here packet.
+							sendaddress[node+2].sin_family = AF_INET;
 						}
 					}
+
+					Printf (PRINT_HIGH, "Received All Here, sending ACK\n");
 					packet.message = htons (PRE_ALLHEREACK);
-					PreSend (&packet, 2, &sendaddress[0]);
+					PreSend (&packet, sizeof(packet), &sendaddress[1]);
 					break;
 				case PRE_GO:
+					Printf (PRINT_HIGH, "Go\n");
 					waiting = false;
 					break;
 				case PRE_DISCONNECT:
@@ -605,11 +650,17 @@ void JoinGame (int i)
 		}
 	}
 
+	popterm ();
+
 	// Clear out any waiting packets
 	while (PreGet (&packet, sizeof(packet)))
 		;
+
+	Printf (PRINT_HIGH, "Total players: %d\n", doomcom->numnodes);
+
+	doomcom->id = DOOMCOM_ID;
+	doomcom->numplayers = doomcom->numnodes;
 }
-*/
 
 //
 // I_InitNetwork
@@ -654,12 +705,10 @@ void I_InitNetwork (void)
 	//		player x: -join <player 1's address>
 	if ( (i = Args.CheckParm ("-net")) )
 		WaitForPlayers (i);
-/*
-	else if ( (i = M_CheckParm ("-host")) )
+	else if ( (i = Args.CheckParm ("-host")) )
 		HostGame (i);
-	else if ( (i = M_CheckParm ("-join")) )
+	else if ( (i = Args.CheckParm ("-join")) )
 		JoinGame (i);
-*/
 	else
 	{
 		// single player game
@@ -741,13 +790,5 @@ char *neterror (void)
 			sprintf (neterr, "%d", code);
 			return neterr;
 	}
-}
-#else
-char *neterror (void)
-{
-	static char neterr[16];
-
-	sprintf (neterr, "%d", WSAGetLastError ());
-	return neterr;
 }
 #endif

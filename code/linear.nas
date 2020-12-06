@@ -11,10 +11,24 @@
 ;*
 ;****************************************************************************
 
-bits 32
+%ifdef M_TARGET_LINUX
 
-%define SCREENWIDTH	320
-%define SCREENHEIGHT	240
+extern	dc_colormap
+extern	dc_x
+extern	dc_yl
+extern	dc_yh
+extern	dc_iscale
+extern	dc_texturefrac
+extern	dc_source
+extern	dc_mask
+extern	dc_pitch
+
+extern	ylookup
+extern	columnofs
+extern	centery
+extern	detailyshift
+
+%else
 
 extern	_dc_colormap
 extern	_dc_x
@@ -29,17 +43,29 @@ extern	_dc_pitch
 extern	_ylookup
 extern	_columnofs
 extern	_centery
+extern	_detailyshift
 
-extern	_ds_y
-extern	_ds_x1
-extern	_ds_x2
-extern	_ds_colormap
-extern	_ds_xfrac
-extern	_ds_yfrac
-extern	_ds_xstep
-extern	_ds_ystep
-extern	_ds_source
-extern	_ds_colsize
+%define	dc_colormap	_dc_colormap
+%define	dc_x		_dc_x
+%define	dc_yl		_dc_yl
+%define	dc_yh		_dc_yh
+%define	dc_iscale	_dc_iscale
+%define	dc_texturefrac	_dc_texturefrac
+%define	dc_source	_dc_source
+%define	dc_mask		_dc_mask
+%define	dc_pitch	_dc_pitch
+
+%define	ylookup		_ylookup
+%define	columnofs	_columnofs
+%define	centery		_centery
+%define detailyshift	_detailyshift
+
+%endif
+
+bits 32
+
+%define SCREENWIDTH	320
+%define SCREENHEIGHT	240
 
 %define PUSHR	pushad
 %define POPR	popad
@@ -84,15 +110,16 @@ calladdr dd	0
 ;=================================
 
 
-	section	.text
+	section	.data
 
+GLOBAL	PatchUnrolled
 GLOBAL	_PatchUnrolled
-EXTERN	_detailyshift
 
+PatchUnrolled:
 _PatchUnrolled:
 	push	ebx
 	push	ebp
-	mov	ebx,[_dc_pitch]
+	mov	ebx,[dc_pitch]
 	mov	ecx,SCREENHEIGHT-1
 	mov	ebp,vscale240+scalepatchoffs
 	mov	eax,ecx
@@ -115,41 +142,43 @@ _PatchUnrolled:
 ;
 ;================
 
+GLOBAL	R_DrawColumnP_Unrolled
 GLOBAL	_R_DrawColumnP_Unrolled
 GLOBAL	@R_DrawColumnP_Unrolled@0
 
 @R_DrawColumnP_Unrolled@0:
 _R_DrawColumnP_Unrolled:
+R_DrawColumnP_Unrolled:
 	PUSHR
 
-	mov	edx,[_ylookup]
-	mov	ebp,[_dc_yh]
+	mov	edx,[ylookup]
+	mov	ebp,[dc_yh]
 	mov	ebx,ebp
 	mov	edi,[edx+ebx*4]
-	mov	edx,[_columnofs]
-	mov	ebx,[_dc_x]
+	mov	edx,[columnofs]
+	mov	ebx,[dc_x]
 	add	edi,[edx+ebx*4]
 
-	sub	ebp,[_dc_yl]		; ebp = pixel count
+	sub	ebp,[dc_yl]		; ebp = pixel count
 	or	ebp,ebp
 	js	done
 
 	mov	ebp,[scalecalls+4+ebp*4]
-	mov	ebx,[_dc_iscale]
+	mov	ebx,[dc_iscale]
 	mov	[calladdr],ebp
 
-	mov	edx,[_dc_texturefrac]
+	mov	edx,[dc_texturefrac]
 	mov	ebp,ebx
 	shl	ebp,16
 	shr	ebx,16
 	mov	ecx,edx
 	shl	edx,16
 	shr	ecx,16
-	mov	dl,[_dc_mask]
-	and	ebx,[_dc_mask]
+	mov	dl,[dc_mask]
+	and	ebx,[dc_mask]
 
-	mov	esi,[_dc_source]
-	mov	eax,[_dc_colormap]
+	mov	esi,[dc_source]
+	mov	eax,[dc_colormap]
 
 	and	ecx,edx			; get address of first location
 	jmp	[calladdr]

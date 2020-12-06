@@ -108,8 +108,8 @@ BOOL	 		viewactive;
  
 BOOL 			netgame;				// only true if packets are broadcast 
 BOOL			multiplayer;
-BOOL 			playeringame[MAXPLAYERS]; 
-player_t		players[MAXPLAYERS]; 
+player_t		players[MAXPLAYERS];
+bool			playeringame[MAXPLAYERS];
  
 int 			consoleplayer;			// player taking events and displaying 
 int 			displayplayer;			// view being displayed 
@@ -644,8 +644,8 @@ BOOL G_Responder (event_t *ev)
 
 	  // [RH] mouse buttons are now sent with key up/down events
 	  case ev_mouse: 
-		mousex = ev->data2 * mouse_sensitivity.value; 
-		mousey = ev->data3 * mouse_sensitivity.value; 
+		mousex = (int)(ev->data2 * mouse_sensitivity.value); 
+		mousey = (int)(ev->data3 * mouse_sensitivity.value); 
 		break;
  
 	  case ev_joystick: 
@@ -890,7 +890,7 @@ void G_PlayerReborn (int player)
 	killcount = p->killcount;
 	itemcount = p->itemcount;
 	secretcount = p->secretcount;
-    b_skill = players[player].skill;    //Added by MC:
+    b_skill = p->skill;    //Added by MC:
 	memcpy (&userinfo, &p->userinfo, sizeof(userinfo));
 
 	memset (p, 0, sizeof(*p));
@@ -917,7 +917,7 @@ void G_PlayerReborn (int player)
 
     //Added by MC: Init bot structure.
     if (bglobal.botingame[player])
-        bglobal.CleanBotstuff (players + player);
+        bglobal.CleanBotstuff (p);
     else
 		p->isbot = false;
 }
@@ -975,7 +975,7 @@ BOOL G_CheckSpot (int playernum, mapthing2_t *mthing)
 
 	// flush an old corpse if needed
 	if (bodyqueslot >= BODYQUESIZE)
-		delete bodyque[bodyqueslot%BODYQUESIZE];
+		bodyque[bodyqueslot%BODYQUESIZE]->Destroy ();
 	bodyque[bodyqueslot%BODYQUESIZE] = players[playernum].mo;
 	bodyqueslot++;
 
@@ -1251,10 +1251,17 @@ void G_SaveGame (int slot, char *description)
 
 void G_BuildSaveName (char *name, int slot)
 {
+#ifndef UNIX
 	if (Args.CheckParm ("-cdrom"))
 		sprintf(name, "c:\\zdoomdat\\%s%d.zds", SAVEGAMENAME, slot);
 	else
 		sprintf (name, "%s%d.zds", SAVEGAMENAME, slot);
+#else
+	sprintf (name, "%s%d.zds", SAVEGAMENAME, slot);
+	char *path = GetUserFile (name);
+	strcpy (name, path);
+	delete[] path;
+#endif
 }
 
 void G_DoSaveGame (void)
@@ -1280,7 +1287,7 @@ void G_DoSaveGame (void)
 	fwrite (SAVESIG, 16, 1, stdfile);
 	fwrite (level.mapname, 8, 1, stdfile);
 
-	FLZOFile savefile (stdfile, FFile::EWriting);
+	FLZOFile savefile (stdfile, FFile::EWriting, true);
 	FArchive arc (savefile);
 
 	{

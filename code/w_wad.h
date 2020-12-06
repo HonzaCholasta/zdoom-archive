@@ -108,8 +108,7 @@ void	W_ReadLump (int lump, void *dest);
 void   *W_CacheLumpNum (int lump, int tag);
 
 // [RH] W_CacheLumpName() is now a macro
-#define W_CacheLumpName(name,tag) \
-		W_CacheLumpNum (W_GetNumForName(name), (tag))
+#define W_CacheLumpName(name,tag) W_CacheLumpNum (W_GetNumForName(name), (tag))
 
 void	W_Profile (const char *fname);
 

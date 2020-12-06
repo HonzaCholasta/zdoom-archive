@@ -46,6 +46,10 @@ typedef unsigned long DWORD;
 #include "doomtype.h"
 #endif
 
+#ifdef UNIX
+#include <unistd.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -56,8 +60,8 @@ typedef unsigned long DWORD;
 
 
 /* We'll need to go below the MIDAS API level a bit */
-#include "../midas/src/midas/midas.h"
-#include "../midas/include/midasdll.h"
+#include <midas/src/midas/midas.h>
+#include <midas/include/midasdll.h>
 
 #include "wave.h"
 #include "m_swap.h"
@@ -538,16 +542,21 @@ void I_InitSound (void)
 #endif
 	_nosound = !!Args.CheckParm ("-nosfx") || !!Args.CheckParm ("-nosound");
 
-#ifdef _WIN32
+#ifdef UNIX
+	seteuid (0);
+	if (geteuid ())
+	    _nosound = true;
+#endif
+#ifndef DJGPP
 	if (!_nosound)	// DOS requires MIDAS for its timer
 #endif
 	{
 		Printf (PRINT_HIGH, "I_InitSound: Initializing MIDAS\n");
-		
+
 		MIDASstartup();
 		
 		MIDASsetOption(MIDAS_OPTION_MIXRATE, (int)snd_samplerate.value);
-		MIDASsetOption(MIDAS_OPTION_MIXBUFLEN, 200);
+		MIDASsetOption(MIDAS_OPTION_MIXBUFLEN, 50);
 
 #ifdef _WIN32
 		if (!wavonly)
@@ -620,6 +629,10 @@ void I_InitSound (void)
 
 	if (!_nosound && !MIDASstartBackgroundPlay(100))
 		MIDASerror ();
+
+#ifdef UNIX
+	seteuid (getuid ());
+#endif
 
 	// Finished initialization.
 	Printf (PRINT_HIGH, "I_InitSound: sound module ready\n");	

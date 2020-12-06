@@ -20,7 +20,14 @@ CVAR (bot_observer, "0", 0)
 //CVAR (bot_watersplash, "0", CVAR_ARCHIVE)
 //CVAR (bot_chat, "1", CVAR_ARCHIVE)
 
-IMPLEMENT_CLASS (DCajunMaster, DObject)
+IMPLEMENT_POINTY_CLASS (DCajunMaster, DObject)
+ DECLARE_POINTER (getspawned)
+ DECLARE_POINTER (botinfo)
+ DECLARE_POINTER (firstthing)
+// DECLARE_POINTER (things)
+ DECLARE_POINTER (body1)
+ DECLARE_POINTER (body2)
+END_POINTERS
 
 BEGIN_COMMAND (addbot)
 {
@@ -54,7 +61,7 @@ void DCajunMaster::ClearPlayer (int i)
 {
 	if (players[i].mo)
 	{
-		delete players[i].mo;
+		players[i].mo->Destroy ();
 		players[i].mo = NULL;
 	}
 	botinfo_t *bot = botinfo;

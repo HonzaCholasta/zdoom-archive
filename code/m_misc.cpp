@@ -32,6 +32,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #if defined(_WIN32)
 #include <io.h>
@@ -208,19 +209,55 @@ void M_FindResponseFile (void)
 //
 // [RH] Handled by console code now.
 
+#ifdef UNIX
+char *GetUserFile (const char *file)
+{
+	char *home = getenv ("HOME");
+	if (home == NULL || *home == '\0')
+		I_FatalError ("Please set your HOME variable");
+
+	char *path = new char[strlen (home) + 9 + strlen (file)];
+	strcpy (path, home);
+	if (home[strlen (home)-1] != '/')
+		strcat (path, "/.zdoom");
+	else
+		strcat (path, ".zdoom");
+
+	struct stat info;
+	if (stat (path, &info) == -1)
+	{
+		if (mkdir (path, S_IRUSR | S_IWUSR | S_IXUSR) == -1)
+		{
+			I_FatalError ("Failed to create %s directory:\n%s",
+						  path, strerror (errno));
+		}
+	}
+	else
+	{
+		if (!S_ISDIR(info.st_mode))
+		{
+			I_FatalError ("%s must be a directory", path);
+		}
+	}
+	strcat (path, "/");
+	strcat (path, file);
+	return path;
+}
+#endif
+
 // [RH] Get configfile path.
 // This file contains commands to set all
 // archived cvars, bind commands to keys,
 // and set other general game information.
 char *GetConfigPath (void)
 {
-	char *p;
 	char *path;
 
-	p = Args.CheckValue ("-config");
-	if (p)
-		return copystring (p);
+	path = Args.CheckValue ("-config");
+	if (path)
+		return copystring (path);
 
+#ifndef UNIX
 	if (Args.CheckParm ("-cdrom"))
 		return copystring ("c:\\zdoomdat\\zdoom.cfg");
 
@@ -229,12 +266,16 @@ char *GetConfigPath (void)
 	strcpy (path, progdir);
 	strcat (path, "zdoom.cfg");
 	return path;
+#else
+	return GetUserFile ("zdoom.cfg");
+#endif
 }
 
 static cvar_t autovar ("autoexec", "", CVAR_ARCHIVE);
 
 char *GetAutoexecPath (void)
 {
+#ifndef UNIX
 	if (Args.CheckParm ("-cdrom"))
 	{
 		return copystring ("c:\\zdoomdat\\autoexec.cfg");
@@ -251,6 +292,9 @@ char *GetAutoexecPath (void)
 
 		return copystring (autovar.string);
 	}
+#else
+	return GetUserFile ("autoexec.cfg");
+#endif
 }
 
 //
@@ -260,7 +304,7 @@ char *GetAutoexecPath (void)
 // [RH] Don't write a config file if M_LoadDefaults hasn't been called.
 static BOOL DefaultsLoaded;
 
-void M_SaveDefaults (void)
+void STACK_ARGS M_SaveDefaults (void)
 {
 	FILE *f;
 	char *configfile;
@@ -349,6 +393,7 @@ void M_LoadDefaults (void)
 	}
 
 	DefaultsLoaded = true;
+	atterm (M_SaveDefaults);
 }
 
 
@@ -387,7 +432,7 @@ typedef struct
 //
 // WritePCXfile
 //
-void WritePCXfile (char *filename, byte *data, int width, int height, unsigned int *palette)
+void WritePCXfile (char *filename, byte *data, int width, int height, DWORD *palette)
 {
 	int 		i;
 	int 		length;
@@ -445,7 +490,7 @@ void WritePCXfile (char *filename, byte *data, int width, int height, unsigned i
 //
 // M_ScreenShot
 //
-static BOOL FindFreeName (char *lbmname, char *extension)
+static BOOL FindFreeName (char *lbmname, const char *extension)
 {
 	int i;
 
@@ -461,7 +506,7 @@ static BOOL FindFreeName (char *lbmname, char *extension)
 		return true;
 }
 
-extern unsigned IndexedPalette[256];
+extern DWORD IndexedPalette[256];
 
 void M_ScreenShot (char *filename)
 {
@@ -472,12 +517,14 @@ void M_ScreenShot (char *filename)
 	// find a file name to save it to
 	if (!filename)
 	{
+#ifndef UNIX
 		if (Args.CheckParm ("-cdrom"))
 		{
 			strcpy (autoname, "C:\\ZDOOMDAT\\");
 			lbmname = autoname + 12;
 		}
 		else
+#endif
 		{
 			lbmname = autoname;
 		}

@@ -46,18 +46,6 @@ typedef unsigned char byte;
 #define STACK_ARGS
 #endif
 
-typedef unsigned char		BYTE;
-typedef unsigned short		WORD;
-typedef unsigned long		DWORD;
-typedef unsigned __int64	QWORD;
-
-typedef signed char			SBYTE;
-typedef signed short		SWORD;
-typedef signed long			SDWORD;
-typedef signed __int64		SQWORD;
-
-typedef unsigned long		BITFIELD;
-
 // Predefined with some OS.
 #ifdef __GNUC__
 #include <values.h>
@@ -93,6 +81,18 @@ typedef unsigned long		BITFIELD;
 #endif
 #endif
 
+
+typedef unsigned char		BYTE;
+typedef unsigned short		WORD;
+typedef unsigned long		DWORD;
+typedef unsigned __int64	QWORD;
+
+typedef signed char			SBYTE;
+typedef signed short		SWORD;
+typedef signed long			SDWORD;
+typedef signed __int64		SQWORD;
+
+typedef unsigned long		BITFIELD;
 
 #ifndef NOASM
 #ifndef USEASM

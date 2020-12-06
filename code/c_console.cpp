@@ -11,7 +11,6 @@
 #include "c_cvars.h"
 #include "c_dispatch.h"
 #include "hu_stuff.h"
-#include "i_input.h"
 #include "i_system.h"
 #include "i_video.h"
 #include "m_swap.h"
@@ -35,6 +34,7 @@ static BOOL TabbedLast;		// Last key pressed was tab
 
 static DCanvas *conback;
 
+extern int KeyRepeatRate, KeyRepeatDelay;
 
 extern int		gametic;
 extern BOOL		automapactive;	// in AM_map.c
@@ -239,7 +239,8 @@ void C_InitConsole (int width, int height, BOOL ingame)
 			}
 
 			VersionString[0] = 0x11;
-			for (int i = 0; i < strlen(DOTVERSIONSTR); i++)
+			size_t i;
+			for (i = 0; i < strlen(DOTVERSIONSTR); i++)
 				VersionString[i+1] = ((DOTVERSIONSTR[i]>='0'&&DOTVERSIONSTR[i]<='9')||DOTVERSIONSTR[i]=='.')?DOTVERSIONSTR[i]-30:DOTVERSIONSTR[i] ^ 0x80;
 			VersionString[i+1] = 0;
 

@@ -48,6 +48,37 @@
 
 BOOL onground;
 
+// This function supplements the pointer cleanup in dobject.cpp, because
+// player_s is not derived from DObject. (I tried it, and DestroyScan was
+// unable to properly determine the player object's type--possibly
+// because it gets staticly allocated in an array.)
+//
+// This function checks all the DObject pointers in a player_s and NULLs any
+// that match the pointer passed in. If you add any pointers that point to
+// DObject (or a subclass), add them here too.
+
+void player_s::FixPointers (const DObject *obj)
+{
+	if (mo == obj)
+		mo = NULL;
+	if (attacker == obj)
+		attacker = NULL;
+	if (camera == obj)
+		camera = NULL;
+	if (dest == obj)
+		dest = NULL;
+	if (prev == obj)
+		prev = NULL;
+	if (enemy == obj)
+		enemy = NULL;
+	if (missile == obj)
+		missile = NULL;
+	if (mate == obj)
+		mate = NULL;
+	if (last_mate == obj)
+		last_mate = NULL;
+}
+
 
 //
 // P_Thrust
@@ -373,7 +404,7 @@ void P_PlayerThink (player_t *player)
 		if (player->isbot)
 		{
 			Printf (PRINT_HIGH, "%s left: No player %d start\n",
-				player->userinfo.netname, player-players+1);
+				player->userinfo.netname, player - players + 1);
 			bglobal.ClearPlayer (player - players);
 			return;
 		}

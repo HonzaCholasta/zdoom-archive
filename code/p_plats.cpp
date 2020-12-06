@@ -109,7 +109,7 @@ void DPlat::RunThink ()
 					case platUpByValueStay:
 					case platDownToNearestFloor:
 					case platDownToLowestCeiling:
-						delete this;
+						Destroy ();
 						break;
 					default:
 						break;
@@ -139,7 +139,7 @@ void DPlat::RunThink ()
 				{
 					case platUpWaitDownStay:
 					case platUpByValue:
-						delete this;
+						Destroy ();
 						break;
 					default:
 						break;
@@ -160,7 +160,7 @@ void DPlat::RunThink ()
 		{
 			case platUpByValueStay:
 			case platRaiseAndStay:
-				delete this;
+				Destroy ();
 			default:
 				break;
 		}

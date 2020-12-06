@@ -54,7 +54,7 @@ void DPillar::RunThink ()
 	if (r == pastdest && s == pastdest)
 	{
 		SN_StopSequence (m_Sector);
-		delete this;
+		Destroy ();
 	}
 }
 

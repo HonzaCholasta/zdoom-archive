@@ -258,8 +258,11 @@ void DActiveButton::RunThink ()
 		case BUTTON_Bottom:
 			sides[m_Line->sidenum[0]].bottomtexture = m_Texture;
 			break;
+
+		default:
+			break;
 		}
 		S_Sound (m_X, m_Y, CHAN_VOICE, "switches/normbutn", 1, ATTN_STATIC);
-		delete this;
+		Destroy ();
 	}
 }

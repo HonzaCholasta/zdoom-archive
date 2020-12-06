@@ -127,7 +127,7 @@ void DDoor::RunThink ()
 			case doorRaise:
 			case doorClose:
 				m_Sector->ceilingdata = NULL;	//jff 2/22/98
-				delete this;					// unlink and free
+				Destroy ();						// unlink and free
 				break;
 				
 			case doorCloseWaitOpen:
@@ -171,7 +171,7 @@ void DDoor::RunThink ()
 			case doorCloseWaitOpen:
 			case doorOpen:
 				m_Sector->ceilingdata = NULL;	//jff 2/22/98
-				delete this;					// unlink and free
+				Destroy ();						// unlink and free
 				break;
 				
 			default:
@@ -185,7 +185,7 @@ void DDoor::RunThink ()
 // [RH] DoorSound: Plays door sound depending on direction and speed
 void DDoor::DoorSound (bool raise) const
 {
-	char *snd;
+	const char *snd;
 
 	if (m_Sector->seqType >= 0)
 	{

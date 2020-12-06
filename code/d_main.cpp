@@ -33,6 +33,10 @@
 #include <sys/stat.h>
 #endif
 
+#ifdef UNIX
+#include <unistd.h>
+#endif
+
 #include <time.h>
 #include <math.h>
 
@@ -333,6 +337,9 @@ void D_Display (void)
 		case GS_DEMOSCREEN:
 			D_PageDrawer ();
 			break;
+
+	default:
+	    break;
 	}
 
 	// draw pause pic
@@ -423,10 +430,12 @@ void D_DoomLoop (void)
 			if (singletics)
 			{
 				I_StartTic ();
+				DObject::BeginFrame ();
 				D_ProcessEvents ();
 				G_BuildTiccmd (&netcmds[consoleplayer][maketic%BACKUPTICS]);
 				//Added by MC: For some of that bot stuff. The main bot function.
-				for (int i = 0; i < MAXPLAYERS; i++)
+				int i;
+				for (i = 0; i < MAXPLAYERS; i++)
 					if (playeringame[i] && players[i].isbot && players[i].mo)
 					{
 						players[i].savedyaw = players[i].mo->angle;
@@ -446,6 +455,7 @@ void D_DoomLoop (void)
 				G_Ticker ();
 				gametic++;
 				maketic++;
+				DObject::EndFrame ();
 				Net_NewMakeTic ();
 			}
 			else
@@ -556,7 +566,6 @@ void D_DoAdvanceDemo (void)
 		case 3:
 			if (gameinfo.advisoryTime)
 			{
-				pagetic = gameinfo.advisoryTime;
 				if (page)
 				{
 					page->Lock ();
@@ -886,11 +895,17 @@ static bool CheckIWADinEnvDir (const char *envname, const char *parm, const char
 //
 // IdentifyVersion
 //
-// Tries to find an IWAD in one of four directories (in this order):
+// Tries to find an IWAD in one of four directories under DOS or Win32:
 //	  1. Current directory
 //	  2. Executable directory
 //	  3. $DOOMWADDIR
 //	  4. $HOME
+//
+// Under UNIX OSes, the search path is:
+//	  1. Current directory
+//	  2. $DOOMWADDIR
+//	  3. $HOME/.zdoom
+//	  4. The share directory defined at compile time (/usr/local/share/zdoom)
 //
 //==========================================================================
 
@@ -898,6 +913,7 @@ static const char *IdentifyVersion (void)
 {
 	const char *titlestring = "Public DOOM - ";
 	const char *iwadparm = Args.CheckValue ("-iwad");
+	char *homepath = NULL;
 
 	if (iwadparm)
 	{
@@ -908,13 +924,24 @@ static const char *IdentifyVersion (void)
 		iwadparm = custwad;
 	}
 
+#ifndef UNIX
 	if (!CheckIWAD ("", iwadparm, titlestring) &&
 		!CheckIWAD (progdir, iwadparm, titlestring) &&
 		!CheckIWADinEnvDir ("DOOMWADDIR", iwadparm, titlestring) &&
 		!CheckIWADinEnvDir ("HOME", iwadparm, titlestring))
+#else
+	if (!CheckIWAD ("", iwadparm, titlestring) &&
+		!CheckIWADinEnvDir ("DOOMWADDIR", iwadparm, titlestring) &&
+		(homepath = GetUserFile (""),
+		 !CheckIWAD (homepath, iwadparm, titlestring)) &&
+		!CheckIWAD (SHARE_DIR, iwadparm, titlestring))
+#endif
 	{
 		Printf (PRINT_HIGH, "Game mode indeterminate.\n");
 	}
+
+	if (homepath)
+		delete[] homepath;
 
 	if (iwadparm)
 		delete[] const_cast<char *>(iwadparm);
@@ -964,6 +991,85 @@ END_CUSTOM_CVAR (transsouls)
 
 //==========================================================================
 //
+// BaseFileSearch
+//
+//==========================================================================
+
+static const char *BaseFileSearch (const char *file, const char *ext)
+{
+	static char wad[256];
+
+	if (!FileExists (file))
+	{
+#ifndef UNIX
+		sprintf (wad, "%s%s", progdir, file);
+		if (!FileExists (wad))
+		{
+			char *doomwaddir = getenv ("DOOMWADDIR");
+			if (doomwaddir)
+			{
+				char dir[256];
+				strcpy (dir, doomwaddir);
+				FixPathSeperator (dir);
+				sprintf (wad, "%s%s%s",
+						 dir,
+						 dir[strlen (dir) - 1] != '/' ? "/" : "",
+						 file);
+				if (!FileExists (wad))
+					goto retry;
+			}
+			else
+				goto retry;
+		}
+#else
+		sprintf (wad, "%s%s", SHARE_DIR, file);
+		if (!FileExists (wad))
+		{
+			char *uwad = GetUserFile (file);
+			if (!FileExists (uwad))
+			{
+				char *doomwaddir = getenv ("DOOMWADDIR");
+				delete[] uwad;
+				if (doomwaddir)
+				{
+					char dir[256];
+					strcpy (dir, doomwaddir);
+					FixPathSeperator (dir);
+					sprintf (wad, "%s%s%s",
+							 dir,
+							 dir[strlen (dir) - 1] != '/' ? "/" : "",
+							 file);
+					if (!FileExists (wad))
+						goto retry;
+				}
+				else
+					goto retry;
+			}
+			else
+			{
+				strcpy (wad, uwad);
+				delete[] uwad;
+			}
+		}
+#endif
+	}
+	else
+		return file;
+	return wad;
+
+ retry:
+	if (ext)
+	{
+		char tmp[256];
+		strcpy (tmp, file);
+		DefaultExtension (tmp, ext);
+		return BaseFileSearch (tmp, NULL);
+	}
+	return NULL;
+}
+
+//==========================================================================
+//
 // D_DoomMain
 //
 //==========================================================================
@@ -973,6 +1079,8 @@ void D_DoomMain (void)
 	int p, flags;
 	char file[256];
 	char *v;
+
+	atterm (DObject::StaticShutdown);
 
 	rngseed = (unsigned long)time (NULL);
 
@@ -986,39 +1094,79 @@ void D_DoomMain (void)
 
 	{
 		// [RH] Make sure zdoom.wad is always loaded,
-		// as it contains stuff we need.
-		char *zdoomwad = (char *)Z_Malloc (strlen (progdir) + 10, PU_STATIC, 0);
-		sprintf (zdoomwad, "%szdoom.wad", progdir);
-		D_AddFile (zdoomwad);
-#if 0	// Maybe when there's actually a zvox.wad to load...
-		sprintf (zdoomwad, "%szvox.wad", progdir);
-		D_AddFile (zdoomwad);
-#endif
-		Z_Free (zdoomwad);
+		// as it contains magic stuff we need.
+		const char *wad;
+
+		wad = BaseFileSearch ("zdoom.wad", NULL);
+		if (wad)
+			D_AddFile (wad);
+		else
+			I_FatalError ("Cannot find zdoom.wad");
+		wad = BaseFileSearch ("zvox.wad", NULL);
+		if (wad)
+			D_AddFile (wad);
 	}
 
 	I_SetTitleString (IdentifyVersion ());
 
 	// [RH] Add any .wad files in the skins directory
 	{
-		char skinname[256];
-		findstate_t findstate;
-		long handle;
-		int stuffstart;
+		char curdir[256];
 
-		stuffstart = sprintf (skinname, "%sskins/", progdir);
-		strcpy (skinname + stuffstart, "*.wad");
-		if ((handle = I_FindFirst (skinname, &findstate)) != -1)
+		if (getcwd (curdir, 256))
 		{
-			do
+			char skindir[256];
+			findstate_t findstate;
+			long handle;
+			int stuffstart;
+
+#ifdef UNIX
+			stuffstart = sprintf (skindir, "%sskins", SHARE_DIR);
+#else
+			stuffstart = sprintf (skindir, "%sskins", progdir);
+#endif
+			if (!chdir (skindir))
 			{
-				if (!(I_FindAttr (&findstate) & FA_DIREC))
+				skindir[stuffstart++] = '/';
+				if ((handle = I_FindFirst ("*.wad", &findstate)) != -1)
 				{
-					strcpy (skinname + stuffstart, I_FindName (&findstate));
-					D_AddFile (skinname);
+					do
+					{
+						if (!(I_FindAttr (&findstate) & FA_DIREC))
+						{
+							strcpy (skindir + stuffstart,
+									I_FindName (&findstate));
+							D_AddFile (skindir);
+						}
+					} while (I_FindNext (handle, &findstate) == 0);
+					I_FindClose (handle);
 				}
-			} while (I_FindNext (handle, &findstate) == 0);
-			I_FindClose (handle);
+			}
+
+			const char *home = getenv ("HOME");
+			if (home)
+			{
+				stuffstart = sprintf (skindir, "%s%s.zdoom/skins", home,
+									  home[strlen(home)-1] == '/' ? "" : "/");
+				if (!chdir (skindir))
+				{
+					skindir[stuffstart++] = '/';
+					if ((handle = I_FindFirst ("*.wad", &findstate)) != -1)
+					{
+						do
+						{
+							if (!(I_FindAttr (&findstate) & FA_DIREC))
+							{
+								strcpy (skindir + stuffstart,
+										I_FindName (&findstate));
+								D_AddFile (skindir);
+							}
+						} while (I_FindNext (handle, &findstate) == 0);
+						I_FindClose (handle);
+					}
+				}
+			}
+			chdir (curdir);
 		}
 	}
 
@@ -1031,7 +1179,11 @@ void D_DoomMain (void)
 		modifiedgame = true;			// homebrew levels
 		int i;
 		for (i = 0; i < files->NumArgs(); i++)
-			D_AddFile (files->GetArg (i));
+		{
+			const char *f = BaseFileSearch (files->GetArg (i), ".wad");
+			if (f)
+				D_AddFile (files->GetArg (i));
+		}
 	}
 	delete files;
 	
@@ -1042,7 +1194,6 @@ void D_DoomMain (void)
 
 	CT_Init ();
 	I_Init ();
-	I_InitGraphics ();
 	V_Init ();
 
 	// Base systems have been inited; enable cvar callbacks
@@ -1053,6 +1204,7 @@ void D_DoomMain (void)
 
 	// [RH] Apply any DeHackEd patch
 	{
+		const char *f;
 		bool noDef = false;
 		int i;
 
@@ -1061,7 +1213,8 @@ void D_DoomMain (void)
 		if (files->NumArgs() > 0)
 		{
 			for (i = 0; i < files->NumArgs(); i++)
-				DoDehPatch (files->GetArg (i), false);
+				if ( (f = BaseFileSearch (files->GetArg (i), ".deh")) )
+					DoDehPatch (f, false);
 			noDef = true;
 		}
 		delete files;
@@ -1071,7 +1224,11 @@ void D_DoomMain (void)
 		if (files->NumArgs() > 0)
 		{
 			for (i = 0; i < files->NumArgs(); i++)
-				DoDehPatch (files->GetArg (i), false);
+			{
+				printf (":%s\n", files->GetArg (i));
+				if ( (f = BaseFileSearch (files->GetArg (i), ".bex")) )
+					printf ("%s\n", f), DoDehPatch (f, false);
+			}
 			noDef = true;
 		}
 		delete files;
@@ -1174,13 +1331,15 @@ void D_DoomMain (void)
 	}
 	if (devparm)
 		Printf (PRINT_HIGH, Strings[0].builtin);	// D_DEVSTR
-	
+
+#ifndef UNIX
 	if (Args.CheckParm("-cdrom"))
 	{
 		Printf (PRINT_HIGH, Strings[1].builtin);	// D_CDROM
 		mkdir ("c:\\zdoomdat", 0);
-	}	
-	
+	}
+#endif
+
 	// turbo option  // [RH] (now a cvar)
 	{
 		char *value = Args.CheckValue ("-turbo");
@@ -1231,7 +1390,7 @@ void D_DoomMain (void)
 	P_Init ();
 
 	Printf (PRINT_HIGH, "\nS_Init: Setting up sound.\n");
-	S_Init ((int)snd_sfxvolume.value /* *8 */, snd_musicvolume.value /* *8*/ );
+	S_Init ((int)snd_sfxvolume.value /* *8 */, (int)snd_musicvolume.value /* *8*/ );
 
 	I_FinishClockCalibration ();
 
