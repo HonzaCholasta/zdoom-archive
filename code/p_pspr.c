@@ -25,6 +25,8 @@
 static const char
 rcsid[] = "$Id: p_pspr.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
+#include <stdlib.h>
+
 #include "doomdef.h"
 #include "d_event.h"
 
@@ -44,22 +46,15 @@ rcsid[] = "$Id: p_pspr.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #define LOWERSPEED				FRACUNIT*6
 #define RAISESPEED				FRACUNIT*6
 
-#define WEAPONBOTTOM	128*FRACUNIT
+#define WEAPONBOTTOM			128*FRACUNIT
 #define WEAPONTOP				32*FRACUNIT
 
-
-// plasma cells for a bfg attack
-#define BFGCELLS				40				
 
 
 //
 // P_SetPsprite
 //
-void
-P_SetPsprite
-( player_t* 	player,
-  int			position,
-  statenum_t	stnum ) 
+void P_SetPsprite (player_t *player, int position, statenum_t stnum)
 {
 	pspdef_t*	psp;
 	state_t*	state;
@@ -109,7 +104,7 @@ P_SetPsprite
 fixed_t 		swingx;
 fixed_t 		swingy;
 
-void P_CalcSwing (player_t* 	player)
+void P_CalcSwing (player_t *player)
 {
 	fixed_t 	swing;
 	int 		angle;
@@ -120,10 +115,10 @@ void P_CalcSwing (player_t* 	player)
 
 	swing = player->bob;
 
-	angle = (FINEANGLES/70*leveltime)&FINEMASK;
+	angle = (FINEANGLES/(TICRATE*2)*level.time)&FINEMASK;
 	swingx = FixedMul ( swing, finesine[angle]);
 
-	angle = (FINEANGLES/70*leveltime+FINEANGLES/2)&FINEMASK;
+	angle = (FINEANGLES/(TICRATE*2)*level.time+FINEANGLES/2)&FINEMASK;
 	swingy = -FixedMul ( swingx, finesine[angle]);
 }
 
@@ -135,7 +130,7 @@ void P_CalcSwing (player_t* 	player)
 // from the bottom of the screen.
 // Uses player
 //
-void P_BringUpWeapon (player_t* player)
+void P_BringUpWeapon (player_t *player)
 {
 	statenum_t	newstate;
 		
@@ -158,7 +153,7 @@ void P_BringUpWeapon (player_t* player)
 // Returns true if there is enough ammo to shoot.
 // If not, selects the next weapon to use.
 //
-boolean P_CheckAmmo (player_t* player)
+boolean P_CheckAmmo (player_t *player)
 {
 	ammotype_t			ammo;
 	int 				count;
@@ -167,7 +162,7 @@ boolean P_CheckAmmo (player_t* player)
 
 	// Minimal amount for one shot varies.
 	if (player->readyweapon == wp_bfg)
-		count = BFGCELLS;
+		count = deh_BFGCells;
 	else if (player->readyweapon == wp_supershotgun)
 		count = 2;		// Double barrel.
 	else
@@ -243,7 +238,7 @@ boolean P_CheckAmmo (player_t* player)
 //
 // P_FireWeapon.
 //
-void P_FireWeapon (player_t* player)
+void P_FireWeapon (player_t *player)
 {
 	statenum_t	newstate;
 		
@@ -262,7 +257,7 @@ void P_FireWeapon (player_t* player)
 // P_DropWeapon
 // Player died, so put the weapon away.
 //
-void P_DropWeapon (player_t* player)
+void P_DropWeapon (player_t *player)
 {
 	P_SetPsprite (player,
 				  ps_weapon,
@@ -278,10 +273,7 @@ void P_DropWeapon (player_t* player)
 // Follows after getting weapon up,
 // or after previous attack/fire sequence.
 //
-void
-A_WeaponReady
-( player_t* 	player,
-  pspdef_t* 	psp )
+void A_WeaponReady (player_t *player, pspdef_t *psp)
 {		
 	statenum_t	newstate;
 	int 		angle;
@@ -327,7 +319,7 @@ A_WeaponReady
 		player->attackdown = false;
 	
 	// bob the weapon based on movement speed
-	angle = (128*leveltime)&FINEMASK;
+	angle = (128*level.time)&FINEMASK;
 	psp->sx = FRACUNIT + FixedMul (player->bob, finecosine[angle]);
 	angle &= FINEANGLES/2-1;
 	psp->sy = WEAPONTOP + FixedMul (player->bob, finesine[angle]);
@@ -340,9 +332,7 @@ A_WeaponReady
 // The player can re-fire the weapon
 // without lowering it entirely.
 //
-void A_ReFire
-( player_t* 	player,
-  pspdef_t* 	psp )
+void A_ReFire (player_t *player, pspdef_t *psp)
 {
 	
 	// check for fire
@@ -362,10 +352,7 @@ void A_ReFire
 }
 
 
-void
-A_CheckReload
-( player_t* 	player,
-  pspdef_t* 	psp )
+void A_CheckReload (player_t *player, pspdef_t *psp)
 {
 	P_CheckAmmo (player);
 #if 0
@@ -381,10 +368,7 @@ A_CheckReload
 // Lowers current weapon,
 //	and changes weapon at bottom.
 //
-void
-A_Lower
-( player_t* 	player,
-  pspdef_t* 	psp )
+void A_Lower (player_t *player, pspdef_t *psp)
 {		
 	psp->sy += LOWERSPEED;
 
@@ -419,10 +403,7 @@ A_Lower
 //
 // A_Raise
 //
-void
-A_Raise
-( player_t* 	player,
-  pspdef_t* 	psp )
+void A_Raise (player_t *player, pspdef_t *psp)
 {
 	statenum_t	newstate;
 		
@@ -445,10 +426,7 @@ A_Raise
 //
 // A_GunFlash
 //
-void
-A_GunFlash
-( player_t* 	player,
-  pspdef_t* 	psp ) 
+void A_GunFlash (player_t *player, pspdef_t *psp)
 {
 	P_SetMobjState (player->mo, S_PLAY_ATK2);
 	P_SetPsprite (player,ps_flash,weaponinfo[player->readyweapon].flashstate);
@@ -464,10 +442,7 @@ A_GunFlash
 //
 // A_Punch
 //
-void
-A_Punch
-( player_t* 	player,
-  pspdef_t* 	psp ) 
+void A_Punch (player_t *player, pspdef_t *psp)
 {
 	angle_t 	angle;
 	int 		damage;
@@ -498,10 +473,7 @@ A_Punch
 //
 // A_Saw
 //
-void
-A_Saw
-( player_t* 	player,
-  pspdef_t* 	psp ) 
+void A_Saw (player_t *player, pspdef_t *psp)
 {
 	angle_t 	angle;
 	int 		damage;
@@ -511,7 +483,7 @@ A_Saw
 	angle = player->mo->angle;
 	angle += (P_Random()-P_Random())<<18;
 	
-	// use meleerange + 1 se the puff doesn't skip the flash
+	// use meleerange + 1 so the puff doesn't skip the flash
 	slope = P_AimLineAttack (player->mo, angle, MELEERANGE+1);
 	P_LineAttack (player->mo, angle, MELEERANGE+1, slope, damage);
 
@@ -547,10 +519,7 @@ A_Saw
 //
 // A_FireMissile
 //
-void
-A_FireMissile
-( player_t* 	player,
-  pspdef_t* 	psp ) 
+void A_FireMissile (player_t *player, pspdef_t *psp)
 {
 	player->ammo[weaponinfo[player->readyweapon].ammo]--;
 	P_SpawnPlayerMissile (player->mo, MT_ROCKET);
@@ -560,12 +529,9 @@ A_FireMissile
 //
 // A_FireBFG
 //
-void
-A_FireBFG
-( player_t* 	player,
-  pspdef_t* 	psp ) 
+void A_FireBFG (player_t *player, pspdef_t *psp)
 {
-	player->ammo[weaponinfo[player->readyweapon].ammo] -= BFGCELLS;
+	player->ammo[weaponinfo[player->readyweapon].ammo] -= deh_BFGCells;
 	P_SpawnPlayerMissile (player->mo, MT_BFG);
 }
 
@@ -574,10 +540,7 @@ A_FireBFG
 //
 // A_FirePlasma
 //
-void
-A_FirePlasma
-( player_t* 	player,
-  pspdef_t* 	psp ) 
+void A_FirePlasma (player_t *player, pspdef_t *psp)
 {
 	player->ammo[weaponinfo[player->readyweapon].ammo]--;
 
@@ -597,8 +560,7 @@ A_FirePlasma
 //
 fixed_t 		bulletslope;
 
-
-void P_BulletSlope (mobj_t* 	mo)
+void P_BulletSlope (mobj_t *mo)
 {
 	angle_t 	an;
 	
@@ -614,18 +576,26 @@ void P_BulletSlope (mobj_t* 	mo)
 		{
 			an -= 2<<26;
 			bulletslope = P_AimLineAttack (mo, an, 16*64*FRACUNIT);
+			// [RH] If we never found a target, use mobj pitch to
+			// determine bulletslope
+			if (!linetarget) {
+				an = mo->angle;
+				bulletslope = -mo->pitch / 2;
+			}
 		}
 	}
+	if (linetarget && mo->player)
+		if (abs(bulletslope - mo->pitch/2) > mo->player->aimdist) {
+			bulletslope = -mo->pitch / 2;
+			an = mo->angle;
+		}
 }
 
 
 //
 // P_GunShot
 //
-void
-P_GunShot
-( mobj_t*		mo,
-  boolean		accurate )
+void P_GunShot (mobj_t *mo, boolean accurate)
 {
 	angle_t 	angle;
 	int 		damage;

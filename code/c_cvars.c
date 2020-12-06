@@ -1,12 +1,12 @@
 #include <string.h>
-#include <malloc.h>
-#include <stdlib.h>
 #include <stdio.h>
+
+#include "m_alloc.h"
 
 #include "c_cvars.h"
 #include "d_player.h"
 
-void *mymalloc (size_t size);
+#include "d_netinfo.h"
 
 static boolean donoset = false;
 cvar_t *CVars = NULL;
@@ -35,9 +35,11 @@ void SetCVar (cvar_t *var, char *value)
 	}
 	if (var->string)
 		free (var->string);
-	var->string = mymalloc (strlen (value) + 1);
+	var->string = Malloc (strlen (value) + 1);
 	strcpy (var->string, value);
 	var->value = (float)atof (value);
+	if (var->flags & CVAR_USERINFO)
+		D_UserInfoChanged (var);
 }
 
 void SetCVarFloat (cvar_t *var, float value)
@@ -55,8 +57,8 @@ cvar_t *cvar (char *var_name, char *value, int flags)
 	var = FindCVar (var_name, &dummy);
 
 	if (!var) {
-		var = mymalloc (sizeof(cvar_t));
-		var->name = mymalloc (strlen (var_name) + 1);
+		var = Malloc (sizeof(cvar_t));
+		var->name = Malloc (strlen (var_name) + 1);
 		strcpy (var->name, var_name);
 		var->string = NULL;
 		var->latched_string = NULL;

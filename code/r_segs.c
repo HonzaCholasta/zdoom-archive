@@ -28,7 +28,7 @@ rcsid[] = "$Id: r_segs.c,v 1.3 1997/01/29 20:10:19 b1 Exp $";
 
 
 
-
+#include "m_alloc.h"
 #include <stdlib.h>
 
 #include "i_system.h"
@@ -383,8 +383,13 @@ R_StoreWallRange
 	int 				lightnum;
 
 	// don't overflow and crash
-	if (ds_p == &drawsegs[MAXDRAWSEGS])
-		return; 		
+	if (ds_p == &drawsegs[MaxDrawSegs]) {
+		// [RH] Grab some more drawsegs
+		MaxDrawSegs += 32;
+		drawsegs = Realloc (drawsegs, MaxDrawSegs * sizeof(drawseg_t));
+		ds_p = &drawsegs[MaxDrawSegs - 32];
+		DEVONLY (Printf, "MaxDrawSegs increased to %d\n", MaxDrawSegs, 0);
+	}
 				
 #ifdef RANGECHECK
 	if (start >=viewwidth || start > stop)

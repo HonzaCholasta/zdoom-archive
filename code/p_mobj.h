@@ -117,90 +117,99 @@
 typedef enum
 {
 	// Call P_SpecialThing when touched.
-	MF_SPECIAL			= 1,
+	MF_SPECIAL			= 0x00000001,
 	// Blocks.
-	MF_SOLID			= 2,
+	MF_SOLID			= 0x00000002,
 	// Can be hit.
-	MF_SHOOTABLE		= 4,
+	MF_SHOOTABLE		= 0x00000004,
 	// Don't use the sector links (invisible but touchable).
-	MF_NOSECTOR 		= 8,
+	MF_NOSECTOR 		= 0x00000008,
 	// Don't use the blocklinks (inert but displayable)
-	MF_NOBLOCKMAP		= 16,					 
+	MF_NOBLOCKMAP		= 0x00000010,					 
 
 	// Not to be activated by sound, deaf monster.
-	MF_AMBUSH			= 32,
+	MF_AMBUSH			= 0x00000020,
 	// Will try to attack right back.
-	MF_JUSTHIT			= 64,
+	MF_JUSTHIT			= 0x00000040,
 	// Will take at least one step before attacking.
-	MF_JUSTATTACKED 	= 128,
+	MF_JUSTATTACKED 	= 0x00000080,
 	// On level spawning (initial position),
 	//	hang from ceiling instead of stand on floor.
-	MF_SPAWNCEILING 	= 256,
+	MF_SPAWNCEILING 	= 0x00000100,
 	// Don't apply gravity (every tic),
 	//	that is, object will float, keeping current height
 	//	or changing it actively.
-	MF_NOGRAVITY		= 512,
+	MF_NOGRAVITY		= 0x00000200,
 
 	// Movement flags.
 	// This allows jumps from high places.
-	MF_DROPOFF			= 0x400,
+	MF_DROPOFF			= 0x00000400,
 	// For players, will pick up items.
-	MF_PICKUP			= 0x800,
+	MF_PICKUP			= 0x00000800,
 	// Player cheat. ???
-	MF_NOCLIP			= 0x1000,
+	MF_NOCLIP			= 0x00001000,
 	// Player: keep info about sliding along walls.
-	MF_SLIDE			= 0x2000,
+	MF_SLIDE			= 0x00002000,
 	// Allow moves to any height, no gravity.
 	// For active floaters, e.g. cacodemons, pain elementals.
-	MF_FLOAT			= 0x4000,
+	MF_FLOAT			= 0x00004000,
 	// Don't cross lines
 	//	 ??? or look at heights on teleport.
-	MF_TELEPORT 		= 0x8000,
+	MF_TELEPORT 		= 0x00008000,
 	// Don't hit same species, explode on block.
 	// Player missiles as well as fireballs of various kinds.
-	MF_MISSILE			= 0x10000,		
+	MF_MISSILE			= 0x00010000,		
 	// Dropped by a demon, not level spawned.
 	// E.g. ammo clips dropped by dying former humans.
-	MF_DROPPED			= 0x20000,
+	MF_DROPPED			= 0x00020000,
 	// Use fuzzy draw (shadow demons or spectres),
 	//	temporary player invisibility powerup.
-	MF_SHADOW			= 0x40000,
+	MF_SHADOW			= 0x00040000,
 	// Flag: don't bleed when shot (use puff),
 	//	barrels and shootable furniture shall not bleed.
-	MF_NOBLOOD			= 0x80000,
+	MF_NOBLOOD			= 0x00080000,
 	// Don't stop moving halfway off a step,
 	//	that is, have dead bodies slide down all the way.
-	MF_CORPSE			= 0x100000,
+	MF_CORPSE			= 0x00100000,
 	// Floating to a height for a move, ???
 	//	don't auto float to target's height.
-	MF_INFLOAT			= 0x200000,
+	MF_INFLOAT			= 0x00200000,
 
 	// On kill, count this enemy object
 	//	towards intermission kill total.
 	// Happy gathering.
-	MF_COUNTKILL		= 0x400000,
+	MF_COUNTKILL		= 0x00400000,
 	
 	// On picking up, count this item object
 	//	towards intermission item total.
-	MF_COUNTITEM		= 0x800000,
+	MF_COUNTITEM		= 0x00800000,
 
 	// Special handling: skull in flight.
 	// Neither a cacodemon nor a missile.
-	MF_SKULLFLY 		= 0x1000000,
+	MF_SKULLFLY 		= 0x01000000,
 
 	// Don't spawn this object
 	//	in death match mode (e.g. key cards).
-	MF_NOTDMATCH		= 0x2000000,
+	MF_NOTDMATCH		= 0x02000000,
 
 	// Player sprites in multiplayer modes are modified
 	//	using an internal color lookup table for re-indexing.
 	// If 0x4 0x8 or 0xc,
 	//	use a translation table for player colormaps
-	MF_TRANSLATION		= 0xc000000,
+	MF_TRANSLATION		= 0x0c000000,
 	// Hmm ???.
 	MF_TRANSSHIFT		= 26,
 
-	MF_TRANSLUCENT		= 0x40000000,
+	// [RH] Andy Baker's stealth monsters
+	//Stealth Mode - Creatures that dissappear and reappear.
+	MF_STEALTH			= 0x10000000,
+
+	// [RH] 3 (4 counting opaque) levels of translucency
+	MF_TRANSLUCSHIFT	= 29,
+	MF_TRANSLUCBITS		= 0x60000000,
+	MF_TRANSLUC25		= 0x20000000,
+	MF_TRANSLUC50		= 0x40000000,
+	MF_TRANSLUC75		= 0x60000000
 
 } mobjflag_t;
 
@@ -212,9 +221,9 @@ typedef struct mobj_s
 	thinker_t			thinker;
 
 	// Info for drawing: position.
-	fixed_t 			x;
-	fixed_t 			y;
-	fixed_t 			z;
+	fixed_t	 			x;
+	fixed_t	 			y;
+	fixed_t	 			z;
 
 	// More list: links in sector (if needed)
 	struct mobj_s*		snext;
@@ -222,6 +231,8 @@ typedef struct mobj_s
 
 	//More drawing info: to determine current sprite.
 	angle_t 			angle;	// orientation
+	fixed_t				pitch;	// [RH] for freelook
+	fixed_t				roll;	// [RH] for future enhancement
 	spritenum_t 		sprite; // used to find patch_t and flip value
 	int 				frame;	// might be ORed with FF_FULLBRIGHT
 
@@ -241,9 +252,9 @@ typedef struct mobj_s
 	fixed_t 			height; 
 
 	// Momentums, used to update position.
-	fixed_t 			momx;
-	fixed_t 			momy;
-	fixed_t 			momz;
+	fixed_t				momx;
+	fixed_t				momy;
+	fixed_t	 			momz;
 
 	// If == validcount, already checked.
 	int 				validcount;
@@ -284,7 +295,10 @@ typedef struct mobj_s
 
 	// Thing being chased/attacked for tracers.
 	struct mobj_s*		tracer; 
-	
+
+	// [RH] Andy Baker's stealth monsters
+	boolean invisible;
+
 } mobj_t;
 
 

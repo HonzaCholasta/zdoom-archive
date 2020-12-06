@@ -97,9 +97,6 @@ typedef struct player_s
 	fixed_t 			deltaviewheight;
 	// bounded/scaled total momentum.
 	fixed_t 			bob;
-	// vertical sheering for freelook
-	// -1 = top, 0 = mid, 1 = bottom
-	fixed_t				ysheer;
 
 	// This is only used between levels,
 	// mo->health is used during levels.
@@ -127,6 +124,7 @@ typedef struct player_s
 	// True if button down last tic.
 	int 				attackdown;
 	int 				usedown;
+	int					jumpdown;		// [RH] Don't jump like a fool
 
 	// Bit flags, for cheats and debug.
 	// See cheat_t, above.
@@ -165,7 +163,10 @@ typedef struct player_s
 	pspdef_t			psprites[NUMPSPRITES];
 
 	// True if secret level has been done.
-	boolean 			didsecret;		
+	boolean 			didsecret;
+
+	// [RH] Max vertical distance for autoaim to work
+	fixed_t				aimdist;
 
 } player_t;
 
@@ -197,7 +198,10 @@ typedef struct
 	
 	// previous and next levels, origin 0
 	int 		last;
-	int 		next;	
+	// [RH] next is the actual name of the next map
+	char 		next[8];
+	char		lname0[8];
+	char		lname1[8];
 	
 	int 		maxkills;
 	int 		maxitems;

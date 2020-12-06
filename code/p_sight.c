@@ -24,11 +24,14 @@
 static const char
 rcsid[] = "$Id: p_sight.c,v 1.3 1997/01/28 22:08:28 b1 Exp $";
 
+#include <malloc.h>
+#include <crtdbg.h>
 
 #include "doomdef.h"
 
 #include "i_system.h"
 #include "p_local.h"
+#include "m_random.h"
 
 // State.
 #include "r_state.h"
@@ -51,11 +54,7 @@ int 			sightcounts[2];
 // P_DivlineSide
 // Returns side 0 (front), 1 (back), or 2 (on).
 //
-int
-P_DivlineSide
-( fixed_t		x,
-  fixed_t		y,
-  divline_t*	node )
+int P_DivlineSide (const fixed_t x, const fixed_t y, const divline_t *node)
 {
 	fixed_t 	dx;
 	fixed_t 	dy;
@@ -75,7 +74,8 @@ P_DivlineSide
 	
 	if (!node->dy)
 	{
-		if (x==node->y)
+		// [RH] Original code was (x==node->y), but that's obviously not right.
+		if (y==node->y)
 			return 2;
 
 		if (y <= node->y)
@@ -105,10 +105,7 @@ P_DivlineSide
 // along the first divline.
 // This is only called by the addthings and addlines traversers.
 //
-fixed_t
-P_InterceptVector2
-( divline_t*	v2,
-  divline_t*	v1 )
+fixed_t P_InterceptVector2 (const divline_t *v2, const divline_t *v1)
 {
 	fixed_t 	frac;
 	fixed_t 	num;
@@ -132,7 +129,7 @@ P_InterceptVector2
 // Returns true
 //	if strace crosses the given subsector successfully.
 //
-boolean P_CrossSubsector (int num)
+boolean P_CrossSubsector (const int num)
 {
 	seg_t*				seg;
 	line_t* 			line;
@@ -158,7 +155,7 @@ boolean P_CrossSubsector (int num)
 #endif
 
 	sub = &subsectors[num];
-	
+
 	// check lines
 	count = sub->numlines;
 	seg = &segs[sub->firstline];
@@ -184,8 +181,11 @@ boolean P_CrossSubsector (int num)
 		
 		divl.x = v1->x;
 		divl.y = v1->y;
-		divl.dx = v2->x - v1->x;
-		divl.dy = v2->y - v1->y;
+		// [RH] This is already calculated. Why calculate it again?
+		divl.dx = line->dx;
+		divl.dy = line->dy;
+	/*	divl.dx = v2->x - v1->x;
+		divl.dy = v2->y - v1->y;	*/
 		s1 = P_DivlineSide (strace.x, strace.y, &divl);
 		s2 = P_DivlineSide (t2x, t2y, &divl);
 
@@ -214,7 +214,7 @@ boolean P_CrossSubsector (int num)
 		else
 			opentop = back->ceilingheight;
 
-		// because of ceiling height differences
+		// because of floor height differences
 		if (front->floorheight > back->floorheight)
 			openbottom = front->floorheight;
 		else
@@ -225,7 +225,7 @@ boolean P_CrossSubsector (int num)
 			return false;				// stop
 		
 		frac = P_InterceptVector2 (&strace, &divl);
-				
+
 		if (front->floorheight != back->floorheight)
 		{
 			slope = FixedDiv (openbottom - sightzstart , frac);
@@ -239,7 +239,7 @@ boolean P_CrossSubsector (int num)
 			if (slope < topslope)
 				topslope = slope;
 		}
-				
+
 		if (topslope <= bottomslope)
 			return false;				// stop 						
 	}
@@ -254,7 +254,7 @@ boolean P_CrossSubsector (int num)
 // Returns true
 //	if strace crosses the given node successfully.
 //
-boolean P_CrossBSPNode (int bspnum)
+boolean P_CrossBSPNode (const int bspnum)
 {
 	node_t* 	bsp;
 	int 		side;
@@ -296,17 +296,22 @@ boolean P_CrossBSPNode (int bspnum)
 //	if a straight line between t1 and t2 is unobstructed.
 // Uses REJECT.
 //
-boolean
-P_CheckSight
-( mobj_t*		t1,
-  mobj_t*		t2 )
+boolean P_CheckSight (const mobj_t *t1, const mobj_t *t2)
 {
 	int 		s1;
 	int 		s2;
 	int 		pnum;
 	int 		bytenum;
 	int 		bitnum;
-	
+
+	// [RH] Andy Baker's stealth monsters
+	// Cannot see an invisible object
+	if (t2->invisible)			// [RH] was (t2->flags & MF_INVIS)
+	{
+		if ( P_Random() > 50 ) // small chance of an attack being made anyway
+			return false;
+	}
+
 	// First check for trivial rejection.
 
 	// Determine subsector entries in REJECT table.
@@ -345,5 +350,3 @@ P_CheckSight
 	// the head node is the last node output
 	return P_CrossBSPNode (numnodes-1); 
 }
-
-

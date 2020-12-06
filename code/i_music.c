@@ -5,6 +5,7 @@
 #include "m_argv.h"
 #include "i_music.h"
 #include "w_wad.h"
+#include "c_console.h"
 
 #include "../midas/include/midasdll.h"
 
@@ -29,6 +30,7 @@ struct MusInfo {
 		MIDASmodulePlayHandle handle;
 	};
 	char *filename;
+	boolean looping;
 };
 typedef struct MusInfo info_t;
 
@@ -108,7 +110,7 @@ int SendMCI(MCIDEVICEID device, UINT msg, DWORD command, DWORD param)
 }
 
 
-void I_PlaySong(int handle, int _looping)
+void I_PlaySong (int handle, int _looping)
 {
 	info_t *info = (info_t *)handle;
 
@@ -116,6 +118,7 @@ void I_PlaySong(int handle, int _looping)
 		return;
 
 	info->status = STATE_STOPPED;
+	info->looping = _looping;
 
 	switch (info->type) {
 		case TYPE_MIDI: {
@@ -138,7 +141,7 @@ void I_PlaySong(int handle, int _looping)
 			break;
 			}
 		case TYPE_MOD:
-			if (info->handle = MIDASplayModule (info->module, TRUE)) {
+			if (info->handle = MIDASplayModule (info->module, _looping)) {
 				MIDASsetMusicVolume (info->handle, musicvolume);
 				info->status = STATE_PLAYING;
 			}
@@ -151,8 +154,15 @@ void I_RestartSong (void)
 {
 	MCI_PLAY_PARMS playParms;
 
-	if (!currSong || currSong->type != TYPE_MIDI || currSong->status != STATE_PLAYING)
+	if (!currSong ||
+		currSong->type != TYPE_MIDI ||
+		currSong->status != STATE_PLAYING)
 		return;
+
+	if (!currSong->looping) {
+		I_StopSong ((int)currSong);
+		return;
+	}
 
 	playParms.dwFrom = 0;
 	playParms.dwCallback = (DWORD)Window;
@@ -267,12 +277,11 @@ void I_UnRegisterSong(int handle)
 	}
 }
 
-int musicLump;
 extern int convert( const char *mus, const char *mid, int nodisplay, int div,
 					int size, int nocomp, int *ow );
 
 
-int I_RegisterSong(void* data)
+int I_RegisterSong(void* data, int musicLen)
 {
 	FILE *f;
 	int ow = 2;
@@ -289,7 +298,7 @@ int I_RegisterSong(void* data)
 		free (info);
 		return 0;
 	}
-	if ( fwrite(data, W_LumpLength(musicLump), 1, f) != 1 ) {
+	if ( fwrite(data, musicLen, 1, f) != 1 ) {
 		fclose (f);
 		Printf ("Unable to write temporary music file\n");
 		free (info);
@@ -332,20 +341,13 @@ int I_RegisterSong(void* data)
 // Is the song playing?
 int I_QrySongPlaying(int handle)
 {
-/*
-	handle = handle;
-	if ( !playing )
+	info_t *info = (info_t *)handle;
+
+	if (!info)
 		return 0;
 
-	if ( looping )
-	{
-		if ( gametic >= musicdies )
-		{
-			SendMCI("play doomMusic from 0", NULL, 0);
-			musicdies = gametic + (muslen * TICRATE) / 1000;
-		}
+	if (info->looping = 1)
 		return 1;
-	}
-*/
-	return musicdies > gametic;
+
+	return info->status;
 }

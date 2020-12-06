@@ -48,6 +48,10 @@ void M_LoadDefaults (void);
 
 void M_SaveDefaults (void);
 
+char *GetConfigPath (void);
+
+char *GetAutoexecPath (void);
+
 
 #endif
 //-----------------------------------------------------------------------------

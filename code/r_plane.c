@@ -39,7 +39,7 @@ rcsid[] = "$Id: r_plane.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 #include "r_local.h"
 #include "r_sky.h"
 
-
+#include "m_alloc.h"
 
 planefunction_t 		floorfunc;
 planefunction_t 		ceilingfunc;
@@ -49,16 +49,16 @@ planefunction_t 		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-#define MAXVISPLANES	256
-visplane_t				visplanes[MAXVISPLANES];
-visplane_t* 			lastvisplane;
-visplane_t* 			floorplane;
-visplane_t* 			ceilingplane;
+int						MaxVisPlanes;
+visplane_t				*visplanes;
+visplane_t 				*lastvisplane;
+visplane_t 				*floorplane;
+visplane_t 				*ceilingplane;
 
 // ?
 #define MAXOPENINGS 	(SCREENWIDTH*64)
 short					*openings;
-short*					lastopening;
+short					*lastopening;
 
 
 //
@@ -82,7 +82,7 @@ int 					*spanstop;
 lighttable_t**			planezlight;
 fixed_t 				planeheight;
 
-fixed_t					*yslopetab;		// [RH] Added for freelook. ylook points into it
+fixed_t 				*yslopetab;		// [RH] Added for freelook. ylook points into it
 fixed_t 				*yslope;
 fixed_t 				*distscale;
 fixed_t 				basexscale;
@@ -94,16 +94,53 @@ fixed_t 				*cachedxstep;
 fixed_t 				*cachedystep;
 
 
+static void PrepVisPlanes (int min)
+{
+	int i;
+	unsigned short *stuff;
+
+	for (i = min; i < MaxVisPlanes; i++) {
+		stuff = (unsigned short *)Calloc (SCREENWIDTH * 2 + 4, sizeof(unsigned short));
+		visplanes[i].top = stuff + 1;
+		visplanes[i].bottom = stuff + SCREENWIDTH + 3;
+	}
+}
 
 //
 // R_InitPlanes
 // Only at game startup.
+// [RH] This function is actually used now.
 //
 void R_InitPlanes (void)
 {
-  // Doh!
+	MaxVisPlanes = 128;			// Default. Increased as needed.
+	visplanes = (visplane_t *)Calloc (MaxVisPlanes, sizeof(visplane_t));
+	PrepVisPlanes (0);
 }
 
+static void GetMoreVisPlanes (visplane_t **toupdate)
+{
+	int oldMax;
+	visplane_t *old = visplanes;
+
+	oldMax = MaxVisPlanes;
+	MaxVisPlanes += 32;
+	visplanes = (visplane_t *)Realloc (visplanes, (MaxVisPlanes) * sizeof(visplane_t));
+
+	DEVONLY (Printf, "MaxVisPlanes increased to %d\n", MaxVisPlanes, 0);
+	
+	PrepVisPlanes (oldMax);
+
+	if (visplanes == old)
+		return;
+
+	*toupdate = &visplanes[*toupdate - old];
+	lastvisplane = &visplanes[lastvisplane - old];
+	if (floorplane)
+		floorplane = &visplanes[floorplane - old];
+	if (ceilingplane)
+		ceilingplane = &visplanes[ceilingplane - old];
+}
 
 //
 // R_MapPlane
@@ -118,11 +155,7 @@ void R_InitPlanes (void)
 //
 // BASIC PRIMITIVE
 //
-void
-R_MapPlane
-( int			y,
-  int			x1,
-  int			x2 )
+void R_MapPlane (int y, int x1, int x2)
 {
 	angle_t 	angle;
 	fixed_t 	distance;
@@ -214,11 +247,7 @@ void R_ClearPlanes (void)
 //
 // R_FindPlane
 //
-visplane_t*
-R_FindPlane
-( fixed_t		height,
-  int			picnum,
-  int			lightlevel )
+visplane_t *R_FindPlane (fixed_t height, int picnum, int lightlevel)
 {
 	visplane_t* check;
 		
@@ -242,8 +271,8 @@ R_FindPlane
 	if (check < lastvisplane)
 		return check;
 				
-	if (lastvisplane - visplanes == MAXVISPLANES)
-		I_Error ("R_FindPlane: no more visplanes");
+	if (lastvisplane - visplanes == MaxVisPlanes)
+		GetMoreVisPlanes (&check);
 				
 	lastvisplane++;
 
@@ -262,11 +291,7 @@ R_FindPlane
 //
 // R_CheckPlane
 //
-visplane_t*
-R_CheckPlane
-( visplane_t*	pl,
-  int			start,
-  int			stop )
+visplane_t *R_CheckPlane (visplane_t *pl, int start, int stop)
 {
 	int 		intrl;
 	int 		intrh;
@@ -309,12 +334,17 @@ R_CheckPlane
 		return pl;				
 	}
 		
+	// [RH] Need to make sure we actually have this lastvisplane
+	if (lastvisplane - visplanes == MaxVisPlanes)
+		GetMoreVisPlanes (&pl);
+
 	// make a new visplane
 	lastvisplane->height = pl->height;
 	lastvisplane->picnum = pl->picnum;
 	lastvisplane->lightlevel = pl->lightlevel;
 	
 	pl = lastvisplane++;
+
 	pl->minx = start;
 	pl->maxx = stop;
 
@@ -327,35 +357,33 @@ R_CheckPlane
 //
 // R_MakeSpans
 //
-void
-R_MakeSpans
-( int			x,
-  int			t1,
-  int			b1,
-  int			t2,
-  int			b2 )
+void R_MakeSpans (int x, int t1, int b1, int t2, int b2)
 {
-	while (t1 < t2 && t1<=b1)
-	{
-		R_MapPlane (t1,spanstart[t1],x-1);
-		t1++;
-	}
-	while (b1 > b2 && b1>=t1)
-	{
-		R_MapPlane (b1,spanstart[b1],x-1);
-		b1--;
-	}
+	//if (t1 != 0xffff)
+		while (t1 < t2 && t1<=b1)
+		{
+			R_MapPlane (t1,spanstart[t1],x-1);
+			t1++;
+		}
+	//if (b1 != 0xffff)
+		while (b1 > b2 && b1>=t1)
+		{
+			R_MapPlane (b1,spanstart[b1],x-1);
+			b1--;
+		}
 		
-	while (t2 < t1 && t2<=b2)
-	{
-		spanstart[t2] = x;
-		t2++;
-	}
-	while (b2 > b1 && b2>=t2)
-	{
-		spanstart[b2] = x;
-		b2--;
-	}
+	//if (t2 != 0xffff)
+		while (t2 < t1 && t2<=b2)
+		{
+			spanstart[t2] = x;
+			t2++;
+		}
+	//if (b2 != 0xffff)
+		while (b2 > b1 && b2>=t2)
+		{
+			spanstart[b2] = x;
+			b2--;
+		}
 }
 
 
@@ -373,11 +401,13 @@ void R_DrawPlanes (void)
 	int 				angle;
 								
 #ifdef RANGECHECK
-	if (ds_p - drawsegs > MAXDRAWSEGS)
+	if (ds_p - drawsegs > MaxDrawSegs)
+		// [RH] Should never get here
 		I_Error ("R_DrawPlanes: drawsegs overflow (%i)",
 				 ds_p - drawsegs);
 	
-	if (lastvisplane - visplanes > MAXVISPLANES)
+	if (lastvisplane - visplanes > MaxVisPlanes)
+		// [RH] Should not get here
 		I_Error ("R_DrawPlanes: visplane overflow (%i)",
 				 lastvisplane - visplanes);
 	
@@ -395,7 +425,7 @@ void R_DrawPlanes (void)
 		// sky flat
 		if (pl->picnum == skyflatnum)
 		{
-			dc_iscale = pspriteiscale;
+			dc_iscale = skyiscale;
 			
 			// Sky is allways drawn full bright,
 			//	i.e. colormaps[0] is used.
@@ -454,41 +484,23 @@ void R_DrawPlanes (void)
 
 boolean R_PlaneInitData (void)
 {
-	short *shorts;
-	int *ints;
 	fixed_t *fixeds;
-	int i;
 
-	if (openings)
-		free (openings);
-	if (spanstart)
-		free (spanstart);
-	if (yslopetab)
-		free (yslopetab);
+	if (openings)		free (openings);
+	if (floorclip)		free (floorclip);
+	if (ceilingclip)	free (ceilingclip);
+	if (spanstart)		free (spanstart);
+	if (yslopetab)		free (yslopetab);
 
-	if (!(shorts = calloc (MAXOPENINGS + SCREENWIDTH * 2 + 
-						   ((SCREENWIDTH + 2) * 2 * MAXVISPLANES), sizeof(short))))
-		return false;
+	openings = Calloc (MAXOPENINGS, sizeof(short));
+	floorclip = Calloc (SCREENWIDTH, sizeof(short));
+	ceilingclip = Calloc (SCREENWIDTH, sizeof(short));
 
-	if (!(ints = calloc (SCREENHEIGHT * 2, sizeof(int))))
-		return false;
+	spanstart = Calloc (SCREENHEIGHT, sizeof(int));
+	spanstop = Calloc (SCREENHEIGHT, sizeof(int));
 
-	if (!(fixeds = calloc (SCREENHEIGHT * 6 + SCREENWIDTH, sizeof(fixed_t))))
-		return false;
-
-	openings = shorts;
-	floorclip = shorts + MAXOPENINGS;
-	ceilingclip = floorclip + SCREENWIDTH;
-
-	visplanes[0].top = ceilingclip + SCREENWIDTH + 1;
-	visplanes[0].bottom = visplanes[0].top + SCREENWIDTH + 2;
-	for (i = 1; i < MAXVISPLANES; i++) {
-		visplanes[i].top = visplanes[i-1].top + (SCREENWIDTH + 2) * 2;
-		visplanes[i].bottom = visplanes[i-1].bottom + (SCREENWIDTH + 2) * 2;
-	}
-
-	spanstart = ints;
-	spanstop = ints + SCREENHEIGHT;
+	// In retrospect, this is probably a dumb thing to do.
+	fixeds = Calloc (SCREENHEIGHT * 6 + SCREENWIDTH, sizeof(fixed_t));
 
 	yslopetab = fixeds;
 	distscale = yslopetab + SCREENHEIGHT * 2;

@@ -38,8 +38,8 @@
 #define MAPBLOCKUNITS	128
 #define MAPBLOCKSIZE	(MAPBLOCKUNITS*FRACUNIT)
 #define MAPBLOCKSHIFT	(FRACBITS+7)
-#define MAPBMASK				(MAPBLOCKSIZE-1)
-#define MAPBTOFRAC				(MAPBLOCKSHIFT-FRACBITS)
+#define MAPBMASK		(MAPBLOCKSIZE-1)
+#define MAPBTOFRAC		(MAPBLOCKSHIFT-FRACBITS)
 
 
 // player radius for movement checking
@@ -48,17 +48,17 @@
 // MAXRADIUS is for precalculated sector block boxes
 // the spider demon is larger,
 // but we do not have any moving sectors nearby
-#define MAXRADIUS				32*FRACUNIT
+#define MAXRADIUS		32*FRACUNIT
 
-#define GRAVITY 		FRACUNIT
+//#define GRAVITY 		FRACUNIT
 #define MAXMOVE 		(30*FRACUNIT)
 
-#define USERANGE				(64*FRACUNIT)
-#define MELEERANGE				(64*FRACUNIT)
+#define USERANGE		(64*FRACUNIT)
+#define MELEERANGE		(64*FRACUNIT)
 #define MISSILERANGE	(32*64*FRACUNIT)
 
 // follow a player exlusively for 3 seconds
-#define BASETHRESHOLD			100
+#define BASETHRESHOLD	100
 
 
 
@@ -127,6 +127,11 @@ void	P_SpawnPlayerMissile (mobj_t* source, mobjtype_t type);
 // P_ENEMY
 //
 void P_NoiseAlert (mobj_t* target, mobj_t* emmiter);
+
+// [RH] Andy Baker's stealth monsters
+void P_BecomeVisible (mobj_t *actor);
+void P_IncreaseVisibility (mobj_t *actor);
+void P_DecreaseVisibility (mobj_t *actor);
 
 
 //
@@ -211,7 +216,7 @@ boolean P_CheckPosition (mobj_t *thing, fixed_t x, fixed_t y);
 boolean P_TryMove (mobj_t* thing, fixed_t x, fixed_t y);
 boolean P_TeleportMove (mobj_t* thing, fixed_t x, fixed_t y);
 void	P_SlideMove (mobj_t* mo);
-boolean P_CheckSight (mobj_t* t1, mobj_t* t2);
+boolean P_CheckSight (const mobj_t* t1, const mobj_t* t2);
 void	P_UseLines (player_t* player);
 
 boolean P_ChangeSector (sector_t* sector, boolean crunch);

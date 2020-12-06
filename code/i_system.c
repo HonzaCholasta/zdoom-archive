@@ -39,6 +39,7 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 #define __BYTEBOOL__
 
 #include "doomdef.h"
+#include "m_argv.h"
 #include "m_misc.h"
 #include "i_video.h"
 #include "i_sound.h"
@@ -59,8 +60,9 @@ extern LONG 			WinWidth, WinHeight;
 extern int				ConRows, ConCols, PhysRows;
 extern char 			*Lines, *Last;
 
+boolean	UseMMX;
 
-int 	mb_used = 8;
+float 	mb_used = 8.0;
 
 
 void
@@ -82,12 +84,18 @@ ticcmd_t*		I_BaseTiccmd(void)
 
 int  I_GetHeapSize (void)
 {
-	return mb_used*1024*1024;
+	return (int)(mb_used*1024*1024);
 }
 
 byte* I_ZoneBase (int*	size)
 {
-	*size = mb_used*1024*1024;
+	int i;
+
+	i = M_CheckParm ("-heapsize");
+	if (i && i < myargc - 1)
+		mb_used = (float)atof (myargv[i + 1]);
+	Printf ("Heapsize: %g megabytes\n", mb_used);
+	*size = (int)(mb_used*1024*1024);
 	return (byte *) malloc (*size);
 }
 
@@ -116,6 +124,26 @@ int  I_GetTime (void)
 //
 void I_Init (void)
 {
+#ifndef USEASM
+	UseMMX = 0;
+#else
+	extern boolean CheckMMX (char *vendorid);
+	char vendorid[13];
+
+	vendorid[0] = vendorid[12] = 0;
+	UseMMX = CheckMMX (vendorid);
+	if (M_CheckParm ("-nommx"))
+		UseMMX = 0;
+
+	if (vendorid[0])
+		Printf ("CPU Vendor ID: %s\n", vendorid);
+
+	if (UseMMX)
+		Printf (" - MMX detected\n");
+	else
+		Printf (" - MMX not detected\n");
+#endif
+
 	I_InitSound();
 
 	DI_Init (Window);
@@ -193,7 +221,7 @@ void I_FatalError (char *error, ...)
 	va_start (argptr,error);
 	index = sprintf (errtext, "Error: ");
 	index += vsprintf (&errtext[index],error,argptr);
-	sprintf (&errtext[index], "\nGetLastError() = 0x%08X", GetLastError());
+	sprintf (&errtext[index], "\nGetLastError() = %d", GetLastError());
 	va_end (argptr);
 
 	// Shutdown. Here might be other errors.

@@ -24,6 +24,8 @@
 static const char
 rcsid[] = "$Id: p_mobj.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
+#include "m_alloc.h"
+
 #include "i_system.h"
 #include "z_zone.h"
 #include "m_random.h"
@@ -39,9 +41,15 @@ rcsid[] = "$Id: p_mobj.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
 #include "doomstat.h"
 
+#include "v_video.h"
+#include "c_cvars.h"
+
+cvar_t *sv_gravity;
+cvar_t *sv_friction;
+
 
 void G_PlayerReborn (int player);
-void P_SpawnMapThing (mapthing_t*		mthing);
+void P_SpawnMapThing (mapthing_t *mthing);
 
 
 //
@@ -50,10 +58,7 @@ void P_SpawnMapThing (mapthing_t*		mthing);
 //
 int test;
 
-boolean
-P_SetMobjState
-( mobj_t*		mobj,
-  statenum_t	state )
+boolean P_SetMobjState (mobj_t *mobj, statenum_t state)
 {
 	state_t*	st;
 
@@ -92,6 +97,8 @@ void P_ExplodeMissile (mobj_t* mo)
 	mo->momx = mo->momy = mo->momz = 0;
 
 	P_SetMobjState (mo, mobjinfo[mo->type].deathstate);
+	if (TransTable)
+		mo->flags |= MF_TRANSLUC50;
 
 	mo->tics -= P_Random()&3;
 
@@ -297,7 +304,7 @@ void P_ZMovement (mobj_t* mo)
 		if (mo->momz < 0)
 		{
 			if (mo->player
-				&& mo->momz < -GRAVITY*8)		
+				&& mo->momz < (fixed_t)(sv_gravity->value * -655.36))		
 			{
 				// Squat down.
 				// Decrease viewheight for a moment
@@ -320,9 +327,9 @@ void P_ZMovement (mobj_t* mo)
 	else if (! (mo->flags & MF_NOGRAVITY) )
 	{
 		if (mo->momz == 0)
-			mo->momz = -GRAVITY*2;
+			mo->momz = (fixed_t)(sv_gravity->value * -163.84);
 		else
-			mo->momz -= GRAVITY;
+			mo->momz -= (fixed_t)(sv_gravity->value * 81.92);
 	}
 		
 	if (mo->z + mo->height > mo->ceilingz)
@@ -461,7 +468,7 @@ void P_MobjThinker (mobj_t* mobj)
 		if (mobj->movecount < 12*35)
 			return;
 
-		if ( leveltime&31 )
+		if ( level.time&31 )
 			return;
 
 		if (P_Random () > 4)
@@ -551,7 +558,7 @@ void P_RemoveMobj (mobj_t* mobj)
 		&& (mobj->type != MT_INS))
 	{
 		itemrespawnque[iquehead] = mobj->spawnpoint;
-		itemrespawntime[iquehead] = leveltime;
+		itemrespawntime[iquehead] = level.time;
 		iquehead = (iquehead+1)&(ITEMQUESIZE-1);
 
 		// lose one off the end?
@@ -596,7 +603,7 @@ void P_RespawnSpecials (void)
 		return; 		
 
 	// wait at least 30 seconds
-	if (leveltime - itemrespawntime[iquetail] < 30*35)
+	if (level.time - itemrespawntime[iquetail] < 30*35)
 		return; 				
 
 	mthing = &itemrespawnque[iquetail];
@@ -669,6 +676,7 @@ void P_SpawnPlayer (mapthing_t* mthing)
 		mobj->flags |= (mthing->type-1)<<MF_TRANSSHIFT;
 				
 	mobj->angle = ANG45 * (mthing->angle/45);
+	mobj->pitch = mobj->roll = 0;
 	mobj->player = p;
 	mobj->health = p->health;
 
@@ -717,11 +725,14 @@ void P_SpawnMapThing (mapthing_t* mthing)
 	// count deathmatch start positions
 	if (mthing->type == 11)
 	{
-		if (deathmatch_p < &deathmatchstarts[10])
-		{
-			memcpy (deathmatch_p, mthing, sizeof(*mthing));
-			deathmatch_p++;
+		if (deathmatch_p == &deathmatchstarts[MaxDeathmatchStarts]) {
+			// [RH] Get more deathmatchstarts
+			MaxDeathmatchStarts += 8;
+			deathmatchstarts = Realloc (deathmatchstarts, MaxDeathmatchStarts * sizeof(mapthing_t));
+			deathmatch_p = &deathmatchstarts[MaxDeathmatchStarts - 8];
 		}
+		memcpy (deathmatch_p, mthing, sizeof(*mthing));
+		deathmatch_p++;
 		return;
 	}
 		
@@ -787,9 +798,9 @@ void P_SpawnMapThing (mapthing_t* mthing)
 	if (mobj->tics > 0)
 		mobj->tics = 1 + (P_Random () % mobj->tics);
 	if (mobj->flags & MF_COUNTKILL)
-		totalkills++;
+		level.total_monsters++;
 	if (mobj->flags & MF_COUNTITEM)
-		totalitems++;
+		level.total_items++;
 				
 	mobj->angle = ANG45 * (mthing->angle/45);
 	if (mthing->options & MTF_AMBUSH)
@@ -946,6 +957,7 @@ P_SpawnPlayerMissile
 	
 	// see which target is to be aimed at
 	an = source->angle;
+
 	slope = P_AimLineAttack (source, an, 16*64*FRACUNIT);
 	
 	if (!linetarget)
@@ -962,10 +974,17 @@ P_SpawnPlayerMissile
 		if (!linetarget)
 		{
 			an = source->angle;
-			slope = 0;
+			// [RH] Use pitch to calculate slope instead of 0.
+			slope = -source->pitch / 2;
 		}
 	}
-				
+
+	if (linetarget && source->player)
+		if (abs(slope - source->pitch/2) > source->player->aimdist) {
+			an = source->angle;
+			slope = -source->pitch / 2;
+		}
+
 	x = source->x;
 	y = source->y;
 	z = source->z + 4*8*FRACUNIT;

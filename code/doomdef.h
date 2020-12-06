@@ -27,14 +27,12 @@
 #include <string.h>
 
 
-// This gets used all over; define it here:
-int Printf (const char *, ...);
-
 //
 // Global parameters/defines.
 //
 // DOOM version
-enum { VERSION =  111 };
+enum { VERSION =  112 };
+#define GAMEVER (((VERSION % 100)) | ((VERSION / 100) << 8))
 
 
 // Game mode handling - identify IWAD version
@@ -251,6 +249,7 @@ typedef enum
 #define KEY_DOWNARROW			0xd0	// DIK_DOWN
 #define KEY_ESCAPE				0x01	// DIK_ESCAPE
 #define KEY_ENTER				0x1c	// DIK_RETURN
+#define KEY_SPACE				0x39	// DIK_SPACE
 #define KEY_TAB 				0x0f	// DIK_TAB
 #define KEY_F1					0x3b	// DIK_F1
 #define KEY_F2					0x3c	// DIK_F2

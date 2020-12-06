@@ -32,12 +32,10 @@
 //	for defining the global state variables.
 #include "doomdata.h"
 #include "d_net.h"
+#include "g_level.h"
 
-// We need the playr data structure as well.
+// We need the player data structure as well.
 #include "d_player.h"
-
-// We need the definition of a cvar_t
-#include "c_console.h"
 
 // We also need the definition of a cvar
 #include "c_cvars.h"
@@ -86,9 +84,7 @@ extern	int 			startmap;
 extern	boolean 		autostart;
 
 // Selected by user. 
-extern	cvar_t *gameskill;
-extern	int 			gameepisode;
-extern	int 			gamemap;
+extern	cvar_t			*gameskill;
 
 // Nightmare mode flag, single player.
 extern	boolean 		respawnmonsters;
@@ -154,18 +150,7 @@ extern	int 	consoleplayer;
 extern	int 	displayplayer;
 
 
-// -------------------------------------
-// Scores, rating.
-// Statistics on a given map, for intermission.
-//
-extern	int 	totalkills;
-extern	int 	totalitems;
-extern	int 	totalsecret;
-
-// Timer, for scores.
-extern	int 	levelstarttic;	// gametic at level start
-extern	int 	leveltime;		// tics in game play for par
-
+extern level_locals_t level;
 
 
 // --------------------------------------
@@ -211,8 +196,8 @@ extern	boolean 		playeringame[MAXPLAYERS];
 
 
 // Player spawn spots for deathmatch.
-#define MAX_DM_STARTS	10
-extern	mapthing_t		deathmatchstarts[MAX_DM_STARTS];
+extern	int				MaxDeathmatchStarts;
+extern	mapthing_t		*deathmatchstarts;
 extern	mapthing_t* 	deathmatch_p;
 
 // Player spawn spots.
@@ -236,7 +221,6 @@ extern	int 			maxammo[NUMAMMO];
 //
 
 // File handling stuff.
-extern	char			basedefault[1024];
 extern	FILE*			debugfile;
 
 // if true, load all graphics at level load
@@ -281,6 +265,39 @@ extern	int 			nettics[MAXNETNODES];
 extern	ticcmd_t		netcmds[MAXPLAYERS][BACKUPTICS];
 extern	int 			ticdup;
 
+
+// ---- [RH] ----
+extern	cvar_t			*developer;
+// Handy macro to print a string if developer cvar is set
+#define DEVONLY(f,a,b,c) if (developer->value) { f (a,b,c); }
+
+
+// Use MMX routines? (Only if USEASM is defined)
+extern	boolean			UseMMX;
+
+#ifdef USEASM
+void EndMMX (void);
+#endif
+
+
+// Miscellaneous info for DeHackEd support
+
+extern int deh_StartHealth;
+extern int deh_StartBullets;
+extern int deh_MaxHealth;
+extern int deh_MaxArmor;
+extern int deh_GreenAC;
+extern int deh_BlueAC;
+extern int deh_MaxSoulsphere;
+extern int deh_SoulsphereHealth;
+extern int deh_MegasphereHealth;
+extern int deh_GodHealth;
+extern int deh_FAArmor;
+extern int deh_FAAC;
+extern int deh_KFAArmor;
+extern int deh_KFAAC;
+extern int deh_BFGCells;
+extern int deh_Infight;
 
 
 #endif

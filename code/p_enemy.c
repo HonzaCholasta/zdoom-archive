@@ -274,8 +274,8 @@ extern	int 	numspechit;
 
 boolean P_Move (mobj_t* actor)
 {
-	fixed_t 	tryx;
-	fixed_t 	tryy;
+	fixed_t	tryx;
+	fixed_t	tryy;
 	
 	line_t* 	ld;
 	
@@ -610,12 +610,18 @@ void A_KeenDie (mobj_t* mo)
 void A_Look (mobj_t* actor)
 {
 	mobj_t* 	targ;
-		
+
 	actor->threshold = 0;		// any shot will wake up
 	targ = actor->subsector->sector->soundtarget;
 
 	if (targ && targ->player && (targ->player->cheats & CF_NOTARGET))
 		return;
+
+	// [RH] Andy Baker's stealth monsters
+	if (actor->flags & MF_STEALTH)
+	{
+		P_IncreaseVisibility(actor);
+	}
 
 	if (targ
 		&& (targ->flags & MF_SHOOTABLE) )
@@ -681,6 +687,12 @@ void A_Look (mobj_t* actor)
 void A_Chase (mobj_t*	actor)
 {
 	int 		delta;
+
+	// [RH] Andy Baker's stealth monsters
+	if (actor->flags & MF_STEALTH)
+	{
+		P_DecreaseVisibility(actor);
+	}
 
 	if (actor->reactiontime)
 		actor->reactiontime--;
@@ -789,10 +801,16 @@ void A_Chase (mobj_t*	actor)
 // A_FaceTarget
 //
 void A_FaceTarget (mobj_t* actor)
-{		
+{
 	if (!actor->target)
 		return;
-	
+
+	// [RH] Andy Baker's stealth monsters
+	if (actor->flags & MF_STEALTH)
+	{
+		P_IncreaseVisibility(actor);
+	}
+
 	actor->flags &= ~MF_AMBUSH;
 		
 	actor->angle = R_PointToAngle2 (actor->x,
@@ -861,6 +879,12 @@ void A_CPosAttack (mobj_t* actor)
 	if (!actor->target)
 		return;
 
+	// [RH] Andy Baker's stealth monsters
+	if (actor->flags & MF_STEALTH)
+	{
+		P_IncreaseVisibility(actor);
+	}
+
 	S_StartSound (actor, sfx_shotgn);
 	A_FaceTarget (actor);
 	bangle = actor->angle;
@@ -908,7 +932,13 @@ void A_BspiAttack (mobj_t *actor)
 {		
 	if (!actor->target)
 		return;
-				
+
+	// [RH] Andy Baker's stealth monsters
+	if (actor->flags & MF_STEALTH)
+	{
+		P_IncreaseVisibility(actor);
+	}
+
 	A_FaceTarget (actor);
 
 	// launch a missile
@@ -1221,7 +1251,7 @@ void A_VileChase (mobj_t* actor)
 					
 					P_SetMobjState (corpsehit,info->raisestate);
 					corpsehit->height <<= 2;
-					corpsehit->flags = info->flags | MF_TRANSLUCENT;
+					corpsehit->flags = info->flags | MF_TRANSLUC50;
 					corpsehit->health = info->spawnhealth;
 					corpsehit->target = NULL;
 
@@ -1455,10 +1485,7 @@ void A_SkullAttack (mobj_t* actor)
 // A_PainShootSkull
 // Spawn a lost soul and launch it at the target
 //
-void
-A_PainShootSkull
-( mobj_t*		actor,
-  angle_t		angle )
+void A_PainShootSkull (mobj_t *actor, angle_t angle)
 {
 	fixed_t 	x;
 	fixed_t 	y;
@@ -1593,6 +1620,12 @@ void A_Pain (mobj_t* actor)
 
 void A_Fall (mobj_t *actor)
 {
+	// [RH] Andy Baker's stealth monsters
+	if (actor->flags & MF_STEALTH)
+	{
+		P_BecomeVisible(actor);
+	}
+
 	// actor is on ground, it can be walked over
 	actor->flags &= ~MF_SOLID;
 
@@ -1624,7 +1657,7 @@ void A_BossDeath (mobj_t* mo)
 				
 	if ( gamemode == commercial)
 	{
-		if (gamemap != 7)
+		if (level.levelnum != 7)
 			return;
 				
 		if ((mo->type != MT_FATSO)
@@ -1633,10 +1666,10 @@ void A_BossDeath (mobj_t* mo)
 	}
 	else
 	{
-		switch(gameepisode)
+		switch(level.cluster)
 		{
 		  case 1:
-			if (gamemap != 8)
+			if (level.levelnum != 8)
 				return;
 
 			if (mo->type != MT_BRUISER)
@@ -1644,7 +1677,7 @@ void A_BossDeath (mobj_t* mo)
 			break;
 			
 		  case 2:
-			if (gamemap != 8)
+			if (level.levelnum != 18)
 				return;
 
 			if (mo->type != MT_CYBORG)
@@ -1652,7 +1685,7 @@ void A_BossDeath (mobj_t* mo)
 			break;
 			
 		  case 3:
-			if (gamemap != 8)
+			if (level.levelnum != 28)
 				return;
 			
 			if (mo->type != MT_SPIDER)
@@ -1661,14 +1694,14 @@ void A_BossDeath (mobj_t* mo)
 			break;
 			
 		  case 4:
-			switch(gamemap)
+			switch(level.levelnum)
 			{
-			  case 6:
+			  case 36:
 				if (mo->type != MT_CYBORG)
 					return;
 				break;
 				
-			  case 8: 
+			  case 38: 
 				if (mo->type != MT_SPIDER)
 					return;
 				break;
@@ -1680,7 +1713,7 @@ void A_BossDeath (mobj_t* mo)
 			break;
 			
 		  default:
-			if (gamemap != 8)
+			if ((level.levelnum % 10) != 8)
 				return;
 			break;
 		}
@@ -1716,7 +1749,7 @@ void A_BossDeath (mobj_t* mo)
 	// victory!
 	if ( gamemode == commercial)
 	{
-		if (gamemap == 7)
+		if (level.levelnum == 7)
 		{
 			if (mo->type == MT_FATSO)
 			{
@@ -1735,7 +1768,7 @@ void A_BossDeath (mobj_t* mo)
 	}
 	else
 	{
-		switch(gameepisode)
+		switch(level.cluster)
 		{
 		  case 1:
 			junk.tag = 666;
@@ -1744,15 +1777,15 @@ void A_BossDeath (mobj_t* mo)
 			break;
 			
 		  case 4:
-			switch(gamemap)
+			switch(level.levelnum)
 			{
-			  case 6:
+			  case 36:
 				junk.tag = 666;
 				EV_DoDoor (&junk, blazeOpen);
 				return;
 				break;
 				
-			  case 8:
+			  case 38:
 				junk.tag = 666;
 				EV_DoFloor (&junk, lowerFloorToLowest);
 				return;
@@ -1851,7 +1884,7 @@ void A_BrainAwake (mobj_t* mo)
 
 void A_BrainPain (mobj_t*		mo)
 {
-	S_StartSound (ORIGIN_SURROUND,sfx_bospn);
+	S_StartSound (ORIGIN_SURROUND2,sfx_bospn);
 }
 
 
@@ -2015,3 +2048,52 @@ void A_PlayerScream (mobj_t* mo)
 	
 	S_StartSound (mo, sound);
 }
+
+
+/***** Start of new functions for Andy Baker's stealth monsters ******/
+
+void P_BecomeVisible(mobj_t* actor)
+{
+	actor->invisible = false;
+	actor->flags &= ~MF_TRANSLUCBITS;
+};
+
+void P_IncreaseVisibility(mobj_t* actor)
+{
+	if (actor->invisible) {
+			actor->invisible = false;
+			actor->flags |= MF_TRANSLUC25;
+	} else switch (actor->flags & MF_TRANSLUCBITS) {
+		case MF_TRANSLUC25:
+			actor->flags ^= MF_TRANSLUCBITS;
+			break;
+		case MF_TRANSLUC50:
+			actor->flags |= MF_TRANSLUC25;
+			break;
+		case MF_TRANSLUC75:
+			actor->flags &= ~MF_TRANSLUCBITS;
+			break;
+	}
+}
+
+void P_DecreaseVisibility(mobj_t* actor)
+{
+	if (actor->invisible)
+		return;			// already invisible
+
+	switch (actor->flags & MF_TRANSLUCBITS) {
+		case 0:
+			actor->flags |= MF_TRANSLUC75;
+			break;
+		case MF_TRANSLUC75:
+			actor->flags &= ~MF_TRANSLUC25;
+			break;
+		case MF_TRANSLUC50:
+			actor->flags ^= MF_TRANSLUCBITS;
+			break;
+		case MF_TRANSLUC25:
+			actor->flags &= ~MF_TRANSLUCBITS;
+			actor->invisible = true;
+	}
+}
+/***** End of new functions for Andy Baker's stealth monsters ******/

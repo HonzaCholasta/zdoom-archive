@@ -1235,7 +1235,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -1287,7 +1287,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	10,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -1313,7 +1313,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -1365,7 +1365,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	8,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -1547,7 +1547,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	8,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -1885,7 +1885,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -1937,7 +1937,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	3,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -1963,7 +1963,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	5,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2015,7 +2015,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	5,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2041,7 +2041,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	100,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2067,7 +2067,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	5,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2093,7 +2093,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2145,7 +2145,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2171,7 +2171,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2223,7 +2223,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUCENT,		// flags
+	MF_NOBLOCKMAP|MF_NOGRAVITY|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2561,7 +2561,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_SPECIAL|MF_COUNTITEM|MF_TRANSLUCENT,		// flags
+	MF_SPECIAL|MF_COUNTITEM|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2587,7 +2587,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_SPECIAL|MF_COUNTITEM|MF_TRANSLUCENT,		// flags
+	MF_SPECIAL|MF_COUNTITEM|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2639,7 +2639,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_SPECIAL|MF_COUNTITEM|MF_TRANSLUCENT,		// flags
+	MF_SPECIAL|MF_COUNTITEM|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -2743,7 +2743,7 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	100,		// mass
 	0,		// damage
 	sfx_None,		// activesound
-	MF_SPECIAL|MF_COUNTITEM|MF_TRANSLUCENT,		// flags
+	MF_SPECIAL|MF_COUNTITEM|MF_TRANSLUC50,		// flags
 	S_NULL		// raisestate
     },
 
@@ -4669,6 +4669,321 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	sfx_None,		// activesound
 	MF_NOBLOCKMAP,		// flags
 	S_NULL		// raisestate
-    }
+    },
+
+	// [RH] Andy Baker's stealth monsters (next 12)
+
+	{		// MT_STEALTHBABY (ARACHNOTRON)
+	4050,		// doomednum
+	S_BSPI_STND,		// spawnstate
+	500,		// spawnhealth
+	S_BSPI_SIGHT,		// seestate
+	sfx_bspsit,		// seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_BSPI_PAIN,  // painstate
+	128,  // painchance
+	sfx_dmpain,  // painsound
+	0,  // meleestate
+	S_BSPI_ATK1,  // missilestate
+	S_BSPI_DIE1,  // deathstate
+	S_NULL,  // xdeathstate
+	sfx_bspdth,  // deathsound
+	12,  // speed
+	64*FRACUNIT,  // radius
+	64*FRACUNIT,  // height
+	600,  // mass
+	0,  // damage
+	sfx_bspact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH,         // flags
+	S_BSPI_RAISE1  // raisestate
+	},
+
+	{           // MT_STEALTHVILE
+	4051,             // doomednum
+	S_VILE_STND,  // spawnstate
+	700,  // spawnhealth
+	S_VILE_RUN1,  // seestate
+	sfx_vilsit,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_VILE_PAIN,  // painstate
+	10,  // painchance
+	sfx_vipain,  // painsound
+	0,  // meleestate
+	S_VILE_ATK1,  // missilestate
+	S_VILE_DIE1,  // deathstate
+	S_NULL,  // xdeathstate
+	sfx_vildth,  // deathsound
+	15,  // speed
+	20*FRACUNIT,  // radius
+	56*FRACUNIT,  // height
+	500,  // mass
+	0,  // damage
+	sfx_vilact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH,             // flags
+	S_NULL  // raisestate
+	},
+
+	{           // MT_STEALTHBRUISER (BARONOFHELL)
+	4052,           // doomednum
+	S_BOSS_STND,  // spawnstate
+	1000,  // spawnhealth
+	S_BOSS_RUN1,  // seestate
+	sfx_brssit,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_BOSS_PAIN,  // painstate
+	50,  // painchance
+	sfx_dmpain,  // painsound
+	S_BOSS_ATK1,  // meleestate
+	S_BOSS_ATK1,  // missilestate
+	S_BOSS_DIE1,  // deathstate
+	S_NULL,  // xdeathstate
+	sfx_brsdth,  // deathsound
+	8,  // speed
+	24*FRACUNIT,  // radius
+	64*FRACUNIT,  // height
+	1000,  // mass
+	0,  // damage
+	sfx_dmact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH,        // flags
+	S_BOSS_RAISE1  // raisestate
+	},
+
+	{           // MT_STEALTHHEAD (CACODEMON)
+	4053,           // doomednum
+	S_HEAD_STND,  // spawnstate
+	400,  // spawnhealth
+	S_HEAD_RUN1,  // seestate
+	sfx_cacsit,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_HEAD_PAIN,  // painstate
+	128,  // painchance
+	sfx_dmpain,  // painsound
+	0,  // meleestate
+	S_HEAD_ATK1,  // missilestate
+	S_HEAD_DIE1,  // deathstate
+	S_NULL,  // xdeathstate
+	sfx_cacdth,  // deathsound
+	8,  // speed
+	31*FRACUNIT,  // radius
+	56*FRACUNIT,  // height
+	400,  // mass
+	0,  // damage
+	sfx_dmact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_FLOAT|MF_NOGRAVITY|MF_COUNTKILL|MF_STEALTH, // flags
+	S_HEAD_RAISE1  // raisestate
+	},
+
+	{               // MT_STEALTHCHAINGUY (CHAINGUNNER)
+	4054,           // doomednum
+	S_CPOS_STND,  // spawnstate
+	70,  // spawnhealth
+	S_CPOS_RUN1,  // seestate
+	sfx_posit2,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_CPOS_PAIN,  // painstate
+	170,  // painchance
+	sfx_popain,  // painsound
+	0,  // meleestate
+	S_CPOS_ATK1,  // missilestate
+	S_CPOS_DIE1,  // deathstate
+	S_CPOS_XDIE1,  // xdeathstate
+	sfx_podth2,  // deathsound
+	8,  // speed
+	20*FRACUNIT,  // radius
+	56*FRACUNIT,  // height
+	100,  // mass
+	0,  // damage
+	sfx_posact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH, // flags
+	S_CPOS_RAISE1  // raisestate
+	},
+
+	{           // MT_STEALTHSERGEANT (DEMON)
+	4055,           // doomednum
+	S_SARG_STND,  // spawnstate
+	150,  // spawnhealth
+	S_SARG_RUN1,  // seestate
+	sfx_sgtsit,  // seesound
+	8,  // reactiontime
+	sfx_sgtatk,  // attacksound
+	S_SARG_PAIN,  // painstate
+	180,  // painchance
+	sfx_dmpain,  // painsound
+	S_SARG_ATK1,  // meleestate
+	0,  // missilestate
+	S_SARG_DIE1,  // deathstate
+	S_NULL,  // xdeathstate
+	sfx_sgtdth,  // deathsound
+	10,  // speed
+	30*FRACUNIT,  // radius
+	56*FRACUNIT,  // height
+	400,  // mass
+	0,  // damage
+	sfx_dmact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH,      // flags
+	S_SARG_RAISE1  // raisestate
+	},
+
+	{           // MT_STEALTHKNIGHT
+	4056,             // doomednum
+	S_BOS2_STND,  // spawnstate
+	500,  // spawnhealth
+	S_BOS2_RUN1,  // seestate
+	sfx_kntsit,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_BOS2_PAIN,  // painstate
+	50,  // painchance
+	sfx_dmpain,  // painsound
+	S_BOS2_ATK1,  // meleestate
+	S_BOS2_ATK1,  // missilestate
+	S_BOS2_DIE1,  // deathstate
+	S_NULL,  // xdeathstate
+	sfx_kntdth,  // deathsound
+	8,  // speed
+	24*FRACUNIT,  // radius
+	64*FRACUNIT,  // height
+	1000,  // mass
+	0,  // damage
+	sfx_dmact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL,  // flags
+	S_BOS2_RAISE1  // raisestate
+	},
+
+	{           // MT_STEALTHTROOP (IMP)
+	4057,           // doomednum
+	S_TROO_STND,  // spawnstate
+	60,  // spawnhealth
+	S_TROO_RUN1,  // seestate
+	sfx_bgsit1,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_TROO_PAIN,  // painstate
+	200,  // painchance
+	sfx_popain,  // painsound
+	S_TROO_ATK1,  // meleestate
+	S_TROO_ATK1,  // missilestate
+	S_TROO_DIE1,  // deathstate
+	S_TROO_XDIE1,  // xdeathstate
+	sfx_bgdth1,  // deathsound
+	8,  // speed
+	20*FRACUNIT,  // radius
+	56*FRACUNIT,  // height
+	100,  // mass
+	0,  // damage
+	sfx_bgact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH, // flags
+	S_TROO_RAISE1  // raisestate
+	},
+
+	{           // MT_STEALTHFATSO
+	4058,             // doomednum
+	S_FATT_STND,  // spawnstate
+	600,  // spawnhealth
+	S_FATT_RUN1,  // seestate
+	sfx_mansit,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_FATT_PAIN,  // painstate
+	80,  // painchance
+	sfx_mnpain,  // painsound
+	0,  // meleestate
+	S_FATT_ATK1,  // missilestate
+	S_FATT_DIE1,  // deathstate
+	S_NULL,  // xdeathstate
+	sfx_mandth,  // deathsound
+	8,  // speed
+	48*FRACUNIT,  // radius
+	64*FRACUNIT,  // height
+	1000,  // mass
+	0,  // damage
+	sfx_posact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH,             // flags
+	S_FATT_RAISE1  // raisestate
+	},
+
+	{           // MT_STEALTHUNDEAD
+	4059,             // doomednum
+	S_SKEL_STND,  // spawnstate
+	300,  // spawnhealth
+	S_SKEL_RUN1,  // seestate
+	sfx_skesit,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_SKEL_PAIN,  // painstate
+	100,  // painchance
+	sfx_popain,  // painsound
+	S_SKEL_FIST1,  // meleestate
+	S_SKEL_MISS1,  // missilestate
+	S_SKEL_DIE1,  // deathstate
+	S_NULL,  // xdeathstate
+	sfx_skedth,  // deathsound
+	10,  // speed
+	20*FRACUNIT,  // radius
+	56*FRACUNIT,  // height
+	500,  // mass
+	0,  // damage
+	sfx_skeact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH,       // flags
+	S_SKEL_RAISE1  // raisestate
+	},
+
+	{           // MT_STEALTHSHOTGUY
+	4060,              // doomednum
+	S_SPOS_STND,  // spawnstate
+	30,  // spawnhealth
+	S_SPOS_RUN1,  // seestate
+	sfx_posit2,  // seesound
+	8,  // reactiontime
+	0,  // attacksound
+	S_SPOS_PAIN,  // painstate
+	170,  // painchance
+	sfx_popain,  // painsound
+	0,  // meleestate
+	S_SPOS_ATK1,  // missilestate
+	S_SPOS_DIE1,  // deathstate
+	S_SPOS_XDIE1,  // xdeathstate
+	sfx_podth2,  // deathsound
+	8,  // speed
+	20*FRACUNIT,  // radius
+	56*FRACUNIT,  // height
+	100,  // mass
+	0,  // damage
+	sfx_posact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH,             // flags
+	S_SPOS_RAISE1  // raisestate
+	},
+
+	{  // MT_STEALTHPOSSESSED
+	4061,           // doomednum
+	S_POSS_STND,  // spawnstate
+	20,  // spawnhealth
+	S_POSS_RUN1,  // seestate
+	sfx_posit1,  // seesound
+	8,  // reactiontime
+	sfx_pistol,  // attacksound
+	S_POSS_PAIN,  // painstate
+	200,  // painchance
+	sfx_popain,  // painsound
+	0,  // meleestate
+	S_POSS_ATK1,  // missilestate
+	S_POSS_DIE1,  // deathstate
+	S_POSS_XDIE1,  // xdeathstate
+	sfx_podth1,  // deathsound
+	8,  // speed
+	20*FRACUNIT,  // radius
+	56*FRACUNIT,  // height
+	100,  // mass
+	0,  // damage
+	sfx_posact,  // activesound
+	MF_SOLID|MF_SHOOTABLE|MF_COUNTKILL|MF_STEALTH,             // flags
+	S_POSS_RAISE1  // raisestate
+	}
+
 };
 

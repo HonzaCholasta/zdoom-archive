@@ -41,7 +41,9 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "v_video.h"
 #include "m_argv.h"
 #include "d_main.h"
+#include "m_alloc.h"
 
+#include "c_console.h"
 #include "c_cvars.h"
 #include "c_dispatch.h"
 #include "st_stuff.h"
@@ -163,19 +165,6 @@ void I_FinishUpdate (void)
 	HRESULT dderr;
 	long *to, *from;
 
-	// draws little dots on the bottom of the screen
-	if (devparm) {
-		i = I_GetTime();
-		tics = i - lasttic;
-		lasttic = i;
-		if (tics > 20) tics = 20;
-
-		for (i=0 ; i<tics*2 ; i+=2)
-			screens[0][ (SCREENHEIGHT-1)*SCREENPITCH + i] = 0xff;
-		for ( ; i<20*2 ; i+=2)
-			screens[0][ (SCREENHEIGHT-1)*SCREENPITCH + i] = 0x0;
-	}
-
 	ms = timeGetTime ();
 	if (lastms) {
 		if (I_ShowFPS->value) {
@@ -197,6 +186,19 @@ void I_FinishUpdate (void)
 		}
 	}
 	lastms = ms;
+
+	// draws little dots on the bottom of the screen
+	if (devparm) {
+		i = I_GetTime();
+		tics = i - lasttic;
+		lasttic = i;
+		if (tics > 20) tics = 20;
+
+		for (i=0 ; i<tics*2 ; i+=2)
+			screens[0][ (SCREENHEIGHT-1)*SCREENPITCH + i] = 0xff;
+		for ( ; i<20*2 ; i+=2)
+			screens[0][ (SCREENHEIGHT-1)*SCREENPITCH + i] = 0x0;
+	}
 
 	ddsd.dwSize = sizeof(DDSURFACEDESC);
 	ddsd.dwFlags = 0;
@@ -345,7 +347,7 @@ static BOOL WINAPI DriverEnumCallback (GUID FAR *lpGUID,
 								 LPSTR lpDriverName,
 								 driver_t **drivers)
 {
-	driver_t *driver = malloc (sizeof(driver_t));
+	driver_t *driver = Malloc (sizeof(driver_t));
 
 	driver->next = NULL;
 	driver->description = copystring (lpDriverDescription);
@@ -369,7 +371,7 @@ static HRESULT WINAPI EnumModesCallback (LPDDSURFACEDESC desc, modelist_t **mode
 
 	if (desc->ddpfPixelFormat.dwRGBBitCount == 8) {
 		nummodes++;
-		mode = malloc (sizeof (modelist_t));
+		mode = Malloc (sizeof (modelist_t));
 
 		mode->next = NULL;
 		mode->width = desc->dwWidth;

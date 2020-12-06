@@ -39,6 +39,8 @@ rcsid[] = "$Id: p_doors.c,v 1.4 1997/02/03 16:47:53 b1 Exp $";
 #include "dstrings.h"
 #include "sounds.h"
 
+#include "c_console.h"
+
 #if 0
 //
 // Sliding door frame information

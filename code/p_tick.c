@@ -32,8 +32,6 @@ rcsid[] = "$Id: p_tick.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
 extern int ConsoleState;
 
-int 	leveltime;
-
 //
 // THINKERS
 // All thinkers should be allocated by Z_Malloc
@@ -131,11 +129,11 @@ void P_RunThinkers (void)
 void P_Ticker (void)
 {
 	int 		i;
-	
+
 	// run the tic
 	if (paused)
 		return;
-				
+
 	// pause if in menu or console and at least one tic has been run
 	if ( !netgame
 		 && (menuactive || ConsoleState == 1 || ConsoleState == 2)
@@ -145,16 +143,16 @@ void P_Ticker (void)
 	{
 		return;
 	}
-	
-				
+
+
 	for (i=0 ; i<MAXPLAYERS ; i++)
 		if (playeringame[i])
 			P_PlayerThink (&players[i]);
-						
+
 	P_RunThinkers ();
 	P_UpdateSpecials ();
 	P_RespawnSpecials ();
 
 	// for par times
-	leveltime++;		
+	level.time++;
 }

@@ -48,6 +48,9 @@ void SetCVarFloat (cvar_t *var, float value);
 // initialize all predefined cvars
 void C_SetCVars (void);
 
+// initialize all those cvars to default values after they are created
+void C_SetCVarsToDefaults (void);
+
 // archive cvars to FILE f
 void C_ArchiveCVars (void *f);
 
