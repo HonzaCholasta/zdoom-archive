@@ -87,7 +87,8 @@ void	G_DoPlayDemo (void);
 void	G_DoCompleted (void);
 void	G_DoVictory (void);
 void	G_DoWorldDone (void);
-void	G_DoSaveGame (void);
+void	G_DoSaveGame (bool okForQuicksave);
+void	G_DoAutoSave (void);
 
 FIntCVar gameskill ("skill", 2, CVAR_SERVERINFO|CVAR_LATCH);
 CVAR (Int, deathmatch, 0, CVAR_SERVERINFO|CVAR_LATCH);
@@ -151,7 +152,7 @@ float	 		normforwardmove[2] = {0x19, 0x32};		// [RH] For setting turbo from cons
 float	 		normsidemove[2] = {0x18, 0x28};			// [RH] Ditto
 
 fixed_t			forwardmove[2], sidemove[2];
-fixed_t 		angleturn[3] = {640, 1280, 320};		// + slow turn
+fixed_t 		angleturn[4] = {640, 1280, 320, 320};		// + slow turn
 fixed_t			flyspeed[2] = {1*256, 3*256};
 int				lookspeed[2] = {450, 512};
 
@@ -190,8 +191,8 @@ int 			bodyqueslot;
 
 void R_ExecuteSetViewSize (void);
 
-char savename[256];
-char BackupSaveName[256];
+char savename[PATH_MAX];
+char BackupSaveName[PATH_MAX];
 
 bool SendLand;
 BYTE SendWeaponSlot;
@@ -219,6 +220,36 @@ CUSTOM_CVAR (Float, turbo, 100.f, 0)
 		forwardmove[1] = (int)(normforwardmove[1]*scale);
 		sidemove[0] = (int)(normsidemove[0]*scale);
 		sidemove[1] = (int)(normsidemove[1]*scale);
+	}
+}
+
+CCMD (turnspeeds)
+{
+	if (argv.argc() == 1)
+	{
+		Printf ("Current turn speeds: %ld %ld %ld %ld\n", angleturn[0],
+			angleturn[1], angleturn[2], angleturn[3]);
+	}
+	else
+	{
+		int i;
+
+		for (i = 1; i <= 4 && i < argv.argc(); ++i)
+		{
+			angleturn[i-1] = atoi (argv[i]);
+		}
+		if (i <= 2)
+		{
+			angleturn[1] = angleturn[0] * 2;
+		}
+		if (i <= 3)
+		{
+			angleturn[2] = angleturn[0] / 2;
+		}
+		if (i <= 4)
+		{
+			angleturn[3] = angleturn[2];
+		}
 	}
 }
 
@@ -317,7 +348,6 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 {
 	int 		strafe;
 	int 		speed;
-	int 		tspeed; 
 	int 		forward;
 	int 		side;
 	int			look;
@@ -343,11 +373,6 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 	else
 		turnheld = 0;
 
-	if (turnheld < SLOWTURNTICS)
-		tspeed = 2; 			// slow turn
-	else
-		tspeed = speed;
-	
 	// let movement keys cancel each other out
 	if (strafe)
 	{
@@ -358,6 +383,11 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 	}
 	else
 	{
+		int tspeed = speed;
+
+		if (turnheld < SLOWTURNTICS)
+			tspeed *= 2;		// slow turn
+		
 		if (Button_Right.bDown)
 			cmd->ucmd.yaw -= angleturn[tspeed];
 		if (Button_Left.bDown)
@@ -408,7 +438,7 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 	if (strafe || lookstrafe)
 		side += (MAXPLMOVE * joyxmove) / 256;
 	else 
-		cmd->ucmd.yaw -= (angleturn[1] * joyxmove) / 256; 
+		cmd->ucmd.yaw -= (1280 * joyxmove) / 256; 
 
 	// [RH] Scale joystick moves over full range
 	if (Button_Mlook.bDown)
@@ -686,6 +716,7 @@ BOOL G_Responder (event_t *ev)
 //
 extern DCanvas *page;
 
+
 void G_Ticker ()
 {
 	int i;
@@ -713,7 +744,7 @@ void G_Ticker ()
 		switch (gameaction)
 		{
 		case ga_loadlevel:
-			G_DoLoadLevel (-1);
+			G_DoLoadLevel (-1, false);
 			break;
 		case ga_newgame2:	// Silence GCC (see above)
 		case ga_newgame:
@@ -723,7 +754,10 @@ void G_Ticker ()
 			G_DoLoadGame ();
 			break;
 		case ga_savegame:
-			G_DoSaveGame ();
+			G_DoSaveGame (true);
+			break;
+		case ga_autosave:
+			G_DoAutoSave ();
 			break;
 		case ga_playdemo:
 			G_DoPlayDemo ();
@@ -913,7 +947,7 @@ void G_PlayerReborn (int player)
 
 	p = &players[player];
 
-	memcpy (frags,p->frags,sizeof(frags));
+	memcpy (frags, p->frags, sizeof(frags));
 	fragcount = p->fragcount;
 	killcount = p->killcount;
 	itemcount = p->itemcount;
@@ -1130,13 +1164,14 @@ void G_DoReborn (int playernum, bool freshbot)
 
 	if (!multiplayer)
 	{
-		if (BackupSaveName[0])
+		if (BackupSaveName[0] && FileExists (BackupSaveName))
 		{ // Load game from the last point it was saved
 			strcpy (savename, BackupSaveName);
 			gameaction = ga_loadgame;
 		}
 		else
 		{ // Reload the level from scratch
+			BackupSaveName[0] = 0;
 			gameaction = ga_loadlevel;
 		}
 	}
@@ -1366,10 +1401,21 @@ void G_DoLoadGame (void)
 
 	arc << text[9];
 
+	if (text[9] == 0x1e)
+	{
+		arc << NextSkill;
+	}
+	else
+	{
+		NextSkill = -1;
+	}
+
 	arc.Close ();
 
-	if (text[9] != 0x1d)
+	if (text[9] != 0x1d && text[9] != 0x1e)
+	{
 		I_Error ("Bad savegame");
+	}
 
 	LocalSelectedItem = players[consoleplayer].readyArtifact;
 
@@ -1392,20 +1438,79 @@ void G_SaveGame (const char *filename, const char *description)
 	sendsave = true;
 }
 
-void G_BuildSaveName (char *name, int slot)
+void G_BuildSaveName (char *name, const char *prefix, int slot)
 {
 #ifndef unix
+	const char *leader;
+
 	if (Args.CheckParm ("-cdrom"))
-		sprintf(name, "c:\\zdoomdat\\%s%d.zds", GStrings(SAVEGAMENAME), slot);
+	{
+		leader = "c:/zdoomdat/";
+	}
 	else
-		sprintf (name, "%s%d.zds", GStrings(SAVEGAMENAME), slot);
+	{
+		leader = progdir;
+	}
+	if (slot < 0)
+	{
+		sprintf (name, "%s%s", leader, prefix);
+	}
+	else
+	{
+		sprintf (name, "%s%s%d.zds", leader, prefix, slot);
+	}
 #else
-	sprintf (name, "%s%d.zds", GStrings(SAVEGAMENAME), slot);
+	if (slot < 0)
+	{
+		sprintf (name, "%s", prefix);
+	}
+	else
+	{
+		sprintf (name, "%s%d.zds", prefix, slot);
+	}
 	char *path = GetUserFile (name);
 	strcpy (name, path);
 	delete[] path;
 #endif
 }
+
+CVAR (Int, autosavenum, 0, CVAR_NOSET|CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Int, disableautosave, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+
+extern void P_CalcHeight (player_t *);
+
+void G_DoAutoSave ()
+{
+	// Do not autosave in multiplayer games or demos
+	if (multiplayer || demoplayback || disableautosave >= 2)
+	{
+		gameaction = ga_nothing;
+		return;
+	}
+
+	// Keep up to four autosaves at a time
+	UCVarValue num;
+	char name[PATH_MAX];
+	time_t utcTime;
+	struct tm *now;
+	char *readableTime;
+	
+	num.Int = (autosavenum + 1) & 3;
+	autosavenum.ForceSet (num, CVAR_Int);
+
+	G_BuildSaveName (name, "auto", num.Int);
+	savegamefile = copystring (name);
+
+	time (&utcTime);
+	now = localtime (&utcTime);
+	readableTime = asctime (now);
+	strcpy (savedescription, "Autosave ");
+	strncpy (savedescription+9, readableTime+4, 12);
+	savedescription[9+12] = 0;
+
+	G_DoSaveGame (false);
+}
+
 
 static void PutSaveWads (FILE *file)
 {
@@ -1525,7 +1630,7 @@ static void PutSavePic (FILE *file, int width, int height)
 	}
 }
 
-void G_DoSaveGame ()
+void G_DoSaveGame (bool okForQuicksave)
 {
 	int i;
 
@@ -1574,10 +1679,10 @@ void G_DoSaveGame ()
 	for (i = 0; i < NUM_GLOBALVARS; i++)
 		arc << ACS_GlobalVars[i];
 
-	BYTE consist = 0x1d;			// consistancy marker
-	arc << consist;
+	BYTE consist = 0x1e;			// consistancy marker
+	arc << consist << NextSkill;
 
-	M_NotifyNewSave (savegamefile, savedescription);
+	M_NotifyNewSave (savegamefile, savedescription, okForQuicksave);
 	gameaction = ga_nothing;
 	savedescription[0] = 0;
 

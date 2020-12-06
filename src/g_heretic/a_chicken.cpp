@@ -34,6 +34,7 @@ public:
 };
 
 IMPLEMENT_STATELESS_ACTOR (ABeakPuff, Heretic, -1, 0)
+	PROP_Mass (5)
 	PROP_AttackSound ("chicken/attack")
 END_DEFAULTS
 
@@ -87,7 +88,9 @@ FWeaponInfo ABeak::WeaponInfo1 =
 	150,
 	15*FRACUNIT,
 	NULL,
-	NULL
+	NULL,
+	RUNTIME_CLASS(ABeak),
+	-1
 };
 
 FWeaponInfo ABeak::WeaponInfo2 =
@@ -106,7 +109,9 @@ FWeaponInfo ABeak::WeaponInfo2 =
 	150,
 	15*FRACUNIT,
 	NULL,
-	NULL
+	NULL,
+	RUNTIME_CLASS(ABeak),
+	-1
 };
 
 IMPLEMENT_ACTOR (ABeak, Heretic, -1, 0)
@@ -213,7 +218,7 @@ FState AChicken::States[] =
 	S_NORMAL (CHKN, 'L',   -1, NULL 					, NULL)
 };
 
-IMPLEMENT_ACTOR (AChicken, Heretic, -1, 0)
+IMPLEMENT_ACTOR (AChicken, Heretic, -1, 122)
 	PROP_SpawnHealth (10)
 	PROP_RadiusFixed (9)
 	PROP_HeightFixed (22)
@@ -274,7 +279,7 @@ FState AFeather::States[] =
 	S_NORMAL (CHKN, 'N',	6, NULL 					, NULL)
 };
 
-IMPLEMENT_ACTOR (AFeather, Heretic, -1, 0)
+IMPLEMENT_ACTOR (AFeather, Heretic, -1, 121)
 	PROP_RadiusFixed (2)
 	PROP_HeightFixed (4)
 	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)

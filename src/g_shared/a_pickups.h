@@ -135,6 +135,12 @@ struct FWeaponInfo
 	const char		*upsound;
 	const char		*readysound;
 	TypeInfo		*type;		// type of actor that represents this weapon
+	int				minammo;	// minimum ammo needed to switch to this weapon
+
+	int GetMinAmmo () const
+	{
+		return (minammo < 0) ? ammouse : minammo;
+	}
 };
 
 enum
@@ -219,8 +225,8 @@ public:
 	virtual bool ShouldStay ();
 	virtual void Hide ();
 	virtual bool DoRespawn ();
-protected:
 	virtual bool TryPickup (AActor *toucher);
+protected:
 	virtual const char *PickupMessage ();
 	virtual void PlayPickupSound (AActor *toucher);
 private:
@@ -232,10 +238,11 @@ private:
 class AWeapon : public AInventory
 {
 	DECLARE_ACTOR (AWeapon, AInventory)
+public:
+	virtual bool TryPickup (AActor *toucher);
 protected:
 	virtual void PlayPickupSound (AActor *toucher);
 	virtual weapontype_t OldStyleID() const;
-	virtual bool TryPickup (AActor *toucher);
 	virtual bool ShouldStay ();
 };
 #define S_LIGHTDONE 0
@@ -270,8 +277,9 @@ protected:
 class AKey : public AInventory
 {
 	DECLARE_CLASS (AKey, AInventory)
-protected:
+public:
 	virtual bool TryPickup (AActor *toucher);
+protected:
 	virtual bool ShouldStay ();
 	virtual void PlayPickupSound (AActor *toucher);
 	virtual keytype_t GetKeyType ();

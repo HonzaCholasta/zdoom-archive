@@ -179,7 +179,7 @@ void M_FindResponseFile (void)
 
 			if (argc != 0)
 			{
-				argv = (char **)Z_Malloc (argc*sizeof(char *) + argsize, PU_STATIC, 0);
+				argv = (char **)Malloc (argc*sizeof(char *) + argsize);
 				argv[i] = (char *)argv + argc*sizeof(char *);
 				ParseCommandLine (file, NULL, argv+i);
 
@@ -251,6 +251,10 @@ static long ParseCommandLine (const char *args, int *argc, char **argv)
 				else if (stuff == '\"')
 				{
 					stuff = 0;
+				}
+				else if (stuff == 0)
+				{
+					args--;
 				}
 				if (argv != NULL)
 				{
@@ -557,7 +561,10 @@ void M_ScreenShot (char *filename)
 
 	// save the pcx file
 	D_Display (true);
-	WritePCXfile (filename, screen, screen->GetPalette ());
+
+	PalEntry palette[256];
+	screen->GetFlashedPalette (palette);
+	WritePCXfile (filename, screen, palette);
 
 	if (!screenshot_quiet)
 	{

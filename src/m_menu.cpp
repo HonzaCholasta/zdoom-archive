@@ -597,13 +597,18 @@ void M_ReadSaveStrings ()
 	{
 		long filefirst;
 		findstate_t c_file;
+		char filter[PATH_MAX];
 
-		filefirst = I_FindFirst ("*.zds", &c_file);
+		G_BuildSaveName (filter, "*.zds", -1);
+		filefirst = I_FindFirst (filter, &c_file);
 		if (filefirst != -1)
 		{
 			do
 			{
-				FILE *file = fopen (I_FindName (&c_file), "rb");
+				// I_FindName only returns the file's name and not its full path
+				char filepath[PATH_MAX];
+				G_BuildSaveName (filepath, I_FindName(&c_file), -1);
+				FILE *file = fopen (filepath, "rb");
 				if (file != NULL)
 				{
 					char sig[PATH_MAX];
@@ -658,7 +663,7 @@ void M_ReadSaveStrings ()
 						if (addIt)
 						{
 							FSaveGameNode *node = new FSaveGameNode;
-							node->Filename = copystring (I_FindName (&c_file));
+							node->Filename = copystring (filepath);
 							node->bOldVersion = oldVer;
 							memcpy (node->Title, title, SAVESTRINGSIZE);
 							M_InsertSaveNode (node);
@@ -708,9 +713,11 @@ void M_InsertSaveNode (FSaveGameNode *node)
 	}
 }
 
-void M_NotifyNewSave (const char *file, const char *title)
+void M_NotifyNewSave (const char *file, const char *title, bool okForQuicksave)
 {
 	FSaveGameNode *node;
+
+	M_ReadSaveStrings ();
 
 	// See if the file is already in our list
 	for (node = static_cast<FSaveGameNode *>(SaveGames.Head);
@@ -724,18 +731,22 @@ void M_NotifyNewSave (const char *file, const char *title)
 #endif
 		{
 			strcpy (node->Title, title);
-			return;
+			node->bOldVersion = false;
+			break;
 		}
 	}
 
-	node = new FSaveGameNode;
-	strcpy (node->Title, title);
-	node->Filename = copystring (file);
-	node->bOldVersion = false;
-	M_InsertSaveNode (node);
-	SelSaveGame = node;
+	if (node->Succ == NULL)
+	{
+		node = new FSaveGameNode;
+		strcpy (node->Title, title);
+		node->Filename = copystring (file);
+		node->bOldVersion = false;
+		M_InsertSaveNode (node);
+		SelSaveGame = node;
+	}
 
-	if (quickSaveSlot == NULL)
+	if (quickSaveSlot == NULL && okForQuicksave)
 	{
 		quickSaveSlot = node;
 	}
@@ -1126,13 +1137,13 @@ void M_DoSave (FSaveGameNode *node)
 	else
 	{
 		// Find an unused filename, and save as that
-		char filename[24];
+		char filename[PATH_MAX];
 		int i;
 		FILE *test;
 
 		for (i = 0;; ++i)
 		{
-			sprintf (filename, "save%d.zds", i);
+			G_BuildSaveName (filename, "save", i);
 			test = fopen (filename, "rb");
 			if (test == NULL)
 			{
@@ -1206,7 +1217,6 @@ void M_QuickSave ()
 	{
 		M_StartControlPanel(false);
 		M_SaveGame (0);
-		quickSaveSlot = NULL; 	// means to pick a slot now
 		return;
 	}
 	sprintf (tempstring, GStrings(QSPROMPT), quickSaveSlot->Title);
@@ -1662,7 +1672,7 @@ static void M_PlayerSetupDrawer ()
 		spriteframe_t *sprframe =
 			&sprites[skins[players[consoleplayer].userinfo.skin].sprite].spriteframes[PlayerState->GetFrame()];
 
-		V_ColorMap = translationtables + consoleplayer*256*2;
+		V_ColorMap = translationtables[TRANSLATION_Players] + consoleplayer*256;
 		screen->DrawTranslatedPatchClean ((patch_t *)W_CacheLumpNum (
 			sprframe->lump[PlayerRotation], PU_CACHE),
 			320 - 52 - 32 + xo, PSetupDef.y + LINEHEIGHT*3 + 52);

@@ -74,6 +74,7 @@ extern	BOOL 			autostart;
 
 // Selected by user. 
 EXTERN_CVAR (Int, gameskill);
+extern	int				NextSkill;			// [RH] Skill to use at next level load
 
 // Nightmare mode flag, single player.
 extern	BOOL 			respawnmonsters;
@@ -301,6 +302,8 @@ struct DehInfo
 	int KFAAC;
 	int Infight;
 	char PlayerSprite[5];
+	BYTE ExplosionStyle;
+	fixed_t ExplosionAlpha;
 };
 extern DehInfo deh;
 

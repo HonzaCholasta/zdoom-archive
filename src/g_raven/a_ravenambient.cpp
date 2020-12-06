@@ -18,7 +18,7 @@ FState ASoundWind::States[] =
 	S_NORMAL (TNT1, 'A',   2, A_WindSound, &States[0])
 };
 
-IMPLEMENT_ACTOR (ASoundWind, Raven, -1, 0)
+IMPLEMENT_ACTOR (ASoundWind, Raven, -1, 110)
 	PROP_SpawnState (0)
 	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR)
 END_DEFAULTS
@@ -27,11 +27,11 @@ AT_GAME_SET (SoundWind)
 {
 	if (gameinfo.gametype == GAME_Heretic)
 	{
-		DoomEdMap.AddType (42, RUNTIME_CLASS(ASoundWind));
+		DOOMEDNUMOF(ASoundWind) = 42;
 	}
 	else if (gameinfo.gametype == GAME_Hexen)
 	{
-		DoomEdMap.AddType (1410, RUNTIME_CLASS(ASoundWind));
+		DOOMEDNUMOF(ASoundWind) = 1410;
 	}
 }
 
@@ -47,7 +47,7 @@ FState ASoundWaterfall::States[] =
 	S_NORMAL (TNT1, 'A',   2, A_WaterfallSound, &States[0])
 };
 
-IMPLEMENT_ACTOR (ASoundWaterfall, Raven, 41, 0)
+IMPLEMENT_ACTOR (ASoundWaterfall, Raven, 41, 111)
 	PROP_Flags (MF_NOBLOCKMAP|MF_NOSECTOR)
 	PROP_SpawnState (0)
 END_DEFAULTS

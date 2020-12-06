@@ -9,11 +9,12 @@
 class ASilverShield : public AArmor
 {
 	DECLARE_ACTOR (ASilverShield, AArmor)
-protected:
+public:
 	bool TryPickup (AActor *toucher)
 	{
 		return P_GiveArmor (toucher->player, (armortype_t)1, 100);
 	}
+protected:
 	virtual const char *PickupMessage ()
 	{
 		return GStrings(TXT_ITEMSHIELD1);
@@ -25,7 +26,7 @@ FState ASilverShield::States[] =
 	S_NORMAL (SHLD, 'A', -1, NULL, NULL)
 };
 
-IMPLEMENT_ACTOR (ASilverShield, Heretic, 85, 0)
+IMPLEMENT_ACTOR (ASilverShield, Heretic, 85, 68)
 	PROP_Flags (MF_SPECIAL)
 	PROP_Flags2 (MF2_FLOATBOB)
 
@@ -37,11 +38,12 @@ END_DEFAULTS
 class AEnchantedShield : public AArmor
 {
 	DECLARE_ACTOR (AEnchantedShield, AArmor)
-protected:
+public:
 	bool TryPickup (AActor *toucher)
 	{
 		return P_GiveArmor (toucher->player, (armortype_t)2, 200);
 	}
+protected:
 	virtual const char *PickupMessage ()
 	{
 		return GStrings(TXT_ITEMSHIELD2);
@@ -53,7 +55,7 @@ FState AEnchantedShield::States[] =
 	S_NORMAL (SHD2, 'A', -1, NULL, NULL)
 };
 
-IMPLEMENT_ACTOR (AEnchantedShield, Heretic, 31, 0)
+IMPLEMENT_ACTOR (AEnchantedShield, Heretic, 31, 69)
 	PROP_Flags (MF_SPECIAL)
 	PROP_Flags2 (MF2_FLOATBOB)
 

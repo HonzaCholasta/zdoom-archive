@@ -9,11 +9,12 @@
 class ACrystalVial : public AHealth
 {
 	DECLARE_ACTOR (ACrystalVial, AHealth)
-protected:
+public:
 	virtual bool TryPickup (AActor *toucher)
 	{
 		return P_GiveBody (toucher->player, 10);
 	}
+protected:
 	virtual const char *PickupMessage ()
 	{
 		return GStrings(TXT_ITEMHEALTH);
@@ -27,7 +28,7 @@ FState ACrystalVial::States[] =
 	S_NORMAL (PTN1, 'C',	3, NULL 				, &States[0])
 };
 
-IMPLEMENT_ACTOR (ACrystalVial, Raven, 81, 0)
+IMPLEMENT_ACTOR (ACrystalVial, Raven, 81, 23)
 	PROP_Flags (MF_SPECIAL)
 	PROP_Flags2 (MF2_FLOATBOB)
 	PROP_SpawnState (0)
