@@ -39,7 +39,7 @@ MIDISong2::MIDISong2 (FILE *file, int len)
 	int i;
 
 	MusHeader = new BYTE[len];
-	if (fread (MusHeader, 1, len, file) != len)
+	if (fread (MusHeader, 1, len, file) != (size_t)len)
 		return;
 
 	// Do some validation of the MIDI file

@@ -43,8 +43,6 @@
 #include "c_cvars.h"
 #include "c_dispatch.h"
 
-extern constate_e ConsoleState;
-
 EXTERN_CVAR (Bool, ticker)
 EXTERN_CVAR (Bool, fullscreen)
 EXTERN_CVAR (Float, vid_winscale)
