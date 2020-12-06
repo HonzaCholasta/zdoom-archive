@@ -81,10 +81,7 @@ DPolyAction::DPolyAction ()
 void DPolyAction::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_PolyObj << m_Speed << m_Dist;
-	else
-		arc >> m_PolyObj >> m_Speed >> m_Dist;
+	arc << m_PolyObj << m_Speed << m_Dist;
 }
 
 DPolyAction::DPolyAction (int polyNum)
@@ -115,10 +112,7 @@ DMovePoly::DMovePoly ()
 void DMovePoly::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Angle << m_xSpeed << m_ySpeed;
-	else
-		arc >> m_Angle >> m_xSpeed >> m_ySpeed;
+	arc << m_Angle << m_xSpeed << m_ySpeed;
 }
 
 DMovePoly::DMovePoly (int polyNum)
@@ -136,10 +130,7 @@ DPolyDoor::DPolyDoor ()
 void DPolyDoor::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Direction << m_TotalDist << m_Tics << m_WaitTics << m_Type << m_Close;
-	else
-		arc >> m_Direction >> m_TotalDist >> m_Tics >> m_WaitTics >> m_Type >> m_Close;
+	arc << m_Direction << m_TotalDist << m_Tics << m_WaitTics << m_Type << m_Close;
 }
 
 DPolyDoor::DPolyDoor (int polyNum, podoortype_t type)
@@ -1129,15 +1120,6 @@ static void InitBlockMap (void)
 {
 	int i;
 
-// [RH] The area was being calculated, but never used
-#if 0
-	int j;
-	seg_t **segList;
-	int area;
-	int leftX, rightX;
-	int topY, bottomY;
-#endif
-
 	PolyBlockMap = (polyblock_t **)Z_Malloc (bmapwidth*bmapheight*sizeof(polyblock_t *),
 		PU_LEVEL, 0);
 	memset (PolyBlockMap, 0, bmapwidth*bmapheight*sizeof(polyblock_t *));
@@ -1145,39 +1127,6 @@ static void InitBlockMap (void)
 	for (i = 0; i < po_NumPolyobjs; i++)
 	{
 		LinkPolyobj(&polyobjs[i]);
-
-#if 0
-		// calculate a rough area
-		// right now, working like shit...gotta fix this...
-		segList = polyobjs[i].segs;
-		leftX = rightX = (*segList)->v1->x;
-		topY = bottomY = (*segList)->v1->y;
-		for (j = 0; j < polyobjs[i].numsegs; j++, segList++)
-		{
-			if ((*segList)->v1->x < leftX)
-			{
-				leftX = (*segList)->v1->x;
-			}
-			if ((*segList)->v1->x > rightX)
-			{
-				rightX = (*segList)->v1->x;
-			}
-			if ((*segList)->v1->y < bottomY)
-			{
-				bottomY = (*segList)->v1->y;
-			}
-			if ((*segList)->v1->y > topY)
-			{
-				topY = (*segList)->v1->y;
-			}
-		}
-		area = ((rightX>>FRACBITS)-(leftX>>FRACBITS))*
-			((topY>>FRACBITS)-(bottomY>>FRACBITS));
-//    fprintf (stdaux, "Area of Polyobj[%d]: %d\n", polyobjs[i].tag, area);
-//    fprintf (stdaux, "\t[%d]\n[%d]\t\t[%d]\n\t[%d]\n", topY>>FRACBITS, 
-//    		leftX>>FRACBITS,
-//    	rightX>>FRACBITS, bottomY>>FRACBITS);
-#endif
 	}
 }
 

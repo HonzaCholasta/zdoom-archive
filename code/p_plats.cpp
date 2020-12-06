@@ -30,6 +30,7 @@
 #include "s_sndseq.h"
 #include "doomstat.h"
 #include "r_state.h"
+#include "gi.h"
 
 IMPLEMENT_SERIAL (DPlat, DMovingFloor)
 
@@ -40,32 +41,16 @@ DPlat::DPlat ()
 void DPlat::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Speed
-			<< m_Low
-			<< m_High
-			<< m_Wait
-			<< m_Count
-			<< m_Status
-			<< m_OldStatus
-			<< m_Crush
-			<< m_Tag
-			<< m_Type;
-	}
-	else
-	{
-		arc >> m_Speed
-			>> m_Low
-			>> m_High
-			>> m_Wait
-			>> m_Count
-			>> m_Status
-			>> m_OldStatus
-			>> m_Crush
-			>> m_Tag
-			>> m_Type;
-	}
+	arc << m_Speed
+		<< m_Low
+		<< m_High
+		<< m_Wait
+		<< m_Count
+		<< m_Status
+		<< m_OldStatus
+		<< m_Crush
+		<< m_Tag
+		<< m_Type;
 }
 
 void DPlat::PlayPlatSound (const char *sound)
@@ -104,8 +89,11 @@ void DPlat::RunThink ()
 
 				switch (m_Type)
 				{
-					case platDownWaitUpStay:
 					case platRaiseAndStay:
+						if (gameinfo.gametype == GAME_Heretic)
+							break;
+					case platDownByValue:
+					case platDownWaitUpStay:
 					case platUpByValueStay:
 					case platDownToNearestFloor:
 					case platDownToLowestCeiling:
@@ -168,7 +156,7 @@ void DPlat::RunThink ()
 		break;
 		
 	case waiting:
-		if (!--m_Count)
+		if (m_Count > 0 && !--m_Count)
 		{
 			if (m_Sector->floorheight == m_Low)
 				m_Status = up;
@@ -265,19 +253,23 @@ manual_plat:
 		{
 		case DPlat::platRaiseAndStay:
 			plat->m_High = P_FindNextHighestFloor (sec, sec->floorheight);
+			plat->m_Low = sec->floorheight;
 			plat->m_Status = DPlat::up;
 			plat->PlayPlatSound ("Floor");
+			sec->special = 0;		// NO MORE DAMAGE, IF APPLICABLE
 			break;
 
 		case DPlat::platUpByValue:
 		case DPlat::platUpByValueStay:
 			plat->m_High = sec->floorheight + height;
+			plat->m_Low = sec->floorheight;
 			plat->m_Status = DPlat::up;
 			plat->PlayPlatSound ("Floor");
 			break;
 		
 		case DPlat::platDownByValue:
 			plat->m_Low = sec->floorheight - height;
+			plat->m_High = sec->floorheight;
 			plat->m_Status = DPlat::down;
 			plat->PlayPlatSound ("Floor");
 			break;
@@ -295,6 +287,7 @@ manual_plat:
 		
 		case DPlat::platUpWaitDownStay:
 			plat->m_High = P_FindHighestFloorSurrounding (sec);
+			plat->m_Low = sec->floorheight;
 
 			if (plat->m_High < sec->floorheight)
 				plat->m_High = sec->floorheight;

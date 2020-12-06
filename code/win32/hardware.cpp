@@ -1,3 +1,6 @@
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
 #include "hardware.h"
 #undef MINCHAR
 #undef MAXCHAR
@@ -79,7 +82,9 @@ void I_FinishUpdate ()
 			chars = sprintf (fpsbuff, "%I64d ms (%d fps)",
 							 howlong, lastcount);
 			screen->Clear (0, screen->height - 8, chars * 8, screen->height, 0);
-			screen->PrintStr (0, screen->height - 8, (char *)&fpsbuff[0], chars);
+			screen->SetFont (ConFont);
+			screen->DrawText (CR_WHITE, 0, screen->height - 8, (char *)&fpsbuff[0]);
+			screen->SetFont (SmallFont);
 			if (lastsec < ms / 1000)
 			{
 				lastcount = framecount / (ms/1000 - lastsec);
@@ -344,7 +349,7 @@ void I_Blit (DCanvas *src, int srcx, int srcy, int srcwidth, int srcheight,
 
 extern int NewWidth, NewHeight, NewBits, DisplayBits;
 
-BEGIN_CUSTOM_CVAR (fullscreen, "0", CVAR_ARCHIVE)
+BEGIN_CUSTOM_CVAR (fullscreen, "1", CVAR_ARCHIVE)
 {
 	if (Video->FullscreenChanged (var.value ? true : false))
 	{

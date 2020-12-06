@@ -13,9 +13,11 @@
 #include "mid2strm.h"
 #include "mus2strm.h"
 #include "i_system.h"
+#include "i_sound.h"
 
-#include "../midas/include/midasdll.h"
+#include <fmod.h>
 
+EXTERN_CVAR (snd_musicvolume)
 extern int _nosound;
 
 class MusInfo
@@ -44,7 +46,7 @@ public:
 class MIDISong : public MusInfo
 {
 public:
-	MIDISong (void *data, int len);
+	MIDISong (int handle, int pos, int len);
 	~MIDISong ();
 	void SetVolume (float volume);
 	void Play (bool looping);
@@ -79,7 +81,7 @@ protected:
 class MUSSong : public MIDISong
 {
 public:
-	MUSSong (void *data, int len);
+	MUSSong (int handle, int pos, int len);
 protected:
 	bool IsMUS () { return true; }
 };
@@ -87,7 +89,7 @@ protected:
 class MODSong : public MusInfo
 {
 public:
-	MODSong (void *data, int len);
+	MODSong (int handle, int pos, int len);
 	~MODSong ();
 	void SetVolume (float volume);
 	void Play (bool looping);
@@ -99,14 +101,34 @@ public:
 	bool IsValid () { return m_Module != NULL; }
 
 protected:
-	MIDASmodulePlayHandle m_Handle;
-	MIDASmodule m_Module;
+	FMUSIC_MODULE *m_Module;
 };
+
+class StreamSong : public MusInfo
+{
+public:
+	StreamSong (int handle, int pos, int len);
+	~StreamSong ();
+	void SetVolume (float volume);
+	void Play (bool looping);
+	void Pause ();
+	void Resume ();
+	void Stop ();
+	bool IsPlaying ();
+	bool IsMIDI () { return false; }
+	bool IsValid () { return m_Stream != NULL; }
+
+protected:
+	FSOUND_STREAM *m_Stream;
+	long m_Channel;
+	static long m_Volume;
+};
+
+long StreamSong::m_Volume = 255;
 
 static MusInfo *currSong;
 static HANDLE	BufferReturnEvent;
 static int		nomusic = 0;
-static char		modName[512];
 static int		musicvolume;
 static DWORD	midivolume;
 static DWORD	nummididevices;
@@ -167,7 +189,7 @@ void MIDISong::SetVolume (float volume)
 
 void I_SetMusicVolume (int volume)
 {
-	if (volume != 127)
+	if (volume)
 	{
 		// Internal state variable.
 		musicvolume = volume;
@@ -179,7 +201,16 @@ void I_SetMusicVolume (int volume)
 
 void MODSong::SetVolume (float volume)
 {
-	MIDASsetMusicVolume (m_Handle, (int)(volume * 64));
+	FMUSIC_SetMasterVolume (m_Module, (int)(volume * 256));
+}
+
+void StreamSong::SetVolume (float volume)
+{
+	m_Volume = (int)(volume * 255);
+	if (m_Channel)
+	{
+		FSOUND_SetVolumeAbsolute (m_Channel, m_Volume);
+	}
 }
 
 BEGIN_COMMAND (snd_listmididevices)
@@ -215,13 +246,14 @@ END_COMMAND (snd_listmididevices)
 
 void I_InitMusic (void)
 {
-	char *temp;
+	static bool setatterm = false;
 
 	Printf (PRINT_HIGH, "I_InitMusic\n");
 	
 	nummididevices = midiOutGetNumDevs ();
 	nummididevicesset = true;
 	snd_mididevice.Callback ();
+	snd_musicvolume.Callback ();
 
 	nomusic = !!Args.CheckParm("-nomusic") || !!Args.CheckParm("-nosound") || !nummididevices;
 
@@ -234,19 +266,11 @@ void I_InitMusic (void)
 		}
 	}
 
-	/* Create temporary file name for MIDAS */
-	temp = getenv("TEMP");
-	if (temp == NULL)
-		temp = ".";
-	strcpy (modName, temp);
-	FixPathSeperator (modName);
-
-	while (modName[strlen(modName)-1] == '/')
-		modName[strlen(modName)-1] = 0;
-
-	strcat (modName, "/doommus.tmp");
-
-	atterm (I_ShutdownMusic);
+	if (!setatterm)
+	{
+		setatterm = true;
+		atterm (I_ShutdownMusic);
+	}
 }
 
 
@@ -257,9 +281,11 @@ void STACK_ARGS I_ShutdownMusic(void)
 		I_UnRegisterSong ((int)currSong);
 		currSong = NULL;
 	}
-	remove (modName);
 	if (BufferReturnEvent)
+	{
 		CloseHandle (BufferReturnEvent);
+		BufferReturnEvent = NULL;
+	}
 }
 
 
@@ -525,10 +551,30 @@ void MODSong::Play (bool looping)
 	m_Status = STATE_Stopped;
 	m_Looping = looping;
 
-	if ( (m_Handle = MIDASplayModule (m_Module, looping)) )
+	if (FMUSIC_PlaySong (m_Module))
 	{
-		MIDASsetMusicVolume (m_Handle, musicvolume);
+		FMUSIC_SetMasterVolume (m_Module, musicvolume << 2);
 		m_Status = STATE_Playing;
+	}
+}
+
+void StreamSong::Play (bool looping)
+{
+	long i;
+
+	m_Status = STATE_Stopped;
+	m_Looping = looping;
+
+	for (i = FSOUND_GetMaxChannels() - 1; i > 0; i++)
+	{
+		m_Channel = FSOUND_Stream_Play (i, m_Stream);
+		if (m_Channel != -1)
+		{
+			FSOUND_SetVolumeAbsolute (m_Channel, m_Volume);
+			FSOUND_SetPan (m_Channel, FSOUND_STEREOPAN);
+			m_Status = STATE_Playing;
+			break;
+		}
 	}
 }
 
@@ -554,7 +600,17 @@ void MODSong::Pause ()
 {
 	if (m_Status == STATE_Playing)
 	{
-		// FIXME
+		if (FMUSIC_SetPaused (m_Module, TRUE))
+			m_Status = STATE_Paused;
+	}
+}
+
+void StreamSong::Pause ()
+{
+	if (m_Status == STATE_Playing)
+	{
+		if (FSOUND_Stream_SetPaused (m_Stream, TRUE))
+			m_Status = STATE_Paused;
 	}
 }
 
@@ -580,7 +636,17 @@ void MODSong::Resume ()
 {
 	if (m_Status == STATE_Paused)
 	{
-		// FIXME
+		if (FMUSIC_SetPaused (m_Module, FALSE))
+			m_Status = STATE_Playing;
+	}
+}
+
+void StreamSong::Resume ()
+{
+	if (m_Status == STATE_Paused)
+	{
+		if (FSOUND_Stream_SetPaused (m_Stream, FALSE))
+			m_Status = STATE_Playing;
 	}
 }
 
@@ -616,8 +682,17 @@ void MODSong::Stop ()
 	if (m_Status != STATE_Stopped)
 	{
 		m_Status = STATE_Stopped;
-		MIDASstopModule (m_Handle);
-		m_Handle = 0;
+		FMUSIC_StopSong (m_Module);
+	}
+}
+
+void StreamSong::Stop ()
+{
+	if (m_Status != STATE_Stopped)
+	{
+		m_Status = STATE_Stopped;
+		FSOUND_Stream_Stop (m_Stream);
+		m_Channel = -1;
 	}
 }
 
@@ -644,28 +719,44 @@ MIDISong::~MIDISong ()
 MODSong::~MODSong ()
 {
 	Stop ();
-	MIDASfreeModule (m_Module);
-	m_Module = 0;
+	FMUSIC_FreeSong (m_Module);
+	m_Module = NULL;
 }
 
-int I_RegisterSong (void *data, int musicLen)
+StreamSong::~StreamSong ()
 {
-	MusInfo *info;
+	Stop ();
+	FSOUND_Stream_Close (m_Stream);
+	m_Stream = NULL;
+}
 
-	if (*(int *)data == (('M')|(('U')<<8)|(('S')<<16)|((0x1a)<<24)))
+int I_RegisterSong (int handle, int pos, int len)
+{
+	MusInfo *info = NULL;
+	DWORD id;
+
+	lseek (handle, pos, SEEK_SET);
+	read (handle, &id, 4);
+
+	if (id == (('M')|(('U')<<8)|(('S')<<16)|((0x1a)<<24)))
 	{
 		// This is a mus file
-		info = new MUSSong (data, musicLen);
+		info = new MUSSong (handle, pos, len);
 	}
-	else if (*(int *)data == (('M')|(('T')<<8)|(('h')<<16)|(('d')<<24)))
+	else if (id == (('M')|(('T')<<8)|(('h')<<16)|(('d')<<24)))
 	{
 		// This is a midi file
-		info = new MIDISong (data, musicLen);
+		info = new MIDISong (handle, pos, len);
 	}
-	else if (!_nosound)	// no MIDAS => no MODs
+	else if (!_nosound)	// no FSOUND => no modules/mp3s
 	{
-		// This is probably a module
-		info = new MODSong (data, musicLen);
+		// First try loading it as MOD, then as MP3
+		info = new MODSong (handle, pos, len);
+		if (!info->IsValid ())
+		{
+			delete info;
+			info = new StreamSong (handle, pos, len);
+		}
 	}
 
 	if (info && !info->IsValid ())
@@ -682,48 +773,44 @@ MIDISong::MIDISong ()
 	m_Buffers = NULL;
 }
 
-MIDISong::MIDISong (void *data, int len)
+MIDISong::MIDISong (int handle, int pos, int len)
 {
 	m_Buffers = NULL;
-	if (nummididevices > 0)
-		m_Buffers = mid2strmConvert ((LPBYTE)data, len);
+	if (nummididevices > 0 && lseek (handle, pos, SEEK_SET) != -1)
+	{
+		byte *data = new byte[len];
+		if (read (handle, data, len) == len)
+		{
+			m_Buffers = mid2strmConvert ((LPBYTE)data, len);
+		}
+		delete[] data;
+	}
 }
 
-MUSSong::MUSSong (void *data, int len) : MIDISong ()
+MUSSong::MUSSong (int handle, int pos, int len) : MIDISong ()
 {
-	if (nummididevices > 0)
-		m_Buffers = mus2strmConvert ((LPBYTE)data, len);
+	m_Buffers = NULL;
+	if (nummididevices > 0 && lseek (handle, pos, SEEK_SET) != -1)
+	{
+		byte *data = new byte[len];
+		if (read (handle, data, len) == len)
+		{
+			m_Buffers = mus2strmConvert ((LPBYTE)data, len);
+		}
+		delete[] data;
+	}
 }
 
-MODSong::MODSong (void *data, int len)
+MODSong::MODSong (int handle, int pos, int len)
 {
-	m_Handle = 0;
-	m_Module = NULL;
+	m_Module = FMUSIC_LoadSong ((char *)new FileHandle (handle, pos, len));
+}
 
-	FILE *f;
-
-	if ((f = fopen (modName, "wb")) == NULL)
-	{
-		Printf (PRINT_HIGH, "Unable to open temporary music file %s\n", modName);
-		return;
-	}
-	if (fwrite (data, len, 1, f) != 1)
-	{
-		fclose (f);
-		remove (modName);
-		Printf (PRINT_HIGH, "Unable to write temporary music file\n");
-		return;
-	}
-	fclose (f);
-
-	if ((m_Module = MIDASloadModule (modName)) == NULL)
-	{
-		// This is not any known music format
-		// (or could not load mod)
-		Printf (PRINT_HIGH, "MIDAS failed to load song:\n%s\n",
-			MIDASgetErrorMessage (MIDASgetLastError()));
-	}
-	remove (modName);
+StreamSong::StreamSong (int handle, int pos, int len)
+{
+	m_Channel = -1;
+	m_Stream = FSOUND_Stream_OpenMpeg ((char *)new FileHandle (handle, pos, len),
+		FSOUND_LOOP_NORMAL|FSOUND_NORMAL);
 }
 
 // Is the song playing?
@@ -741,5 +828,10 @@ bool MIDISong::IsPlaying ()
 
 bool MODSong::IsPlaying ()
 {
-	return m_Looping ? true : m_Status != STATE_Stopped;
+	return !!FMUSIC_IsPlaying (m_Module);
+}
+
+bool StreamSong::IsPlaying ()
+{
+	return m_Channel != -1;
 }

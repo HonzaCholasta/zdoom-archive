@@ -179,15 +179,11 @@ DSeqNode *DSeqNode::SequenceListHead;
 
 void DSeqNode::SerializeSequences (FArchive &arc)
 {
-	if (arc.IsStoring ())
-	{
-		arc << SequenceListHead;
-	}
-	else
+	if (arc.IsLoading ())
 	{
 		SN_StopAllSequences ();
-		arc >> SequenceListHead;
 	}
+	arc << SequenceListHead;
 }
 
 IMPLEMENT_SERIAL (DSeqNode, DObject)
@@ -199,33 +195,36 @@ DSeqNode::DSeqNode ()
 
 void DSeqNode::Serialize (FArchive &arc)
 {
+	int seqOffset;
+
 	Super::Serialize (arc);
 	if (arc.IsStoring ())
 	{
-		arc << SN_GetSequenceOffset (m_Sequence, m_SequencePtr)
+		seqOffset = SN_GetSequenceOffset (m_Sequence, m_SequencePtr);
+		arc << seqOffset
 			<< m_DelayTics
 			<< m_Volume
 			<< m_Atten
-			<< S_sfx[m_CurrentSoundID].name
-			<< Sequences[m_Sequence]->name
 			<< m_Next
 			<< m_Prev;
+			arc.WriteString (S_sfx[m_CurrentSoundID].name);
+			arc.WriteString (Sequences[m_Sequence]->name);
 	}
 	else
 	{
 		char *seqName = NULL, *soundName = NULL;
-		int seqOffset = 0, delayTics = 0;
+		int delayTics = 0;
 		float volume;
 		int atten = ATTN_NORM;
 
-		arc >> seqOffset
-			>> delayTics
-			>> volume
-			>> atten
-			>> soundName
-			>> seqName
-			>> m_Next
-			>> m_Prev;
+		arc << seqOffset
+			<< delayTics
+			<< volume
+			<< atten
+			<< m_Next
+			<< m_Prev
+			<< soundName
+			<< seqName;
 
 		int i;
 
@@ -255,10 +254,7 @@ END_POINTERS
 void DSeqActorNode::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Actor;
-	else
-		arc >> m_Actor;
+	arc << m_Actor;
 }
 
 IMPLEMENT_SERIAL (DSeqPolyNode, DSeqNode)
@@ -266,14 +262,7 @@ IMPLEMENT_SERIAL (DSeqPolyNode, DSeqNode)
 void DSeqPolyNode::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << (WORD)(m_Poly - polyobjs);
-	else
-	{
-		WORD ofs;
-		arc >> ofs;
-		m_Poly = polyobjs + ofs;
-	}
+	arc.SerializePointer (polyobjs, (BYTE **)&m_Poly, sizeof(*polyobjs));
 }
 
 IMPLEMENT_SERIAL (DSeqSectorNode, DSeqNode)
@@ -281,10 +270,7 @@ IMPLEMENT_SERIAL (DSeqSectorNode, DSeqNode)
 void DSeqSectorNode::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Sector;
-	else
-		arc >> m_Sector;
+	arc << m_Sector;
 }
 
 //==========================================================================
@@ -795,7 +781,7 @@ void DSeqNode::RunThink ()
 
 	case SS_CMD_DELAYRAND:
 		m_DelayTics = GetData(*m_SequencePtr)+
-			M_Random()%(*(m_SequencePtr+1)-GetData(*m_SequencePtr));
+			P_Random(pr_ssdelay)%(*(m_SequencePtr+1)-GetData(*m_SequencePtr));
 		m_SequencePtr += 2;
 		m_CurrentSoundID = -1;
 		break;

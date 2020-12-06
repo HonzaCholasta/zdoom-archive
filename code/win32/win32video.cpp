@@ -82,7 +82,6 @@ Win32Video::Win32Video (int parm)
 	m_LastUpdatedCanvas = NULL;
 	m_NeedPalChange = 0;
 
-	I_DetectOS ();
 	if (vid_noptc.value || Args.CheckParm ("-noptc"))
 	{
 		Printf_Bold ("Bypassing PTC\n");

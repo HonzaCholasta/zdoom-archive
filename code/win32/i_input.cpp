@@ -48,7 +48,6 @@ static BOOL mousepaused;
 static BOOL WindowActive;
 static BOOL MakeMouseEvents;
 
-extern BOOL menuactive;
 extern BOOL vidactive;
 extern HWND Window;
 

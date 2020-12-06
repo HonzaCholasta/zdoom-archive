@@ -30,11 +30,7 @@ DSectorEffect::DSectorEffect (sector_t *sector)
 void DSectorEffect::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Sector;
-	else
-		arc >> m_Sector;
-
+	arc << m_Sector;
 }
 
 IMPLEMENT_SERIAL (DMover, DSectorEffect)
@@ -108,16 +104,15 @@ DMover::EResult DMover::MovePlane (fixed_t speed, fixed_t dest, int crush,
 		{
 		case -1:
 			// DOWN
-			if (m_Sector->floorheight - speed < dest)
+			if (m_Sector->floorheight - speed <= dest)
 			{
 				lastpos = m_Sector->floorheight;
 				m_Sector->floorheight = dest;
-				flag = P_ChangeSector (m_Sector, crush);
-				if (flag == true)
+				flag = P_ChangeSector (m_Sector, crush, dest - lastpos, 0);
+				if (flag)
 				{
 					m_Sector->floorheight = lastpos;
-					P_ChangeSector (m_Sector, crush);
-					//return crushed;
+					P_ChangeSector (m_Sector, crush, lastpos - dest, 0);
 				}
 				return pastdest;
 			}
@@ -125,11 +120,11 @@ DMover::EResult DMover::MovePlane (fixed_t speed, fixed_t dest, int crush,
 			{
 				lastpos = m_Sector->floorheight;
 				m_Sector->floorheight -= speed;
-				flag = P_ChangeSector (m_Sector, crush);
-				if (flag == true)
+				flag = P_ChangeSector (m_Sector, crush, -speed, 0);
+				if (flag)
 				{
 					m_Sector->floorheight = lastpos;
-					P_ChangeSector (m_Sector, crush);
+					P_ChangeSector (m_Sector, crush, speed, 0);
 					return crushed;
 				}
 			}
@@ -143,12 +138,11 @@ DMover::EResult DMover::MovePlane (fixed_t speed, fixed_t dest, int crush,
 			{
 				lastpos = m_Sector->floorheight;
 				m_Sector->floorheight = destheight;
-				flag = P_ChangeSector (m_Sector, crush);
-				if (flag == true)
+				flag = P_ChangeSector (m_Sector, crush, destheight - lastpos, 0);
+				if (flag)
 				{
 					m_Sector->floorheight = lastpos;
-					P_ChangeSector (m_Sector, crush);
-					//return crushed;
+					P_ChangeSector (m_Sector, crush, lastpos - destheight, 0);
 				}
 				return pastdest;
 			}
@@ -157,13 +151,13 @@ DMover::EResult DMover::MovePlane (fixed_t speed, fixed_t dest, int crush,
 				// COULD GET CRUSHED
 				lastpos = m_Sector->floorheight;
 				m_Sector->floorheight += speed;
-				flag = P_ChangeSector (m_Sector, crush);
-				if (flag == true)
+				flag = P_ChangeSector (m_Sector, crush, speed, 0);
+				if (flag)
 				{
-					if (crush)
+					if (crush >= 0)
 						return crushed;
 					m_Sector->floorheight = lastpos;
-					P_ChangeSector (m_Sector, crush);
+					P_ChangeSector (m_Sector, crush, -speed, 0);
 					return crushed;
 				}
 			}
@@ -183,13 +177,12 @@ DMover::EResult DMover::MovePlane (fixed_t speed, fixed_t dest, int crush,
 			{
 				lastpos = m_Sector->ceilingheight;
 				m_Sector->ceilingheight = destheight;
-				flag = P_ChangeSector (m_Sector, crush);
+				flag = P_ChangeSector (m_Sector, crush, destheight - lastpos, 1);
 
-				if (flag == true)
+				if (flag)
 				{
 					m_Sector->ceilingheight = lastpos;
-					P_ChangeSector (m_Sector, crush);
-					//return crushed;
+					P_ChangeSector (m_Sector, crush, lastpos - destheight, 1);
 				}
 				return pastdest;
 			}
@@ -198,14 +191,13 @@ DMover::EResult DMover::MovePlane (fixed_t speed, fixed_t dest, int crush,
 				// COULD GET CRUSHED
 				lastpos = m_Sector->ceilingheight;
 				m_Sector->ceilingheight -= speed;
-				flag = P_ChangeSector (m_Sector, crush);
-
-				if (flag == true)
+				flag = P_ChangeSector (m_Sector, crush, -speed, 1);
+				if (flag)
 				{
-					if (crush)
+					if (crush >= 0)
 						return crushed;
 					m_Sector->ceilingheight = lastpos;
-					P_ChangeSector (m_Sector, crush);
+					P_ChangeSector (m_Sector, crush, speed, 1);
 					return crushed;
 				}
 			}
@@ -217,12 +209,11 @@ DMover::EResult DMover::MovePlane (fixed_t speed, fixed_t dest, int crush,
 			{
 				lastpos = m_Sector->ceilingheight;
 				m_Sector->ceilingheight = dest;
-				flag = P_ChangeSector (m_Sector, crush);
-				if (flag == true)
+				flag = P_ChangeSector (m_Sector, crush, dest - lastpos, 1);
+				if (flag)
 				{
 					m_Sector->ceilingheight = lastpos;
-					P_ChangeSector (m_Sector, crush);
-					//return crushed;
+					P_ChangeSector (m_Sector, crush, lastpos - dest, 1);
 				}
 				return pastdest;
 			}
@@ -230,13 +221,13 @@ DMover::EResult DMover::MovePlane (fixed_t speed, fixed_t dest, int crush,
 			{
 				lastpos = m_Sector->ceilingheight;
 				m_Sector->ceilingheight += speed;
-				flag = P_ChangeSector (m_Sector, crush);
+				flag = P_ChangeSector (m_Sector, crush, speed, 1);
 // UNUSED
 #if 0
-				if (flag == true)
+				if (flag)
 				{
 					m_Sector->ceilingheight = lastpos;
-					P_ChangeSector (m_Sector, crush);
+					P_ChangeSector (m_Sector, crush, -speed, 1);
 					return crushed;
 				}
 #endif

@@ -36,12 +36,12 @@
 //	to handle IWAD dependend animations etc.
 typedef enum
 {
-  shareware,	// DOOM 1 shareware, E1, M9
-  registered,	// DOOM 1 registered, E3, M27
-  commercial,	// DOOM 2 retail, E1 M34
-  // DOOM 2 german edition not handled
-  retail,		// DOOM 1 retail, E4, M36
-  undetermined	// Well, no IWAD found.
+	shareware,		// DOOM 1 shareware, E1, M9
+	registered,		// DOOM 1 registered, E3, M27
+	commercial,		// DOOM 2 retail, E1 M34
+	// DOOM 2 german edition not handled
+	retail,			// DOOM 1 retail, E4, M36
+	undetermined	// Well, no IWAD found.
   
 } GameMode_t;
 
@@ -66,7 +66,6 @@ typedef enum
   german,
   unknown
 } Language_t;
-
 
 // If rangecheck is undefined, most parameter validation debugging code
 // will not be compiled
@@ -120,117 +119,7 @@ typedef float skill_t;
 
 
 
-//
-// Key cards.
-//
-typedef enum
-{
-	it_bluecard,
-	it_yellowcard,
-	it_redcard,
-	it_blueskull,
-	it_yellowskull,
-	it_redskull,
-	
-	NUMCARDS
-	
-} card_t;
-
-inline FArchive &operator<< (FArchive &arc, card_t i)
-{
-	return arc << (BYTE)i;
-}
-inline FArchive &operator>> (FArchive &arc, card_t &i)
-{
-	BYTE in; arc >> in; i = (card_t)in; return arc;
-}
-
-
-// The defined weapons,
-//	including a marker indicating
-//	user has not changed weapon.
-typedef enum
-{
-	wp_fist,
-	wp_pistol,
-	wp_shotgun,
-	wp_chaingun,
-	wp_missile,
-	wp_plasma,
-	wp_bfg,
-	wp_chainsaw,
-	wp_supershotgun,
-
-	NUMWEAPONS,
-	
-	// No pending weapon change.
-	wp_nochange
-
-} weapontype_t;
-
-inline FArchive &operator<< (FArchive &arc, weapontype_t i)
-{
-	return arc << (BYTE)i;
-}
-inline FArchive &operator>> (FArchive &arc, weapontype_t &i)
-{
-	BYTE in; arc >> in; i = (weapontype_t)in; return arc;
-}
-
-
-// Ammunition types defined.
-typedef enum
-{
-	am_clip,	// Pistol / chaingun ammo.
-	am_shell,	// Shotgun / double barreled shotgun.
-	am_cell,	// Plasma rifle, BFG.
-	am_misl,	// Missile launcher.
-	NUMAMMO,
-	am_noammo	// Unlimited for chainsaw / fist.		
-
-} ammotype_t;
-
-inline FArchive &operator<< (FArchive &arc, ammotype_t i)
-{
-	return arc << (BYTE)i;
-}
-inline FArchive &operator>> (FArchive &arc, ammotype_t &i)
-{
-	BYTE in; arc >> in; i = (ammotype_t)in; return arc;
-}
-
-
-// Power up artifacts.
-typedef enum
-{
-	pw_invulnerability,
-	pw_strength,
-	pw_invisibility,
-	pw_ironfeet,
-	pw_allmap,
-	pw_infrared,
-	NUMPOWERS
-	
-} powertype_t;
-
-inline FArchive &operator<< (FArchive &arc, powertype_t i)
-{
-	return arc << (BYTE)i;
-}
-inline FArchive &operator>> (FArchive &arc, powertype_t &i)
-{
-	BYTE in; arc >> in; i = (powertype_t)in; return arc;
-}
-
-
-//
-// Power up durations, how many tics till expiration.
-//
-#define INVULNTICS	(30*TICRATE)
-#define INVISTICS	(60*TICRATE)
-#define INFRATICS	(120*TICRATE)
-#define IRONTICS	(60*TICRATE)
-
+#define TELEFOGHEIGHT			(gameinfo.telefogheight)
 
 //
 // DOOM keyboard definition.
@@ -331,7 +220,6 @@ inline FArchive &operator>> (FArchive &arc, powertype_t &i)
 #define	DF_NO_ITEMS			2		// Do not spawn powerups (DM)
 #define	DF_WEAPONS_STAY		4		// Leave weapons around after pickup (DM)
 #define	DF_YES_FALLING		8		// Falling too far hurts
-#define DF_NO_FRIENDLY_FIRE	16		// Can't hurt teammates
 //#define	DF_INVENTORY_ITEMS	32		// Wait for player to use powerups when picked up
 #define	DF_SAME_LEVEL		64		// Stay on the same map when someone exits (DM)
 #define	DF_SPAWN_FARTHEST	128		// Spawn players as far as possible from other players (DM)
@@ -356,6 +244,40 @@ inline FArchive &operator>> (FArchive &arc, powertype_t &i)
 #define MORE_FRICTION_MOMENTUM	15000	// mud factor based on momentum
 #define ORIG_FRICTION			0xE800	// original value
 #define ORIG_FRICTION_FACTOR	2048	// original value
+#define FRICTION_LOW			0xf900
 #define FRICTION_FLY			0xeb00
+
+// [RH] Means of death flags (based on Quake2's)
+#define MOD_UNKNOWN			0
+#define MOD_FIST			1
+#define MOD_PISTOL			2
+#define MOD_SHOTGUN			3
+#define MOD_CHAINGUN		4
+#define MOD_ROCKET			5
+#define MOD_R_SPLASH		6
+#define MOD_PLASMARIFLE		7
+#define MOD_BFG_BOOM		8
+#define MOD_BFG_SPLASH		9
+#define MOD_CHAINSAW		10
+#define MOD_SSHOTGUN		11
+#define MOD_WATER			12
+#define MOD_SLIME			13
+#define MOD_LAVA			14
+#define MOD_CRUSH			15
+#define MOD_TELEFRAG		16
+#define MOD_FALLING			17
+#define MOD_SUICIDE			18
+#define MOD_BARREL			19
+#define MOD_EXIT			20
+#define MOD_SPLASH			21
+#define MOD_HIT				22
+#define MOD_RAILGUN			23
+#define MOD_ICE				24
+#define MOD_FRIENDLY_FIRE	0x80000000
+
+// Most damage defined using HITDICE
+#define HITDICE(a) ((1+(P_Random()&7))*a)
+
+#define BLINKTHRESHOLD (4*32)
 
 #endif	// __DOOMDEF_H__

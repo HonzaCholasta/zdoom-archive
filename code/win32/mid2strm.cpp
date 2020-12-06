@@ -670,7 +670,7 @@ BOOL			AddEventToStream(MEVENT *pMe)
 	}
 	else if (pMe->abEvent[0] == MIDI_SYSEX || pMe->abEvent[0] == MIDI_SYSEXEND)
 	{
-		Printf (PRINT_HIGH, "NOTE: Ignoring SysEx for now.\n");
+		DPrintf ("NOTE: Ignoring SysEx for now.\n");
 	}
 	else
 	{

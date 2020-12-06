@@ -76,37 +76,6 @@ void P_SerializeRNGState (FArchive &arc)
 {
 	int i;
 
-	if (arc.IsStoring ())
-	{
-		for (i = 0; i < NUMPRCLASS; i++)
-			arc << rng.seed[i];
-	}
-	else
-	{
-		for (i = 0; i < NUMPRCLASS; i++)
-			arc >> rng.seed[i];
-	}
+	for (i = 0; i < NUMPRCLASS; i++)
+		arc << rng.seed[i];
 }
-
-//----------------------------------------------------------------------------
-//
-// $Log: m_random.c,v $
-// Revision 1.6  1998/05/03  23:13:18  killough
-// Fix #include
-//
-// Revision 1.5  1998/03/31  10:43:05  killough
-// Fix (supposed) RNG problems, add new demo_insurance
-//
-// Revision 1.4  1998/03/28  17:56:05  killough
-// Improve RNG by adding external seed
-//
-// Revision 1.3  1998/02/17  05:40:08  killough
-// Make RNGs local to each calling block, for demo sync
-//
-// Revision 1.2  1998/01/26  19:23:51  phares
-// First rev with no ^Ms
-//
-// Revision 1.1.1.1  1998/01/19  14:02:58  rand
-// Lee's Jan 19 sources
-//
-//----------------------------------------------------------------------------

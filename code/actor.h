@@ -39,7 +39,7 @@
 // Needs precompiled tables/data structures.
 #include "info.h"
 
-
+#include "doomdef.h"
 
 
 
@@ -147,6 +147,7 @@
 #define	MF_TRANSLATION	0x0c000000	// if 0x4 0x8 or 0xc, use a translation
 #define	MF_TRANSSHIFT	26			// tablefor player colormaps
 
+#define MF_UNMORPHED	0x10000000	// [RH] Actor is the unmorphed version of something else
 #define	MF_STEALTH		0x40000000	// [RH] Andy Baker's stealth monsters
 #define	MF_ICECORPSE	0x80000000	// a frozen corpse (for blasting) [RH] was 0x800000
 
@@ -198,12 +199,47 @@
 #define MF2_SEEKERMISSILE	0x40000000	// is a seeker (for reflection)
 #define MF2_REFLECTIVE		0x80000000	// reflects missiles
 
+// --- mobj.flags3 ---
+
+#define MF3_FLOORHUGGER		0x00000001	// Missile stays on floor
+#define MF3_CEILINGHUGGER	0x00000002	// Missile stays on ceiling
+#define MF3_NORADIUSDMG		0x00000004	// Actor does not take radius damage
+#define MF3_GHOST			0x00000008	// Actor is a ghost
+#define MF3_ALWAYSPUFF		0x00000010	// Puff always appears, even when hit nothing
+#define MF3_SEEISALSOACTIVE	0x00000020	// Play see sound instead of active 1/2 the time
+#define MF3_DONTSPLASH		0x00000040	// Thing doesn't make a splash
+#define MF3_VERYFAST		0x00000080	// Don't offset missile as much when spawning
+#define MF3_DONTOVERLAP		0x00000100	// Don't pass over/under other things with this bit set
+#define MF3_DONTMORPH		0x00000200	// Immune to arti_egg
+#define MF3_DONTSQUASH		0x00000400	// Death ball can't squash this actor
+#define MF3_EXPLOCOUNT		0x00000800	// Don't explode until special2 counts to special1
+#define MF3_FULLVOLACTIVE	0x00001000	// Active sound is played at full volume
+#define MF3_CLERICINVUL		0x00002000	// Player who has the Cleric's invulnerability behavior
+#define MF3_SKYEXPLODE		0x00004000	// Explode missile when hitting sky
+#define MF3_STAYMORPHED		0x00008000	// Monster cannot unmorph
+#define MF3_DONTBLAST		0x00010000	// Actor cannot be pushed by blasting
+#define MF3_CANBLAST		0x00020000	// Actor is not a monster but can be blasted
+#define MF3_NOTARGET		0x00040000	// This actor not targetted when it hurts something else
+#define MF3_CARRIED			0x00080000	// Actor was carried this tic
 
 #define TRANSLUC25			(FRACUNIT/4)
 #define TRANSLUC33			(FRACUNIT/3)
 #define TRANSLUC50			(FRACUNIT/2)
 #define TRANSLUC66			((FRACUNIT*2)/3)
 #define TRANSLUC75			((FRACUNIT*3)/4)
+
+// <wingdi.h> also #defines OPAQUE
+#ifndef OPAQUE
+#define OPAQUE				(FRACUNIT)
+#endif
+
+// This translucency value produces the closest match to Heretic's TINTTAB.
+// ~40% of the value of the overlaid image shows through.
+#define HR_SHADOW			(0x6800)
+
+// Hexen's TINTTAB is the same as Heretic's, just reversed.
+#define HX_SHADOW			(0x9800)
+#define HX_ALTSHADOW		(0x6800)
 
 // Map Object definition.
 class AActor : public DThinker
@@ -213,17 +249,77 @@ public:
 	AActor ();
 	AActor (const AActor &other);
 	AActor &operator= (const AActor &other);
-	AActor (fixed_t x, fixed_t y, fixed_t z, mobjtype_t type);
 	void Destroy ();
 	~AActor ();
 
+	static AActor *StaticSpawn (const TypeInfo *type, fixed_t x, fixed_t y, fixed_t z);
+
+	// BeginPlay: Called just after the actor is created
+	virtual void BeginPlay ();
+	// LevelSpawned: Called after BeginPlay if this actor was spawned by the world
+	virtual void LevelSpawned ();
+	// PostBeginPlay: Called just before the actor's first think
+	virtual void PostBeginPlay () {}
+
+	virtual void Activate (AActor *activator);
+	virtual void Deactivate (AActor *activator);
+
+	// Set values for this class's ActorInfo
+	static void SetDefaults (FActorInfo *info);
+
 	virtual void RunThink ();
+
+	// Smallest yaw interval for a mapthing to be spawned with
+	virtual angle_t AngleIncrements () { return ANGLE_45; }
+
+	// Means-of-death for this actor
+	virtual int GetMOD () { return MOD_UNKNOWN; }
+
+	// Normal/ranged obituary if this actor is the attacker
+	virtual const char *GetObituary () { return NULL; }
+
+	// Melee obituary if this actor is the attacker
+	virtual const char *GetHitObituary () { return GetObituary (); }
+
+	// Return true if the monster should use a missile attack, false for melee
+	virtual bool SuggestMissileAttack (fixed_t dist);
+
+	// Called when actor dies
+	virtual void Die (AActor *source, AActor *inflictor);
+
+	// Called by A_Explode just before exploding the actor
+	virtual void PreExplode () {}
+
+	// Called by A_Explode to find out how much damage to do
+	virtual void GetExplodeParms (int &damage, int &dist, bool &hurtSource) {}
+
+	// Perform some special damage action. Returns the amount of damage to do.
+	// Returning -1 signals the damage routine to exit immediately
+	virtual int DoSpecialDamage (AActor *target, int damage);
+
+	// Centaurs and ettins squeal when electrocuted, poisoned, or "holy"-ed
+	virtual void Howl () {}
+
+	// Returns true if other should become the actor's new target
+	virtual bool NewTarget (AActor *other) { return true; }
+
+	// Called by A_NoBlocking in case the actor wants to drop some presents
+	virtual void NoBlockingSet () {}
+
+	// Called by A_SinkMobj
+	virtual fixed_t GetSinkSpeed () { return FRACUNIT; }
+
+	// Called by A_RaiseMobj
+	virtual fixed_t GetRaiseSpeed () { return 2*FRACUNIT; }
+
+	// Actor just hit the floor
+	virtual void HitFloor () {}
 
 // info for drawing
 	fixed_t	 		x,y,z;
 	AActor			*snext, **sprev;	// links in sector (if needed)
 	angle_t			angle;
-	spritenum_t		sprite;				// used to find patch_t and flip value
+	int				sprite;				// used to find patch_t and flip value
 	int				frame;				// might be ord with FF_FULLBRIGHT
 	DWORD			effects;			// [RH] see p_effect.h
 
@@ -232,17 +328,17 @@ public:
 	AActor			*bnext, **bprev;	// links in blocks (if needed)
 	struct subsector_s		*subsector;
 	fixed_t			floorz, ceilingz;	// closest together of contacted secs
-//	fixed_t			floorpic;			// contacted sec floorpic
+	int				floorpic;			// contacted sec floorpic
 	fixed_t			radius, height;		// for movement checking
 	fixed_t			momx, momy, momz;	// momentums
 	int				validcount;			// if == validcount, already checked
-	mobjtype_t		type;
-	mobjinfo_t		*info;				// &mobjinfo[mobj->type]
 	int				tics;				// state tic counter
-	state_t			*state;
+	FState			*state;
 	int				damage;			// For missiles
 	int				flags;
 	int				flags2;			// Heretic flags
+	int				flags3;			// Hexen/Heretic actor-dependant behavior made flagged
+	int				mapflags;		// Flags from map (MTF_*)
 	int				special1;		// Special info
 	int				special2;		// Special info
 	int 			health;
@@ -257,17 +353,16 @@ public:
 									// teleporting
 	int				threshold;		// if > 0, the target will be chased
 									// no matter what (even if shot)
-	player_s		*player;		// only valid if type == MT_PLAYER
+	player_s		*player;		// only valid if type of APlayerPawn
 	int				lastlook;		// player number last looked for
 	mapthing2_t		spawnpoint; 	// For nightmare respawn
 	AActor			*tracer;		// Thing being chased/attacked for tracers
-//	fixed_t			floorclip;		// value to use for floor clipping
-//	int				archiveNum;		// Identity during archive
+	fixed_t			floorclip;		// value to use for floor clipping
 	short			tid;			// thing identifier
 	byte			special;		// special
 	byte			args[5];		// special arguments
 
-	AActor			*inext, *iprev;	// Links to other mobjs in same bucket
+	AActor			*inext, **iprev;// Links to other mobjs in same bucket
 	AActor			*goal;			// Monster's goal if not chasing anything
 	byte			*translation;	// Translation table (or NULL)
 	fixed_t			translucency;	// 65536=fully opaque, 0=fully invisible
@@ -286,22 +381,88 @@ public:
 	static void ClearTIDHashes ();
 	void AddToHash ();
 	void RemoveFromHash ();
-	AActor *FindByTID (int tid) const;
-	static AActor *FindByTID (const AActor *first, int tid);
-	AActor *FindGoal (int tid, int kind) const;
-	static AActor *FindGoal (const AActor *first, int tid, int kind);
 
 private:
 	static AActor *TIDHash[128];
 	static inline int TIDHASH (int key) { return key & 127; }
 
+	friend class FActorIterator;
+
 public:
 	void LinkToWorld ();
 	void UnlinkFromWorld ();
+	void AdjustFloorClip ();
 	void SetOrigin (fixed_t x, fixed_t y, fixed_t z);
+	bool SetState (FState *newstate);
+	bool SetStateNF (FState *newstate);
 
+	static FState States[];
 };
 
+class FActorIterator
+{
+public:
+	FActorIterator (int i) : base (NULL), id (i)
+	{
+	}
+	AActor *Next ()
+	{
+		if (id == 0)
+			return NULL;
+		if (!base)
+			base = AActor::TIDHash[id & 127];
+		else
+			base = base->inext;
 
+		while (base && base->tid != id)
+			base = base->inext;
+
+		return base;
+	}
+private:
+	AActor *base;
+	int id;
+};
+
+template<class T>
+class TActorIterator : public FActorIterator
+{
+public:
+	TActorIterator (int id) : FActorIterator (id) {}
+	T *Next ()
+	{
+		AActor *actor;
+		do
+		{
+			actor = FActorIterator::Next ();
+		} while (actor && !actor->IsKindOf (RUNTIME_CLASS(T)));
+		return static_cast<T *>(actor);
+	}
+};
+
+inline AActor *Spawn (const TypeInfo *type, fixed_t x, fixed_t y, fixed_t z)
+{
+	return AActor::StaticSpawn (type, x, y, z);
+}
+
+inline AActor *Spawn (const char *type, fixed_t x, fixed_t y, fixed_t z)
+{
+	return AActor::StaticSpawn (TypeInfo::FindType (type), x, y, z);
+}
+
+template<class T>
+inline T *Spawn (fixed_t x, fixed_t y, fixed_t z)
+{
+	return static_cast<T *>(AActor::StaticSpawn (RUNTIME_CLASS(T), x, y, z));
+}
+
+struct FActorInfo;
+
+inline FActorInfo *GetInfo (AActor *actor)
+{
+	return RUNTIME_TYPE(actor)->ActorInfo;
+}
+
+#define S_FREETARGMOBJ	1
 
 #endif // __P_MOBJ_H__

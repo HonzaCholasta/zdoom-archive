@@ -49,11 +49,14 @@
 #include "r_local.h"
 #include "p_local.h"
 #include "p_lnspec.h"
+#include "p_terrain.h"
 
 #include "g_game.h"
 
 #include "s_sound.h"
 #include "sc_man.h"
+#include "hstrings.h"
+#include "gi.h"
 
 // State.
 #include "r_state.h"
@@ -76,26 +79,13 @@ DScroller::DScroller ()
 void DScroller::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Type
-			<< m_dx << m_dy
-			<< m_Affectee
-			<< m_Control
-			<< m_LastHeight
-			<< m_vdx << m_vdy
-			<< m_Accel;
-	}
-	else
-	{
-		arc >> m_Type
-			>> m_dx >> m_dy
-			>> m_Affectee
-			>> m_Control
-			>> m_LastHeight
-			>> m_vdx >> m_vdy
-			>> m_Accel;
-	}
+	arc << m_Type
+		<< m_dx << m_dy
+		<< m_Affectee
+		<< m_Control
+		<< m_LastHeight
+		<< m_vdx << m_vdy
+		<< m_Accel;
 }
 
 DPusher::DPusher ()
@@ -105,30 +95,15 @@ DPusher::DPusher ()
 void DPusher::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Type
-			<< m_Source
-			<< m_Xmag
-			<< m_Ymag
-			<< m_Magnitude
-			<< m_Radius
-			<< m_X
-			<< m_Y
-			<< m_Affectee;
-	}
-	else
-	{
-		arc >> m_Type
-			>> m_Source
-			>> m_Xmag
-			>> m_Ymag
-			>> m_Magnitude
-			>> m_Radius
-			>> m_X
-			>> m_Y
-			>> m_Affectee;
-	}
+	arc << m_Type
+		<< m_Source
+		<< m_Xmag
+		<< m_Ymag
+		<< m_Magnitude
+		<< m_Radius
+		<< m_X
+		<< m_Y
+		<< m_Affectee;
 }
 
 //
@@ -159,7 +134,6 @@ typedef struct
 static anim_t*  lastanim;
 static anim_t*  anims;
 static size_t	maxanims;
-
 
 // Factor to scale scrolling effect into mobj-carrying properties = 3/32.
 // (This is so scrolling floors and objects on them can move at same speed.)
@@ -411,7 +385,6 @@ void P_InitPicAnims (void)
 	}
 	Z_Free (animdefs);
 }
-
 
 // [RH] Check dmflags for noexit and respond accordingly
 BOOL CheckIfExitIsGood (AActor *self)
@@ -944,7 +917,7 @@ int P_FindMinSurroundingLight (sector_t *sector, int max)
 //	Returns true if the player has the desired key,
 //	false otherwise.
 
-BOOL P_CheckKeys (player_t *p, keytype_t lock, BOOL remote)
+BOOL P_CheckKeys (player_t *p, keyspecialtype_t lock, BOOL remote)
 {
 	if ((lock & 0x7f) == NoKey)
 		return true;
@@ -956,27 +929,30 @@ BOOL P_CheckKeys (player_t *p, keytype_t lock, BOOL remote)
 	BOOL bc, rc, yc, bs, rs, ys;
 	BOOL equiv = lock & 0x80;
 
-	lock = (keytype_t)(lock & 0x7f);
+	lock = (keyspecialtype_t)(lock & 0x7f);
 
-	bc = p->cards[it_bluecard];
-	rc = p->cards[it_redcard];
-	yc = p->cards[it_yellowcard];
-	bs = p->cards[it_blueskull];
-	rs = p->cards[it_redskull];
-	ys = p->cards[it_yellowskull];
+	bc = p->keys[it_bluecard];
+	rc = p->keys[it_redcard];
+	yc = p->keys[it_yellowcard];
+	bs = p->keys[it_blueskull];
+	rs = p->keys[it_redskull];
+	ys = p->keys[it_yellowskull];
 
-	if (equiv) {
-		bc = bs = (bc || bs);
-		rc = rs = (rc || rs);
-		yc = yc = (yc || ys);
+	if (equiv || gameinfo.gametype == GAME_Heretic)
+	{
+		bc = bs = (bc | bs);
+		rc = rs = (rc | rs);
+		yc = yc = (yc | ys);
 	}
+	if (gameinfo.gametype != GAME_Doom)
+		remote = false;
 
 	switch (lock) {
 		default:		// Unknown key; assume we have it
 			return true;
 
 		case AnyKey:
-			if (bc || bs || rc || rs || yc || ys)
+			if (bc | bs | rc | rs | yc | ys)
 				return true;
 			msg = PD_ANY;
 			break;
@@ -1030,9 +1006,18 @@ BOOL P_CheckKeys (player_t *p, keytype_t lock, BOOL remote)
 	{
 		int keytrysound = S_FindSound ("misc/keytry");
 		if (keytrysound > -1)
-			S_Sound (p->mo, CHAN_VOICE, "misc/keytry", 1, ATTN_NORM);
+			S_SoundID (p->mo, CHAN_VOICE, keytrysound, 1, ATTN_NORM);
 		else
-			S_Sound (p->mo, CHAN_VOICE, "*grunt1", 1, ATTN_NORM);
+			S_Sound (p->mo, CHAN_VOICE, "*usefail", 1, ATTN_NORM);
+		if (gameinfo.gametype == GAME_Heretic)
+		{
+			if (msg == PD_REDK)
+				msg = TXT_NEEDGREENKEY;
+			else if (msg == PD_BLUEK)
+				msg = TXT_NEEDBLUEKEY;
+			else if (msg = PD_YELLOWK)
+				msg = TXT_NEEDYELLOWKEY;
+		}
 		C_MidPrint (msg);
 	}
 	return false;
@@ -1069,36 +1054,39 @@ BOOL P_ActivateLine (line_t *line, AActor *mo, int side, int activationType)
 		  // (in Hexen, only MCROSS lines could be activated by monsters)
 			BOOL noway = true;
 
-			switch (lineActivation) {
-				case SPAC_IMPACT:
-				case SPAC_PCROSS:
-					// shouldn't really be here if not a missile
-				case SPAC_MCROSS:
+			switch (lineActivation)
+			{
+			case SPAC_IMPACT:
+			case SPAC_PCROSS:
+				// shouldn't really be here if not a missile
+			case SPAC_MCROSS:
+				noway = false;
+				break;
+			case SPAC_CROSS:
+				switch (line->special)
+				{
+				case Teleport:
+				case Teleport_NoFog:
+				case Teleport_Line:
+				case Door_Raise:
+				case Plat_DownWaitUpStayLip:
+				case Plat_DownWaitUpStay:
 					noway = false;
+				}
+				break;
+			case SPAC_USE:
+			case SPAC_PUSH:
+				switch (line->special)
+				{
+				case Door_Raise:
+					if (line->args[0] == 0)
+						noway = false;
 					break;
-				case SPAC_CROSS:
-					switch (line->special) {
-						case Teleport:
-						case Teleport_NoFog:
-						case Teleport_Line:
-						case Door_Raise:
-						case Plat_DownWaitUpStayLip:
-						case Plat_DownWaitUpStay:
-							noway = false;
-					}
-					break;
-				case SPAC_USE:
-				case SPAC_PUSH:
-					switch (line->special) {
-						case Door_Raise:
-							if (line->args[0] == 0)
-								noway = false;
-							break;
-						case Teleport:
-						case Teleport_NoFog:
-							noway = false;
-					}
-					break;
+				case Teleport:
+				case Teleport_NoFog:
+					noway = false;
+				}
+				break;
 			}
 			if (noway)
 				return false;
@@ -1200,27 +1188,27 @@ void P_PlayerInSpecialSector (player_t *player)
 
 	// Has hitten ground.
 	// [RH] Normal DOOM special or BOOM specialized?
-	if (special >= dLight_Flicker && special <= dLight_FireFlicker)
+	if (special >= dLight_Flicker && special <= dDamage_LavaHefty)
 	{
 		switch (special)
 		{
-		  case dDamage_Hellslime:
+		case dDamage_Hellslime:
 			// HELLSLIME DAMAGE
 			if (!player->powers[pw_ironfeet])
 				if (!(level.time&0x1f))
 					P_DamageMobj (player->mo, NULL, NULL, 10, MOD_SLIME);
 			break;
-			
-		  case dDamage_Nukage:
+
+		case dDamage_Nukage:
 			// NUKAGE DAMAGE
 			if (!player->powers[pw_ironfeet])
 				if (!(level.time&0x1f))
-					P_DamageMobj (player->mo, NULL, NULL, 5, MOD_LAVA);
+					P_DamageMobj (player->mo, NULL, NULL, 5, MOD_SLIME);
 			break;
-			
-		  case dDamage_SuperHellslime:
+
+		case dDamage_SuperHellslime:
 			// SUPER HELLSLIME DAMAGE
-		  case dLight_Strobe_Hurt:
+		case dLight_Strobe_Hurt:
 			// STROBE HURT
 			if (!player->powers[pw_ironfeet]
 				|| (P_Random (pr_playerinspecialsector)<5) )
@@ -1229,8 +1217,8 @@ void P_PlayerInSpecialSector (player_t *player)
 					P_DamageMobj (player->mo, NULL, NULL, 20, MOD_SLIME);
 			}
 			break;
-							
-		  case dDamage_End:
+
+		case dDamage_End:
 			// EXIT SUPER DAMAGE! (for E1M8 finale)
 			player->cheats &= ~CF_GODMODE;
 
@@ -1240,8 +1228,24 @@ void P_PlayerInSpecialSector (player_t *player)
 			if (player->health <= 10 && (!deathmatch.value || !(dmflags & DF_NO_EXIT)))
 				G_ExitLevel(0);
 			break;
-							
-		  default:
+
+		case dDamage_LavaWimpy:
+			if (!(level.time & 15))
+			{
+				P_DamageMobj(player->mo, NULL, NULL, 5, MOD_LAVA, DMG_FIRE_DAMAGE);
+				P_HitFloor(player->mo);
+			}
+			break;
+
+		case dDamage_LavaHefty:
+			if(!(level.time & 15))
+			{
+				P_DamageMobj(player->mo, NULL, NULL, 8, MOD_LAVA, DMG_FIRE_DAMAGE);
+				P_HitFloor(player->mo);
+			}
+			break;
+
+		default:
 			// [RH] Ignore unknown specials
 			break;
 		}
@@ -1249,44 +1253,52 @@ void P_PlayerInSpecialSector (player_t *player)
 	else
 	{
 		//jff 3/14/98 handle extended sector types for secrets and damage
-		switch (special & DAMAGE_MASK) {
-			case 0x000: // no damage
-				break;
-			case 0x100: // 2/5 damage per 31 ticks
-				if (!player->powers[pw_ironfeet])
-					if (!(level.time&0x1f))
-						P_DamageMobj (player->mo, NULL, NULL, 5, MOD_LAVA);
-				break;
-			case 0x200: // 5/10 damage per 31 ticks
-				if (!player->powers[pw_ironfeet])
-					if (!(level.time&0x1f))
-						P_DamageMobj (player->mo, NULL, NULL, 10, MOD_SLIME);
-				break;
-			case 0x300: // 10/20 damage per 31 ticks
-				if (!player->powers[pw_ironfeet]
-					|| (P_Random(pr_playerinspecialsector)<5))	// take damage even with suit
-				{
-					if (!(level.time&0x1f))
-						P_DamageMobj (player->mo, NULL, NULL, 20, MOD_SLIME);
-				}
-				break;
+		switch (special & DAMAGE_MASK)
+		{
+		case 0x000: // no damage
+			break;
+		case 0x100: // 2/5 damage per 31 ticks
+			if (!player->powers[pw_ironfeet])
+				if (!(level.time&0x1f))
+					P_DamageMobj (player->mo, NULL, NULL, 5, MOD_LAVA);
+			break;
+		case 0x200: // 5/10 damage per 31 ticks
+			if (!player->powers[pw_ironfeet])
+				if (!(level.time&0x1f))
+					P_DamageMobj (player->mo, NULL, NULL, 10, MOD_SLIME);
+			break;
+		case 0x300: // 10/20 damage per 31 ticks
+			if (!player->powers[pw_ironfeet]
+				|| (P_Random(pr_playerinspecialsector)<5))	// take damage even with suit
+			{
+				if (!(level.time&0x1f))
+					P_DamageMobj (player->mo, NULL, NULL, 20, MOD_SLIME);
+			}
+			break;
 		}
 
 		// [RH] Apply any customizable damage
-		if (sector->damage) {
-			if (sector->damage < 20) {
+		if (sector->damage)
+		{
+			if (sector->damage < 20)
+			{
 				if (!player->powers[pw_ironfeet] && !(level.time&0x1f))
 					P_DamageMobj (player->mo, NULL, NULL, sector->damage, sector->mod);
-			} else if (sector->damage < 50) {
+			}
+			else if (sector->damage < 50)
+			{
 				if ((!player->powers[pw_ironfeet] || (P_Random(pr_playerinspecialsector)<5))
 					 && !(level.time&0x1f))
 					P_DamageMobj (player->mo, NULL, NULL, sector->damage, sector->mod);
-			} else {
+			}
+			else
+			{
 				P_DamageMobj (player->mo, NULL, NULL, sector->damage, sector->mod);
 			}
 		}
 
-		if (sector->special & SECRET_MASK) {
+		if (sector->special & SECRET_MASK)
+		{
 			player->secretcount++;
 			level.found_secrets++;
 			sector->special &= ~SECRET_MASK;
@@ -1298,6 +1310,32 @@ void P_PlayerInSpecialSector (player_t *player)
 	}
 }
 
+//============================================================================
+//
+// P_PlayerOnSpecialFlat
+//
+//============================================================================
+
+void P_PlayerOnSpecialFlat (player_t *player, int floorType)
+{
+	if (player->mo->z > player->mo->subsector->sector->floorheight &&
+		!player->mo->waterlevel)
+	{ // Player is not touching the floor
+		return;
+	}
+	if (Terrains[floorType].DamageAmount &&
+		!(level.time & Terrains[floorType].DamageTimeMask))
+	{
+		P_DamageMobj (player->mo, NULL, NULL, Terrains[floorType].DamageAmount,
+			Terrains[floorType].DamageMOD, Terrains[floorType].DamageFlags);
+		if (Terrains[floorType].Splash != -1)
+		{
+			S_SoundID (player->mo, CHAN_AUTO,
+				Splashes[Terrains[floorType].Splash].NormalSplashSound, 1,
+				ATTN_IDLE);
+		}
+	}
+}
 
 
 
@@ -1484,6 +1522,13 @@ void P_SpawnSpecials (void)
 			sector->special &= 0xff00;
 			break;
 
+		case dFriction_Low:
+			sector->friction = FRICTION_LOW;
+			sector->movefactor = 0x269;
+			sector->special &= 0xff00;
+			sector->special |= FRICTION_MASK;
+			break;
+
 		  // [RH] Hexen-like phased lighting
 		case LightSequenceStart:
 			new DPhased (sector);
@@ -1497,12 +1542,18 @@ void P_SpawnSpecials (void)
 			sector->sky = PL_SKYFLAT;
 			break;
 
+		case dScroll_EastLavaDamage:
+			new DScroller (DScroller::sc_carry_players, 2048*28, 0, -1, sector-sectors, 0);
+			new DScroller (DScroller::sc_floor, (-FRACUNIT/2)<<3,
+				0, -1, sector-sectors, 0);
+			sector->special = (sector->special & 0xff00) | dDamage_LavaWimpy;
+			break;
+
 		default:
-			  // [RH] Try for normal Hexen scroller
 			if ((sector->special & 0xff) >= Scroll_North_Slow &&
 				(sector->special & 0xff) <= Scroll_SouthWest_Fast)
-			{
-				static char hexenScrollies[24][2] =
+			{ // Hexen scroll special
+				static const char hexenScrollies[24][2] =
 				{
 					{  0,  1 }, {  0,  2 }, {  0,  4 },
 					{ -1,  0 }, { -2,  0 }, { -4,  0 },
@@ -1513,18 +1564,44 @@ void P_SpawnSpecials (void)
 					{ -1, -1 }, { -2, -2 }, { -4, -4 },
 					{  1, -1 }, {  2, -2 }, {  4, -4 }
 				};
+				static const byte scrollDirs[8] =
+				{
+					64, 0, 192, 128, 96, 32, 224, 160
+				};
+				static const char speedMuls[3] = { 5, 10, 25 };
+
 				int i = (sector->special & 0xff) - Scroll_North_Slow;
 				int dx = hexenScrollies[i][0] * (FRACUNIT/2);
 				int dy = hexenScrollies[i][1] * (FRACUNIT/2);
 
 				new DScroller (DScroller::sc_floor, dx, dy, -1, sector-sectors, 0);
 				// Hexen scrolling floors cause the player to move
-				// faster than they scroll. I do this just for compatibility
-				// with Hexen and recommend using Killough's more-versatile
-				// scrollers instead.
-				dx = FixedMul (-dx, CARRYFACTOR*2);
-				dy = FixedMul (dy, CARRYFACTOR*2);
-				new DScroller (DScroller::sc_carry, dx, dy, -1, sector-sectors, 0);
+				// faster than they scroll.
+				angle_t fineangle = scrollDirs[i / 3] * 32;
+				fixed_t carryspeed = speedMuls[i % 3] * 2048;
+				dx = FixedMul (carryspeed, finecosine[fineangle]);
+				dy = FixedMul (carryspeed, finesine[fineangle]);
+				new DScroller (DScroller::sc_carry_players, dx, dy, -1, sector-sectors, 0);
+				sector->special &= 0xff00;
+			}
+			else if ((sector->special & 0xff) >= Carry_East5 &&
+					 (sector->special & 0xff) <= Carry_West35)
+			{ // Heretic scroll special
+				static const byte scrollDirs[4] = { 6, 9, 1, 4 };
+				static const char speedMuls[5] = { 5, 10, 25, 30, 35 };
+
+				int i = (sector->special & 0xff) - Carry_East5;
+				byte dir = scrollDirs[i / 5];
+				fixed_t carryspeed = speedMuls[i % 5] * 2048;
+				fixed_t dx = carryspeed * ((dir & 3) - 1);
+				fixed_t dy = carryspeed * (((dir & 12) >> 2) - 1);
+				new DScroller (DScroller::sc_carry_players, dx, dy, -1, sector-sectors, 0);
+				if ((sector->special & 0xff) <= Carry_East35)
+				{ // Only east scrollers also scroll the flat
+					new DScroller (DScroller::sc_floor,
+						(-FRACUNIT/2)<<((sector->special & 0xff) - Carry_East5),
+						0, -1, sector-sectors, 0);
+				}
 				sector->special &= 0xff00;
 			}
 			break;
@@ -1693,6 +1770,7 @@ void DScroller::RunThink ()
 			break;
 
 		case sc_carry:
+		case sc_carry_players:
 
 			// killough 3/7/98: Carry things on floor
 			// killough 3/20/98: use new sector list which reflects true members
@@ -1706,15 +1784,20 @@ void DScroller::RunThink ()
 				sec->heightsec->floorheight : MININT;
 
 			for (node = sec->touching_thinglist; node; node = node->m_snext)
+			{
 				if (!((thing = node->m_thing)->flags & MF_NOCLIP) &&
+					!(thing->flags3 & MF3_CARRIED) &&
+					(m_Type == sc_carry || thing->player) &&
 					(!(thing->flags & MF_NOGRAVITY || thing->z > height) ||
 					 thing->z < waterheight))
-				  {
+				{
 					// Move objects only if on floor or underwater,
 					// non-floating, and clipped.
 					thing->momx += dx;
 					thing->momy += dy;
-				  }
+					thing->flags3 |= MF3_CARRIED;
+				}
+			}
 			break;
 
 		case sc_carry_ceiling:       // to be added later
@@ -2074,6 +2157,36 @@ static void P_SpawnFriction(void)
 // types 1 & 2 is the sector containing the MT_PUSH/MT_PULL Thing.
 
 
+class APointPusher : public AActor
+{
+	DECLARE_STATELESS_ACTOR (APointPusher, AActor);
+};
+IMPLEMENT_DEF_SERIAL (APointPusher, AActor);
+REGISTER_ACTOR (APointPusher, Any);
+
+void APointPusher::SetDefaults (FActorInfo *info)
+{
+	ACTOR_DEFS_STATELESS;
+	info->doomednum = 5001;
+	info->flags = MF_NOBLOCKMAP;
+	info->flags2 = MF2_DONTDRAW;
+}
+
+class APointPuller : public AActor
+{
+	DECLARE_STATELESS_ACTOR (APointPuller, AActor);
+};
+IMPLEMENT_DEF_SERIAL (APointPuller, AActor);
+REGISTER_ACTOR (APointPuller, Any);
+
+void APointPuller::SetDefaults (FActorInfo *info)
+{
+	ACTOR_DEFS_STATELESS;
+	info->doomednum = 5002;
+	info->flags = MF_NOBLOCKMAP;
+	info->flags2 = MF2_DONTDRAW;
+}
+
 #define PUSH_FACTOR 7
 
 /////////////////////////////
@@ -2131,7 +2244,7 @@ BOOL PIT_PushThing (AActor *thing)
 		if ((speed > 0) && (P_CheckSight (thing, tmpusher->m_Source, true)))
 		{
 			angle_t pushangle = R_PointToAngle2 (thing->x, thing->y, sx, sy);
-			if (tmpusher->m_Source->type == MT_PUSH)
+			if (tmpusher->m_Source->IsA (RUNTIME_CLASS(APointPusher)))
 				pushangle += ANG180;    // away
 			pushangle >>= ANGLETOFINESHIFT;
 			thing->momx += FixedMul (speed, finecosine[pushangle]);
@@ -2290,19 +2403,14 @@ AActor *P_GetPushThing (int s)
 
 	sec = sectors + s;
 	thing = sec->thinglist;
-	while (thing)
+
+	while (thing &&
+		   !thing->IsA (RUNTIME_CLASS(APointPusher)) &&
+		   !thing->IsA (RUNTIME_CLASS(APointPuller)))
 	{
-		switch (thing->type)
-		{
-		  case MT_PUSH:
-		  case MT_PULL:
-			return thing;
-		  default:
-			break;
-		}
 		thing = thing->snext;
 	}
-	return NULL;
+	return thing;
 }
 
 /////////////////////////////
@@ -2340,11 +2448,13 @@ static void P_SpawnPushers(void)
 					}
 				}
 			} else {	// [RH] Find thing by tid
-				AActor *thing = NULL;
+				AActor *thing;
+				FActorIterator iterator (l->args[1]);
 
-				while ( (thing = AActor::FindByTID (thing, l->args[1])) )
+				while ( (thing = iterator.Next ()) )
 				{
-					if (thing->type == MT_PUSH || thing->type == MT_PULL)
+					if (thing->IsA (RUNTIME_CLASS(APointPuller)) ||
+						thing->IsA (RUNTIME_CLASS(APointPusher)))
 						new DPusher (DPusher::p_push, l->args[3] ? l : NULL, l->args[2],
 									 0, thing, thing->subsector->sector - sectors);
 				}

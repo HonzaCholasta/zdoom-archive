@@ -118,6 +118,13 @@ typedef enum {
 	pr_botspawnmobj,			// 66
 	pr_botopendoor,				// 67
 	pr_botchecksight,			// 68
+	pr_bobbing,					// 69
+	pr_wpnreadysnd,				// 70
+	pr_spark,					// 71
+	pr_torch,					// 72
+	pr_ssdelay,					// 73
+	pr_afx,						// 74
+	pr_chainwiggle,				// 75
 	// Start new entries -- add new entries below
 
 	// End of new entries
@@ -138,7 +145,13 @@ extern DWORD rngseed;			// The starting seed (not part of state)
 #define M_Random() P_Random(pr_misc)
 
 // As M_Random, but used by the play simulation.
-int P_Random(pr_class_t);
+int P_Random(pr_class_t = pr_all_in_one);
+
+inline int PS_Random(pr_class_t cls = pr_all_in_one)
+{
+	int t = P_Random (cls);
+	return t - P_Random (cls);
+}
 
 // Fix randoms for demos.
 void M_ClearRandom(void);

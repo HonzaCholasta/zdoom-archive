@@ -7,8 +7,6 @@
 #include "c_dispatch.h"
 #include "m_swap.h"
 
-extern patch_t *hu_font[HU_FONTSIZE];
-
 FStat *FStat::m_FirstStat;
 FStat *FStat::m_CurrStat;
 
@@ -80,10 +78,8 @@ void FStat::PrintStat ()
 		char stattext[256];
 
 		m_CurrStat->GetStats (stattext);
-		int len = strlen (stattext);
-		for (int i = 0; i < len; i++)
-			stattext[i] ^= 0x80;
-		screen->PrintStr (5, screen->height - 9, stattext, len);
+		screen->DrawText (CR_GREEN, 5, screen->height -
+			SmallFont->GetHeight(), stattext);
 		SB_state = -1;
 	}
 }

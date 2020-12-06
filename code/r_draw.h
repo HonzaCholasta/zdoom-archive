@@ -76,7 +76,7 @@ extern void (*R_DrawSpan)(void);
 
 // [RH] Span blit into an interleaved intermediate buffer
 extern void (*R_DrawColumnHoriz)(void);
-void R_DrawMaskedColumnHoriz (column_t *column);
+void R_DrawMaskedColumnHoriz (column_t *column, int baseclip);
 
 // [RH] Initialize the above five pointers
 void R_InitColumnDrawers (BOOL is8bit);

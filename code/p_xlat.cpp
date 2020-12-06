@@ -8,6 +8,8 @@
 #include "m_swap.h"
 #include "p_spec.h"
 #include "p_local.h"
+#include "a_sharedglobal.h"
+#include "gi.h"
 
 // Speeds for ceilings/crushers (x/8 units per tic)
 //	(Hexen crushers go up at half the speed that they go down)
@@ -33,10 +35,10 @@
 #define VDOORWAIT		150
 
 // Speeds for stairs (x/8 units per tic)
-#define S_SLOW			2
-#define S_NORMAL		4
-#define S_FAST			16
-#define S_TURBO			32
+#define ST_SLOW			2
+#define ST_NORMAL		4
+#define ST_FAST			16
+#define ST_TURBO		32
 
 // Speeds for plats (Hexen plats stop 8 units above the floor)
 #define P_SLOW			8
@@ -99,7 +101,7 @@ typedef struct {
 #define MONWALK ((byte)((SPAC_MCROSS<<ML_SPAC_SHIFT)>>8))
 #define REP		((byte)(ML_REPEAT_SPECIAL>>8))
 
-static const xlat_t SpecialTranslation[] = {
+static xlat_t SpecialTranslation[] = {
 /*   0 */ { 0 },
 /*   1 */ { USE|MONST|REP,	Door_Raise,					 { 0, D_SLOW, VDOORWAIT } },
 /*   2 */ { WALK,			Door_Open,					 { TAG, D_SLOW } },
@@ -107,8 +109,8 @@ static const xlat_t SpecialTranslation[] = {
 /*   4 */ { WALK|MONST,		Door_Raise,					 { TAG, D_SLOW, VDOORWAIT } },
 /*   5 */ { WALK,			Floor_RaiseToLowestCeiling,	 { TAG, F_SLOW } },
 /*	 6 */ { WALK,			Ceiling_CrushAndRaiseA,		 { TAG, C_NORMAL, C_NORMAL, 10 } },
-/*   7 */ { USE,			Stairs_BuildUpDoom,			 { TAG, S_SLOW, 8 } },
-/*   8 */ { WALK,			Stairs_BuildUpDoom,			 { TAG, S_SLOW, 8 } },
+/*   7 */ { USE,			Stairs_BuildUpDoom,			 { TAG, ST_SLOW, 8 } },
+/*   8 */ { WALK,			Stairs_BuildUpDoom,			 { TAG, ST_SLOW, 8 } },
 /*	 9 */ { USE,			Floor_Donut,				 { TAG, DORATE, DORATE } },
 /*  10 */ { WALK|MONST,		Plat_DownWaitUpStayLip,		 { TAG, P_FAST, PLATWAIT, 0 } },
 /*  11 */ { USE,			Exit_Normal,				 { 0 } },
@@ -126,9 +128,9 @@ static const xlat_t SpecialTranslation[] = {
 /*  23 */ { USE,			Floor_LowerToLowest,		 { TAG, F_SLOW } },
 /*  24 */ { SHOOT,			Floor_RaiseToLowestCeiling,  { TAG, F_SLOW } },
 /*  25 */ { WALK,			Ceiling_CrushAndRaiseA,		 { TAG, C_SLOW, C_SLOW, 10 } },
-/*  26 */ { USE|REP,		Door_LockedRaise,			 { TAG, D_SLOW, VDOORWAIT, BCard | CardIsSkull } },
-/*  27 */ { USE|REP,		Door_LockedRaise,			 { TAG, D_SLOW, VDOORWAIT, YCard | CardIsSkull } },
-/*  28 */ { USE|REP,		Door_LockedRaise,			 { TAG, D_SLOW, VDOORWAIT, RCard | CardIsSkull } },
+/*  26 */ { USE|REP,		Door_LockedRaise,			 { 0, D_SLOW, VDOORWAIT, BCard | CardIsSkull } },
+/*  27 */ { USE|REP,		Door_LockedRaise,			 { 0, D_SLOW, VDOORWAIT, YCard | CardIsSkull } },
+/*  28 */ { USE|REP,		Door_LockedRaise,			 { 0, D_SLOW, VDOORWAIT, RCard | CardIsSkull } },
 /*  29 */ { USE,			Door_Raise,					 { TAG, D_SLOW, VDOORWAIT } },
 /*  30 */ { WALK,			Floor_RaiseByTexture,		 { TAG, F_SLOW } },
 /*  31 */ { USE,			Door_Open,					 { 0, D_SLOW } },
@@ -200,7 +202,7 @@ static const xlat_t SpecialTranslation[] = {
 /*  97 */ { WALK|REP|MONST, Teleport,					 { TAG } },
 /*  98 */ { WALK|REP,		Floor_LowerToHighest,		 { TAG, F_FAST, 136 } },
 /*  99 */ { USE|REP,		Door_LockedRaise,			 { TAG, D_FAST, 0, BCard | CardIsSkull } },
-/* 100 */ { WALK,			Stairs_BuildUpDoom,			 { TAG, S_TURBO, 16, 0, 0 } },
+/* 100 */ { WALK,			Stairs_BuildUpDoom,			 { TAG, ST_TURBO, 16, 0, 0 } },
 /* 101 */ { USE,			Floor_RaiseToLowestCeiling,	 { TAG, F_SLOW } },
 /* 102 */ { USE,			Floor_LowerToHighest,		 { TAG, F_SLOW, 128 } },
 /* 103 */ { USE,			Door_Open,					 { TAG, D_SLOW } },
@@ -227,7 +229,7 @@ static const xlat_t SpecialTranslation[] = {
 /* 124 */ { WALK,			Exit_Secret,				 { 0 } },
 /* 125 */ { MONWALK,		Teleport,					 { TAG } },
 /* 126 */ { MONWALK|REP,	Teleport,					 { TAG } },
-/* 127 */ { USE,			Stairs_BuildUpDoom,			 { TAG, S_TURBO, 16, 0, 0 } },
+/* 127 */ { USE,			Stairs_BuildUpDoom,			 { TAG, ST_TURBO, 16, 0, 0 } },
 /* 128 */ { WALK|REP,		Floor_RaiseToNearest,		 { TAG, F_SLOW } },
 /* 129 */ { WALK|REP,		Floor_RaiseToNearest,		 { TAG, F_FAST } },
 /* 130 */ { WALK,			Floor_RaiseToNearest,		 { TAG, F_FAST } },
@@ -359,10 +361,10 @@ static const xlat_t SpecialTranslation[] = {
 /* 253 */ { 0,				Scroll_Floor,				 { TAG, 4, 2, 0, 0 } },
 /* 254 */ { 0,				Scroll_Texture_Model,		 { TAG, 0 } },
 /* 255 */ { 0,				Scroll_Texture_Offsets },
-/* 256 */ { WALK|REP,		Stairs_BuildUpDoom,			 { TAG, S_SLOW, 8, 0, 0 } },
-/* 257 */ { WALK|REP,		Stairs_BuildUpDoom,			 { TAG, S_TURBO, 16, 0, 0 } },
-/* 258 */ { USE|REP,		Stairs_BuildUpDoom,			 { TAG, S_SLOW, 8, 0, 0 } },
-/* 259 */ { USE|REP,		Stairs_BuildUpDoom,			 { TAG, S_TURBO, 16, 0, 0 } },
+/* 256 */ { WALK|REP,		Stairs_BuildUpDoom,			 { TAG, ST_SLOW, 8, 0, 0 } },
+/* 257 */ { WALK|REP,		Stairs_BuildUpDoom,			 { TAG, ST_TURBO, 16, 0, 0 } },
+/* 258 */ { USE|REP,		Stairs_BuildUpDoom,			 { TAG, ST_SLOW, 8, 0, 0 } },
+/* 259 */ { USE|REP,		Stairs_BuildUpDoom,			 { TAG, ST_TURBO, 16, 0, 0 } },
 /* 260 */ { 0,				TranslucentLine,			 { TAG, 128 } },
 /* 261 */ { 0,				Transfer_CeilingLight,		 { TAG } },
 /* 262 */ { WALK|MONST,		Teleport_Line,				 { TAG, TAG, 1 } },
@@ -378,6 +380,45 @@ static const xlat_t SpecialTranslation[] = {
 /* 272 */ { 0,				Static_Init,				 { TAG, Init_TransferSky, 1 } }
 };
 #define NUM_SPECIALS 272
+
+void P_InitXlat ()
+{
+	if (gameinfo.gametype == GAME_Heretic)
+	{
+		SpecialTranslation[7].args[1] = F_SLOW;
+		SpecialTranslation[8].args[1] = F_SLOW;
+
+		SpecialTranslation[10].flags &= ~MONST;
+		SpecialTranslation[88].flags &= ~MONST;
+
+		SpecialTranslation[99].flags = 0;
+		SpecialTranslation[99].newspecial = Scroll_Texture_Right;
+		SpecialTranslation[99].args[0] = SCROLL_UNIT;
+
+		SpecialTranslation[100].flags = WALK|REP;
+		SpecialTranslation[100].newspecial = Door_Raise;
+		SpecialTranslation[100].args[1] = D_SLOW*3;
+		SpecialTranslation[100].args[2] = VDOORWAIT;
+
+		SpecialTranslation[105].flags = WALK;
+		SpecialTranslation[105].newspecial = Exit_Secret;
+		SpecialTranslation[105].args[0] = 0;
+		SpecialTranslation[105].args[1] = 0;
+		SpecialTranslation[105].args[2] = 0;
+
+		SpecialTranslation[106].flags = WALK;
+		SpecialTranslation[106].newspecial = Stairs_BuildUpDoom;
+		SpecialTranslation[106].args[1] = F_SLOW;
+		SpecialTranslation[106].args[2] = 16;
+
+		SpecialTranslation[107].flags = USE;
+		SpecialTranslation[107].newspecial = Stairs_BuildUpDoom;
+		SpecialTranslation[107].args[1] = F_SLOW;
+		SpecialTranslation[107].args[2] = 16;
+		SpecialTranslation[107].args[3] = 0;
+		SpecialTranslation[107].args[4] = 0;
+	}
+}
 
 void P_TranslateLineDef (line_t *ld, maplinedef_t *mld)
 {
@@ -401,9 +442,14 @@ void P_TranslateLineDef (line_t *ld, maplinedef_t *mld)
 			flags |= SPAC_USETHROUGH << ML_SPAC_SHIFT;
 		}
 		ld->special = SpecialTranslation[special].newspecial;
+		// No, there is no guarantee that 65535 is unique, but considering
+		// most editors don't like values that big, it should be safe enough,
+		// particularly considering no map should have
 		for (i = 0; i < 5; i++)
-			ld->args[i] = SpecialTranslation[special].args[i] == TAG ? tag :
-						  SpecialTranslation[special].args[i];
+		{
+			ld->args[i] = SpecialTranslation[special].args[i] == TAG
+						? tag : SpecialTranslation[special].args[i];
+		}
 	}
 	else if (special <= GenCrusherBase)
 	{
@@ -481,10 +527,10 @@ void P_TranslateLineDef (line_t *ld, maplinedef_t *mld)
 				flags |= ML_MONSTERSCANACTIVATE;
 			switch (special & 0x0018)
 			{
-				case 0x0000:	ld->args[1] = S_SLOW;	break;
-				case 0x0008:	ld->args[1] = S_NORMAL;	break;
-				case 0x0010:	ld->args[1] = S_FAST;	break;
-				case 0x0018:	ld->args[1] = S_TURBO;	break;
+				case 0x0000:	ld->args[1] = ST_SLOW;	break;
+				case 0x0008:	ld->args[1] = ST_NORMAL;	break;
+				case 0x0010:	ld->args[1] = ST_FAST;	break;
+				case 0x0018:	ld->args[1] = ST_TURBO;	break;
 			}
 			switch (special & 0x00c0)
 			{
@@ -606,43 +652,61 @@ void P_TranslateLineDef (line_t *ld, maplinedef_t *mld)
 
 // The teleport specials that use things as destinations also require
 // that their TIDs be set to the tags of their containing sectors. We
-// do that after the rest of the level has been loaded.
+// do that after the rest of the level has been loaded. If any dest is
+// in a sector with a tag of 0, it gets mapped to some unused tag and
+// so do the lines that reference it.
 
-void P_TranslateTeleportThings (void)
+void P_TranslateTeleportThings ()
 {
+	TArray<ATeleportDest *> baddests;
+	TArray<int> badlines;
 	int i, j;
+	int highestid = 0;
 
 	for (i = 0; i < numlines; i++)
 	{
 		if (lines[i].special == Teleport ||
 			lines[i].special == Teleport_NoFog)
 		{
+			if (lines[i].args[0] == 0)
+			{
+				badlines.Push (i);
+			}
+			else if (lines[i].args[0] > highestid)
+			{
+				highestid = lines[i].args[0];
+			}
+
 			// The sector tag hash table hasn't been set up yet,
 			// so we need to use this linear search.
 			for (j = 0; j < numsectors; j++)
 			{
 				if (sectors[j].tag == lines[i].args[0])
 				{
-					AActor *other;
-					TThinkerIterator<AActor> iterator;
+					ATeleportDest *other;
+					TThinkerIterator<ATeleportDest> iterator;
 
 					while ( (other = iterator.Next ()) )
 					{
-						// not a teleportman
-						if (other->type != MT_TELEPORTMAN && other->type != MT_TELEPORTMAN2)
-							continue;
-
 						// wrong sector
 						if (other->subsector->sector - sectors != j)
 							continue;
 
-						// It's a teleportman, so set it's tid to match
-						// the sector's tag.
-						other->tid = lines[i].args[0];
-						other->AddToHash ();
+						// already handled
+						if (other->tid != 0)
+							continue;
 
-						// We only bother with the first teleportman
-						break;
+						// it's a teleportdest
+						if (lines[i].args[0] == 0)
+						{
+							baddests.Push (other);
+							other->tid = 1;
+						}
+						else
+						{
+							other->tid = lines[i].args[0];
+							other->AddToHash ();
+						}
 					}
 					if (other)
 						break;
@@ -650,12 +714,72 @@ void P_TranslateTeleportThings (void)
 			}
 		}
 	}
+
+	if (baddests.Size ())
+	{
+		ATeleportDest *other;
+
+		highestid++;
+		while (baddests.Pop (other))
+		{
+			other->tid = highestid;
+			other->AddToHash ();
+		}
+		while (badlines.Pop (i))
+		{
+			lines[i].args[0] = highestid;
+		}
+	}
 }
 
 int P_TranslateSectorSpecial (int special)
 {
+	int high;
+
 	// This supports phased lighting with specials 21-24
-	return (special == 9) ? SECRET_MASK :
-			((special & 0xfe0) << 3) |
-			((special & 0x01f) + (((special & 0x1f) < 21) ? 64 : -20));
+	if (special == 9)
+	{
+		return SECRET_MASK;
+	}
+
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		high = (special & 0xfe0) << 3;
+		special &= 0x1f;
+		if (special < 21)
+		{
+			return high | (special + 64);
+		}
+		else if (special < 40)
+		{
+			return high | (special - 20);
+		}
+	}
+	else
+	{
+		high = (special & 0xfc0) << 3;
+		special &= 0x3f;
+		if (special == 5)
+		{
+			return high | dDamage_LavaWimpy;
+		}
+		else if (special == 16)
+		{
+			return high | dDamage_LavaHefty;
+		}
+		else if (special == 4)
+		{
+			return high | dScroll_EastLavaDamage;
+		}
+		else if (special < 20)
+		{
+			return high | (special + 64);
+		}
+		else if (special < 40)
+		{
+			return high | (special + 205);
+		}
+	}
+
+	return high | special;
 }

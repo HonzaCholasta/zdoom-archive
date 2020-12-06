@@ -74,6 +74,7 @@
 #include "cmdlib.h"
 
 #include "g_game.h"
+#include "gi.h"
 
 //
 // M_WriteFile
@@ -251,23 +252,33 @@ char *GetUserFile (const char *file)
 // and set other general game information.
 char *GetConfigPath (void)
 {
+	static const char *confignames[3][2] =
+	{
+		{ "zdoom.cfg", "c:\\zdoomdot\\zdoom.cfg" },
+		{ "zheretic.cfg", "c:\\zdoomdot\\zheretic.cfg" },
+		{ "zhexen.cfg", "c:\\zdoomdot\\zhexen.cfg" },
+	};
+
+	int configtype;
 	char *path;
 
 	path = Args.CheckValue ("-config");
 	if (path)
 		return copystring (path);
 
+	configtype = (gameinfo.gametype == GAME_Doom) ? 0 :
+		(gameinfo.gametype == GAME_Heretic) ? 1 : 2;
 #ifndef UNIX
 	if (Args.CheckParm ("-cdrom"))
-		return copystring ("c:\\zdoomdat\\zdoom.cfg");
+		return copystring (confignames[configtype][1]);
 
-	path = new char[strlen (progdir) + 11];
+	path = new char[strlen (progdir) + strlen(confignames[configtype][0]) + 1];
 
 	strcpy (path, progdir);
-	strcat (path, "zdoom.cfg");
+	strcat (path, confignames[configtype][0]);
 	return path;
 #else
-	return GetUserFile ("zdoom.cfg");
+	return GetUserFile (confignames[configtype][0]);
 #endif
 }
 
@@ -348,7 +359,7 @@ EXTERN_CVAR (dimamount)
 // put into newer configfiles.
 static CVAR (configver, CONFIGVERSIONSTR, CVAR_ARCHIVE)
 
-void M_LoadDefaults (void)
+void M_LoadDefaults ()
 {
 	extern char DefBindings[];
 	char *configfile;
@@ -356,7 +367,30 @@ void M_LoadDefaults (void)
 
 	// Set default key bindings. These will be overridden
 	// by the bindings in the config file if it exists.
-	AddCommandString (DefBindings);
+	AddCommandString ("binddefaults");
+
+	if (gameinfo.gametype & GAME_Raven)
+	{
+		EXTERN_CVAR (con_centernotify);
+		EXTERN_CVAR (msg0color);
+		EXTERN_CVAR (dimcolor);
+		EXTERN_CVAR (color);
+		EXTERN_CVAR (splashfactor);
+
+		con_centernotify.SetDefault ("1");
+		msg0color.SetDefault ("9");
+		dimcolor.SetDefault ("0 0 f");
+
+		if (gameinfo.gametype == GAME_Heretic)
+		{
+			color.SetDefault ("3f 60 40");
+			Strings[333].builtin = "zticsv";	// 333 = SAVEGAMENAME
+		}
+		else	// Hexen
+		{
+			Strings[333].builtin = "zhexsv";
+		}
+	}
 
 	configfile = GetConfigPath ();
 	execcommand = new char[strlen (configfile) + 8];
@@ -414,8 +448,8 @@ typedef struct
 	unsigned short		xmax;
 	unsigned short		ymax;
 	
-	unsigned short		hres;
-	unsigned short		vres;
+	unsigned short		hdpi;
+	unsigned short		vdpi;
 
 	unsigned char		palette[48];
 	
@@ -434,56 +468,107 @@ typedef struct
 //
 void WritePCXfile (char *filename, byte *data, int width, int height, DWORD *palette)
 {
-	int 		i;
-	int 		length;
-	pcx_t*		pcx;
-	byte*		pack;
+	int x, y;
+	int runlen;
+	BYTE color;
+	pcx_t pcx;
+	FILE *file;
 
-	pcx = (pcx_t *)Malloc (width * height * 2 + 1000);
+	pcx.manufacturer = 10;				// PCX id
+	pcx.version = 5;					// 256 color
+	pcx.encoding = 1;
+	pcx.bits_per_pixel = 8;				// 256 color
+	pcx.xmin = 0;
+	pcx.ymin = 0;
+	pcx.xmax = width-1;
+	pcx.ymax = height-1;
+	pcx.hdpi = 75;
+	pcx.vdpi = 75;
+	memset (pcx.palette, 0, sizeof(pcx.palette));
+	pcx.reserved = 0;
+	pcx.color_planes = 1;				// chunky image
+	pcx.bytes_per_line = width + (width & 1);
+	pcx.palette_type = 1;				// not a grey scale
+	memset (pcx.filler, 0, sizeof(pcx.filler));
 
-	pcx->manufacturer = 0x0a;			// PCX id
-	pcx->version = 5;					// 256 color
-	pcx->encoding = 1;					// uncompressed
-	pcx->bits_per_pixel = 8;			// 256 color
-	pcx->xmin = 0;
-	pcx->ymin = 0;
-	pcx->xmax = SHORT(width-1);
-	pcx->ymax = SHORT(height-1);
-	pcx->hres = SHORT(width);
-	pcx->vres = SHORT(height);
-	memset (pcx->palette,0,sizeof(pcx->palette));
-	pcx->color_planes = 1;				// chunky image
-	pcx->bytes_per_line = SHORT(width);
-	pcx->palette_type = SHORT(1);		// not a grey scale [RH] Really!
-	memset (pcx->filler,0,sizeof(pcx->filler));
+	file = fopen (filename, "wb");
+	if (file == NULL)
+	{
+		fprintf (stderr, "Could not open %s for writing\n", filename);
+		return;
+	}
+
+	fwrite (&pcx, sizeof(pcx), 1, file);
 
 	// pack the image
-	pack = &pcx->data;
-		
-	for (i=0 ; i<width*height ; i++)
+	for (y = height; y > 0; y--)
 	{
-		if ( (*data & 0xc0) != 0xc0)
-			*pack++ = *data++;
-		else
+		color = *data++;
+		runlen = 1;
+
+		for (x = width - 1; x > 0; x--)
 		{
-			*pack++ = 0xc1;
-			*pack++ = *data++;
+			if (*data == color)
+			{
+				runlen++;
+			}
+			else
+			{
+				if (runlen > 1 || color >= 0xc0)
+				{
+					while (runlen > 63)
+					{
+						putc (0xff, file);
+						putc (color, file);
+						runlen -= 63;
+					}
+					if (runlen > 0)
+					{
+						putc (0xc0 + runlen, file);
+					}
+				}
+				if (runlen > 0)
+				{
+					putc (color, file);
+				}
+				runlen = 1;
+				color = *data;
+			}
+			data++;
 		}
+
+		if (runlen > 1 || color >= 0xc0)
+		{
+			while (runlen > 63)
+			{
+				putc (0xff, file);
+				putc (color, file);
+				runlen -= 63;
+			}
+			if (runlen > 0)
+			{
+				putc (0xc0 + runlen, file);
+			}
+		}
+		if (runlen > 0)
+		{
+			putc (color, file);
+		}
+
+		if (width & 1)
+			putc (0, file);
 	}
 
 	// write the palette
-	*pack++ = 0x0c; 	// palette ID byte
-	for (i=0 ; i<256 ; i++, palette++) {
-		*pack++ = RPART(*palette);
-		*pack++ = GPART(*palette);
-		*pack++ = BPART(*palette);
+	putc (12, file);		// palette ID byte
+	for (x = 0; x < 256; x++, palette++)
+	{
+		putc (RPART(*palette), file);
+		putc (GPART(*palette), file);
+		putc (BPART(*palette), file);
 	}
 
-	// write output file
-	length = pack - (byte *)pcx;
-	M_WriteFile (filename, pcx, length);
-
-	free (pcx);
+	fclose (file);
 }
 
 

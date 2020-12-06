@@ -157,7 +157,8 @@ static void MakeFountain (AActor *actor, int color1, int color2)
 
 	particle = JitterParticle (51);
 
-	if (particle) {
+	if (particle)
+	{
 		angle_t an = M_Random()<<(24-ANGLETOFINESHIFT);
 		fixed_t out = FixedMul (actor->radius, M_Random()<<8);
 

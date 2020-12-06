@@ -74,22 +74,20 @@ void WriteLong (int v, byte **stream)
 }
 
 // Returns the number of bytes read
-int UnpackUserCmd (usercmd_t *ucmd, byte **stream)
+int UnpackUserCmd (usercmd_t *ucmd, const usercmd_t *basis, byte **stream)
 {
 	byte *start = *stream;
 	byte flags;
-	byte flags2;
 
-	// make sure the ucmd is empty
-	memset (ucmd, 0, sizeof(usercmd_t));
+	if (basis != NULL)
+		memcpy (ucmd, basis, sizeof(usercmd_t));
+	else
+		memset (ucmd, 0, sizeof(usercmd_t));
 
 	flags = ReadByte (stream);
-	if (flags & UCMDF_MORE)
-		flags2 = ReadByte (stream);
-	else
-		flags2 = 0;
 
-	if (flags) {
+	if (flags)
+	{
 		if (flags & UCMDF_BUTTONS)
 			ucmd->buttons = ReadByte (stream);
 		if (flags & UCMDF_PITCH)
@@ -102,76 +100,67 @@ int UnpackUserCmd (usercmd_t *ucmd, byte **stream)
 			ucmd->sidemove = ReadWord (stream);
 		if (flags & UCMDF_UPMOVE)
 			ucmd->upmove = ReadWord (stream);
-		if (flags & UCMDF_IMPULSE)
-			ucmd->impulse = ReadByte (stream);
-
-		if (flags2) {
-			if (flags2 & UCMDF_ROLL)
-				ucmd->roll = ReadWord (stream);
-			if (flags2 & UCMDF_USE)
-				ucmd->use = ReadByte (stream);
-		}
+		if (flags & UCMDF_ROLL)
+			ucmd->roll = ReadWord (stream);
 	}
 
 	return *stream - start;
 }
 
 // Returns the number of bytes written
-int PackUserCmd (usercmd_t *ucmd, byte **stream)
+int PackUserCmd (const usercmd_t *ucmd, const usercmd_t *basis, byte **stream)
 {
 	byte flags = 0;
-	byte flags2 = 0;
 	byte *temp = *stream;
 	byte *start = *stream;
+	usercmd_t blank;
 
-	WriteByte (0, stream);			// Make room for the packing bits
-	if (ucmd->roll || ucmd->use) {
-		flags |= UCMDF_MORE;
-		WriteByte (0, stream);		// Make room for more packing bits
+	if (basis == NULL)
+	{
+		memset (&blank, 0, sizeof(blank));
+		basis = &blank;
 	}
 
-	if (ucmd->buttons) {
+	WriteByte (0, stream);			// Make room for the packing bits
+
+	if (ucmd->buttons != basis->buttons)
+	{
 		flags |= UCMDF_BUTTONS;
 		WriteByte (ucmd->buttons, stream);
 	}
-	if (ucmd->pitch) {
+	if (ucmd->pitch != basis->pitch)
+	{
 		flags |= UCMDF_PITCH;
 		WriteWord (ucmd->pitch, stream);
 	}
-	if (ucmd->yaw) {
+	if (ucmd->yaw != basis->yaw)
+	{
 		flags |= UCMDF_YAW;
 		WriteWord (ucmd->yaw, stream);
 	}
-	if (ucmd->forwardmove) {
+	if (ucmd->forwardmove != basis->forwardmove)
+	{
 		flags |= UCMDF_FORWARDMOVE;
 		WriteWord (ucmd->forwardmove, stream);
 	}
-	if (ucmd->sidemove) {
+	if (ucmd->sidemove != basis->sidemove)
+	{
 		flags |= UCMDF_SIDEMOVE;
 		WriteWord (ucmd->sidemove, stream);
 	}
-	if (ucmd->upmove) {
+	if (ucmd->upmove != basis->upmove)
+	{
 		flags |= UCMDF_UPMOVE;
 		WriteWord (ucmd->upmove, stream);
 	}
-	if (ucmd->impulse) {
-		flags |= UCMDF_IMPULSE;
-		WriteByte (ucmd->impulse, stream);
-	}
-
-	if (ucmd->roll) {
-		flags2 |= UCMDF_ROLL;
+	if (ucmd->roll != basis->roll)
+	{
+		flags |= UCMDF_ROLL;
 		WriteWord (ucmd->roll, stream);
-	}
-	if (ucmd->use) {
-		flags2 |= UCMDF_USE;
-		WriteByte (ucmd->use, stream);
 	}
 
 	// Write the packing bits
 	WriteByte (flags, &temp);
-	if (flags2)
-		WriteByte (flags2, &temp);
 
 	return *stream - start;
 }
@@ -180,27 +169,26 @@ FArchive &operator<< (FArchive &arc, usercmd_t &cmd)
 {
 	byte bytes[256];
 	byte *stream = bytes;
-	int len = PackUserCmd (&cmd, &stream);
-	arc << (BYTE)len;
-	arc.Write (bytes, len);
+	if (arc.IsStoring ())
+	{
+		BYTE len = PackUserCmd (&cmd, NULL, &stream);
+		arc << len;
+		arc.Write (bytes, len);
+	}
+	else
+	{
+		BYTE len;
+		arc << len;
+		arc.Read (bytes, len);
+		UnpackUserCmd (&cmd, NULL, &stream);
+	}
 	return arc;
 }
 
-FArchive &operator>> (FArchive &arc, usercmd_t &cmd)
-{
-	byte bytes[256];
-	byte *stream = bytes;
-	BYTE len;
-	arc >> len;
-	arc.Read (bytes, len);
-	UnpackUserCmd (&cmd, &stream);
-	return arc;
-}
-
-int WriteUserCmdMessage (usercmd_t *ucmd, byte **stream)
+int WriteUserCmdMessage (usercmd_t *ucmd, const usercmd_t *basis, byte **stream)
 {
 	WriteByte (DEM_USERCMD, stream);
-	return PackUserCmd (ucmd, stream) + 1;
+	return PackUserCmd (ucmd, basis, stream) + 1;
 }
 
 
@@ -211,61 +199,30 @@ int SkipTicCmd (byte **stream, int count)
 
 	for (i = count; i > 0; i--)
 	{
-		BOOL moreticdata = true;
+		bool moreticdata = true;
 
 		flow += 2;		// Skip consistancy marker
-
 		while (moreticdata)
 		{
 			byte type = *flow++;
 
-			switch (type)
+			if (type == DEM_USERCMD)
 			{
-				case DEM_MUSICCHANGE:
-				case DEM_PRINT:
-				case DEM_CENTERPRINT:
-				case DEM_UINFCHANGED:
-				case DEM_SINFCHANGED:
-				case DEM_GIVECHEAT:
-				case DEM_CHANGEMAP:
-					skip = strlen ((char *)flow) + 1;
-					break;
-
-				case DEM_GENERICCHEAT:
-				case DEM_DROPPLAYER:
-					skip = 1;
-					break;
-
-				case DEM_SAY:
-				case DEM_ADDBOT:
-					skip = 2 + strlen ((char *)(flow + 1));
-					break;
-
-				case DEM_USERCMD:
-					moreticdata = false;
-					skip = 1;
-					if (*flow & UCMDF_BUTTONS)		skip += 1;
-					if (*flow & UCMDF_PITCH)		skip += 2;
-					if (*flow & UCMDF_YAW)			skip += 2;
-					if (*flow & UCMDF_FORWARDMOVE)	skip += 2;
-					if (*flow & UCMDF_SIDEMOVE)		skip += 2;
-					if (*flow & UCMDF_UPMOVE)		skip += 2;
-					if (*flow & UCMDF_IMPULSE)		skip += 1;
-
-					if (*flow & UCMDF_MORE)
-					{
-						flow++;
-						if (*flow & UCMDF_ROLL)		skip += 2;
-						if (*flow & UCMDF_USE)		skip += 1;
-					}
-					break;
-			
-				default:
-					// All other commands are assumed to have zero parameters
-					skip = 0;
-					break;
+				moreticdata = false;
+				skip = 1;
+				if (*flow & UCMDF_BUTTONS)		skip += 1;
+				if (*flow & UCMDF_PITCH)		skip += 2;
+				if (*flow & UCMDF_YAW)			skip += 2;
+				if (*flow & UCMDF_FORWARDMOVE)	skip += 2;
+				if (*flow & UCMDF_SIDEMOVE)		skip += 2;
+				if (*flow & UCMDF_UPMOVE)		skip += 2;
+				if (*flow & UCMDF_ROLL)			skip += 2;
+				flow += skip;
 			}
-			flow += skip;
+			else
+			{
+				Net_SkipCommand (type, &flow);
+			}
 		}
 	}
 
@@ -292,7 +249,8 @@ void ReadTicCmd (byte **stream, int player, int tic)
 		Net_SkipCommand (type, stream);
 
 	NetSpecs[player][tic].SetData (start, *stream - start - 1);
-	UnpackUserCmd (&tcmd->ucmd, stream);
+	UnpackUserCmd (&tcmd->ucmd,
+		tic ? &netcmds[player][(tic-1)%BACKUPTICS].ucmd : NULL, stream);
 }
 
 void RunNetSpecs (int player, int buf)

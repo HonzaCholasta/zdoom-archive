@@ -50,10 +50,10 @@ void M_Init (void);
 
 // Called by intro code to force menu up upon a keypress,
 // does nothing if menu is already up.
-void M_StartControlPanel (void);
+void M_StartControlPanel (bool makeSound);
 
 // [RH] Setup options menu
-BOOL M_StartOptionsMenu (void);
+bool M_StartOptionsMenu (void);
 
 // [RH] Handle keys for options menu
 void M_OptResponder (event_t *ev);
@@ -124,10 +124,13 @@ typedef struct menuitem_s {
 
 typedef struct menu_s {
 	char			title[8];
+	char		   *texttitle;
 	int				lastOn;
 	int				numitems;
 	int				indent;
 	menuitem_t	   *items;
+	int				scrolltop;
+	int				scrollpos;
 } menu_t;
 
 typedef struct value_s {
@@ -138,17 +141,18 @@ typedef struct value_s {
 typedef struct
 {
 	// -1 = no cursor here, 1 = ok, 2 = arrows ok
-	short		status;
+	byte		status;
+	byte		fulltext;	// [RH] Menu name is text, not a graphic
 	
-	char		name[10];
+	// hotkey in menu
+	char		alphaKey;						
+	
+	const char *name;
 	
 	// choice = menu item #.
 	// if status = 2,
 	//	 choice=0:leftarrow,1:rightarrow
 	void		(*routine)(int choice);
-	
-	// hotkey in menu
-	char		alphaKey;						
 } oldmenuitem_t;
 
 typedef struct oldmenu_s
@@ -167,8 +171,8 @@ typedef struct
 		menu_t *newmenu;
 		oldmenu_t *old;
 	} menu;
-	BOOL isNewStyle;
-	BOOL drawSkull;
+	bool isNewStyle;
+	bool drawSkull;
 } menustack_t;
 
 extern value_t YesNo[2];
@@ -180,8 +184,5 @@ extern int MenuStackDepth;
 
 extern menu_t  *CurrentMenu;
 extern int		CurrentItem;
-
-extern short	 itemOn;
-extern oldmenu_t *currentMenu;
 
 #endif

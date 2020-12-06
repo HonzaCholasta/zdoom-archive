@@ -41,9 +41,7 @@ extern dirtype_t diags[4];
 extern fixed_t xspeed[8];
 extern fixed_t yspeed[8];
 
-extern line_t **spechit;
-extern int numspechit;
-
+extern TArray<line_t *> spechit;
 
 //Called while the bot moves after it's player->dest mobj
 //which can be a weapon/enemy/item whatever.
@@ -90,19 +88,21 @@ BOOL DCajunMaster::Move (AActor *actor, ticcmd_t *cmd)
 
 	if (!try_ok) //Anything blocking that could be opened etc..
 	{
-		if (!numspechit)
+		if (!spechit.Size ())
 			return false;
 
 		actor->movedir = DI_NODIR;
 
-		for (good = 0; numspechit > 0; )
+		good = 0;
+		line_t *ld;
+
+		while (spechit.Pop (ld))
 		{
-			line_t *ld = spechit[--numspechit];
 			bool tryit = true;
 
-			if (ld->special == Door_LockedRaise && !P_CheckKeys (actor->player, (keytype_t)ld->args[3], false))
+			if (ld->special == Door_LockedRaise && !P_CheckKeys (actor->player, (keyspecialtype_t)ld->args[3], false))
 				tryit = false;
-			else if (ld->special == Generic_Door && !P_CheckKeys (actor->player, (keytype_t)ld->args[4], false))
+			else if (ld->special == Generic_Door && !P_CheckKeys (actor->player, (keyspecialtype_t)ld->args[4], false))
 				tryit = false;
 
 			if (tryit &&

@@ -27,7 +27,6 @@ int PrintString (int printlevel, const char *string);
 int VPrintf (int printlevel, const char *format, va_list parms);
 int STACK_ARGS Printf_Bold (const char *format, ...);
 
-void C_AddNotifyString (int printlevel, const char *s);
 void C_DrawConsole (void);
 void C_ToggleConsole (void);
 void C_FullConsole (void);
@@ -39,7 +38,6 @@ void C_InitTicker (const char *label, unsigned int max);
 void C_SetTicker (unsigned int at);
 
 void C_MidPrint (char *message);
-void C_DrawMid (void);
 
 BOOL C_Responder (event_t *ev);
 

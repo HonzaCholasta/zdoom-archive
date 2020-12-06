@@ -4,6 +4,7 @@
 #include "doomtype.h"
 #include "doomdef.h"
 #include "m_fixed.h"
+#include "tarray.h"
 
 #define NUM_MAPVARS				32
 #define NUM_WORLDVARS			64
@@ -31,24 +32,30 @@
 #define LEVEL_FREELOOK_NO		0x00010000
 #define LEVEL_FREELOOK_YES		0x00020000
 
+#define LEVEL_HEADSPECIAL		0x00100000		// Heretic episode 1/4
+#define LEVEL_MINOTAURSPECIAL	0x00200000		// Heretic episode 2/5
+#define LEVEL_SORCERER2SPECIAL	0x00400000		// Heretic episode 3
+#define LEVEL_SPECKILLMONSTERS	0x00800000
+
 #define LEVEL_DEFINEDINMAPINFO	0x20000000		// Level was defined in a MAPINFO lump
 #define LEVEL_CHANGEMAPCHEAT	0x40000000		// Don't display cluster messages
 #define LEVEL_VISITED			0x80000000		// Used for intermission map
 
 struct acsdefered_s;
 
-struct level_info_s {
+struct level_info_s
+{
 	char		mapname[8];
 	int			levelnum;
-	char		*level_name;
 	char		pname[8];
 	char		nextmap[8];
 	char		secretmap[8];
-	int			partime;
 	char		skypic1[8];
-	char		music[8];
-	DWORD		flags;
 	int			cluster;
+	int			partime;
+	DWORD		flags;
+	char		*music;
+	char		*level_name;
 	FLZOMemFile	*snapshot;
 	struct acsdefered_s *defered;
 };
@@ -65,8 +72,8 @@ struct level_pwad_info_s : public level_info_s
 };
 typedef struct level_pwad_info_s level_pwad_info_t;
 
-
-struct level_locals_s {
+struct level_locals_s
+{
 	int			time;
 	int			starttime;
 	int			partime;
@@ -84,7 +91,7 @@ struct level_locals_s {
 	DWORD		fadeto;					// The color the palette fades to (usually black)
 	DWORD		outsidefog;				// The fog for sectors with sky ceilings
 
-	char		music[8];
+	char		*music;
 	char		skypic1[8];
 	char		skypic2[8];
 
@@ -100,6 +107,9 @@ struct level_locals_s {
 	int			total_monsters;
 	int			killed_monsters;
 
+	float		gravity;
+	fixed_t		aircontrol;
+
 	// The following are all used for ACS scripting
 	byte		*behavior;
 	int			*scripts;
@@ -108,12 +118,34 @@ struct level_locals_s {
 };
 typedef struct level_locals_s level_locals_t;
 
-struct cluster_info_s {
+enum EndTypes
+{
+	END_Pic,
+	END_Pic1,
+	END_Pic2,
+	END_Pic3,
+	END_Bunny,
+	END_Cast,
+	END_Demon,
+	END_Underwater,
+	END_Chess
+};
+
+struct EndSequence
+{
+	byte EndType;
+	char PicName[8];
+};
+
+extern TArray<EndSequence> EndSequences;
+
+struct cluster_info_s
+{
 	int			cluster;
-	char		messagemusic[9];
 	char		finaleflat[8];
 	char		*exittext;
 	char		*entertext;
+	char		*messagemusic;
 	int			flags;
 };
 typedef struct cluster_info_s cluster_info_t;

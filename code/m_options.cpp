@@ -25,6 +25,7 @@
 #include "v_video.h"
 #include "v_text.h"
 #include "w_wad.h"
+#include "gi.h"
 
 #include "r_local.h"
 
@@ -53,10 +54,9 @@ CVAR (mouse_sensitivity, "1.0", CVAR_ARCHIVE)
 // Show messages has default, 0 = off, 1 = on
 CVAR (show_messages, "1", CVAR_ARCHIVE)
 
-extern BOOL				OptionsActive;
+extern bool	OptionsActive;
 
-extern int				screenSize;
-extern short			skullAnimCounter;
+extern int	skullAnimCounter;
 
 EXTERN_CVAR (cl_run)
 EXTERN_CVAR (invertmouse)
@@ -65,14 +65,19 @@ EXTERN_CVAR (lookstrafe)
 EXTERN_CVAR (crosshair)
 EXTERN_CVAR (freelook)
 
-void M_ChangeMessages(void);
-void M_SizeDisplay(float diff);
-void M_StartControlPanel(void);
+void M_ChangeMessages ();
+void M_SizeDisplay (float diff);
 
-int  M_StringHeight(char *string);
-void M_ClearMenus (void);
+int  M_StringHeight (char *string);
+void M_ClearMenus ();
 
+EColorRange LabelColor;
+EColorRange ValueColor;
+EColorRange MoreColor;
 
+static bool CanScrollUp;
+static bool CanScrollDown;
+static int VisBottom;
 
 value_t YesNo[2] = {
 	{ 0.0, "No" },
@@ -91,7 +96,7 @@ value_t OnOff[2] = {
 
 menu_t  *CurrentMenu;
 int		CurrentItem;
-static BOOL	WaitingForKey;
+static bool		WaitingForKey;
 static char	   *OldMessage;
 static itemtype OldType;
 
@@ -136,6 +141,7 @@ static menuitem_t OptionItems[] =
 
 menu_t OptionMenu = {
 	{ 'M','_','O','P','T','T','T','L' },
+	"OPTIONS",
 	0,
 	16,
 	177,
@@ -150,36 +156,59 @@ menu_t OptionMenu = {
  *=======================================*/
 
 static menuitem_t ControlsItems[] = {
-	{ whitetext,"ENTER to change, BACKSPACE to clear", {NULL}, {0.0}, {0.0}, {0.0}, {NULL} },
-	{ control,	"Attack",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+attack"} },
-	{ control,	"Next Weapon",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"weapnext"} },	// Was already here
-	{ control,	"Previous Weapon",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"weapprev"} },	// TIJ
+	{ redtext,"ENTER to change, BACKSPACE to clear", {NULL}, {0.0}, {0.0}, {0.0}, {NULL} },
+	{ redtext,	" ",					{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ whitetext,"Controls",				{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ control,	"Fire",					{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+attack"} },
 	{ control,	"Use / Open",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+use"} },
-	{ control,	"Jump",					{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+jump"} },
-	{ control,	"Walk forward",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+forward"} },
-	{ control,	"Backpedal",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+back"} },
+	{ control,	"Move forward",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+forward"} },
+	{ control,	"Move backward",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+back"} },
+	{ control,	"Strafe left",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+moveleft"} },
+	{ control,	"Strafe right",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+moveright"} },
 	{ control,	"Turn left",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+left"} },
 	{ control,	"Turn right",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+right"} },
-	{ control,	"Run",					{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+speed"} },
-	{ control,	"Step left",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+moveleft"} },
-	{ control,	"Step right",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+moveright"} },
-	{ control,	"Sidestep",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+strafe"} },
+	{ control,	"Jump",					{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+jump"} },
+	{ control,	"Fly / Swim up",		{NULL},	{0.0}, {0.0}, {0.0}, {(value_t *)"+moveup"} },
+	{ control,	"Fly / Swim down",		{NULL},	{0.0}, {0.0}, {0.0}, {(value_t *)"+movedown"} },
+	{ control,	"Stop flying",			{NULL},	{0.0}, {0.0}, {0.0}, {(value_t *)"land"} },
+	{ control,	"Mouse look",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+mlook"} },
+	{ control,	"Keyboard look",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+klook"} },
 	{ control,	"Look up",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+lookup"} },
 	{ control,	"Look down",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+lookdown"} },
 	{ control,	"Center view",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"centerview"} },
-	{ control,	"Mouse look",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+mlook"} },
-	{ control,	"Keyboard look",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+klook"} },
+	{ control,	"Run",					{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+speed"} },
+	{ control,	"Strafe",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"+strafe"} },
+	{ redtext,	" ",					{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ whitetext,"Chat",					{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ control,	"Say",					{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"messagemode"} },
+	{ control,	"Team say",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"messagemode2"} },
+	{ redtext,	" ",					{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ whitetext,"Weapons",				{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ control,	"Next weapon",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"weapnext"} },
+	{ control,	"Previous weapon",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"weapprev"} },
+	{ redtext,	" ",					{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ whitetext,"Inventory",			{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ control,	"Activate item",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"invuse"} },
+	{ control,	"Activate all items",	{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"invuseall"} },
+	{ control,	"Next item",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"invnext"} },
+	{ control,	"Previous item",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"invprev"} },
+	{ redtext,	" ",					{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
+	{ whitetext,"Other",				{NULL},	{0.0}, {0.0}, {0.0}, {NULL} },
 	{ control,	"Toggle automap",		{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"togglemap"} },
-	{ control,	"Chasecam",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"chase"} }
+	{ control,	"Chasecam",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"chase"} },
+	{ control,	"Add a bot",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"addbot"} },
+	{ control,	"Coop spy",				{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"spynext"} },
+	{ control,	"Screeshot",			{NULL}, {0.0}, {0.0}, {0.0}, {(value_t *)"screenshot"} }
 };
 
 menu_t ControlsMenu = {
 	{ 'M','_','C','O','N','T','R','O' },
-	1,
-	21,	// TIJ	Was: 19
-		//		Now: 21 (2 more Control menu items: Prev and Next Weapon)
+	"CUSTOMIZE CONTROLS",
+	3,
+	sizeof(ControlsItems)/sizeof(ControlsItems[0]),
 	0,
 	ControlsItems,
+	2,
 };
 
 /*=======================================
@@ -210,11 +239,10 @@ static value_t Crosshairs[] =
 	{ 1.0, "Cross 1" },
 	{ 2.0, "Cross 2" },
 	{ 3.0, "X" },
-	{ 4.0, "Diamond" },
-	{ 5.0, "Dot" },
-	{ 6.0, "Box" },
-	{ 7.0, "Angle" },
-	{ 8.0, "Big Thing" }
+	{ 4.0, "Circle" },
+	{ 5.0, "Angle" },
+	{ 6.0, "Triangle" },
+	{ 7.0, "Dot" }
 };
 
 static value_t DetailModes[] =
@@ -253,7 +281,7 @@ static menuitem_t VideoItems[] = {
 	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
 	{ slider,	"Screen size",			{&screenblocks},	   	{3.0}, {12.0},	{1.0}, {NULL} },
 	{ slider,	"Brightness",			{&Gamma},			   	{1.0}, {3.0},	{0.1}, {NULL} },
-	{ discrete,	"Crosshair",			{&crosshair},		   	{9.0}, {0.0},	{0.0}, {Crosshairs} },
+	{ discrete,	"Crosshair",			{&crosshair},		   	{8.0}, {0.0},	{0.0}, {Crosshairs} },
 	{ discrete, "Column render mode",	{&r_columnmethod},		{2.0}, {0.0},	{0.0}, {ColumnMethods} },
 	{ discrete, "Detail mode",			{&r_detail},		   	{4.0}, {0.0},	{0.0}, {DetailModes} },
 	{ discrete, "Stretch short skies",	{&r_stretchsky},	   	{2.0}, {0.0},	{0.0}, {OnOff} },
@@ -275,6 +303,7 @@ static menuitem_t VideoItems[] = {
 
 menu_t VideoMenu = {
 	"M_VIDEO",
+	"DISPLAY OPTIONS",
 	0,
 #ifdef _WIN32
 	20,
@@ -291,6 +320,7 @@ menu_t VideoMenu = {
  *
  *=======================================*/
 EXTERN_CVAR (con_scaletext)
+EXTERN_CVAR (con_centernotify)
 EXTERN_CVAR (msg0color)
 EXTERN_CVAR (msg1color)
 EXTERN_CVAR (msg2color)
@@ -308,7 +338,10 @@ static value_t TextColors[] =
 	{ 4.0, "brown" },
 	{ 5.0, "gold" },
 	{ 6.0, "red" },
-	{ 7.0, "blue" }
+	{ 7.0, "blue" },
+	{ 8.0, "orange" },
+	{ 9.0, "white" },
+	{ 10.0, "yellow" }
 };
 
 static value_t MessageLevels[] = {
@@ -320,21 +353,23 @@ static value_t MessageLevels[] = {
 static menuitem_t MessagesItems[] = {
 	{ discrete,	"Scale text in high res", {&con_scaletext},		{2.0}, {0.0}, 	{0.0}, {OnOff} },
 	{ discrete, "Minimum message level", {&msglevel},		   	{3.0}, {0.0},   {0.0}, {MessageLevels} },
+	{ discrete, "Center messages",		{&con_centernotify},	{2.0}, {0.0},	{0.0}, {OnOff} },
 	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
 	{ whitetext, "Message Colors",		{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
 	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
-	{ cdiscrete, "Item Pickup",			{&msg0color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
-	{ cdiscrete, "Obituaries",			{&msg1color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
-	{ cdiscrete, "Critical Messages",	{&msg2color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
-	{ cdiscrete, "Chat Messages",		{&msg3color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
-	{ cdiscrete, "Team Messages",		{&msg4color},		   	{8.0}, {0.0},	{0.0}, {TextColors} },
-	{ cdiscrete, "Centered Messages",	{&msgmidcolor},			{8.0}, {0.0},	{0.0}, {TextColors} }
+	{ cdiscrete, "Item Pickup",			{&msg0color},		   	{11.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Obituaries",			{&msg1color},		   	{11.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Critical Messages",	{&msg2color},		   	{11.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Chat Messages",		{&msg3color},		   	{11.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Team Messages",		{&msg4color},		   	{11.0}, {0.0},	{0.0}, {TextColors} },
+	{ cdiscrete, "Centered Messages",	{&msgmidcolor},			{11.0}, {0.0},	{0.0}, {TextColors} }
 };
 
 menu_t MessagesMenu = {
 	"M_MESS",
+	"MESSAGES",
 	0,
-	11,
+	12,
 	0,
 	MessagesItems,
 };
@@ -402,11 +437,8 @@ static menuitem_t ModesItems[] = {
 
 menu_t ModesMenu = {
 	{ 'M','_','V','I','D','M','O','D' },
-#ifndef DJGPP
+	"VIDEO MODE",
 	2,
-#else
-	4,
-#endif
 	20,
 	130,
 	ModesItems,
@@ -437,13 +469,14 @@ static menuitem_t DMFlagsItems[] = {
 	{ bitflag,	"Fast monsters",		{(cvar_t *)DF_FAST_MONSTERS},		{0}, {0}, {0}, {(value_t *)&dmflags} },
 	{ bitflag,	"Allow jump",			{(cvar_t *)DF_NO_JUMP},				{1}, {0}, {0}, {(value_t *)&dmflags} },
 	{ bitflag,	"Allow freelook",		{(cvar_t *)DF_NO_FREELOOK},			{1}, {0}, {0}, {(value_t *)&dmflags} },
-	{ bitflag,	"Friendly fire",		{(cvar_t *)DF_NO_FRIENDLY_FIRE},	{1}, {0}, {0}, {(value_t *)&dmflags} },
 	{ redtext,	" ",					{NULL},								{0.0}, {0.0},	{0.0}, {NULL} },
+	{ slider,	"Friendly fire scale",	{&friendlyfire},					{0.0}, {1.0},	{0.05},{NULL} },
 	{ discrete, "Teamplay",				{&teamplay},						{2.0}, {0.0},	{0.0}, {OnOff} }
 };
 
 static menu_t DMFlagsMenu = {
 	{ 'M','_','G','M','P','L','A','Y' },
+	"GAMEPLAY OPTIONS",
 	0,
 	19,
 	0,
@@ -505,6 +538,25 @@ void M_OptInit (void)
 	default:
 		break;
 	}
+
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		LabelColor = CR_UNTRANSLATED;
+		ValueColor = CR_GRAY;
+		MoreColor = CR_GRAY;
+	}
+	else if (gameinfo.gametype == GAME_Heretic)
+	{
+		LabelColor = CR_GREEN;
+		ValueColor = CR_UNTRANSLATED;
+		MoreColor = CR_UNTRANSLATED;
+	}
+	else // Hexen
+	{
+		LabelColor = CR_RED;
+		ValueColor = CR_UNTRANSLATED;
+		MoreColor = CR_UNTRANSLATED;
+	}
 }
 
 
@@ -540,18 +592,18 @@ END_COMMAND (togglemessages)
 BEGIN_COMMAND (sizedown)
 {
 	M_SizeDisplay (-1.0);
-	S_Sound (CHAN_VOICE, "plats/pt1_mid", 1, ATTN_NONE);
+	S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 }
 END_COMMAND (sizedown)
 
 	BEGIN_COMMAND (sizeup)
 {
 	M_SizeDisplay(1.0);
-	S_Sound (CHAN_VOICE, "plats/pt1_mid", 1, ATTN_NONE);
+	S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
 }
 END_COMMAND (sizeup)
 
-	void M_BuildKeyList (menuitem_t *item, int numitems)
+void M_BuildKeyList (menuitem_t *item, int numitems)
 {
 	int i;
 
@@ -572,6 +624,8 @@ void M_SwitchMenu (menu_t *menu)
 	MenuStack[MenuStackDepth].drawSkull = false;
 	MenuStackDepth++;
 
+	CanScrollUp = false;
+	CanScrollDown = false;
 	CurrentMenu = menu;
 	CurrentItem = menu->lastOn;
 
@@ -585,7 +639,7 @@ void M_SwitchMenu (menu_t *menu)
 			item = menu->items + i;
 			if (item->type != whitetext && item->type != redtext)
 			{
-				thiswidth = V_StringWidth (item->label);
+				thiswidth = screen->StringWidth (item->label);
 				if (thiswidth > widest)
 					widest = thiswidth;
 			}
@@ -596,7 +650,7 @@ void M_SwitchMenu (menu_t *menu)
 	flagsvar = NULL;
 }
 
-BOOL M_StartOptionsMenu (void)
+bool M_StartOptionsMenu (void)
 {
 	M_SwitchMenu (&OptionMenu);
 	return true;
@@ -605,7 +659,6 @@ BOOL M_StartOptionsMenu (void)
 void M_DrawSlider (int x, int y, float min, float max, float cur)
 {
 	float range;
-	int i;
 
 	range = max - min;
 
@@ -616,12 +669,10 @@ void M_DrawSlider (int x, int y, float min, float max, float cur)
 
 	cur -= min;
 
-	screen->DrawPatchClean ((patch_t *)W_CacheLumpName ("LSLIDE", PU_CACHE), x, y);
-	for (i = 1; i < 11; i++)
-		screen->DrawPatchClean ((patch_t *)W_CacheLumpName ("MSLIDE", PU_CACHE), x + i*8, y);
-	screen->DrawPatchClean ((patch_t *)W_CacheLumpName ("RSLIDE", PU_CACHE), x + 88, y);
-
-	screen->DrawPatchClean ((patch_t *)W_CacheLumpName ("CSLIDE", PU_CACHE), x + 5 + (int)((cur * 78.0) / range), y);
+	screen->SetFont (ConFont);
+	screen->DrawTextCleanMove (CR_WHITE, x, y, "\x10\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x12");
+	screen->DrawTextCleanMove (CR_ORANGE, x + 5 + (int)((cur * 78.f) / range), y, "\x13");
+	screen->SetFont (SmallFont);
 }
 
 int M_FindCurVal (float cur, value_t *values, int numvals)
@@ -635,50 +686,73 @@ int M_FindCurVal (float cur, value_t *values, int numvals)
 	return v;
 }
 
-void M_OptDrawer (void)
+void M_OptDrawer ()
 {
-	int color;
-	int y, width, i, x;
+	EColorRange color;
+	int y, width, i, x, ytop;
 	menuitem_t *item;
-	patch_t *title;
 
-	title = (patch_t *)W_CacheLumpName (CurrentMenu->title, PU_CACHE);
-	
-	screen->DrawPatchClean (title, 160-SHORT(title->width)/2, 10);
-
-//	for (i = 0, y = 20 + title->height; i < CurrentMenu->numitems; i++, y += 8)	{
-	for (i = 0, y = 15 + title->height; i < CurrentMenu->numitems; i++, y += 8)	// TIJ
+	i = W_CheckNumForName (CurrentMenu->title);
+	if (gameinfo.gametype == GAME_Doom && i >= 0)
 	{
+		patch_t *title = (patch_t *)W_CacheLumpNum (i, PU_CACHE);
+		screen->DrawPatchClean (title, 160-SHORT(title->width)/2, 10);
+		y = 15 + title->height;
+	}
+	else if (BigFont && CurrentMenu->texttitle)
+	{
+		screen->SetFont (BigFont);
+		screen->DrawTextCleanMove (CR_UNTRANSLATED,
+			160-screen->StringWidth (CurrentMenu->texttitle)/2, 10,
+			CurrentMenu->texttitle);
+		screen->SetFont (SmallFont);
+		y = 15 + BigFont->GetHeight ();
+	}
+	else
+	{
+		y = 15;
+	}
+
+	ytop = y + CurrentMenu->scrolltop * 8;
+	for (i = 0; i < CurrentMenu->numitems &&
+		y <= 200 - SmallFont->GetHeight (); i++, y += 8)
+	{
+		if (i == CurrentMenu->scrolltop)
+		{
+			i += CurrentMenu->scrollpos;
+		}
+
 		item = CurrentMenu->items + i;
 
 		if (item->type != screenres)
 		{
-			width = V_StringWidth (item->label);
+			width = screen->StringWidth (item->label);
 			switch (item->type)
 			{
 			case more:
 				x = CurrentMenu->indent - width;
-				color = CR_GREY;
+				color = MoreColor;
 				break;
 
 			case redtext:
 				x = 160 - width / 2;
-				color = CR_RED;
+				color = LabelColor;
 				break;
 
 			case whitetext:
 				x = 160 - width / 2;
-				color = CR_GREY;
+				color = ValueColor;
 				break;
 
 			case listelement:
 				x = CurrentMenu->indent + 14;
-				color = CR_RED;
+				color = LabelColor;
 				break;
 
 			default:
 				x = CurrentMenu->indent - width;
-				color = CR_RED;
+				color = (item->type == control && WaitingForKey && i == CurrentItem)
+					? CR_YELLOW : LabelColor;
 				break;
 			}
 			screen->DrawTextCleanMove (color, x, y, item->label);
@@ -695,14 +769,14 @@ void M_OptDrawer (void)
 
 				if (v == vals)
 				{
-					screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, "Unknown");
+					screen->DrawTextCleanMove (ValueColor, CurrentMenu->indent + 14, y, "Unknown");
 				}
 				else
 				{
 					if (item->type == cdiscrete)
 						screen->DrawTextCleanMove (v, CurrentMenu->indent + 14, y, item->e.values[v].name);
 					else
-						screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, item->e.values[v].name);
+						screen->DrawTextCleanMove (ValueColor, CurrentMenu->indent + 14, y, item->e.values[v].name);
 				}
 
 			}
@@ -722,7 +796,10 @@ void M_OptDrawer (void)
 				char description[64];
 
 				C_NameKeys (description, item->b.key1, item->c.key2);
-				screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, description);
+				screen->SetFont (ConFont);
+				screen->DrawTextCleanMove (CR_WHITE,
+					CurrentMenu->indent + 14, y, description);
+				screen->SetFont (SmallFont);
 			}
 			break;
 
@@ -741,7 +818,8 @@ void M_OptDrawer (void)
 				else
 					str = value[0].name;
 
-				screen->DrawTextCleanMove (CR_GREY, CurrentMenu->indent + 14, y, str);
+				screen->DrawTextCleanMove (ValueColor,
+					CurrentMenu->indent + 14, y, str);
 			}
 			break;
 
@@ -751,7 +829,9 @@ void M_OptDrawer (void)
 
 			if (i == CurrentItem && (skullAnimCounter < 6 || WaitingForKey))
 			{
-				screen->DrawPatchClean ((patch_t *)W_CacheLumpName ("LITLCURS", PU_CACHE), CurrentMenu->indent + 3, y);
+				screen->SetFont (ConFont);
+				screen->DrawTextCleanMove (CR_RED, CurrentMenu->indent + 3, y, "\xd");
+				screen->SetFont (SmallFont);
 			}
 		}
 		else
@@ -775,9 +855,9 @@ void M_OptDrawer (void)
 				if (str)
 				{
 					if (x == item->e.highlight)
-						color = CR_GREY;
+						color = ValueColor;
 					else
-						color = CR_RED;
+						color = LabelColor;
 
 					screen->DrawTextCleanMove (color, 104 * x + 20, y, str);
 				}
@@ -785,18 +865,35 @@ void M_OptDrawer (void)
 
 			if (i == CurrentItem && ((item->a.selmode != -1 && (skullAnimCounter < 6 || WaitingForKey)) || testingmode))
 			{
-				screen->DrawPatchClean ((patch_t *)W_CacheLumpName ("LITLCURS", PU_CACHE), item->a.selmode * 104 + 8, y);
+				screen->SetFont (ConFont);
+				screen->DrawTextCleanMove (CR_RED, item->a.selmode * 104 + 8, y, "\xd");
+				screen->SetFont (SmallFont);
 			}
-
 		}
 	}
+
+	CanScrollUp = (CurrentMenu->scrollpos != 0);
+	CanScrollDown = (i < CurrentMenu->numitems);
+	VisBottom = i - 1;
+
+	screen->SetFont (ConFont);
+	if (CanScrollUp)
+	{
+		screen->DrawTextCleanMove (CR_ORANGE, 3, ytop, "\x1a");
+	}
+	if (CanScrollDown)
+	{
+		screen->DrawTextCleanMove (CR_ORANGE, 3, y - 8, "\x1b");
+	}
+	screen->SetFont (SmallFont);
 
 	if (flagsvar)
 	{
 		char flagsblah[64];
 
 		sprintf (flagsblah, "%s = %s", flagsvar->name, flagsvar->string);
-		screen->DrawTextCleanMove (CR_GREY, 160 - (V_StringWidth (flagsblah) >> 1), 190, flagsblah);
+		screen->DrawTextCleanMove (ValueColor,
+			160 - (screen->StringWidth (flagsblah) >> 1), 190, flagsblah);
 	}
 }
 
@@ -824,313 +921,331 @@ void M_OptResponder (event_t *ev)
 		(ch == KEY_LEFTARROW || ch == KEY_RIGHTARROW || ch == KEY_ENTER)
 		&& !demoplayback)
 	{
-			int newflags = *item->e.flagint ^ item->a.flagmask;
-			char val[16];
+		int newflags = *item->e.flagint ^ item->a.flagmask;
+		char val[16];
 
-			sprintf (val, "%d", newflags);
-			flagsvar->Set (val);
-			return;
+		sprintf (val, "%d", newflags);
+		flagsvar->Set (val);
+		return;
 	}
 
 	switch (ch)
 	{
-		case KEY_DOWNARROW:
+	case KEY_DOWNARROW:
+		{
+			int modecol;
+
+			if (item->type == screenres)
 			{
-				int modecol;
-
-				if (item->type == screenres)
-				{
-					modecol = item->a.selmode;
-					item->a.selmode = -1;
-				}
-				else
-				{
-					modecol = 0;
-				}
-
-				do
-				{
-					if (++CurrentItem == CurrentMenu->numitems)
-						CurrentItem = 0;
-				} while (CurrentMenu->items[CurrentItem].type == redtext ||
-						 CurrentMenu->items[CurrentItem].type == whitetext ||
-						 (CurrentMenu->items[CurrentItem].type == screenres &&
-						  !CurrentMenu->items[CurrentItem].b.res1));
-
-				if (CurrentMenu->items[CurrentItem].type == screenres)
-					CurrentMenu->items[CurrentItem].a.selmode = modecol;
-
-				S_Sound (CHAN_VOICE, "plats/pt1_stop", 1, ATTN_NONE);
+				modecol = item->a.selmode;
+				item->a.selmode = -1;
 			}
-			break;
-
-		case KEY_UPARROW:
+			else
 			{
-				int modecol;
-
-				if (item->type == screenres)
-				{
-					modecol = item->a.selmode;
-					item->a.selmode = -1;
-				}
-				else
-				{
-					modecol = 0;
-				}
-
-				do
-				{
-					if (--CurrentItem < 0)
-						CurrentItem = CurrentMenu->numitems - 1;
-				} while (CurrentMenu->items[CurrentItem].type == redtext ||
-						 CurrentMenu->items[CurrentItem].type == whitetext ||
-						 (CurrentMenu->items[CurrentItem].type == screenres &&
-						  !CurrentMenu->items[CurrentItem].b.res1));
-
-				if (CurrentMenu->items[CurrentItem].type == screenres)
-					CurrentMenu->items[CurrentItem].a.selmode = modecol;
-
-				S_Sound (CHAN_VOICE, "plats/pt1_stop", 1, ATTN_NONE);
+				modecol = 0;
 			}
-			break;
 
-		case KEY_LEFTARROW:
-			switch (item->type)
+			do
 			{
-				case slider:
+				CurrentItem++;
+				if (CanScrollDown && CurrentItem == VisBottom)
+				{
+					CurrentMenu->scrollpos++;
+					VisBottom++;
+				}
+				if (CurrentItem == CurrentMenu->numitems)
+				{
+					CurrentMenu->scrollpos = 0;
+					CurrentItem = 0;
+				}
+			} while (CurrentMenu->items[CurrentItem].type == redtext ||
+					 CurrentMenu->items[CurrentItem].type == whitetext ||
+					 (CurrentMenu->items[CurrentItem].type == screenres &&
+					  !CurrentMenu->items[CurrentItem].b.res1));
+
+			if (CurrentMenu->items[CurrentItem].type == screenres)
+				CurrentMenu->items[CurrentItem].a.selmode = modecol;
+
+			S_Sound (CHAN_VOICE, "menu/cursor", 1, ATTN_NONE);
+		}
+		break;
+
+	case KEY_UPARROW:
+		{
+			int modecol;
+
+			if (item->type == screenres)
+			{
+				modecol = item->a.selmode;
+				item->a.selmode = -1;
+			}
+			else
+			{
+				modecol = 0;
+			}
+
+			do
+			{
+				CurrentItem--;
+				if (CanScrollUp &&
+					CurrentItem == CurrentMenu->scrolltop + CurrentMenu->scrollpos)
+				{
+					CurrentMenu->scrollpos--;
+				}
+				if (CurrentItem < 0)
+				{
+					CurrentMenu->scrollpos = MAX (0,CurrentMenu->numitems - 22 + CurrentMenu->scrolltop);
+					CurrentItem = CurrentMenu->numitems - 1;
+				}
+			} while (CurrentMenu->items[CurrentItem].type == redtext ||
+					 CurrentMenu->items[CurrentItem].type == whitetext ||
+					 (CurrentMenu->items[CurrentItem].type == screenres &&
+					  !CurrentMenu->items[CurrentItem].b.res1));
+
+			if (CurrentMenu->items[CurrentItem].type == screenres)
+				CurrentMenu->items[CurrentItem].a.selmode = modecol;
+
+			S_Sound (CHAN_VOICE, "menu/cursor", 1, ATTN_NONE);
+		}
+		break;
+
+	case KEY_LEFTARROW:
+		switch (item->type)
+		{
+			case slider:
+				{
+					float newval = item->a.cvar->value - item->d.step;
+
+					if (newval < item->b.min)
+						newval = item->b.min;
+
+					if (item->e.cfunc)
+						item->e.cfunc (item->a.cvar, newval);
+					else
+						item->a.cvar->Set (newval);
+				}
+				S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
+				break;
+
+			case discrete:
+			case cdiscrete:
+				{
+					int cur;
+					int numvals;
+
+					numvals = (int)item->b.min;
+					cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
+					if (--cur < 0)
+						cur = numvals - 1;
+
+					item->a.cvar->Set (item->e.values[cur].value);
+
+					// Hack hack. Rebuild list of resolutions
+					if (item->e.values == Depths)
+						BuildModesList (screen->width, screen->height, DisplayBits);
+				}
+				S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
+				break;
+
+			case screenres:
+				{
+					int col;
+
+					col = item->a.selmode - 1;
+					if (col < 0)
 					{
-						float newval = item->a.cvar->value - item->d.step;
-
-						if (newval < item->b.min)
-							newval = item->b.min;
-
-						if (item->e.cfunc)
-							item->e.cfunc (item->a.cvar, newval);
-						else
-							item->a.cvar->Set (newval);
-					}
-					S_Sound (CHAN_VOICE, "plats/pt1_mid", 1, ATTN_NONE);
-					break;
-
-				case discrete:
-				case cdiscrete:
-					{
-						int cur;
-						int numvals;
-
-						numvals = (int)item->b.min;
-						cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
-						if (--cur < 0)
-							cur = numvals - 1;
-
-						item->a.cvar->Set (item->e.values[cur].value);
-
-						// Hack hack. Rebuild list of resolutions
-						if (item->e.values == Depths)
-							BuildModesList (screen->width, screen->height, DisplayBits);
-					}
-					S_Sound (CHAN_VOICE, "plats/pt1_mid", 1, ATTN_NONE);
-					break;
-
-				case screenres:
-					{
-						int col;
-
-						col = item->a.selmode - 1;
-						if (col < 0)
+						if (CurrentItem > 0)
 						{
-							if (CurrentItem > 0)
+							if (CurrentMenu->items[CurrentItem - 1].type == screenres)
 							{
-								if (CurrentMenu->items[CurrentItem - 1].type == screenres)
+								item->a.selmode = -1;
+								CurrentMenu->items[--CurrentItem].a.selmode = 2;
+							}
+						}
+					}
+					else
+					{
+						item->a.selmode = col;
+					}
+				}
+				S_Sound (CHAN_VOICE, "menu/cursor", 1, ATTN_NONE);
+				break;
+
+			default:
+				break;
+		}
+		break;
+
+	case KEY_RIGHTARROW:
+		switch (item->type)
+		{
+			case slider:
+				{
+					float newval = item->a.cvar->value + item->d.step;
+
+					if (newval > item->c.max)
+						newval = item->c.max;
+
+					if (item->e.cfunc)
+						item->e.cfunc (item->a.cvar, newval);
+					else
+						item->a.cvar->Set (newval);
+				}
+				S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
+				break;
+
+			case discrete:
+			case cdiscrete:
+				{
+					int cur;
+					int numvals;
+
+					numvals = (int)item->b.min;
+					cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
+					if (++cur >= numvals)
+						cur = 0;
+
+					item->a.cvar->Set (item->e.values[cur].value);
+
+					// Hack hack. Rebuild list of resolutions
+					if (item->e.values == Depths)
+						BuildModesList (screen->width, screen->height, DisplayBits);
+				}
+				S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
+				break;
+
+			case screenres:
+				{
+					int col;
+
+					col = item->a.selmode + 1;
+					if ((col > 2) || (col == 2 && !item->d.res3) || (col == 1 && !item->c.res2))
+					{
+						if (CurrentMenu->numitems - 1 > CurrentItem)
+						{
+							if (CurrentMenu->items[CurrentItem + 1].type == screenres)
+							{
+								if (CurrentMenu->items[CurrentItem + 1].b.res1)
 								{
 									item->a.selmode = -1;
-									CurrentMenu->items[--CurrentItem].a.selmode = 2;
+									CurrentMenu->items[++CurrentItem].a.selmode = 0;
 								}
 							}
 						}
-						else
-						{
-							item->a.selmode = col;
-						}
 					}
-					S_Sound (CHAN_VOICE, "plats/pt1_stop", 1, ATTN_NONE);
-					break;
+					else
+					{
+						item->a.selmode = col;
+					}
+				}
+				S_Sound (CHAN_VOICE, "menu/cursor", 1, ATTN_NONE);
+				break;
 
-				default:
-					break;
-			}
-			break;
+			default:
+				break;
+		}
+		break;
 
-		case KEY_RIGHTARROW:
-			switch (item->type)
+	case KEY_BACKSPACE:
+		if (item->type == control)
+		{
+			C_UnbindACommand (item->e.command);
+			item->b.key1 = item->c.key2 = 0;
+		}
+		break;
+
+	case KEY_ENTER:
+		if (CurrentMenu == &ModesMenu)
+		{
+			if (!(item->type == screenres && GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
 			{
-				case slider:
-					{
-						float newval = item->a.cvar->value + item->d.step;
-
-						if (newval > item->c.max)
-							newval = item->c.max;
-
-						if (item->e.cfunc)
-							item->e.cfunc (item->a.cvar, newval);
-						else
-							item->a.cvar->Set (newval);
-					}
-					S_Sound (CHAN_VOICE, "plats/pt1_mid", 1, ATTN_NONE);
-					break;
-
-				case discrete:
-				case cdiscrete:
-					{
-						int cur;
-						int numvals;
-
-						numvals = (int)item->b.min;
-						cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
-						if (++cur >= numvals)
-							cur = 0;
-
-						item->a.cvar->Set (item->e.values[cur].value);
-
-						// Hack hack. Rebuild list of resolutions
-						if (item->e.values == Depths)
-							BuildModesList (screen->width, screen->height, DisplayBits);
-					}
-					S_Sound (CHAN_VOICE, "plats/pt1_mid", 1, ATTN_NONE);
-					break;
-
-				case screenres:
-					{
-						int col;
-
-						col = item->a.selmode + 1;
-						if ((col > 2) || (col == 2 && !item->d.res3) || (col == 1 && !item->c.res2))
-						{
-							if (CurrentMenu->numitems - 1 > CurrentItem)
-							{
-								if (CurrentMenu->items[CurrentItem + 1].type == screenres)
-								{
-									if (CurrentMenu->items[CurrentItem + 1].b.res1)
-									{
-										item->a.selmode = -1;
-										CurrentMenu->items[++CurrentItem].a.selmode = 0;
-									}
-								}
-							}
-						}
-						else
-						{
-							item->a.selmode = col;
-						}
-					}
-					S_Sound (CHAN_VOICE, "plats/pt1_stop", 1, ATTN_NONE);
-					break;
-
-				default:
-					break;
+				NewWidth = screen->width;
+				NewHeight = screen->height;
 			}
-			break;
+			NewBits = BitTranslate[(int)DummyDepthCvar.value];
+			setmodeneeded = true;
+			S_Sound (CHAN_VOICE, "menu/choose", 1, ATTN_NONE);
+			SetModesMenu (NewWidth, NewHeight, NewBits);
+		}
+		else if (item->type == more && item->e.mfunc)
+		{
+			CurrentMenu->lastOn = CurrentItem;
+			S_Sound (CHAN_VOICE, "menu/choose", 1, ATTN_NONE);
+			item->e.mfunc();
+		}
+		else if (item->type == discrete || item->type == cdiscrete)
+		{
+			int cur;
+			int numvals;
 
-		case KEY_BACKSPACE:
-			if (item->type == control)
-			{
-				C_UnbindACommand (item->e.command);
-				item->b.key1 = item->c.key2 = 0;
-			}
-			break;
+			numvals = (int)item->b.min;
+			cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
+			if (++cur >= numvals)
+				cur = 0;
 
-		case KEY_ENTER:
+			item->a.cvar->Set (item->e.values[cur].value);
+
+			// Hack hack. Rebuild list of resolutions
+			if (item->e.values == Depths)
+				BuildModesList (screen->width, screen->height, DisplayBits);
+
+			S_Sound (CHAN_VOICE, "menu/change", 1, ATTN_NONE);
+		}
+		else if (item->type == control)
+		{
+			WaitingForKey = true;
+			OldMessage = CurrentMenu->items[0].label;
+			OldType = CurrentMenu->items[0].type;
+			CurrentMenu->items[0].label = "Press new key for control, ESC to cancel";
+			CurrentMenu->items[0].type = redtext;
+		}
+		else if (item->type == listelement)
+		{
+			CurrentMenu->lastOn = CurrentItem;
+			S_Sound (CHAN_VOICE, "menu/choose", 1, ATTN_NONE);
+			item->e.lfunc (CurrentItem);
+		}
+		else if (item->type == screenres)
+		{
+		}
+		break;
+
+	case KEY_ESCAPE:
+		CurrentMenu->lastOn = CurrentItem;
+		M_PopMenuStack ();
+		break;
+
+	default:
+		if (ev->data2 == 't')
+		{
+			// Test selected resolution
 			if (CurrentMenu == &ModesMenu)
 			{
-				if (!(item->type == screenres && GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
+				if (!(item->type == screenres &&
+					GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
 				{
 					NewWidth = screen->width;
 					NewHeight = screen->height;
 				}
+				OldWidth = screen->width;
+				OldHeight = screen->height;
+				OldBits = DisplayBits;
 				NewBits = BitTranslate[(int)DummyDepthCvar.value];
 				setmodeneeded = true;
-				S_Sound (CHAN_VOICE, "weapons/pistol", 1, ATTN_NONE);
+				testingmode = I_GetTime() + 5 * TICRATE;
+				S_Sound (CHAN_VOICE, "menu/choose", 1, ATTN_NONE);
 				SetModesMenu (NewWidth, NewHeight, NewBits);
 			}
-			else if (item->type == more && item->e.mfunc)
-			{
-				CurrentMenu->lastOn = CurrentItem;
-				S_Sound (CHAN_VOICE, "weapons/pistol", 1, ATTN_NONE);
-				item->e.mfunc();
-			}
-			else if (item->type == discrete || item->type == cdiscrete)
-			{
-				int cur;
-				int numvals;
-
-				numvals = (int)item->b.min;
-				cur = M_FindCurVal (item->a.cvar->value, item->e.values, numvals);
-				if (++cur >= numvals)
-					cur = 0;
-
-				item->a.cvar->Set (item->e.values[cur].value);
-
-				// Hack hack. Rebuild list of resolutions
-				if (item->e.values == Depths)
-					BuildModesList (screen->width, screen->height, DisplayBits);
-
-				S_Sound (CHAN_VOICE, "plats/pt1_mid", 1, ATTN_NONE);
-			}
-			else if (item->type == control)
-			{
-				WaitingForKey = true;
-				OldMessage = CurrentMenu->items[0].label;
-				OldType = CurrentMenu->items[0].type;
-				CurrentMenu->items[0].label = "Press new key for control or ESC to cancel";
-				CurrentMenu->items[0].type = redtext;
-			}
-			else if (item->type == listelement)
-			{
-				CurrentMenu->lastOn = CurrentItem;
-				S_Sound (CHAN_VOICE, "weapons/pistol", 1, ATTN_NONE);
-				item->e.lfunc (CurrentItem);
-			}
-			else if (item->type == screenres)
-			{
-			}
-			break;
-
-		case KEY_ESCAPE:
-			CurrentMenu->lastOn = CurrentItem;
-			M_PopMenuStack ();
-			break;
-
-		default:
-			if (ev->data2 == 't')
-			{
-				// Test selected resolution
-				if (CurrentMenu == &ModesMenu)
-				{
-					if (!(item->type == screenres &&
-						GetSelectedSize (CurrentItem, &NewWidth, &NewHeight)))
-					{
-						NewWidth = screen->width;
-						NewHeight = screen->height;
-					}
-					OldWidth = screen->width;
-					OldHeight = screen->height;
-					OldBits = DisplayBits;
-					NewBits = BitTranslate[(int)DummyDepthCvar.value];
-					setmodeneeded = true;
-					testingmode = I_GetTime() + 5 * TICRATE;
-					S_Sound (CHAN_VOICE, "weapons/pistol", 1, ATTN_NONE);
-					SetModesMenu (NewWidth, NewHeight, NewBits);
-				}
-			}
-			else if (ev->data2 == 'd' && CurrentMenu == &ModesMenu)
-			{
-				// Make current resolution the default
-				vid_defwidth.Set ((float)screen->width);
-				vid_defheight.Set ((float)screen->height);
-				vid_defbits.Set ((float)DisplayBits);
-				SetModesMenu (screen->width, screen->height, DisplayBits);
-			}
-			break;
+		}
+		else if (ev->data2 == 'd' && CurrentMenu == &ModesMenu)
+		{
+			// Make current resolution the default
+			vid_defwidth.Set ((float)screen->width);
+			vid_defheight.Set ((float)screen->height);
+			vid_defbits.Set ((float)DisplayBits);
+			SetModesMenu (screen->width, screen->height, DisplayBits);
+		}
+		break;
 	}
 }
 
@@ -1178,10 +1293,9 @@ static void CustomizeControls (void)
 
 BEGIN_COMMAND (menu_keys)
 {
-	M_StartControlPanel ();
-	S_Sound (CHAN_VOICE, "switches/normbutn", 1, ATTN_NONE);
+	M_StartControlPanel (true);
 	OptionsActive = true;
-	CustomizeControls();
+	CustomizeControls ();
 }
 END_COMMAND (menu_keys)
 
@@ -1195,8 +1309,7 @@ static void GameplayOptions (void)
 
 BEGIN_COMMAND (menu_gameplay)
 {
-	M_StartControlPanel ();
-	S_Sound (CHAN_VOICE, "switches/normbutn", 1, ATTN_NONE);
+	M_StartControlPanel (true);
 	OptionsActive = true;
 	GameplayOptions ();
 }
@@ -1209,8 +1322,7 @@ static void VideoOptions (void)
 
 BEGIN_COMMAND (menu_display)
 {
-	M_StartControlPanel ();
-	S_Sound (CHAN_VOICE, "switches/normbutn", 1, ATTN_NONE);
+	M_StartControlPanel (true);
 	OptionsActive = true;
 	M_SwitchMenu (&VideoMenu);
 }
@@ -1362,8 +1474,7 @@ static void SetVidMode (void)
 
 BEGIN_COMMAND (menu_video)
 {
-	M_StartControlPanel ();
-	S_Sound (CHAN_VOICE, "switches/normbutn", 1, ATTN_NONE);
+	M_StartControlPanel (true);
 	OptionsActive = true;
 	SetVidMode ();
 }

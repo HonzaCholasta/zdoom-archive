@@ -6,59 +6,102 @@
 #include "g_level.h"
 #include "dstrings.h"
 #include "hu_stuff.h"
+#include "gi.h"
 
 #include <math.h>
 #include <stdlib.h>
 
-/* Most of these bindings are equivalent
- * to the original DOOM's keymappings.
+struct FBinding
+{
+	const char *Key;
+	const char *Bind;
+};
+
+/* Default keybindings for Doom (and all other games)
  */
-char DefBindings[] =
-	"bind ` toggleconsole; "			// <- This is new
-	"bind 1 \"impulse 1\"; "
-	"bind 2 \"impulse 2\"; "
-	"bind 3 \"impulse 3\"; "
-	"bind 4 \"impulse 4\"; "
-	"bind 5 \"impulse 5\"; "
-	"bind 6 \"impulse 6\"; "
-	"bind 7 \"impulse 7\"; "
-	"bind - sizedown; "
-	"bind = sizeup; "
-	"bind ctrl +attack; "
-	"bind alt +strafe; "
-	"bind shift +speed; "
-	"bind space +use; "
-	"bind rightarrow +right; "
-	"bind leftarrow +left; "
-	"bind uparrow +forward; "
-	"bind downarrow +back; "
-	"bind , +moveleft; "
-	"bind . +moveright; "
-	"bind mouse1 +attack; "
-	"bind mouse2 +strafe; "
-	"bind mouse3 +forward; "
-	"bind mouse4 +speed; "				// <- So is this
-	"bind joy1 +attack; "
-	"bind joy2 +strafe; "
-	"bind joy3 +speed; "
-	"bind joy4 +use; "
-	"bind capslock \"toggle cl_run\"; "	// <- This too
-	"bind f1 menu_help; "
-	"bind f2 menu_save; "
-	"bind f3 menu_load; "
-	"bind f4 menu_options; "			// <- Since we don't have a separate sound menu anymore
-	"bind f5 menu_display; "			// <- More useful than just changing the detail level
-	"bind f6 quicksave; "
-	"bind f7 menu_endgame; "
-	"bind f8 togglemessages; "
-	"bind f9 quickload; "
-	"bind f10 menu_quit; "
-	"bind tab togglemap; "
-	"bind pause pause; "
-	"bind sysrq screenshot; "			// <- Also known as the Print Screen key
-	"bind t messagemode; "
-	"bind \\ +showscores; "				// <- Another new command
-	"bind f12 spynext";
+static const FBinding DefBindings[] =
+{
+	{ "`", "toggleconsole" },
+	{ "1", "slot 1" },
+	{ "2", "slot 2" },
+	{ "3", "slot 3" },
+	{ "4", "slot 4" },
+	{ "5", "slot 5" },
+	{ "6", "slot 6" },
+	{ "7", "slot 7" },
+	{ "8", "slot 8" },
+	{ "9", "slot 9" },
+	{ "0", "slot 0" },
+	{ "[", "invprev" },
+	{ "]", "invnext" },
+	{ "enter", "invuse" },
+	{ "-", "sizedown" },
+	{ "=", "sizeup" },
+	{ "ctrl", "+attack" },
+	{ "alt", "+strafe" },
+	{ "shift", "+speed" },
+	{ "space", "+use" },
+	{ "rightarrow", "+right" },
+	{ "leftarrow", "+left" },
+	{ "uparrow", "+forward" },
+	{ "downarrow", "+back" },
+	{ ",", "+moveleft" },
+	{ ".", "+moveright" },
+	{ "mouse1", "+attack" },
+	{ "mouse2", "+strafe" },
+	{ "mouse3", "+forward" },
+	{ "mouse4", "+speed" },
+	{ "joy1", "+attack" },
+	{ "joy2", "+strafe" },
+	{ "joy3", "+speed" },
+	{ "joy4", "+use" },
+	{ "capslock", "toggle cl_run" },
+	{ "f1", "menu_help" },
+	{ "f2", "menu_save" },
+	{ "f3", "menu_load" },
+	{ "f4", "menu_options" },
+	{ "f5", "menu_display" },
+	{ "f6", "quicksave" },
+	{ "f7", "menu_endgame" },
+	{ "f8", "togglemessages" },
+	{ "f9", "quickload" },
+	{ "f11", "bumpgamma" },
+	{ "f10", "menu_quit" },
+	{ "tab", "togglemap" },
+	{ "pause", "pause" },
+	{ "sysrq", "screenshot" },
+	{ "t", "messagemode" },
+	{ "\\", "+showscores" },
+	{ "f12", "spynext" },
+	{ "mwheeldown", "weapnext" },
+	{ "mwheelup", "weapprev" },
+	NULL
+};
+
+static const FBinding DefRavenBindings[] =
+{
+	{ "pgup", "+moveup" },
+	{ "insert", "+movedown" },
+	{ "home", "land" },
+	{ "pgdn", "+lookup" },
+	{ "del", "+lookdown" },
+	{ "end", "centerview" },
+	NULL
+};
+
+static const FBinding DefHexenBindings[] =
+{
+	{ "/", "+jump" },
+	{ "backspace", "invuseall" },
+	// \ arti_health
+	// 0 arti_poisonbag
+	// 9 arti_blastradius
+	// 8 arti_teleport
+	// 7 arti_teleportother
+	// 6 arti_egg
+	// 5 arti_invulnerability
+	NULL
+};
 
 const char *KeyNames[NUM_KEYS] = {
 	// This array is dependant on the particular keyboard input
@@ -274,9 +317,31 @@ BEGIN_COMMAND (doublebind)
 }
 END_COMMAND (doublebind)
 
+static void SetBinds (const FBinding *array)
+{
+	char bindbuff[64];
+
+	while (array->Key)
+	{
+		sprintf (bindbuff, "bind %s \"%s\"", array->Key, array->Bind);
+		AddCommandString (bindbuff);
+		array++;
+	}
+}
+
 BEGIN_COMMAND (binddefaults)
 {
-	AddCommandString (DefBindings);
+	SetBinds (DefBindings);
+
+	if (gameinfo.gametype & GAME_Raven)
+	{
+		SetBinds (DefRavenBindings);
+	}
+
+	if (gameinfo.gametype == GAME_Hexen)
+	{
+		SetBinds (DefHexenBindings);
+	}
 }
 END_COMMAND (binddefaults)
 

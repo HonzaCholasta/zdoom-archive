@@ -24,7 +24,6 @@ struct userinfo_s
 typedef struct userinfo_s userinfo_t;
 
 FArchive &operator<< (FArchive &arc, userinfo_t &info);
-FArchive &operator>> (FArchive &arc, userinfo_t &info);
 
 void D_SetupUserInfo (void);
 

@@ -4,7 +4,7 @@
 
 #include "hardware.h"
 #include "v_video.h"
-#include "ptc.h"
+#include <ptc.h>
 
 class Win32Video : public IVideo
 {

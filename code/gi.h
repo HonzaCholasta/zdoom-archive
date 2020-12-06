@@ -14,6 +14,18 @@
 #define GI_MENUHACK_COMMERCIAL	0x00000060
 #define GI_NOCRAZYDEATH			0x00000080
 
+#ifndef EGAMETYPE
+#define EGAMETYPE
+enum EGameType
+{
+	GAME_Any	 = 0,
+	GAME_Doom	 = 1,
+	GAME_Heretic = 2,
+	GAME_Hexen	 = 4,
+	GAME_Raven	 = 6
+};
+#endif
+
 typedef struct
 {
 	byte offset;
@@ -57,6 +69,9 @@ typedef struct
 	int maxSwitch;
 	char borderFlat[8];
 	gameborder_t *border;
+	int telefogheight;
+	EGameType gametype;
+	int defKickback;
 } gameinfo_t;
 
 extern gameinfo_t gameinfo;

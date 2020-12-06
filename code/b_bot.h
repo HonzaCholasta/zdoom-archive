@@ -14,6 +14,7 @@
 #include "doomdef.h"
 #include "d_ticcmd.h"
 #include "r_defs.h"
+#include "a_pickups.h"
 
 #define FORWARDWALK		0x1900
 #define FORWARDRUN		0x3200
@@ -32,7 +33,7 @@
 
 #define MAX_TRAVERSE_DIST 100000000 //10 meters, used within b_func.c
 #define AVOID_DIST   45000000 //Try avoid incoming missiles once they reached this close
-#define SAFE_SELF_MISDIST 11000000    //Distance from self to target where it's safe to pull a rocket.
+#define SAFE_SELF_MISDIST (140*FRACUNIT)    //Distance from self to target where it's safe to pull a rocket.
 #define FRIEND_DIST  15000000 //To friend.
 #define DARK_DIST  5000000 //Distance that bot can see enemies in the dark from.
 #define WHATS_DARK  50 //light value thats classed as dark.
@@ -58,72 +59,6 @@ struct botskill_t
 };
 
 FArchive &operator<< (FArchive &arc, botskill_t &skill);
-FArchive &operator>> (FArchive &arc, botskill_t &skill);
-
-struct pos_t
-{
-	fixed_t x;
-	fixed_t y;
-	fixed_t z;
-};
-
-enum prior_t
-{
-	Armour1		= MT_MISC0,
-	Armour2		= MT_MISC1,
-	Potion		= MT_MISC2,
-	Helmet		= MT_MISC3,
-	Stimpack	= MT_MISC10,
-	Medikit		= MT_MISC11,
-	Soul		= MT_MISC12,
-	AmmoBox		= MT_MISC17,
-	Rocket		= MT_MISC18,
-	RoxBox		= MT_MISC19,
-	Cell		= MT_MISC20,
-	CellPack	= MT_MISC21,
-	Shell		= MT_MISC22,
-	ShellBox	= MT_MISC23,
-	Backpack	= MT_MISC24,
-	Bfg			= MT_MISC25,
-	Saw			= MT_MISC26,
-	Rl			= MT_MISC27,
-	Plasma		= MT_MISC28,
-	Clip		= MT_CLIP,
-	Chain		= MT_CHAINGUN,
-	Shotgun		= MT_SHOTGUN,
-	Ssg			= MT_SUPERSHOTGUN,
-	Invul		= MT_INV,
-	Invis		= MT_INS,
-	Mega		= MT_MEGA,
-	Berserk		= MT_MISC13
-};
-
-inline FArchive &operator<< (FArchive &arc, prior_t type)
-{
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, prior_t &type)
-{
-	BYTE in; arc >> in; type = (prior_t)type; return arc;
-}
-
-//Type of chat to give away this tic (if any).
-enum botchat_t
-{
-	c_insult,
-	c_kill,
-	c_teamup,
-	c_none
-};
-
-inline FArchive &operator<< (FArchive &arc, botchat_t chat)
-{
-	return arc << (BYTE)chat;
-}
-inline FArchive &operator>> (FArchive &arc, botchat_t &chat)
-{
-	BYTE in; arc >> in; chat = (botchat_t)in; return arc;
-}
 
 //Info about all bots in the bots.cfg
 //Updated during each level start.
@@ -150,7 +85,7 @@ public:
 	void Init ();
 	void End();
 	void CleanBotstuff (player_s *p);
-	bool Spawn (const char *name, int color = NOCOLOR);
+	bool SpawnBot (const char *name, int color = NOCOLOR);
 	bool LoadBots ();
 	void ForgetBots ();
 	void DoAddBot (int bnum, char *info);
@@ -158,7 +93,6 @@ public:
 
 	//(B_Func.c)
 	bool Check_LOS (AActor *mobj1, AActor *mobj2, angle_t vangle);
-	mobjtype_t Warrior_weapon_drop (AActor *actor);
 
 	//(B_Think.c)
 	void WhatToGet (AActor *actor, AActor *item);
@@ -194,7 +128,7 @@ private:
 	AActor *Choose_Mate (AActor *bot);
 	AActor *Find_enemy (AActor *bot);
 	void SetBodyAt (fixed_t x, fixed_t y, fixed_t z, int hostnum);
-	pos_t FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd);
+	fixed_t FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd);
 	angle_t FireRox (AActor *bot, AActor *enemy, ticcmd_t *cmd);
 	bool SafeCheckPosition (AActor *actor, fixed_t x, fixed_t y);
 
@@ -220,7 +154,6 @@ extern DCajunMaster bglobal;
 
 EXTERN_CVAR (bot_flag_return_time)
 EXTERN_CVAR (bot_next_color)
-EXTERN_CVAR (weapondrop)
 EXTERN_CVAR (bot_allow_duds)
 EXTERN_CVAR (bot_maxcorpses)
 EXTERN_CVAR (bot_observer)

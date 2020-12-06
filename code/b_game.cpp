@@ -55,6 +55,7 @@ Everything that is changed is marked (maybe commented) with "Added by MC"
 #include "sc_man.h"
 #include "stats.h"
 #include "m_misc.h"
+#include "sbar.h"
 
 //Externs
 DCajunMaster bglobal;
@@ -83,7 +84,7 @@ enum
 static bool waitingforspawn[MAXPLAYERS];
 
 
-void G_DoReborn (int playernum);
+void G_DoReborn (int playernum, bool freshbot);
 
 
 //This function is called every tick (from g_game.c),
@@ -119,7 +120,7 @@ void DCajunMaster::Main (int buf)
 	{
 		if (t_join == ((wanted_botnum - botnum) * SPAWN_DELAY))
 		{
-            if (!Spawn (getspawned->GetArg (spawn_tries)))
+            if (!SpawnBot (getspawned->GetArg (spawn_tries)))
 				wanted_botnum--;
             spawn_tries++;
 		}
@@ -143,7 +144,10 @@ void DCajunMaster::Main (int buf)
 		observer = false;
 		players[consoleplayer].mo->UnlinkFromWorld ();
 		players[consoleplayer].mo->flags = MF_SOLID|MF_SHOOTABLE|MF_DROPOFF|MF_PICKUP|MF_NOTDMATCH;
-		players[consoleplayer].mo->flags2 &= ~MF2_FLY;
+		if (players[consoleplayer].powers[pw_flight] == 0)
+		{
+			players[consoleplayer].mo->flags2 &= ~MF2_FLY;
+		}
 		players[consoleplayer].mo->LinkToWorld ();
 	}
 
@@ -247,7 +251,7 @@ void DCajunMaster::End ()
 //The color parameter overides bots
 //induvidual colors if not = NOCOLOR.
 
-bool DCajunMaster::Spawn (const char *name, int color)
+bool DCajunMaster::SpawnBot (const char *name, int color)
 {
 	int num=0;
 	static bool red; //ctf, spawning helper, spawn first blue then a red ...
@@ -374,6 +378,7 @@ bool DCajunMaster::Spawn (const char *name, int color)
 void DCajunMaster::DoAddBot (int bnum, char *info)
 {
 	multiplayer = true; //Prevents cheating and so on, emulates real netgame (almost).
+	SB_state = -1;
 	players[bnum].isbot = true;
 	playeringame[bnum] = true;
 	players[bnum].mo = NULL;
@@ -381,7 +386,7 @@ void DCajunMaster::DoAddBot (int bnum, char *info)
 	players[bnum].playerstate = PST_REBORN;
 	botingame[bnum] = true;
     Printf (PRINT_HIGH, "%s joined the game\n", players[bnum].userinfo.netname);
-    G_DoReborn (bnum);
+    G_DoReborn (bnum, true);
 	waitingforspawn[bnum] = false;
 }
 
@@ -436,8 +441,6 @@ void DCajunMaster::CleanBotstuff (player_t *p)
 	p->sleft = false; //If false, strafe is right.
 	p->allround = false;
 	p->redteam = false; //in ctf, if true this bot is on red team, else on blue..
-	//Misc
-	p->chat = c_none;//What bot will say one a tic.
 }
 
 

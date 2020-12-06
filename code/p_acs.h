@@ -120,7 +120,56 @@ public:
 		PCD_ENDPRINTBOLD =			101,
 		PCD_ACTIVATORSOUND =		102,
 		PCD_LOCALAMBIENTSOUND =		103,
-		PCD_SETLINEMONSTERBLOCKING =104
+		PCD_SETLINEMONSTERBLOCKING =104,
+		PCD_PLAYERBLUESKULL	=		105,	// [BC] Start of new pcodes
+		PCD_PLAYERREDSKULL =		106,
+		PCD_PLAYERYELLOWSKULL =		107,
+		PCD_PLAYERMASTERSKULL =		108,
+		PCD_PLAYERBLUECARD =		109,
+		PCD_PLAYERREDCARD =			110,
+		PCD_PLAYERYELLOWCARD =		111,
+		PCD_PLAYERMASTERCARD =		112,
+		PCD_PLAYERBLACKSKULL =		113,
+		PCD_PLAYERSILVERSKULL =		114,
+		PCD_PLAYERGOLDSKULL =		115,
+		PCD_PLAYERBLACKCARD =		116,
+		PCD_PLAYERSILVERCARD =		117,
+		PCD_PLAYERGOLDCARD =		118,
+		PCD_PLAYERTEAM1 =			119,
+		PCD_PLAYERFRAGS =			120,
+		PCD_PLAYERHEALTH =			121,
+		PCD_PLAYERARMORPOINTS =		122,
+		PCD_PLAYEREXPERT =			123,
+		PCD_TEAM1COUNT =			124,
+		PCD_TEAM2COUNT =			125,
+		PCD_TEAM1SCORE =			126,
+		PCD_TEAM2SCORE =			127,
+		PCD_TEAMFRAGPOINTS =		128,
+		PCD_LSPEC6 =				129,
+		PCD_LSPEC6DIRECT =			130,
+		PCD_PRINTNAME =				131,
+		PCD_MUSICCHANGE =			132,
+		PCD_FIXEDMUL =				133,
+		PCD_FIXEDDIV =				134,
+		PCD_SETGRAVITY =			135,
+		PCD_SETGRAVITYDIRECT =		136,
+		PCD_SETAIRCONTROL =			137,
+		PCD_SETAIRCONTROLDIRECT =	138,
+		PCD_CLEARINVENTORY =		139,
+		PCD_GIVEINVENTORY =			140,
+		PCD_GIVEINVENTORYDIRECT =	141,
+		PCD_TAKEINVENTORY =			142,
+		PCD_TAKEINVENTORYDIRECT =	143,
+		PCD_CHECKINVENTORY =		144,
+		PCD_CHECKINVENTORYDIRECT =	145,
+		PCD_SPAWN =					146,
+		PCD_SPAWNDIRECT =			147,
+		PCD_SPAWNSPOT =				148,
+		PCD_SPAWNSPOTDIRECT =		149,
+		PCD_SETMUSIC =				150,
+		PCD_SETMUSICDIRECT =		151,
+		PCD_LOCALSETMUSIC =			152,
+		PCD_LOCALSETMUSICDIRECT =	153,
 	};
 
 	// Some constants used by ACS scripts
@@ -208,6 +257,8 @@ protected:
 	static void ChangeFlat (int tag, int name, bool floorOrCeiling);
 	static int CountPlayers ();
 	static void SetLineTexture (int lineid, int side, int position, int name);
+	static int DoSpawn (int type, fixed_t x, fixed_t y, fixed_t z, int tid, int angle);
+	static int DoSpawnSpot (int type, int spot, int tid, int angle);
 
 private:
 	DLevelScript ();
@@ -215,13 +266,12 @@ private:
 	friend class DACSThinker;
 };
 
-inline FArchive &operator<< (FArchive &arc, DLevelScript::EScriptState state)
+inline FArchive &operator<< (FArchive &arc, DLevelScript::EScriptState &state)
 {
-	return arc << (BYTE)state;
-}
-inline FArchive &operator>> (FArchive &arc, DLevelScript::EScriptState &state)
-{
-	BYTE in; arc >> in; state = (DLevelScript::EScriptState)in; return arc;
+	BYTE val = (BYTE)state;
+	arc << val;
+	state = (DLevelScript::EScriptState)val;
+	return arc;
 }
 
 inline void DLevelScript::PushToStack (int val)
@@ -270,7 +320,6 @@ struct acsdefered_s
 };
 typedef struct acsdefered_s acsdefered_t;
 
-FArchive &operator<< (FArchive &arc, acsdefered_s *defer);
-FArchive &operator>> (FArchive &arc, acsdefered_s* &defer);
+FArchive &operator<< (FArchive &arc, acsdefered_s *&defer);
 
 #endif //__P_ACS_H__

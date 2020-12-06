@@ -181,6 +181,8 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 
 		Printf (PRINT_HIGH, "Heapsize: %g megabytes\n", mb_used);
 
+		I_DetectOS ();
+
 		D_DoomMain ();
 	}
 	catch (CDoomError &error)

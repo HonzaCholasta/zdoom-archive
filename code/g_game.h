@@ -61,7 +61,14 @@ BOOL G_Responder (event_t*	ev);
 
 void G_ScreenShot (char *filename);
 
-void G_PlayerFinishLevel (int player);
+enum EFinishLevelType
+{
+	FINISH_SameHub,
+	FINISH_NextHub,
+	FINISH_NoHub
+};
+
+void G_PlayerFinishLevel (int player, EFinishLevelType mode);
 
 #define BODYQUESIZE 	32
 class AActor;

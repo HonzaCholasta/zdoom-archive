@@ -33,6 +33,7 @@
 #include "c_cvars.h"
 #include "g_level.h"
 #include "r_sky.h"
+#include "gi.h"
 
 extern int dmflags;
 extern int *texturewidthmask;
@@ -74,16 +75,25 @@ extern fixed_t freelookviewheight;
 
 void R_InitSkyMap ()
 {
+	fixed_t fskyheight;
+
 	if (textureheight == NULL)
 		return;
 
 	if (textureheight[sky1texture] != textureheight[sky2texture])
 	{
-		Printf (PRINT_HIGH, "\x8a+Both sky textures must be the same height.\x8a-\n");
+		Printf (PRINT_HIGH, "\x81+Both sky textures must be the same height.\x81-\n");
 		sky2texture = sky1texture;
 	}
 
-	if (textureheight[sky1texture] <= (128 << FRACBITS))
+	// Heretic's sky textures are recorded with the wrong height. :-(
+	// Assume 200 pixels tall, since anything else would look bad in Heretic
+	// anyway.
+	fskyheight = textureheight[sky1texture];
+	if (gameinfo.gametype == GAME_Heretic && fskyheight == 128 * FRACUNIT)
+		fskyheight = 200 * FRACUNIT;
+
+	if (fskyheight <= (128 << FRACBITS))
 	{
 		skytexturemid = 200/2*FRACUNIT;
 		skystretch = (r_stretchsky.value
@@ -95,7 +105,7 @@ void R_InitSkyMap ()
 		skytexturemid = 200*FRACUNIT;
 		skystretch = 0;
 	}
-	skyheight = textureheight[sky1texture] << skystretch;
+	skyheight = fskyheight << skystretch;
 
 	if (viewwidth && viewheight)
 	{

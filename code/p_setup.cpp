@@ -36,6 +36,7 @@
 #include "doomdef.h"
 #include "p_local.h"
 #include "p_effect.h"
+#include "p_terrain.h"
 #include "s_sound.h"
 #include "doomstat.h"
 #include "p_lnspec.h"
@@ -113,9 +114,7 @@ BOOL			rejectempty;
 
 
 // Maintain single and multi player starting spots.
-int				MaxDeathmatchStarts;
-mapthing2_t		*deathmatchstarts;
-mapthing2_t		*deathmatch_p;
+TArray<mapthing2_t> deathmatchstarts (16);
 mapthing2_t		playerstarts[MAXPLAYERS];
 
 
@@ -594,15 +593,6 @@ void P_FinishLoadingLineDefs (void)
 			int j;
 
 			case TranslucentLine:			// killough 4/11/98: translucent 2s textures
-#if 0
-				lump = sides[*ld->sidenum].special;		// translucency from sidedef
-				if (!ld->tag)							// if tag==0,
-					ld->tranlump = lump;				// affect this linedef only
-				else
-					for (j=0;j<numlines;j++)			// if tag!=0,
-						if (lines[j].tag == ld->tag)	// affect all matching linedefs
-							lines[j].tranlump = lump;
-#else
 				// [RH] Second arg controls how opaque it is.
 				if (!ld->args[0])
 					ld->lucency = (byte)ld->args[1];
@@ -610,7 +600,6 @@ void P_FinishLoadingLineDefs (void)
 					for (j = 0; j < numlines; j++)
 						if (lines[j].id == ld->args[0])
 							lines[j].lucency = (byte)ld->args[1];
-#endif
 				break;
 		}
 	}
@@ -1202,8 +1191,8 @@ void P_GroupLines (void)
 	total = 0;
 	for (i = 0; i < numlines; i++, li++)
 	{
-		total++;
 		li->frontsector->linecount++;
+		total++;
 
 		if (li->backsector && li->backsector != li->frontsector)
 		{
@@ -1215,12 +1204,12 @@ void P_GroupLines (void)
 	// build line tables for each sector		
 	linebuffer = (line_t **)Z_Malloc (total*sizeof(line_t *), PU_LEVEL, 0);
 	sector = sectors;
-	for (i=0 ; i<numsectors ; i++, sector++)
+	for (i = 0; i < numsectors; i++, sector++)
 	{
 		bbox.ClearBox ();
 		sector->lines = linebuffer;
 		li = lines;
-		for (j=0 ; j<numlines ; j++, li++)
+		for (j = 0; j < numlines; j++, li++)
 		{
 			if (li->frontsector == sector || li->backsector == sector)
 			{
@@ -1230,7 +1219,9 @@ void P_GroupLines (void)
 			}
 		}
 		if (linebuffer - sector->lines != sector->linecount)
+		{
 			I_Error ("P_GroupLines: miscounted");
+		}
 						
 		// set the soundorg to the middle of the bounding box
 		sector->soundorg[0] = (bbox.Right()+bbox.Left())/2;
@@ -1253,7 +1244,6 @@ void P_GroupLines (void)
 		block = block < 0 ? 0 : block;
 		//sector->blockbox.Left()=block;
 	}
-		
 }
 
 //
@@ -1323,15 +1313,6 @@ void P_SetupLevel (char *lumpname, int position)
 
 	PolyBlockMap = NULL;
 
-#if 0 // UNUSED
-	if (debugfile)
-	{
-		Z_FreeTags (PU_LEVEL, MAXINT);
-		Z_FileDumpHeap (debugfile);
-	}
-	else
-#endif
-
 	DThinker::DestroyAllThinkers ();
 	Z_FreeTags (PU_LEVEL, PU_PURGELEVEL-1);
 	NormalLight.next = NULL;	// [RH] Z_FreeTags frees all the custom colormaps
@@ -1380,7 +1361,7 @@ void P_SetupLevel (char *lumpname, int position)
 
 	bodyqueslot = 0;
 // phares 8/10/98: Clear body queue so the corpses from previous games are
-// not assumed to be from this one. The AActor's belonging to these corpses
+// not assumed to be from this one. The actors belonging to these corpses
 // are cleared in the normal freeing of zoned memory between maps, so all
 // we have to do here is clear the pointers to them.
 
@@ -1389,12 +1370,7 @@ void P_SetupLevel (char *lumpname, int position)
 
 	po_NumPolyobjs = 0;
 
-	if (!deathmatchstarts)
-	{
-		MaxDeathmatchStarts = 16;	// [RH] Default. Increased as needed.
-		deathmatchstarts = (mapthing2_t *)Malloc (MaxDeathmatchStarts * sizeof(mapthing2_t));
-	}
-	deathmatch_p = deathmatchstarts;
+	deathmatchstarts.Clear ();
 
 	if (!HasBehavior)
 		P_LoadThings (lumpnum+ML_THINGS);
@@ -1428,9 +1404,6 @@ void P_SetupLevel (char *lumpname, int position)
 	// killough 3/26/98: Spawn icon landings:
 	P_SpawnBrainTargets();
 
-	// clear special respawning que
-	iquehead = iquetail = 0;			
-		
 	// set up world state
 	P_SpawnSpecials ();
 
@@ -1455,7 +1428,8 @@ void P_Init (void)
 	P_InitEffects ();		// [RH]
 	P_InitSwitchList ();
 	P_InitPicAnims ();
-	R_InitSprites (sprnames);
+	P_InitTerrainTypes ();
+	R_InitSprites ();
 }
 
 

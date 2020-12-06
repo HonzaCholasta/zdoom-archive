@@ -12,16 +12,12 @@
 #include "m_alloc.h"
 #include "d_player.h"
 
-IMPLEMENT_CLASS (DConsoleCommand, DObject)
-
-IMPLEMENT_CLASS (DConsoleAlias, DConsoleCommand)
-
 CVAR (lookspring, "1", CVAR_ARCHIVE);	// Generate centerview when -mlook encountered?
 
-static DConsoleCommand *FindNameInHashTable (DConsoleCommand **table, const char *name);
-static DConsoleCommand *ScanChainForName (DConsoleCommand *start, const char *name, DConsoleCommand **prev);
+static FConsoleCommand *FindNameInHashTable (FConsoleCommand **table, const char *name);
+static FConsoleCommand *ScanChainForName (FConsoleCommand *start, const char *name, FConsoleCommand **prev);
 
-DConsoleCommand *Commands[HASH_SIZE];
+FConsoleCommand *Commands[HASH_SIZE];
 
 struct ActionBits actionbits[NUM_ACTIONS] =
 {
@@ -104,7 +100,7 @@ void C_DoCommand (char *cmd)
 	char **argv;
 	char *args, *arg, *realargs;
 	char *data;
-	DConsoleCommand *com;
+	FConsoleCommand *com;
 	int check = -1;
 
 	data = ParseString (cmd);
@@ -318,7 +314,7 @@ char *ParseString (char *data)
 	return data;
 }
 
-static DConsoleCommand *ScanChainForName (DConsoleCommand *start, const char *name, DConsoleCommand **prev)
+static FConsoleCommand *ScanChainForName (FConsoleCommand *start, const char *name, FConsoleCommand **prev)
 {
 	int comp;
 
@@ -337,17 +333,17 @@ static DConsoleCommand *ScanChainForName (DConsoleCommand *start, const char *na
 	return NULL;
 }
 
-static DConsoleCommand *FindNameInHashTable (DConsoleCommand **table, const char *name)
+static FConsoleCommand *FindNameInHashTable (FConsoleCommand **table, const char *name)
 {
-	DConsoleCommand *dummy;
+	FConsoleCommand *dummy;
 
 	return ScanChainForName (table[MakeKey (name) % HASH_SIZE], name, &dummy);
 }
 
-bool DConsoleCommand::AddToHash (DConsoleCommand **table)
+bool FConsoleCommand::AddToHash (FConsoleCommand **table)
 {
 	unsigned int key;
-	DConsoleCommand *insert, **bucket;
+	FConsoleCommand *insert, **bucket;
 
 	if (!stricmp (m_Name, "toggle"))
 		key = 1;
@@ -381,7 +377,7 @@ bool DConsoleCommand::AddToHash (DConsoleCommand **table)
 	return true;
 }
 
-DConsoleCommand::DConsoleCommand (const char *name)
+FConsoleCommand::FConsoleCommand (const char *name)
 {
 	static bool firstTime = true;
 
@@ -409,12 +405,12 @@ DConsoleCommand::DConsoleCommand (const char *name)
 	m_Name = copystring (name);
 
 	if (!AddToHash (Commands))
-		Printf (PRINT_HIGH, "DConsoleCommand c'tor: %s exists\n", name);
+		Printf (PRINT_HIGH, "FConsoleCommand c'tor: %s exists\n", name);
 	else
 		C_AddTabCommand (name);
 }
 
-DConsoleCommand::~DConsoleCommand ()
+FConsoleCommand::~FConsoleCommand ()
 {
 	*m_Prev = m_Next;
 	if (m_Next)
@@ -423,13 +419,13 @@ DConsoleCommand::~DConsoleCommand ()
 	delete[] m_Name;
 }
 
-DConsoleAlias::DConsoleAlias (const char *name, const char *command)
-	: DConsoleCommand (name)
+FConsoleAlias::FConsoleAlias (const char *name, const char *command)
+	: FConsoleCommand (name)
 {
 	m_Command = copystring (command);
 }
 
-DConsoleAlias::~DConsoleAlias ()
+FConsoleAlias::~FConsoleAlias ()
 {
 	delete[] m_Command;
 }
@@ -463,10 +459,10 @@ char *BuildString (int argc, char **argv)
 	}
 }
 
-static int DumpHash (DConsoleCommand **table, BOOL aliases)
+static int DumpHash (FConsoleCommand **table, BOOL aliases)
 {
 	int bucket, count;
-	DConsoleCommand *cmd;
+	FConsoleCommand *cmd;
 
 	for (bucket = count = 0; bucket < HASH_SIZE; bucket++)
 	{
@@ -477,7 +473,7 @@ static int DumpHash (DConsoleCommand **table, BOOL aliases)
 			if (cmd->IsAlias())
 			{
 				if (aliases)
-					static_cast<DConsoleAlias *>(cmd)->PrintAlias ();
+					static_cast<FConsoleAlias *>(cmd)->PrintAlias ();
 			}
 			else if (!aliases)
 				cmd->PrintCommand ();
@@ -487,15 +483,16 @@ static int DumpHash (DConsoleCommand **table, BOOL aliases)
 	return count;
 }
 
-void DConsoleAlias::Archive (FILE *f)
+void FConsoleAlias::Archive (FILE *f)
 {
-	fprintf (f, "alias \"%s\" \"%s\"\n", m_Name, m_Command);
+	if (f != NULL)
+		fprintf (f, "alias \"%s\" \"%s\"\n", m_Name, m_Command);
 }
 
 void C_ArchiveAliases (FILE *f)
 {
 	int bucket;
-	DConsoleCommand *alias;
+	FConsoleCommand *alias;
 
 	for (bucket = 0; bucket < HASH_SIZE; bucket++)
 	{
@@ -503,7 +500,7 @@ void C_ArchiveAliases (FILE *f)
 		while (alias)
 		{
 			if (alias->IsAlias())
-				static_cast<DConsoleAlias *>(alias)->Archive (f);
+				static_cast<FConsoleAlias *>(alias)->Archive (f);
 			alias = alias->m_Next;
 		}
 	}
@@ -511,7 +508,7 @@ void C_ArchiveAliases (FILE *f)
 
 BEGIN_COMMAND (alias)
 {
-	DConsoleCommand *prev, *alias, **chain;
+	FConsoleCommand *prev, *alias, **chain;
 
 	if (argc == 1)
 	{
@@ -540,9 +537,9 @@ BEGIN_COMMAND (alias)
 				delete alias;
 
 			if (argc > 3)
-				new DConsoleAlias (argv[1], BuildString (argc - 2, &argv[2]));
+				new FConsoleAlias (argv[1], BuildString (argc - 2, &argv[2]));
 			else
-				new DConsoleAlias (argv[1], copystring (argv[2]));
+				new FConsoleAlias (argv[1], copystring (argv[2]));
 		}
 	}
 }

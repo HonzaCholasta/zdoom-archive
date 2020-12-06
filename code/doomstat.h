@@ -40,7 +40,16 @@
 // We also need the definition of a cvar
 #include "c_cvars.h"
 
-
+// -----------------------
+// Game speed.
+//
+enum EGameSpeed
+{
+	SPEED_NoneYet,
+	SPEED_Normal,
+	SPEED_Fast
+};
+extern EGameSpeed GameSpeed;
 
 
 // ------------------------
@@ -59,11 +68,9 @@ extern GameMission_t	gamemission;
 // Set if homebrew PWAD stuff has been added.
 extern	BOOL			modifiedgame;
 
-
 // -------------------------------------------
 // Language.
 extern	Language_t		language;
-
 
 // -------------------------------------------
 // Selected skill type, map etc.
@@ -93,6 +100,9 @@ EXTERN_CVAR (alwaysapplydmflags)
 
 // [RH] Teamplay mode
 EXTERN_CVAR (teamplay)
+
+// [RH] Friendly fire amount
+EXTERN_CVAR (friendlyfire)
 		
 // -------------------------
 // Internal parameters for sound rendering.
@@ -113,17 +123,12 @@ EXTERN_CVAR (snd_musicvolume)			// maximum volume for music
 // Status flags for refresh.
 //
 
-// Depending on view size - no status bar?
-// Note that there is no way to disable the
-//	status bar explicitely.
-extern	BOOL			statusbaractive;
-
-extern	BOOL			automapactive;	// In AutoMap mode?
-extern	BOOL			menuactive; 	// Menu overlayed?
-extern	BOOL			paused; 		// Game Pause?
+extern	bool			automapactive;	// In AutoMap mode?
+extern	bool			menuactive; 	// Menu overlayed?
+extern	int				paused; 		// Game Pause?
 
 
-extern	BOOL			viewactive;
+extern	bool			viewactive;
 
 extern	BOOL	 		nodrawers;
 extern	BOOL	 		noblit;
@@ -158,7 +163,7 @@ extern level_locals_t level;
 // DEMO playback/recording related stuff.
 // No demo, there is a human player in charge?
 // Disable save/end game?
-extern	BOOL			usergame;
+extern	bool			usergame;
 
 extern	BOOL			demoplayback;
 extern	BOOL			demorecording;
@@ -193,9 +198,7 @@ extern	bool	 		playeringame[MAXPLAYERS];
 
 
 // Player spawn spots for deathmatch.
-extern	int				MaxDeathmatchStarts;
-extern	mapthing2_t		*deathmatchstarts;
-extern	mapthing2_t*	deathmatch_p;
+extern TArray<mapthing2_t> deathmatchstarts;
 
 // Player spawn spots.
 extern	mapthing2_t		playerstarts[MAXPLAYERS];
@@ -205,9 +208,6 @@ extern	mapthing2_t		playerstarts[MAXPLAYERS];
 extern	struct wbstartstruct_s wminfo; 
 
 
-// LUT of ammunition limits for each kind.
-// This doubles with BackPack powerup item.
-extern	int 			maxammo[NUMAMMO];
 
 
 
@@ -313,7 +313,6 @@ struct DehInfo
 	int FAAC;
 	int KFAArmor;
 	int KFAAC;
-	int BFGCells;
 	int Infight;
 };
 extern struct DehInfo deh;

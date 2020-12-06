@@ -20,22 +20,21 @@ void C_ArchiveAliases (FILE *f);
 // build a single string out of multiple strings
 char *BuildString (int argc, char **argv);
 
-class DConsoleCommand : public DObject
+class FConsoleCommand
 {
-	DECLARE_CLASS (DConsoleCommand, DObject)
 public:
-	DConsoleCommand (const char *name);
-	virtual ~DConsoleCommand ();
+	FConsoleCommand (const char *name);
+	virtual ~FConsoleCommand ();
 	virtual void Run () = 0;
 	virtual bool IsAlias () { return false; }
 	void PrintCommand () { Printf (PRINT_HIGH, "%s\n", m_Name); }
 
-	DConsoleCommand *m_Next, **m_Prev;
+	FConsoleCommand *m_Next, **m_Prev;
 	char *m_Name;
 
 protected:
-	DConsoleCommand ();
-	bool AddToHash (DConsoleCommand **table);
+	FConsoleCommand ();
+	bool AddToHash (FConsoleCommand **table);
 
 	AActor *m_Instigator;
 	int argc;
@@ -46,20 +45,19 @@ protected:
 };
 
 #define BEGIN_COMMAND(n) \
-	static class Cmd_##n : public DConsoleCommand { \
+	static class Cmd_##n : public FConsoleCommand { \
 		public: \
-			Cmd_##n () : DConsoleCommand (#n) {} \
-			Cmd_##n (const char *name) : DConsoleCommand (name) {} \
+			Cmd_##n () : FConsoleCommand (#n) {} \
+			Cmd_##n (const char *name) : FConsoleCommand (name) {} \
 			void Run ()
 
 #define END_COMMAND(n)		} Istaticcmd##n;
 
-class DConsoleAlias : public DConsoleCommand
+class FConsoleAlias : public FConsoleCommand
 {
-	DECLARE_CLASS (DConsoleAlias, DConsoleCommand)
 public:
-	DConsoleAlias (const char *name, const char *command);
-	~DConsoleAlias ();
+	FConsoleAlias (const char *name, const char *command);
+	~FConsoleAlias ();
 	void Run () { AddCommandString (m_Command); }
 	bool IsAlias () { return true; }
 	void PrintAlias () { Printf (PRINT_HIGH, "%s : %s\n", m_Name, m_Command); }

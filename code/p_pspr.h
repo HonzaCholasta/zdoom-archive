@@ -46,6 +46,13 @@
 #define FF_FRAMEMASK	0x7fff
 
 
+#define WEAPONBOTTOM			128*FRACUNIT
+
+// [RH] +0x6000 helps it meet the screen bottom
+//		at higher resolutions while still being in
+//		the right spot at 320x200.
+#define WEAPONTOP				(32*FRACUNIT+0x6000)
+
 
 //
 // Overlay psprites are scaled shapes
@@ -60,18 +67,17 @@ typedef enum
 
 } psprnum_t;
 
-inline FArchive &operator<< (FArchive &arc, psprnum_t i)
+inline FArchive &operator<< (FArchive &arc, psprnum_t &i)
 {
-	return arc << (BYTE)i;
-}
-inline FArchive &operator>> (FArchive &arc, psprnum_t &out)
-{
-	BYTE in; arc >> in; out = (psprnum_t)in; return arc;
+	BYTE val = (BYTE)i;
+	arc << val;
+	i = (psprnum_t)val;
+	return arc;
 }
 
 typedef struct pspdef_s
 {
-	state_t*	state;	// a NULL state means not active
+	FState*		state;	// a NULL state means not active
 	int 		tics;
 	fixed_t 	sx;
 	fixed_t 	sy;
@@ -79,6 +85,30 @@ typedef struct pspdef_s
 } pspdef_t;
 
 FArchive &operator<< (FArchive &, pspdef_t &);
-FArchive &operator>> (FArchive &, pspdef_t &);
+
+class player_s;
+
+void P_SetPsprite (player_s *player, int position, FState *state);
+void P_SetPspriteNF (player_s *player, int position, FState *state);
+void P_CalcSwing (player_s *player);
+void P_ActivateMorphWeapon (player_s *player);
+void P_PostMorphWeapon (player_s *player, weapontype_t weapon);
+void P_BringUpWeapon (player_s *player);
+bool P_CheckAmmo (player_s *player);
+void P_FireWeapon (player_s *player);
+void P_DropWeapon (player_s *player);
+void P_BulletSlope (AActor *mo);
+void P_GunShot (AActor *mo, BOOL accurate);
+
+void A_WeaponReady (player_s *player, pspdef_t *psp);
+void A_ReFire (player_s *player, pspdef_t *psp);
+void A_Lower (player_s *player, pspdef_t *psp);
+void A_Raise (player_s *player, pspdef_t *psp);
+void A_GunFlash (player_s *player, pspdef_t *psp);
+void A_Light0 (player_s *player, pspdef_t *psp);
+void A_Light1 (player_s *player, pspdef_t *psp);
+void A_Light2 (player_s *player, pspdef_t *psp);
+
+extern fixed_t bulletslope;
 
 #endif	// __P_PSPR_H__

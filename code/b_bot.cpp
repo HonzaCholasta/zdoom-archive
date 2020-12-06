@@ -13,7 +13,6 @@
 
 //CVAR (bot_flag_return_time, "1000", CVAR_ARCHIVE)
 CVAR (bot_next_color, "11", 0)
-CVAR (weapondrop, "0", CVAR_SERVERINFO)
 //CVAR (bot_allow_duds, "0", CVAR_ARCHIVE)
 //CVAR (bot_maxcorpses, "0", CVAR_ARCHIVE)
 CVAR (bot_observer, "0", 0)
@@ -51,9 +50,9 @@ BEGIN_COMMAND (addbot)
 	}
 */
 	if (argc > 1)
-		bglobal.Spawn (argv[1]);
+		bglobal.SpawnBot (argv[1]);
 	else
-		bglobal.Spawn (NULL);
+		bglobal.SpawnBot (NULL);
 }
 END_COMMAND (addbot)
 
@@ -115,8 +114,4 @@ END_COMMAND (listbots)
 FArchive &operator<< (FArchive &arc, botskill_t &skill)
 {
 	return arc << skill.aiming << skill.perfection << skill.reaction << skill.isp;
-}
-FArchive &operator>> (FArchive &arc, botskill_t &skill)
-{
-	return arc >> skill.aiming >> skill.perfection >> skill.reaction >> skill.isp;
 }

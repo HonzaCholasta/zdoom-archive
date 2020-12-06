@@ -120,7 +120,7 @@ void STACK_ARGS D_QuitNetGame (void);
 void TryRunTics (void);
 
 // [RH] Functions for making and using special "ticcmds"
-void Net_NewMakeTic (void);
+void Net_NewMakeTic ();
 void Net_WriteByte (byte);
 void Net_WriteWord (short);
 void Net_WriteLong (int);
@@ -128,5 +128,7 @@ void Net_WriteString (const char *);
 
 void Net_DoCommand (int type, byte **stream, int player);
 void Net_SkipCommand (int type, byte **stream);
+
+void Net_ClearBuffers ();
 
 #endif

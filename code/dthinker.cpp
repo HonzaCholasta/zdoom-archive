@@ -8,6 +8,8 @@ extern cycle_t BotSupportCycles;
 
 IMPLEMENT_SERIAL (DThinker, DObject)
 
+static DThinker *NextToThink;
+
 DThinker *DThinker::FirstThinker = NULL;
 DThinker *DThinker::LastThinker = NULL;
 
@@ -22,17 +24,20 @@ void DThinker::Serialize (FArchive &arc)
 void DThinker::SerializeAll (FArchive &arc, bool hubLoad)
 {
 	DThinker *thinker;
+	BYTE id;
 
 	if (arc.IsStoring ())
 	{
 		thinker = FirstThinker;
+		id = 1;
 		while (thinker)
 		{
-			arc << (BYTE)1;
+			arc << id;
 			arc << thinker;
 			thinker = thinker->m_Next;
 		}
-		arc << (BYTE)0;
+		id = 0;
+		arc << id;
 	}
 	else
 	{
@@ -41,13 +46,12 @@ void DThinker::SerializeAll (FArchive &arc, bool hubLoad)
 		else
 			DestroyAllThinkers ();
 
-		BYTE more;
-		arc >> more;
-		while (more)
+		arc << id;
+		while (id)
 		{
 			DThinker *thinker;
-			arc >> thinker;
-			arc >> more;
+			arc << thinker;
+			arc << id;
 		}
 
 		// killough 3/26/98: Spawn icon landings:
@@ -81,6 +85,8 @@ DThinker::~DThinker ()
 
 void DThinker::Destroy ()
 {
+	if (this == NextToThink)
+		NextToThink = m_Next;
 	if (FirstThinker == this)
 		FirstThinker = m_Next;
 	if (LastThinker == this)
@@ -100,10 +106,11 @@ void DThinker::DestroyAllThinkers ()
 	while (currentthinker)
 	{
 		DThinker *next = currentthinker->m_Next;
+		DObject::BeginFrame ();
 		currentthinker->Destroy ();
+		DObject::EndFrame ();
 		currentthinker = next;
 	}
-	DObject::EndFrame ();
 }
 
 // Destroy all thinkers except for player-controlled actors
@@ -135,9 +142,14 @@ void DThinker::RunThinkers ()
 	currentthinker = FirstThinker;
 	while (currentthinker)
 	{
-		DThinker *next = currentthinker->m_Next;
+		NextToThink = currentthinker->m_Next;
+		if (currentthinker->ObjectFlags & OF_JustSpawned)
+		{	// OF_JustSpawned is valid with actors only
+			currentthinker->ObjectFlags &= ~OF_JustSpawned;
+			(static_cast<AActor *> (currentthinker))->PostBeginPlay ();
+		}
 		currentthinker->RunThink ();
-		currentthinker = next;
+		currentthinker = NextToThink;
 	}
 	unclock (ThinkCycles);
 }

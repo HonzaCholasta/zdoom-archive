@@ -2,46 +2,37 @@
 #define __V_TEXT_H__
 
 #include "doomtype.h"
+#include "v_font.h"
 
 struct brokenlines_s {
-	int width;
+	short width;
+	byte nlterminated;
+	byte pad;
 	char *string;
 };
 typedef struct brokenlines_s brokenlines_t;
 
-#define CR_BRICK			0
-#define CR_TAN				1
-#define CR_GRAY				2
-#define CR_GREY				2
-#define CR_GREEN			3
-#define CR_BROWN			4
-#define CR_GOLD				5
-#define CR_RED				6
-#define CR_BLUE				7
-#define CR_ORANGE			8
-#define NUM_TEXT_COLORS		9
+#define TEXTCOLOR_ESCAPE	'\x81'
 
-#define TEXTCOLOR_BRICK		"\x8aA"
-#define TEXTCOLOR_TAN		"\x8aB"
-#define TEXTCOLOR_GRAY		"\x8aC"
-#define TEXTCOLOR_GREY		"\x8aC"
-#define TEXTCOLOR_GREEN		"\x8aD"
-#define TEXTCOLOR_BROWN		"\x8aE"
-#define TEXTCOLOR_GOLD		"\x8aF"
-#define TEXTCOLOR_RED		"\x8aG"
-#define TEXTCOLOR_BLUE		"\x8aH"
-#define TEXTCOLOR_ORANGE	"\x8aI"
+#define TEXTCOLOR_BRICK		"\x81""A"
+#define TEXTCOLOR_TAN		"\x81""B"
+#define TEXTCOLOR_GRAY		"\x81""C"
+#define TEXTCOLOR_GREY		"\x81""C"
+#define TEXTCOLOR_GREEN		"\x81""D"
+#define TEXTCOLOR_BROWN		"\x81""E"
+#define TEXTCOLOR_GOLD		"\x81""F"
+#define TEXTCOLOR_RED		"\x81""G"
+#define TEXTCOLOR_BLUE		"\x81""H"
+#define TEXTCOLOR_ORANGE	"\x81""I"
+#define TEXTCOLOR_WHITE		"\x81""J"
+#define TEXTCOLOR_YELLOW	"\x81""k"
 
-#define TEXTCOLOR_NORMAL	"\x8a-"
-#define TEXTCOLOR_BOLD		"\x8a+"
+#define TEXTCOLOR_NORMAL	"\x81-"
+#define TEXTCOLOR_BOLD		"\x81+"
 
-int V_StringWidth (const byte *str);
-inline int V_StringWidth (const char *str) { return V_StringWidth ((const byte *)str); }
-
-brokenlines_t *V_BreakLines (int maxwidth, const byte *str);
+brokenlines_t *V_BreakLines (int maxwidth, const byte *str, bool keepspace=false);
 void V_FreeBrokenLines (brokenlines_t *lines);
-inline brokenlines_t *V_BreakLines (int maxwidth, const char *str) { return V_BreakLines (maxwidth, (const byte *)str); }
-
-void V_InitConChars (byte transcolor);
+inline brokenlines_t *V_BreakLines (int maxwidth, const char *str, bool keepspace=false)
+ { return V_BreakLines (maxwidth, (const byte *)str, keepspace); }
 
 #endif //__V_TEXT_H__

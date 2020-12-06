@@ -32,8 +32,6 @@
 #define SWAP_DOUBLE(x)		{ QWORD qw = *(QWORD *)&x; SWAP_QWORD(qw); x = *(double *)&qw; }
 #endif
 
-#define MAX(a,b)	((a)<(b)?(a):(b))
-
 // Output buffer size for LZO compression, extra space in case uncompressable
 #define OUT_LEN(a)		((a) + (a) / 64 + 16 + 3)
 
@@ -422,7 +420,7 @@ void FLZOMemFile::Serialize (FArchive &arc)
 		if (sig[0] != LZOSig[0] || sig[1] != LZOSig[1] || sig[2] != LZOSig[2] || sig[3] != LZOSig[3])
 			I_Error ("Expected to extract an LZO-compressed file\n");
 
-		arc >> sizes[0] >> sizes[1];
+		arc << sizes[0] << sizes[1];
 		DWORD len = sizes[0] == 0 ? sizes[1] : sizes[0];
 
 		m_Buffer = (BYTE *)Malloc (len+8);
@@ -538,7 +536,7 @@ DWORD FArchive::ReadCount ()
 	return count;
 }
 
-FArchive &FArchive::operator<< (const char *str)
+void FArchive::WriteString (const char *str)
 {
 	if (str == NULL)
 	{
@@ -550,104 +548,152 @@ FArchive &FArchive::operator<< (const char *str)
 		WriteCount (size);
 		Write (str, size - 1);
 	}
-	return *this;
 }
 
-FArchive &FArchive::operator>> (char *&str)
+FArchive &FArchive::operator<< (char *&str)
 {
-	DWORD size = ReadCount ();
-	if (size == 0)
-		ReplaceString ((char **)&str, NULL);
+	if (m_Storing)
+	{
+		WriteString (str);
+	}
 	else
 	{
-		char *str2 = new char[size];
-		size--;
-		Read (str2, size);
-		str2[size] = 0;
-		ReplaceString ((char **)&str, str2);
+		DWORD size = ReadCount ();
+		if (size == 0)
+		{
+			ReplaceString ((char **)&str, NULL);
+		}
+		else
+		{
+			char *str2 = new char[size];
+			size--;
+			Read (str2, size);
+			str2[size] = 0;
+			ReplaceString ((char **)&str, str2);
+		}
 	}
 	return *this;
 }
 
-FArchive &FArchive::operator<< (BYTE c)
+FArchive &FArchive::operator<< (BYTE &c)
 {
-	Write (&c, sizeof(BYTE));
+	if (m_Storing)
+		Write (&c, sizeof(BYTE));
+	else
+		Read (&c, sizeof(BYTE));
 	return *this;
 }
 
-FArchive &FArchive::operator>> (BYTE &c)
+FArchive &FArchive::operator<< (WORD &w)
 {
-	Read (&c, sizeof(BYTE));
+	if (m_Storing)
+	{
+		WORD temp = w;
+		SWAP_WORD(temp);
+		Write (&temp, sizeof(WORD));
+	}
+	else
+	{
+		Read (&w, sizeof(WORD));
+		SWAP_WORD(w);
+	}
 	return *this;
 }
 
-FArchive &FArchive::operator<< (WORD w)
+FArchive &FArchive::operator<< (DWORD &w)
 {
-	SWAP_WORD(w);
-	Write (&w, sizeof(WORD));
+	if (m_Storing)
+	{
+		DWORD temp = w;
+		SWAP_DWORD(temp);
+		Write (&temp, sizeof(DWORD));
+	}
+	else
+	{
+		Read (&w, sizeof(DWORD));
+		SWAP_DWORD(w);
+	}
 	return *this;
 }
 
-FArchive &FArchive::operator>> (WORD &w)
+FArchive &FArchive::operator<< (QWORD &w)
 {
-	Read (&w, sizeof(WORD));
-	SWAP_WORD(w);
+	if (m_Storing)
+	{
+		QWORD temp = w;
+		SWAP_QWORD(temp);
+		Write (&temp, sizeof(QWORD));
+	}
+	else
+	{
+		Read (&w, sizeof(QWORD));
+		SWAP_QWORD(w);
+	}
 	return *this;
 }
 
-FArchive &FArchive::operator<< (DWORD w)
+FArchive &FArchive::operator<< (float &w)
 {
-	SWAP_DWORD(w);
-	Write (&w, sizeof(DWORD));
+	if (m_Storing)
+	{
+		float temp = w;
+		SWAP_FLOAT(temp);
+		Write (&temp, sizeof(float));
+	}
+	else
+	{
+		Read (&w, sizeof(float));
+		SWAP_FLOAT(w);
+	}
 	return *this;
 }
 
-FArchive &FArchive::operator>> (DWORD &w)
+FArchive &FArchive::operator<< (double &w)
 {
-	Read (&w, sizeof(DWORD));
-	SWAP_DWORD(w);
+	if (m_Storing)
+	{
+		double temp = w;
+		SWAP_DOUBLE(temp);
+		Write (&temp, sizeof(double));
+	}
+	else
+	{
+		Read (&w, sizeof(double));
+		SWAP_DOUBLE(w);
+	}
 	return *this;
 }
 
-FArchive &FArchive::operator<< (QWORD w)
+FArchive &FArchive::SerializePointer (void *ptrbase, BYTE **ptr, DWORD elemSize)
 {
-	SWAP_QWORD(w);
-	Write (&w, sizeof(QWORD));
-	return *this;
-}
+	WORD w;
 
-FArchive &FArchive::operator>> (QWORD &w)
-{
-	Read (&w, sizeof(QWORD));
-	SWAP_QWORD(w);
-	return *this;
-}
-
-FArchive &FArchive::operator<< (float w)
-{
-	SWAP_FLOAT(w);
-	Write (&w, sizeof(float));
-	return *this;
-}
-
-FArchive &FArchive::operator>> (float &w)
-{
-	Read (&w, sizeof(float));
-	SWAP_FLOAT(w);
-	return *this;
-}
-
-FArchive &FArchive::operator<< (double w)
-{
-	SWAP_DOUBLE(w);
-	Write (&w, sizeof(double));
-	return *this;
-}
-
-FArchive &FArchive::operator>> (double &w)
-{
-	Read (&w, sizeof(double));
-	SWAP_DOUBLE(w);
+	if (m_Storing)
+	{
+		if (*ptr)
+		{
+			w = (*ptr - (byte *)ptrbase) / elemSize;
+			SWAP_WORD(w);
+		}
+		else
+		{
+			w = 0xffff;
+		}
+		Write (&w, sizeof(WORD));
+	}
+	else
+	{
+		Read (&w, sizeof(WORD));
+		SWAP_WORD (w);
+		if (w != 0xffff)
+		{
+			*ptr = (byte *)ptrbase + w * elemSize;
+		}
+		else
+		{
+			*ptr = NULL;
+		}
+	}
 	return *this;
 }
 
@@ -658,13 +704,15 @@ FArchive &FArchive::operator>> (double &w)
 #define NEW_PLYR_OBJ		((BYTE)5)
 #define NEW_PLYR_CLS_OBJ	((BYTE)6)
 
-FArchive &FArchive::operator<< (DObject *obj)
+FArchive &FArchive::WriteObject (DObject *obj)
 {
 	player_t *player;
+	BYTE id[2];
 
 	if (obj == NULL)
 	{
-		operator<< (NULL_OBJ);
+		id[0] = NULL_OBJ;
+		Write (id, 1);
 	}
 	else
 	{
@@ -674,7 +722,8 @@ FArchive &FArchive::operator<< (DObject *obj)
 		{
 			//I_Error ("Tried to save an instance of DObject.\n"
 			//		 "This should not happen.\n");
-			operator<< (NULL_OBJ);
+			id[0] = NULL_OBJ;
+			Write (id, 1);
 		}
 		else if (m_TypeMap[type->TypeIndex].toArchive == ~0)
 		{
@@ -686,12 +735,14 @@ FArchive &FArchive::operator<< (DObject *obj)
 				(player = static_cast<AActor *>(obj)->player) &&
 				player->mo == obj)
 			{
-				operator<< (NEW_PLYR_CLS_OBJ);
-				operator<< ((BYTE)(player - players));
+				id[0] = NEW_PLYR_CLS_OBJ;
+				id[1] = (BYTE)(player - players);
+				Write (id, 2);
 			}
 			else
 			{
-				operator<< (NEW_CLS_OBJ);
+				id[0] = NEW_CLS_OBJ;
+				Write (id, 1);
 			}
 			WriteClass (type);
 			MapObject (obj);
@@ -712,12 +763,14 @@ FArchive &FArchive::operator<< (DObject *obj)
 					(player = static_cast<AActor *>(obj)->player) &&
 					player->mo == obj)
 				{
-					operator<< (NEW_PLYR_OBJ);
-					operator<< ((BYTE)(player - players));
+					id[0] = NEW_PLYR_OBJ;
+					id[1] = (BYTE)(player - players);
+					Write (id, 2);
 				}
 				else
 				{
-					operator<< (NEW_OBJ);
+					id[0] = NEW_OBJ;
+					Write (id, 1);
 				}
 				WriteCount (m_TypeMap[type->TypeIndex].toArchive);
 				MapObject (obj);
@@ -725,7 +778,8 @@ FArchive &FArchive::operator<< (DObject *obj)
 			}
 			else
 			{
-				operator<< (OLD_OBJ);
+				id[0] = OLD_OBJ;
+				Write (id, 1);
 				WriteCount (index);
 			}
 		}
@@ -740,7 +794,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 	BYTE playerNum;
 	DWORD index;
 
-	operator>> (objHead);
+	operator<< (objHead);
 
 	switch (objHead)
 	{
@@ -758,7 +812,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 		break;
 
 	case NEW_PLYR_CLS_OBJ:
-		operator>> (playerNum);
+		operator<< (playerNum);
 		if (m_HubTravel)
 		{
 			// If travelling inside a hub, use the existing player actor
@@ -782,7 +836,7 @@ FArchive &FArchive::ReadObject (DObject* &obj, TypeInfo *wanttype)
 		break;
 
 	case NEW_PLYR_OBJ:
-		operator>> (playerNum);
+		operator<< (playerNum);
 		if (m_HubTravel)
 		{
 			type = ReadStoredClass (wanttype);
@@ -821,7 +875,7 @@ DWORD FArchive::WriteClass (const TypeInfo *info)
 	}
 	m_TypeMap[info->TypeIndex].toArchive = m_ClassCount;
 	m_TypeMap[m_ClassCount].toCurrent = info;
-	operator<< (info->Name);
+	WriteString (info->Name);
 	return m_ClassCount++;
 }
 
@@ -839,7 +893,7 @@ const TypeInfo *FArchive::ReadClass ()
 		I_Error ("Too many unique classes have been read.\nOnly %u were registered\n",
 			TypeInfo::m_NumTypes);
 	}
-	operator>> (typeName.val);
+	operator<< (typeName.val);
 	for (i = 0; i < TypeInfo::m_NumTypes; i++)
 	{
 		if (!strcmp (TypeInfo::m_Types[i]->Name, typeName.val))
@@ -921,4 +975,49 @@ DWORD FArchive::FindObjectIndex (const DObject *obj) const
 		index = m_ObjectMap[index].hashNext;
 	}
 	return index;
+}
+
+void FArchive::UserWriteClass (const TypeInfo *type)
+{
+	BYTE id;
+
+	if (type == NULL)
+	{
+		id = 2;
+		Write (&id, 1);
+	}
+	else
+	{
+		if (m_TypeMap[type->TypeIndex].toArchive == ~0)
+		{
+			id = 1;
+			Write (&id, 1);
+			WriteClass (type);
+		}
+		else
+		{
+			id = 0;
+			Write (&id, 1);
+			WriteCount (m_TypeMap[type->TypeIndex].toArchive);
+		}
+	}
+}
+
+void FArchive::UserReadClass (const TypeInfo *&type)
+{
+	BYTE newclass;
+
+	Read (&newclass, 1);
+	switch (newclass)
+	{
+	case 0:
+		type = ReadStoredClass (RUNTIME_CLASS(DObject));
+		break;
+	case 1:
+		type = ReadClass ();
+		break;
+	case 2:
+		type = NULL;
+		break;
+	}
 }

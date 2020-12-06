@@ -62,13 +62,12 @@ public:
 	SDWORD	m_Timer;
 	fixed_t	m_X, m_Y;	// Location of timer sound
 
-	friend FArchive &operator<< (FArchive &arc, EWhere where)
+	friend FArchive &operator<< (FArchive &arc, EWhere &where)
 	{
-		return arc << (BYTE)where;
-	}
-	friend FArchive &operator>> (FArchive &arc, EWhere &out)
-	{
-		BYTE in; arc >> in; out = (EWhere)in; return arc;
+		BYTE val = (BYTE)where;
+		arc << val;
+		where = (EWhere)val;
+		return arc;
 	}
 };
 
@@ -81,7 +80,7 @@ static int  numswitches;
 //
 // [RH] Rewritten to use a BOOM-style SWITCHES lump and remove the
 //		MAXSWITCHES limit.
-void P_InitSwitchList(void)
+void P_InitSwitchList ()
 {
 	byte *alphSwitchList = (byte *)W_CacheLumpName ("SWITCHES", PU_STATIC);
 	byte *list_p;
@@ -122,7 +121,7 @@ void P_InitSwitchList(void)
 
 //
 // Start a button counting down till it turns off.
-// [RH] Rewritten to remove MAXBUTTONS limit and use temporary soundorgs.
+// [RH] Rewritten to remove MAXBUTTONS limit.
 //
 static void P_StartButton (line_t *line, DActiveButton::EWhere w, int texture,
 						   int time, fixed_t x, fixed_t y)
@@ -193,7 +192,8 @@ void P_ChangeSwitchTexture (line_t *line, int useAgain)
 		{
 			// [RH] The original code played the sound at buttonlist->soundorg,
 			//		which wasn't necessarily anywhere near the switch if it was
-			//		facing a big sector.
+			//		facing a big sector (and which wasn't necessarily for the
+			//		button just activated, either).
 			fixed_t x = line->v1->x + (line->dx >> 1);
 			fixed_t y = line->v1->y + (line->dy >> 1);
 			S_Sound (x, y, CHAN_VOICE, sound, 1, ATTN_STATIC);
@@ -231,14 +231,7 @@ DActiveButton::DActiveButton (line_t *line, EWhere where, SWORD texture,
 void DActiveButton::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Line << m_Where << m_Texture << m_Timer << m_X << m_Y;
-	}
-	else
-	{
-		arc >> m_Line >> m_Where >> m_Texture >> m_Timer >> m_X >> m_Y;
-	}
+	arc << m_Line << m_Where << m_Texture << m_Timer << m_X << m_Y;
 }
 
 void DActiveButton::RunThink ()

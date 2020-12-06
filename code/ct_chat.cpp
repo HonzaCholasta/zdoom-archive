@@ -26,12 +26,13 @@
 #include "c_cvars.h"
 #include "v_text.h"
 #include "v_video.h"
+#include "gi.h"
 
 #define QUEUESIZE		128
 #define MESSAGESIZE		128
 #define MESSAGELEN		265
 #define HU_INPUTX		0
-#define HU_INPUTY		(0 + (SHORT(hu_font[0]->height) +1))
+#define HU_INPUTY		(0 + (screen->Font->GetHeight () + 1))
 
 EXTERN_CVAR (con_scaletext)
 
@@ -43,8 +44,6 @@ BOOL CT_Responder (event_t *ev);
 void HU_DrawScores (player_t *plyr);
 
 int chatmodeon;
-
-patch_t *hu_font[HU_FONTSIZE];
 
 // Private data
 
@@ -92,30 +91,9 @@ cvar_t *chat_macros[10] =
 
 void CT_Init (void)
 {
-	int i, j, sub;
-	char *tplate, buffer[12];
-
 	len = 0; // initialize the queue index
 	chatmodeon = 0;
 	ChatQueue[0] = 0;
-
-	// load the heads-up font
-	j = HU_FONTSTART;
-
-	// [RH] Quick hack to handle the FONTA of Heretic and Hexen
-	if (W_CheckNumForName ("FONTA01") >= 0) {
-		tplate = "FONTA%02u";
-		sub = HU_FONTSTART - 1;
-	} else {
-		tplate = "STCFN%.3d";
-		sub = 0;
-	}
-
-	for (i = 0; i < HU_FONTSIZE; i++)
-	{
-		sprintf (buffer, tplate, j++ - sub);
-		hu_font[i] = (patch_t *) W_CacheLumpName(buffer, PU_STATIC);
-	}
 }
 
 //===========================================================================
@@ -204,7 +182,7 @@ void CT_Drawer (void)
 	if (chatmodeon)
 	{
 		static const char *prompt = "Say: ";
-		int i, x, c, scalex, y, promptwidth;
+		int i, x, scalex, y, promptwidth;
 
 		if (con_scaletext.value)
 		{
@@ -219,22 +197,14 @@ void CT_Drawer (void)
 
 		y += (screen->height == realviewheight && viewactive) ? screen->height : ST_Y;
 
-		promptwidth = V_StringWidth (prompt) * scalex;
-		x = SHORT(hu_font['_' - HU_FONTSTART]->width) * scalex * 2 + promptwidth;
+		promptwidth = screen->StringWidth (prompt) * scalex;
+		x = screen->Font->GetCharWidth ('_') * scalex * 2 + promptwidth;
 
 		// figure out if the text is wider than the screen->
 		// if so, only draw the right-most portion of it.
 		for (i = len - 1; i >= 0 && x < screen->width; i--)
 		{
-			c = toupper(ChatQueue[i] & 0x7f) - HU_FONTSTART;
-			if (c < 0 || c >= HU_FONTSIZE)
-			{
-				x += 4 * scalex;
-			}
-			else
-			{
-				x += SHORT(hu_font[c]->width) * scalex;
-			}
+			x += screen->Font->GetCharWidth (ChatQueue[i] & 0x7f) * scalex;
 		}
 
 		if (i >= 0)
@@ -247,16 +217,16 @@ void CT_Drawer (void)
 		}
 
 		// draw the prompt, text, and cursor
-		ChatQueue[len] = '_';
+		ChatQueue[len] = gameinfo.gametype == GAME_Doom ? '_' : '[';
 		ChatQueue[len+1] = '\0';
 		if (con_scaletext.value)
 		{
-			screen->DrawTextClean (CR_RED, 0, y, prompt);
+			screen->DrawTextClean (CR_GREEN, 0, y, prompt);
 			screen->DrawTextClean (CR_GREY, promptwidth, y, ChatQueue + i);
 		}
 		else
 		{
-			screen->DrawText (CR_RED, 0, y, prompt);
+			screen->DrawText (CR_GREEN, 0, y, prompt);
 			screen->DrawText (CR_GREY, promptwidth, y, ChatQueue + i);
 		}
 		ChatQueue[len] = '\0';
@@ -324,9 +294,12 @@ static void ShoveChatStr (const char *str, int who)
 
 BEGIN_COMMAND (messagemode)
 {
-	chatmodeon = 1;
-	C_HideConsole ();
-	CT_ClearChatMessage ();
+	if (!menuactive)
+	{
+		chatmodeon = 1;
+		C_HideConsole ();
+		CT_ClearChatMessage ();
+	}
 }
 END_COMMAND (messagemode)
 
@@ -343,9 +316,12 @@ END_COMMAND (say)
 
 BEGIN_COMMAND (messagemode2)
 {
-	chatmodeon = 2;
-	C_HideConsole ();
-	CT_ClearChatMessage ();
+	if (!menuactive)
+	{
+		chatmodeon = 2;
+		C_HideConsole ();
+		CT_ClearChatMessage ();
+	}
 }
 END_COMMAND (messagemode2)
 
@@ -391,9 +367,9 @@ void HU_DrawScores (player_t *player)
 	{
 		if (playeringame[i])
 		{
-			int width = V_StringWidth (players[i].userinfo.netname);
+			int width = screen->StringWidth (players[i].userinfo.netname);
 			if (teamplay.value)
-				width += V_StringWidth (players[i].userinfo.team) + 24;
+				width += screen->StringWidth (players[i].userinfo.team) + 24;
 			if (width > maxwidth)
 				maxwidth = width;
 		}
@@ -424,9 +400,11 @@ void HU_DrawScores (player_t *player)
 		else
 			sprintf (str, "Level ends in %02d:%02d", minutes, seconds);
 		
-		screen->DrawTextClean (CR_GREY, screen->width/2 - V_StringWidth (str)/2*CleanXfac, y - 12 * CleanYfac, str);
+		screen->DrawTextClean (CR_GREY, screen->width/2 - screen->StringWidth (str)/2*CleanXfac,
+			y - 12 * CleanYfac, str);
 	}
 
+	int height = screen->Font->GetHeight() * CleanYfac;
 	for (i = 0; i < MAXPLAYERS && y < ST_Y - 12 * CleanYfac; i++)
 	{
 		int color = sortedplayers[i]->userinfo.color;
@@ -438,7 +416,7 @@ void HU_DrawScores (player_t *player)
 								   RPART(color), GPART(color), BPART(color),
 								   DefaultPalette->numcolors);
 
-			screen->Clear (x, y, x + 24 * CleanXfac, y + SHORT(hu_font[0]->height) * CleanYfac, color);
+			screen->Clear (x, y, x + 24 * CleanXfac, y + height, color);
 
 			sprintf (str, "%d", sortedplayers[i]->fragcount);
 			screen->DrawTextClean (sortedplayers[i] == player ? CR_GREEN : CR_BRICK,
@@ -461,7 +439,7 @@ void HU_DrawScores (player_t *player)
 
 			screen->DrawTextClean (color, margin + 32 * CleanXfac, y, str);
 
-			y += 10 * CleanYfac;
+			y += height + CleanYfac;
 		}
 	}
 	BorderNeedRefresh = true;

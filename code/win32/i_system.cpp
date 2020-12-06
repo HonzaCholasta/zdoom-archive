@@ -190,10 +190,10 @@ int I_GetTimeEventDriven (void)
 
 int I_WaitForTicEvent (int prevtic)
 {
-	if (prevtic >= tics)
-		do {
-			WaitForSingleObject (NewTicArrived, INFINITE);
-		} while (prevtic >= tics);
+	while (prevtic >= tics)
+	{
+		WaitForSingleObject (NewTicArrived, 1000/TICRATE);
+	}
 
 	return tics;
 }
@@ -377,6 +377,8 @@ void STACK_ARGS I_Quit (void)
 extern FILE *Logfile;
 BOOL gameisdead;
 
+extern "C" {
+
 void STACK_ARGS I_FatalError (const char *error, ...)
 {
 	static BOOL alreadyThrown = false;
@@ -418,6 +420,8 @@ void STACK_ARGS I_Error (const char *error, ...)
 	throw CRecoverableError (errortext);
 }
 
+}	// extern "C"
+
 char DoomStartupTitle[256] = { 0 };
 
 void I_SetTitleString (const char *title)
@@ -425,7 +429,7 @@ void I_SetTitleString (const char *title)
 	int i;
 
 	for (i = 0; title[i]; i++)
-		DoomStartupTitle[i] = title[i] | 0x80;
+		DoomStartupTitle[i] = title[i];
 }
 
 void I_PrintStr (int xp, const char *cp, int count, BOOL scroll)

@@ -10,6 +10,7 @@
 #include "v_palette.h"
 #include "tables.h"
 #include "i_system.h"
+#include "a_sharedglobal.h"
 
 #define FUNC(a) static BOOL a (line_t *ln, AActor *it, int arg0, int arg1, \
 							   int arg2, int arg3, int arg4)
@@ -114,7 +115,7 @@ FUNC(LS_Door_LockedRaise)
 // Door_LockedRaise (tag, speed, delay, lock)
 {
 	return EV_DoDoor (arg2 ? DDoor::doorRaise : DDoor::doorOpen, ln, it,
-					  arg0, SPEED(arg1), TICS(arg2), (keytype_t)arg3);
+					  arg0, SPEED(arg1), TICS(arg2), (keyspecialtype_t)arg3);
 }
 
 FUNC(LS_Door_CloseWaitOpen)
@@ -136,7 +137,7 @@ FUNC(LS_Generic_Door)
 		case 3: type = DDoor::doorClose;			break;
 		default: return false;
 	}
-	return EV_DoDoor (type, ln, it, arg0, SPEED(arg1), OCTICS(arg3), (keytype_t)arg4);
+	return EV_DoDoor (type, ln, it, arg0, SPEED(arg1), OCTICS(arg3), (keyspecialtype_t)arg4);
 }
 
 FUNC(LS_Floor_LowerByValue)
@@ -666,13 +667,13 @@ FUNC(LS_Teleport_NewMap)
 FUNC(LS_Teleport)
 // Teleport (tid)
 {
-	return EV_Teleport (arg0, TeleportSide, it);
+	return EV_Teleport (arg0, ln, TeleportSide, it, true);
 }
 
 FUNC(LS_Teleport_NoFog)
 // Teleport_NoFog (tid)
 {
-	return EV_SilentTeleport (arg0, ln, TeleportSide, it);
+	return EV_Teleport (arg0, ln, TeleportSide, it, false);
 }
 
 FUNC(LS_Teleport_EndGame)
@@ -721,7 +722,7 @@ FUNC(LS_DamageThing)
 	return it ? true : false;
 }
 
-BOOL P_GiveBody (player_t *, int);
+bool P_GiveBody (player_t *, int);
 
 FUNC(LS_HealThing)
 // HealThing (amount)
@@ -735,8 +736,8 @@ FUNC(LS_HealThing)
 		else
 		{
 			it->health += arg0;
-			if (mobjinfo[it->type].spawnhealth > it->health)
-				it->health = mobjinfo[it->type].spawnhealth;
+			if (GetInfo (it)->spawnhealth < it->health)
+				it->health = GetInfo (it)->spawnhealth;
 		}
 	}
 
@@ -746,43 +747,57 @@ FUNC(LS_HealThing)
 FUNC(LS_Thing_Activate)
 // Thing_Activate (tid)
 {
-	AActor *mobj = AActor::FindByTID (NULL, arg0);
+	AActor *actor;
+	FActorIterator iterator (arg0);
+	int count = 0;
 
-	while (mobj)
+	actor = iterator.Next ();
+	while (actor)
 	{
-		AActor *temp = mobj->FindByTID (arg0);
-		P_ActivateMobj (mobj, it);
-		mobj = temp;
+		// Actor might removes itself as part of activation, so get next
+		// one before we activate it.
+		AActor *temp = iterator.Next ();
+		actor->Activate (it);
+		actor = temp;
+		count++;
 	}
 
-	return true;
+	return count != 0;
 }
 
 FUNC(LS_Thing_Deactivate)
 // Thing_Deactivate (tid)
 {
-	AActor *mobj = AActor::FindByTID (NULL, arg0);
+	AActor *actor;
+	FActorIterator iterator (arg0);
+	int count = 0;
 
-	while (mobj)
+	actor = iterator.Next ();
+	while (actor)
 	{
-		AActor *temp = mobj->FindByTID (arg0);
-		P_DeactivateMobj (mobj);
-		mobj = temp;
+		// Actor might removes itself as part of deactivation, so get next
+		// one before we activate it.
+		AActor *temp = iterator.Next ();
+		actor->Deactivate (it);
+		actor = temp;
+		count++;
 	}
 
-	return true;
+	return count != 0;
 }
 
 FUNC(LS_Thing_Remove)
 // Thing_Remove (tid)
 {
-	AActor *mobj = AActor::FindByTID (NULL, arg0);
+	FActorIterator iterator (arg0);
+	AActor *actor;
 
-	while (mobj)
+	actor = iterator.Next ();
+	while (actor)
 	{
-		AActor *temp = mobj->FindByTID (arg0);
-		mobj->Destroy ();
-		mobj = temp;
+		AActor *temp = iterator.Next ();
+		actor->Destroy ();
+		actor = temp;
 	}
 
 	return true;
@@ -791,16 +806,16 @@ FUNC(LS_Thing_Remove)
 FUNC(LS_Thing_Destroy)
 // Thing_Destroy (tid)
 {
-	AActor *mobj = AActor::FindByTID (NULL, arg0);
+	FActorIterator iterator (arg0);
+	AActor *actor;
 
-	while (mobj)
+	actor = iterator.Next ();
+	while (actor)
 	{
-		AActor *temp = mobj->FindByTID (arg0);
-
-		if (mobj->flags & MF_SHOOTABLE)
-			P_DamageMobj (mobj, NULL, it, mobj->health, MOD_UNKNOWN);
-
-		mobj = temp;
+		AActor *temp = iterator.Next ();
+		if (actor->flags & MF_SHOOTABLE)
+			P_DamageMobj (actor, NULL, it, actor->health, MOD_UNKNOWN);
+		actor = temp;
 	}
 
 	return true;
@@ -835,10 +850,12 @@ FUNC(LS_Thing_SpawnNoFog)
 FUNC(LS_Thing_SetGoal)
 // Thing_SetGoal (tid, goal, delay)
 {
-	AActor *self = AActor::FindByTID (NULL, arg0);
-	AActor *goal = AActor::FindGoal (NULL, arg1, MT_PATHNODE);
+	TActorIterator<AActor> selfiterator (arg0);
+	TActorIterator<AWayPoint> goaliterator (arg1);
+	AActor *self;
+	AWayPoint *goal = goaliterator.Next ();
 
-	while (self)
+	while ( (self = selfiterator.Next ()) )
 	{
 		if (self->flags & MF_SHOOTABLE)
 		{
@@ -846,7 +863,6 @@ FUNC(LS_Thing_SetGoal)
 			if (!self->target)
 				self->reactiontime = arg2 * TICRATE;
 		}
-		self = self->FindByTID (arg0);
 	}
 
 	return true;
@@ -877,7 +893,7 @@ FUNC(LS_ACS_ExecuteAlways)
 FUNC(LS_ACS_LockedExecute)
 // ACS_LockedExecute (script, map, s_arg1, s_arg2, lock)
 {
-	if (arg4 && !P_CheckKeys (it->player, (keytype_t)arg4, 1))
+	if (arg4 && !P_CheckKeys (it->player, (keyspecialtype_t)arg4, 1))
 		return false;
 	else
 		return LS_ACS_Execute (ln, it, arg0, arg1, arg2, arg3, 0);
@@ -1410,30 +1426,49 @@ FUNC(LS_Line_AlignFloor)
 FUNC(LS_ChangeCamera)
 // ChangeCamera (tid, who, revert?)
 {
-	AActor *camera = AActor::FindGoal (NULL, arg0, MT_CAMERA);
+	const TypeInfo *camtype = TypeInfo::FindType ("SecurityCamera");
+	if (camtype == NULL)
+		return false;
 
-	if (!it || !it->player || arg1) {
+	FActorIterator iterator (arg0);
+	AActor *camera;
+
+	while ( (camera = iterator.Next ()) )
+		if (camera->IsKindOf (camtype))
+			break;
+
+	if (!it || !it->player || arg1)
+	{
 		int i;
 
-		for (i = 0; i < MAXPLAYERS; i++) {
+		for (i = 0; i < MAXPLAYERS; i++)
+		{
 			if (!playeringame[i])
 				continue;
 
-			if (camera) {
+			if (camera)
+			{
 				players[i].camera = camera;
 				if (arg2)
 					players[i].cheats |= CF_REVERTPLEASE;
-			} else {
+			}
+			else
+			{
 				players[i].camera = players[i].mo;
 				players[i].cheats &= ~CF_REVERTPLEASE;
 			}
 		}
-	} else {
-		if (camera) {
+	}
+	else
+	{
+		if (camera)
+		{
 			it->player->camera = camera;
 			if (arg2)
 				it->player->cheats |= CF_REVERTPLEASE;
-		} else {
+		}
+		else
+		{
 			it->player->camera = it;
 			it->player->cheats &= ~CF_REVERTPLEASE;
 		}

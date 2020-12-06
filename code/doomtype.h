@@ -141,4 +141,7 @@ int STACK_ARGS DPrintf (const char *, ...);
 #define	PRINT_CHAT			3		// chat messages
 #define PRINT_TEAMCHAT		4		// chat messages from a teammate
 
+#define MIN(a,b)	((a)<(b)?(a):(b))
+#define MAX(a,b)	((a)>(b)?(a):(b))
+
 #endif

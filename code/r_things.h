@@ -85,24 +85,19 @@ extern fixed_t			pspriteyscale;
 extern fixed_t			pspritexiscale;
 
 
-void R_DrawMaskedColumn (column_t* column);
+void R_DrawMaskedColumn (column_t* column, int baseclip);
 
 
 void R_CacheSprite (spritedef_t *sprite);
 void R_SortVisSprites (void);
 void R_AddSprites (sector_t *sec, int lightlevel);
-void R_AddPSprites (void);
-void R_DrawSprites (void);
-void R_InitSprites (char** namelist);
-void R_ClearSprites (void);
-void R_DrawMasked (void);
+void R_AddPSprites ();
+void R_DrawSprites ();
+void R_InitSprites ();
+void R_ClearSprites ();
+void R_DrawMasked ();
 
 void R_ClipVisSprite (vissprite_t *vis, int xl, int xh);
 
 
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------

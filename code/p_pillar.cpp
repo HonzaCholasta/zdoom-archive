@@ -16,24 +16,12 @@ DPillar::DPillar ()
 void DPillar::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Type
-			<< m_FloorSpeed
-			<< m_CeilingSpeed
-			<< m_FloorTarget
-			<< m_CeilingTarget
-			<< m_Crush;
-	}
-	else
-	{
-		arc >> m_Type
-			>> m_FloorSpeed
-			>> m_CeilingSpeed
-			>> m_FloorTarget
-			>> m_CeilingTarget
-			>> m_Crush;
-	}
+	arc << m_Type
+		<< m_FloorSpeed
+		<< m_CeilingSpeed
+		<< m_FloorTarget
+		<< m_CeilingTarget
+		<< m_Crush;
 }
 
 void DPillar::RunThink ()

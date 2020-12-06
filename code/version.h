@@ -2,15 +2,15 @@
 #define __VERSION_H__
 
 // Lots of different representations for the version number
-enum { VERSION = 122 };
-#define VERSIONSTR "122"
-#define CONFIGVERSIONSTR "122"
-#define DOTVERSIONSTR "1.22"
-#define GAMEVER (1*256+22)
+enum { VERSION = 123 };
+#define VERSIONSTR "123"
+#define CONFIGVERSIONSTR "123"
+#define DOTVERSIONSTR "1.23 beta 7"
+#define GAMEVER (1*256+23)
 
 // SAVESIG is the save game signature. It should be the minimum version
 // whose savegames this version is compatible with, which could be
 // earlier than this version.
-#define SAVESIG "ZDOOMSAVE119    "	// Needs to be exactly 16 chars long
+#define SAVESIG "ZDOOMSAVE123    "	// Needs to be exactly 16 chars long
 
 #endif //__VERSION_H__

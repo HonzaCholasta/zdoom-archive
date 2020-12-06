@@ -26,11 +26,6 @@
 
 #include <stdio.h>
 
-#include "minilzo.h"
-// [RH] Output buffer size for LZO compression.
-//		Extra space in case uncompressable.
-#define OUT_LEN(a)		((a) + (a) / 64 + 16 + 3)
-
 #include "m_alloc.h"
 
 #include "i_system.h"
@@ -67,6 +62,8 @@ IMPLEMENT_CLASS (DCanvas, DObject)
 
 int DisplayWidth, DisplayHeight, DisplayBits;
 
+FFont *SmallFont, *BigFont, *ConFont;
+
 unsigned int Col2RGB8[65][256];
 byte RGB32k[32][32][32];
 
@@ -74,8 +71,6 @@ byte RGB32k[32][32][32];
 // [RH] The framebuffer is no longer a mere byte array.
 // There's also only one, not four.
 DCanvas *screen;
-
-DBoundingBox dirtybox;
 
 CVAR (vid_defwidth, "320", CVAR_ARCHIVE)
 CVAR (vid_defheight, "200", CVAR_ARCHIVE)
@@ -99,14 +94,13 @@ int		NewWidth, NewHeight, NewBits;
 // 
 void V_MarkRect (int x, int y, int width, int height)
 {
-	dirtybox.AddToBox (x, y);
-	dirtybox.AddToBox (x+width-1, y+height-1);
 }
 
 
 DCanvas::DCanvas (int _width, int _height, int _bits)
 {
 	buffer = NULL;
+	Font = NULL;
 	m_LockCount = 0;
 	m_Private = NULL;
 	I_AllocateScreen (this, _width, _height, _bits);
@@ -410,21 +404,28 @@ char *V_GetColorStringByName (const char *name)
 	data = strchr (rgbNames, '\n');
 	step = 0;
 
-	while ( (data = COM_Parse (data)) ) {
-		if (step < 3) {
+	while ( (data = COM_Parse (data)) )
+	{
+		if (step < 3)
+		{
 			c[step++] = atoi (com_token);
-		} else {
+		}
+		else
+		{
 			step = 0;
-			if (*data >= ' ') {		// In case this name contains a space...
+			if (*data >= ' ')
+			{		// In case this name contains a space...
 				char *newchar = com_token + strlen(com_token);
 
-				while (*data >= ' ') {
+				while (*data >= ' ')
+				{
 					*newchar++ = *data++;
 				}
 				*newchar = 0;
 			}
 			
-			if (!stricmp (com_token, name)) {
+			if (!stricmp (com_token, name))
+			{
 				sprintf (descr, "%04x %04x %04x",
 						 (c[0] << 8) | c[0],
 						 (c[1] << 8) | c[1],
@@ -478,7 +479,7 @@ static void BuildTransTable (DWORD *palette)
 
 		for (x = 0; x < 65; x++)
 			for (y = 0; y < 256; y++)
-				Col2RGB8[x][y] = (((RPART(palette[y])*x)>>4)<<20)  |
+				Col2RGB8[x][y] = (((RPART(palette[y])*x)>>4)<<20) |
 								  ((GPART(palette[y])*x)>>4) |
 								 (((BPART(palette[y])*x)>>4)<<10);
 	}
@@ -561,6 +562,7 @@ BOOL V_DoModeSetup (int width, int height, int bits)
 	R_MultiresInit ();
 
 	M_RefreshModesList ();
+	screen->SetFont (SmallFont);
 
 	return true;
 }
@@ -570,22 +572,27 @@ BOOL V_SetResolution (int width, int height, int bits)
 	int oldwidth, oldheight;
 	int oldbits;
 
-	if (screen) {
+	if (screen)
+	{
 		oldwidth = screen->width;
 		oldheight = screen->height;
 		oldbits = DisplayBits;
-	} else {
-		// Harmless if screen wasn't allocated
+	}
+	else
+	{ // Harmless if screen wasn't allocated
 		oldwidth = width;
 		oldheight = height;
 		oldbits = bits;
 	}
 
 	I_ClosestResolution (&width, &height, bits);
-	if (!I_CheckResolution (width, height, bits)) {				// Try specified resolution
-		if (!I_CheckResolution (oldwidth, oldheight, oldbits)) {// Try previous resolution (if any)
+	if (!I_CheckResolution (width, height, bits))
+	{ // Try specified resolution
+		if (!I_CheckResolution (oldwidth, oldheight, oldbits))
+		{ // Try previous resolution (if any)
 	   		return false;
-		} else {
+		} else
+		{
 			width = oldwidth;
 			height = oldheight;
 			bits = oldbits;
@@ -600,33 +607,42 @@ BEGIN_COMMAND (vid_setmode)
 	int		width = 0, height = screen->height;
 	int		bits = DisplayBits;
 
-	if (argc > 1) {
+	if (argc > 1)
+	{
 		width = atoi (argv[1]);
-		if (argc > 2) {
+		if (argc > 2)
+		{
 			height = atoi (argv[2]);
-			if (argc > 3) {
+			if (argc > 3)
+			{
 				bits = atoi (argv[3]);
 			}
 		}
 	}
 
-	if (width) {
-		if (I_CheckResolution (width, height, bits))
-			goodmode = true;
+	if (width && I_CheckResolution (width, height, bits))
+	{
+		goodmode = true;
 	}
 
-	if (goodmode) {
+	if (goodmode)
+	{
 		// The actual change of resolution will take place
 		// near the beginning of D_Display().
-		if (gamestate != GS_STARTUP) {
+		if (gamestate != GS_STARTUP)
+		{
 			setmodeneeded = true;
 			NewWidth = width;
 			NewHeight = height;
 			NewBits = bits;
 		}
-	} else if (width) {
+	}
+	else if (width)
+	{
 		Printf (PRINT_HIGH, "Unknown resolution %d x %d x %d\n", width, height, bits);
-	} else {
+	}
+	else
+	{
 		Printf (PRINT_HIGH, "Usage: vid_setmode <width> <height> <mode>\n");
 	}
 }
@@ -644,6 +660,23 @@ void V_Init (void)
 	// [RH] Initialize palette subsystem
 	if (!(DefaultPalette = InitPalettes ("PLAYPAL")))
 		I_FatalError ("Could not initialize palette");
+
+	// load the heads-up font
+	int base;
+
+	if ((base = W_CheckNumForName ("FONTA_S")) >= 0)
+	{
+		int size = W_GetNumForName ("FONTA_E") - base;
+		SmallFont = new FFont (base + 1, ' '+1, size - 1);
+		base = W_GetNumForName ("FONTB_S");
+		size = W_GetNumForName ("FONTB_E") - base;
+		BigFont = new FFont (base + 1, ' '+1, size - 1);
+	}
+	else
+	{
+		SmallFont = new FFont ("STCFN%.3d", HU_FONTSTART, HU_FONTSIZE, HU_FONTSTART);
+		BigFont = new FFont ("FONTB%02u", HU_FONTSTART, HU_FONTSIZE, 1);
+	}
 
 	width = height = bits = 0;
 
@@ -685,7 +718,7 @@ void V_Init (void)
 	else
 		Printf (PRINT_HIGH, "Resolution: %d x %d x %d\n", screen->width, screen->height, screen->bits);
 
-	V_InitConChars (0xf7);
+	ConFont = new FConsoleFont (W_GetNumForName ("CONCHARS"));
 	C_InitConsole (screen->width, screen->height, true);
 
 	V_Palette = (unsigned int *)DefaultPalette->colors;

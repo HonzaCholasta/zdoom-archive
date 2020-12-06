@@ -48,8 +48,8 @@ public:
 		sc_floor,
 		sc_ceiling,
 		sc_carry,
-		sc_carry_ceiling	// killough 4/11/98: carry objects hanging on ceilings
-
+		sc_carry_ceiling,	// killough 4/11/98: carry objects hanging on ceilings
+		sc_carry_players	// [RH] Only carry players
 	};
 	
 	DScroller (EScrollType type, fixed_t dx, fixed_t dy, int control, int affectee, int accel);
@@ -74,13 +74,12 @@ private:
 	DScroller ();
 };
 
-inline FArchive &operator<< (FArchive &arc, DScroller::EScrollType type)
+inline FArchive &operator<< (FArchive &arc, DScroller::EScrollType &type)
 {
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, DScroller::EScrollType &out)
-{
-	BYTE in; arc >> in; out = (DScroller::EScrollType)in; return arc;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (DScroller::EScrollType)val;
+	return arc;
 }
 
 // phares 3/20/98: added new model of Pushers for push/pull effects
@@ -130,13 +129,12 @@ protected:
 	friend BOOL PIT_PushThing (AActor *thing);
 };
 
-inline FArchive &operator<< (FArchive &arc, DPusher::EPusher type)
+inline FArchive &operator<< (FArchive &arc, DPusher::EPusher &type)
 {
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, DPusher::EPusher &out)
-{
-	BYTE in; arc >> in; out = (DPusher::EPusher)in; return arc;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (DPusher::EPusher)val;
+	return arc;
 }
 
 // [RH] Types of keys used by locked doors and scripts
@@ -154,9 +152,9 @@ typedef enum
 	AllKeys = 101,
 
 	CardIsSkull = 128
-} keytype_t;
+} keyspecialtype_t;
 
-BOOL P_CheckKeys (player_t *p, keytype_t lock, BOOL remote);
+BOOL P_CheckKeys (player_t *p, keyspecialtype_t lock, BOOL remote);
 
 // Define values for map objects
 #define MO_TELEPORTMAN			14
@@ -181,6 +179,7 @@ BOOL	P_ActivateLine (line_t *ld, AActor *mo, int side, int activationType);
 BOOL	P_TestActivateLine (line_t *ld, AActor *mo, int side, int activationType);
 
 void	P_PlayerInSpecialSector (player_t *player);
+void	P_PlayerOnSpecialFlat (player_t *player, int floorType);
 
 //
 // getSide()
@@ -478,21 +477,19 @@ private:
 	friend void P_ActivateInStasis (int tag);
 };
 
-inline FArchive &operator<< (FArchive &arc, DPlat::EPlatType type)
+inline FArchive &operator<< (FArchive &arc, DPlat::EPlatType &type)
 {
-	return arc << (BYTE)type;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (DPlat::EPlatType)val;
+	return arc;
 }
-inline FArchive &operator>> (FArchive &arc, DPlat::EPlatType &out)
+inline FArchive &operator<< (FArchive &arc, DPlat::EPlatState &state)
 {
-	BYTE in; arc >> in; out = (DPlat::EPlatType)in; return arc;
-}
-inline FArchive &operator<< (FArchive &arc, DPlat::EPlatState state)
-{
-	return arc << (BYTE)state;
-}
-inline FArchive &operator>> (FArchive &arc, DPlat::EPlatState &out)
-{
-	BYTE in; arc >> in; out = (DPlat::EPlatState)in; return arc;
+	BYTE val = (BYTE)state;
+	arc << val;
+	state = (DPlat::EPlatState)val;
+	return arc;
 }
 
 //
@@ -528,13 +525,12 @@ private:
 	DPillar ();
 };
 
-inline FArchive &operator<< (FArchive &arc, DPillar::EPillar type)
+inline FArchive &operator<< (FArchive &arc, DPillar::EPillar &type)
 {
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, DPillar::EPillar &out)
-{
-	BYTE in; arc >> in; out = (DPillar::EPillar)in; return arc;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (DPillar::EPillar)val;
+	return arc;
 }
 
 BOOL EV_DoPillar (DPillar::EPillar type, int tag, fixed_t speed, fixed_t height,
@@ -577,7 +573,7 @@ protected:
 	void DoorSound (bool raise) const;
 
 	friend BOOL	EV_DoDoor (DDoor::EVlDoor type, line_t *line, AActor *thing,
-						   int tag, int speed, int delay, keytype_t lock);
+						   int tag, int speed, int delay, keyspecialtype_t lock);
 	friend void P_SpawnDoorCloseIn30 (sector_t *sec);
 	friend void P_SpawnDoorRaiseIn5Mins (sector_t *sec);
 private:
@@ -585,13 +581,12 @@ private:
 
 };
 
-inline FArchive &operator<< (FArchive &arc, DDoor::EVlDoor type)
+inline FArchive &operator<< (FArchive &arc, DDoor::EVlDoor &type)
 {
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, DDoor::EVlDoor &out)
-{
-	BYTE in; arc >> in; out = (DDoor::EVlDoor)in; return arc;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (DDoor::EVlDoor)val;
+	return arc;
 }
 
 
@@ -670,13 +665,12 @@ private:
 	friend void P_ActivateInStasisCeiling (int tag);
 };
 
-inline FArchive &operator<< (FArchive &arc, DCeiling::ECeiling type)
+inline FArchive &operator<< (FArchive &arc, DCeiling::ECeiling &type)
 {
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, DCeiling::ECeiling &type)
-{
-	BYTE in; arc >> in; type = (DCeiling::ECeiling)in; return arc;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (DCeiling::ECeiling)val;
+	return arc;
 }
 
 
@@ -767,13 +761,12 @@ private:
 	DFloor ();
 };
 
-inline FArchive &operator<< (FArchive &arc, DFloor::EFloor type)
+inline FArchive &operator<< (FArchive &arc, DFloor::EFloor &type)
 {
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, DFloor::EFloor &type)
-{
-	BYTE in; arc >> in; type = (DFloor::EFloor)in; return arc;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (DFloor::EFloor)val;
+	return arc;
 }
 
 class DElevator : public DMover
@@ -809,13 +802,12 @@ private:
 	DElevator ();
 };
 
-inline FArchive &operator<< (FArchive &arc, DElevator::EElevator type)
+inline FArchive &operator<< (FArchive &arc, DElevator::EElevator &type)
 {
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, DElevator::EElevator &out)
-{
-	BYTE in; arc >> in; out = (DElevator::EElevator)in; return arc;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (DElevator::EElevator)val;
+	return arc;
 }
 
 class DFloorWaggle : public DMovingFloor
@@ -856,8 +848,8 @@ BOOL EV_DoChange (line_t *line, EChange changetype, int tag);
 //
 // P_TELEPT
 //
-BOOL EV_Teleport (int tid, int side, AActor *thing);
-BOOL EV_SilentTeleport (int tid, line_t *line, int side, AActor *thing);
+BOOL P_Teleport (AActor *thing, fixed_t x, fixed_t y, fixed_t z, angle_t angle, bool useFog);
+BOOL EV_Teleport (int tid, line_t *line, int side, AActor *thing, bool fog);
 BOOL EV_SilentLineTeleport (line_t *line, int side, AActor *thing, int id,
 							BOOL reverse);
 

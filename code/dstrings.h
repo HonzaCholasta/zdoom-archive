@@ -26,9 +26,9 @@
 #ifndef __DSTRINGS__
 #define __DSTRINGS__
 
-void D_InitStrings (void);
+void D_InitStrings ();
 
-void ReplaceString (char **ptr, char *str);
+void ReplaceString (char **ptr, const char *str);
 
 
 // QuitDOOM messages
@@ -37,13 +37,15 @@ void ReplaceString (char **ptr, char *str);
 extern char* endmsg[];
 
 // [RH] String handling has changed significantly and is no longer static per build.
-typedef enum {
+typedef enum
+{
 	str_notchanged,
 	str_patched,
 	str_custom
 } strtype_t;
 
-typedef struct gamestring_s {
+typedef struct gamestring_s
+{
 	strtype_t	 type;
 	char		*name;
 	char		*builtin;
@@ -450,13 +452,64 @@ typedef struct gamestring_s {
 #define STARTUP4			(Strings[337].string)
 #define STARTUP5			(Strings[338].string)
 
-#define NUMSTRINGS			339
+#define HE1TEXT				(Strings[339].string)
+#define HE2TEXT				(Strings[340].string)
+#define HE3TEXT				(Strings[341].string)
+#define HE4TEXT				(Strings[342].string)
+#define HE5TEXT				(Strings[343].string)
+
+#define HHUSTR_E1M1			(Strings[344].string)
+#define HHUSTR_E1M2			(Strings[345].string)
+#define HHUSTR_E1M3			(Strings[346].string)
+#define HHUSTR_E1M4			(Strings[347].string)
+#define HHUSTR_E1M5			(Strings[348].string)
+#define HHUSTR_E1M6			(Strings[349].string)
+#define HHUSTR_E1M7			(Strings[350].string)
+#define HHUSTR_E1M8			(Strings[351].string)
+#define HHUSTR_E1M9			(Strings[352].string)
+
+#define HHUSTR_E2M1			(Strings[353].string)
+#define HHUSTR_E2M2			(Strings[354].string)
+#define HHUSTR_E2M3			(Strings[355].string)
+#define HHUSTR_E2M4			(Strings[356].string)
+#define HHUSTR_E2M5			(Strings[357].string)
+#define HHUSTR_E2M6			(Strings[358].string)
+#define HHUSTR_E2M7			(Strings[359].string)
+#define HHUSTR_E2M8			(Strings[360].string)
+#define HHUSTR_E2M9			(Strings[361].string)
+
+#define HHUSTR_E3M1			(Strings[362].string)
+#define HHUSTR_E3M2			(Strings[363].string)
+#define HHUSTR_E3M3			(Strings[364].string)
+#define HHUSTR_E3M4			(Strings[365].string)
+#define HHUSTR_E3M5			(Strings[366].string)
+#define HHUSTR_E3M6			(Strings[367].string)
+#define HHUSTR_E3M7			(Strings[368].string)
+#define HHUSTR_E3M8			(Strings[369].string)
+#define HHUSTR_E3M9			(Strings[370].string)
+
+#define HHUSTR_E4M1			(Strings[371].string)
+#define HHUSTR_E4M2			(Strings[372].string)
+#define HHUSTR_E4M3			(Strings[373].string)
+#define HHUSTR_E4M4			(Strings[374].string)
+#define HHUSTR_E4M5			(Strings[375].string)
+#define HHUSTR_E4M6			(Strings[376].string)
+#define HHUSTR_E4M7			(Strings[377].string)
+#define HHUSTR_E4M8			(Strings[378].string)
+#define HHUSTR_E4M9			(Strings[379].string)
+
+#define HHUSTR_E5M1			(Strings[380].string)
+#define HHUSTR_E5M2			(Strings[381].string)
+#define HHUSTR_E5M3			(Strings[382].string)
+#define HHUSTR_E5M4			(Strings[383].string)
+#define HHUSTR_E5M5			(Strings[384].string)
+#define HHUSTR_E5M6			(Strings[385].string)
+#define HHUSTR_E5M7			(Strings[386].string)
+#define HHUSTR_E5M8			(Strings[387].string)
+#define HHUSTR_E5M9			(Strings[388].string)
+
+#define NUMSTRINGS			389
 
 extern gamestring_t Strings[];
 
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------

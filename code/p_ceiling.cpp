@@ -44,38 +44,19 @@ DCeiling::DCeiling ()
 void DCeiling::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Type
-			<< m_BottomHeight
-			<< m_TopHeight
-			<< m_Speed
-			<< m_Speed1
-			<< m_Speed2
-			<< m_Crush
-			<< m_Silent
-			<< m_Direction
-			<< m_Texture
-			<< m_NewSpecial
-			<< m_Tag
-			<< m_OldDirection;
-	}
-	else
-	{
-		arc >> m_Type
-			>> m_BottomHeight
-			>> m_TopHeight
-			>> m_Speed
-			>> m_Speed1
-			>> m_Speed2
-			>> m_Crush
-			>> m_Silent
-			>> m_Direction
-			>> m_Texture
-			>> m_NewSpecial
-			>> m_Tag
-			>> m_OldDirection;
-	}
+	arc << m_Type
+		<< m_BottomHeight
+		<< m_TopHeight
+		<< m_Speed
+		<< m_Speed1
+		<< m_Speed2
+		<< m_Crush
+		<< m_Silent
+		<< m_Direction
+		<< m_Texture
+		<< m_NewSpecial
+		<< m_Tag
+		<< m_OldDirection;
 }
 
 void DCeiling::PlayCeilingSound ()

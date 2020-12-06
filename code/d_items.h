@@ -25,24 +25,12 @@
 #include "doomdef.h"
 #include "doomtype.h"
 #include "info.h"
+#include "a_pickups.h"
 
 class AActor;
 class player_s;
 
-// Weapon info: sprite frames, ammunition use.
-struct weaponinfo_s
-{
-	ammotype_t	ammo;
-	statenum_t	upstate;
-	statenum_t	downstate;
-	statenum_t 	readystate;
-	statenum_t	atkstate;
-	statenum_t	flashstate;
-	mobjtype_t	droptype;
-};
-typedef struct weaponinfo_s weaponinfo_t;
 
-extern	weaponinfo_t	weaponinfo[NUMWEAPONS];
 
 // Item stuff: (this is d_items.h, right?)
 

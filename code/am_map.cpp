@@ -41,8 +41,6 @@
 
 #include "v_text.h"
 
-extern patch_t *hu_font[];
-
 // State.
 #include "doomstat.h"
 #include "r_state.h"
@@ -76,7 +74,7 @@ CVAR (am_thingcolor,		"fc fc fc",	CVAR_ARCHIVE)
 CVAR (am_gridcolor,			"8b 5a 2b",	CVAR_ARCHIVE)
 CVAR (am_xhaircolor,		"80 80 80",	CVAR_ARCHIVE)
 CVAR (am_notseencolor,		"6c 6c 6c",	CVAR_ARCHIVE)
-CVAR (am_lockedcolor,		"00 00 98",	CVAR_ARCHIVE)
+CVAR (am_lockedcolor,		"00 78 00",	CVAR_ARCHIVE)
 CVAR (am_ovyourcolor,		"fc e8 d8",	CVAR_ARCHIVE)
 CVAR (am_ovwallcolor,		"00 ff 00",	CVAR_ARCHIVE)
 CVAR (am_ovthingcolor,		"e8 88 00",	CVAR_ARCHIVE)
@@ -208,12 +206,12 @@ mline_t thintriangle_guy[] = {
 
 
 
-static int 	cheating = 0;
+int			AutoMapCheat = 0;
 static int 	grid = 0;
 
 static int 	leveljuststarted = 1; 	// kluge until AM_LevelInit() is called
 
-BOOL		automapactive = false;
+bool		automapactive = false;
 
 // location of window on screen
 static int	f_x;
@@ -275,13 +273,8 @@ static int markpointnum = 0; // next point to be assigned
 
 static int followplayer = 1; // specifies whether to follow the player around
 
-// [RH] Not static so that the DeHackEd code can reach it.
-unsigned char cheat_amap_seq[] = { 0xb2, 0x26, 0x26, 0x2e, 0xff };
-static cheatseq_t cheat_amap = { cheat_amap_seq, 0 };
-
 static BOOL stopped = true;
 
-extern BOOL viewactive;
 
 #define NUMALIASES		3
 #define WALLCOLORS		-1
@@ -617,12 +610,17 @@ void AM_initColors (BOOL overlayed)
 void AM_loadPics(void)
 {
 	int i;
+	int lump;
 	char namebuf[9];
   
 	for (i = 0; i < 10; i++)
 	{
-		sprintf(namebuf, "AMMNUM%d", i);
-		marknums[i] = (patch_t *)W_CacheLumpName (namebuf, PU_STATIC);
+		sprintf (namebuf, "AMMNUM%d", i);
+		lump = W_CheckNumForName (namebuf);
+		if (lump != -1)
+			marknums[i] = (patch_t *)W_CacheLumpNum (lump, PU_STATIC);
+		else
+			marknums[i] = NULL;
 	}
 }
 
@@ -653,7 +651,7 @@ void AM_clearMarks(void)
 // should be called at the start of every level
 // right now, i figure it out myself
 //
-void AM_LevelInit(void)
+void AM_LevelInit (void)
 {
 	leveljuststarted = 0;
 
@@ -730,10 +728,7 @@ BEGIN_COMMAND (togglemap)
 	if (!automapactive)
 	{
 		AM_Start ();
-		if (am_overlay.value)
-			viewactive = true;
-		else
-			viewactive = false;
+		viewactive = (am_overlay.value != 0.f);
 	}
 	else
 	{
@@ -834,14 +829,9 @@ BOOL AM_Responder (event_t *ev)
 				Printf (PRINT_HIGH, "%s\n", AMSTR_MARKSCLEARED);
 				break;
 			default:
-				cheatstate=0;
+				cheatstate = 0;
 				rc = false;
 			}
-		}
-		if (!deathmatch.value && cht_CheckCheat(&cheat_amap, (char)ev->data2))
-		{
-			rc = true;	// [RH] Eat last keypress of cheat sequence
-			cheating = (cheating+1) % 3;
 		}
 	}
 	else if (ev->type == ev_keyup)
@@ -1609,9 +1599,9 @@ void AM_drawWalls(void)
 			AM_rotatePoint (&l.b.x, &l.b.y);
 		}
 
-		if (cheating || (lines[i].flags & ML_MAPPED))
+		if (AutoMapCheat || (lines[i].flags & ML_MAPPED))
 		{
-			if ((lines[i].flags & ML_DONTDRAW) && !cheating)
+			if ((lines[i].flags & ML_DONTDRAW) && !AutoMapCheat)
 				continue;
 			if (!lines[i].backsector)
 			{
@@ -1619,9 +1609,10 @@ void AM_drawWalls(void)
 			}
 			else
 			{
-				if (lines[i].special == Teleport ||
+				if ((lines[i].special == Teleport ||
 					lines[i].special == Teleport_NoFog ||
-					lines[i].special == Teleport_Line)
+					lines[i].special == Teleport_Line) &&
+					GET_SPAC(lines[i].flags) != SPAC_MCROSS)
 				{ // intra-level teleporters
 					AM_drawMline(&l, IntraTeleportColor);
 				}
@@ -1634,7 +1625,7 @@ void AM_drawWalls(void)
 				}
 				else if (lines[i].flags & ML_SECRET)
 				{ // secret door
-					if (cheating)
+					if (AutoMapCheat)
 						AM_drawMline(&l, SecretWallColor);
 				    else
 						AM_drawMline(&l, WallColor);
@@ -1654,7 +1645,7 @@ void AM_drawWalls(void)
 				{
 					AM_drawMline(&l, CDWallColor); // ceiling level change
 				}
-				else if (cheating)
+				else if (AutoMapCheat)
 				{
 					AM_drawMline(&l, TSWallColor);
 				}
@@ -1755,7 +1746,7 @@ void AM_drawPlayers(void)
 		else
 			angle = players[consoleplayer].camera->angle;
 
-		if (cheating)
+		if (AutoMapCheat)
 			AM_drawLineCharacter
 			(cheat_player_arrow, NUMCHEATPLYRLINES, 0,
 			 angle, YourColor, players[consoleplayer].camera->x, players[consoleplayer].camera->y);
@@ -1858,7 +1849,7 @@ void AM_drawMarks (void)
 			fx = CXMTOF(pt.x);
 			fy = CYMTOF(pt.y) - 3;
 
-			if (fx >= f_x && fx <= f_w - w && fy >= f_y && fy <= f_h - h)
+			if (fx >= f_x && fx <= f_w - w && fy >= f_y && fy <= f_h - h && marknums[i])
 				FB->DrawPatchCleanNoMove (marknums[i], fx, fy);
 		}
 	}
@@ -1901,64 +1892,11 @@ void AM_Drawer (void)
 
 	AM_drawWalls();
 	AM_drawPlayers();
-	if (cheating==2)
+	if (AutoMapCheat >= 2)
 		AM_drawThings(ThingColor);
 
 	if (!viewactive)
 		AM_drawCrosshair(XHairColor);
 
 	AM_drawMarks();
-
-	if (!viewactive) {
-
-		char line[64+10];
-		int y, i, time = level.time / TICRATE, height;
-
-		height = (hu_font[0]->height + 1) * CleanYfac;
-
-		if (deathmatch.value)
-			y = ST_Y - height + 1;
-		else
-		{
-			y = ST_Y - height * 2 + 1;
-
-			if (am_showmonsters.value)
-			{
-				sprintf (line, TEXTCOLOR_RED "MONSTERS:"
-							   TEXTCOLOR_NORMAL " %d / %d",
-							   level.killed_monsters, level.total_monsters);
-				FB->DrawTextClean (CR_GREY, 0, y, line);
-			}
-
-			if (am_showsecrets.value)
-			{
-				sprintf (line, TEXTCOLOR_RED "SECRETS:"
-							   TEXTCOLOR_NORMAL " %d / %d",
-							   level.found_secrets, level.total_secrets);
-				FB->DrawTextClean (CR_GREY, screen->width - V_StringWidth (line) * CleanXfac, y, line);
-			}
-
-			y += height;
-		}
-
-		line[0] = '\x8a';
-		line[1] = CR_RED + 'A';
-		i = 0;
-		while (i < 8 && level.mapname[i]) {
-			line[2 + i++] = level.mapname[i];
-		}
-		i += 2;
-		line[i++] = ':';
-		line[i++] = ' ';
-		line[i++] = '\x8a';
-		line[i++] = '-';
-		strcpy (&line[i], level.level_name);
-		FB->DrawTextClean (CR_GREY, 0, y, line);
-
-		if (am_showtime.value) {
-			sprintf (line, " %02d:%02d:%02d", time/3600, (time%3600)/60, time%60);	// Time
-			FB->DrawTextClean (CR_RED, screen->width - V_StringWidth (line) * CleanXfac, y, line);
-		}
-
-	}
 }

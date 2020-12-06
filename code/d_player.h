@@ -28,6 +28,8 @@
 // as commands per game tick.
 #include "d_ticcmd.h"
 
+#include "a_artifacts.h"
+
 // The player data structure depends on a number
 // of other structs: items (internal inventory),
 // animation states (closely tied to the sprites
@@ -44,21 +46,55 @@
 //Added by MC:
 #include "b_bot.h"
 
+class player_s;
 
+class APlayerPawn : public AActor
+{
+	DECLARE_STATELESS_ACTOR (APlayerPawn, AActor);
+public:
+	virtual void PlayIdle ()
+	{
+		if (state >= GetInfo (this)->seestate && state < GetInfo (this)->missilestate)
+			SetState (GetInfo (this)->spawnstate);
+	}
+	virtual void PlayRunning ()
+	{
+		if (state == GetInfo (this)->spawnstate)
+			SetState (GetInfo (this)->seestate);
+	}
+	virtual void PlayAttacking ()
+	{
+		SetState (GetInfo (this)->missilestate);
+	}
+	virtual void PlayAttacking2 ()
+	{
+		SetState (GetInfo (this)->missilestate+1);
+	}
+	virtual bool HealOther (player_s *pawn) { return false; }	// returns true if effective
+	virtual void ThrowPoisonBag () {}
+	virtual const TypeInfo *GetDropType ();
+	virtual void GiveDefaultInventory () {}
+	virtual int GetAutoArmorSave () { return 0; }
+	virtual fixed_t GetArmorIncrement (int armortype) { return 10*FRACUNIT; }
+	virtual const char *BaseSoundName () { return NULL; }
+	virtual fixed_t GetJumpZ () { return 8*FRACUNIT; }
 
+	void NoBlockingSet ();
+};
+
+class APlayerChunk : APlayerPawn
+{
+	DECLARE_STATELESS_ACTOR (APlayerChunk, APlayerPawn);
+};
 
 //
 // Player states.
 //
 typedef enum
 {
-	// Playing or camping.
-	PST_LIVE,
-	// Dead on the ground, view follows killer.
-	PST_DEAD,
-	// Ready to restart/respawn???
-	PST_REBORN			
-
+	PST_LIVE,	// Playing or camping.
+	PST_DEAD,	// Dead on the ground, view follows killer.
+	PST_REBORN	// Ready to restart/respawn???
 } playerstate_t;
 
 
@@ -67,22 +103,16 @@ typedef enum
 //
 typedef enum
 {
-	// No clipping, walk through barriers.
-	CF_NOCLIP			= 1,
-	// No damage, no health loss.
-	CF_GODMODE			= 2,
-	// Not really a cheat, just a debug aid.
-	CF_NOMOMENTUM		= 4,
-	// [RH] Monsters don't target
-	CF_NOTARGET			= 8,
-	// [RH] Flying player
-	CF_FLY				= 16,
-	// [RH] Put camera behind player
-	CF_CHASECAM			= 32,
-	// [RH] Don't let the player move
-	CF_FROZEN			= 64,
-	// [RH] Stick camera in player's head if he moves
-	CF_REVERTPLEASE		= 128
+	CF_NOCLIP			= 1,	// No clipping, walk through barriers.
+	CF_GODMODE			= 2,	// No damage, no health loss.
+	CF_NOMOMENTUM		= 4,	// Not really a cheat, just a debug aid.
+	CF_NOTARGET			= 8,	// [RH] Monsters don't target
+	CF_FLY				= 16,	// [RH] Flying player
+	CF_CHASECAM			= 32,	// [RH] Put camera behind player
+	CF_FROZEN			= 64,	// [RH] Don't let the player move
+	CF_REVERTPLEASE		= 128,	// [RH] Stick camera in player's head if (s)he moves
+	CF_NOSKIN			= 256,	// [RH] Don't use skin
+	CF_STEPLEFT			= 512,	// [RH] Play left footstep sound next time
 } cheat_t;
 
 
@@ -95,12 +125,14 @@ public:
 	void Serialize (FArchive &arc);
 	void FixPointers (const DObject *obj);
 
-	AActor		*mo;
+	APlayerPawn	*mo;
 	BYTE		playerstate;
-	struct ticcmd_t	cmd;
+	ticcmd_t	cmd;
 
 	userinfo_t	userinfo;				// [RH] who is this?
 	
+	const TypeInfo *cls;				// class of associated PlayerPawn
+
 	float		fov;					// field of vision
 	fixed_t		viewz;					// focal origin above r.z
 	fixed_t		viewheight;				// base height above floor for viewz
@@ -113,35 +145,50 @@ public:
 	// This avoids anomolies with such things as Boom ice and conveyors.
 	fixed_t		momx, momy;				// killough 10/98
 
+	bool		centering;
+	byte		turnticks;
+	short		oldbuttons;
 	int			health;					// only used between levels, mo->health
 										// is used during levels
-	int			armorpoints;
 	int			armortype;				// armor type is 0-2
+	int			armorpoints[NUMARMOR];
 
-	int			powers[NUMPOWERS];		// invinc and invis are tic counters
-	bool		cards[NUMCARDS];
-	BOOL		backpack;
+	int			inventorytics;
+	WORD		inventory[NUMINVENTORYSLOTS];
+	artitype_t	readyArtifact;
+	int			artifactCount;
+	int			inventorySlotNum;
+	int			powers[NUMPOWERS];
+	bool		keys[NUMKEYS];
+	int			pieces;					// Fourth Weapon pieces
+	bool		backpack;
 	
 	int			frags[MAXPLAYERS];		// kills of other players
 	int			fragcount;				// [RH] Cumulative frags for this player
 
 	weapontype_t	readyweapon;
 	weapontype_t	pendingweapon;		// wp_nochange if not changing
-	int			weaponowned[NUMWEAPONS];// needs to be int for status bar
+	bool		weaponowned[NUMWEAPONS];
 	int			ammo[NUMAMMO];
 	int			maxammo[NUMAMMO];
 
-	int			attackdown, usedown;	// true if button down last tic
 	int			cheats;					// bit flags
 	short		refire;					// refired shots are less accurate
 	short		inconsistant;
 	int			killcount, itemcount, secretcount;		// for intermission
 	int			damagecount, bonuscount;// for screen flashing
+	int			flamecount;				// for flame thrower duration
+	int			poisoncount;			// screen flash for poison damage
+	AActor		*poisoner;				// NULL for non-player actors
 	AActor		*attacker;				// who did damage (NULL for floors)
 	int			extralight;				// so gun flashes light up areas
 	int			fixedcolormap;			// can be set to REDCOLORMAP, etc.
 	int			xviewshift;				// [RH] view shift (for earthquakes)
 	pspdef_t	psprites[NUMPSPRITES];	// view sprites (gun, etc)
+	int			morphTics;				// player is a chicken/pig if > 0
+	int			chickenPeck;			// chicken peck countdown
+	AActor		*rain1;					// active rain maker 1
+	AActor		*rain2;					// active rain maker 2
 	int			jumpTics;				// delay the next jump for a moment
 
 	int			respawn_time;			// [RH] delay respawning until this tic
@@ -190,34 +237,16 @@ public:
 
 	fixed_t		oldx;
 	fixed_t		oldy;
-
-	//Misc
-	char c_target[256];		// Target for chat.
-	botchat_t chat;			// What bot will say one a tic.
 };
 
 typedef player_s player_t;
 
 // Bookkeeping on players - state.
-extern player_s		players[MAXPLAYERS];
+extern player_s players[MAXPLAYERS];
 
-inline FArchive &operator<< (FArchive &arc, player_s *p)
+inline FArchive &operator<< (FArchive &arc, player_s *&p)
 {
-	if (p)
-		return arc << (BYTE)(p - players);
-	else
-		return arc << (BYTE)0xff;
-}
-
-inline FArchive &operator>> (FArchive &arc, player_s *&p)
-{
-	BYTE ofs;
-	arc >> ofs;
-	if (ofs == 0xff)
-		p = NULL;
-	else
-		p = players + ofs;
-	return arc;
+	return arc.SerializePointer (players, (BYTE **)&p, sizeof(*players));
 }
 
 //

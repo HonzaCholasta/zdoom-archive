@@ -147,8 +147,10 @@ BOOL P_SightBlockLinesIterator (int x, int y)
 						return false;	// stop checking
 
 				// store the line for later intersection testing
-					intercept_p->d.line = ld;
-					intercept_p++;
+					intercept_t newintercept;
+					newintercept.isaline = true;
+					newintercept.d.line = ld;
+					intercepts.Push (newintercept);
 				}
 				polyLink->polyobj->validcount = validcount;
 			}
@@ -180,9 +182,10 @@ BOOL P_SightBlockLinesIterator (int x, int y)
 			return false;	// stop checking
 
 	// store the line for later intersection testing
-		intercept_p->d.line = ld;
-		intercept_p++;
-
+		intercept_t newintercept;
+		newintercept.isaline = true;
+		newintercept.d.line = ld;
+		intercepts.Push (newintercept);
 	}
 
 	return true;			// everything was checked
@@ -197,19 +200,21 @@ BOOL P_SightBlockLinesIterator (int x, int y)
 ====================
 */
 
-BOOL P_SightTraverseIntercepts ( void )
+BOOL P_SightTraverseIntercepts ()
 {
 	int count;
 	fixed_t dist;
 	intercept_t *scan, *in;
+	size_t scanpos;
 	divline_t dl;
 
-	count = intercept_p - intercepts;
+	count = intercepts.Size ();
 //
 // calculate intercept distance
 //
-	for (scan = intercepts ; scan<intercept_p ; scan++)
+	for (scanpos = 0; scanpos < intercepts.Size (); scanpos++)
 	{
+		scan = &intercepts[scanpos];
 		P_MakeDivline (scan->d.line, &dl);
 		scan->frac = P_InterceptVector (&trace, &dl);
 	}
@@ -222,14 +227,17 @@ BOOL P_SightTraverseIntercepts ( void )
 	while (count--)
 	{
 		dist = MAXINT;
-		for (scan = intercepts ; scan<intercept_p ; scan++)
+		for (scanpos = 0; scanpos < intercepts.Size (); scanpos++)
+		{
+			scan = &intercepts[scanpos];
 			if (scan->frac < dist)
 			{
 				dist = scan->frac;
 				in = scan;
 			}
+		}
 
-		if ( !PTR_SightTraverse (in) )
+		if (!PTR_SightTraverse (in))
 			return false;					// don't bother going farther
 		in->frac = MAXINT;
 	}
@@ -259,7 +267,7 @@ BOOL P_SightPathTraverse (fixed_t x1, fixed_t y1, fixed_t x2, fixed_t y2)
 	int count;
 
 	validcount++;
-	intercept_p = intercepts;
+	intercepts.Clear ();
 
 	if ( ((x1-bmaporgx)&(MAPBLOCKSIZE-1)) == 0)
 		x1 += FRACUNIT;							// don't side exactly on a line

@@ -70,7 +70,6 @@ void P_Ticker (void)
 	if (!bglobal.freeze)
 	{
 		P_UpdateSpecials ();
-		P_RespawnSpecials ();
 	}
 
 	// [RH] Apply falling damage

@@ -969,26 +969,11 @@ void R_DrawSpanD (void)
 // Assumes a given structure of the PLAYPAL.
 // Could be read from a lump instead.
 //
-extern byte *Ranges;
-
-void R_InitTranslationTables (void)
+void R_InitTranslationTables ()
 {
-	static const char ranges[11][8] = {
-		"CRBRICK",
-		"CRTAN",
-		"CRGRAY",
-		"CRGREEN",
-		"CRBROWN",
-		"CRGOLD",
-		"CRRED",
-		"CRBLUE2",
-		{ 'C','R','O','R','A','N','G','E' },
-		{ 'C','R','Y','E','L','L','O','W' },
-		"CRBLUE"
-	};
 	int i;
 		
-	translationtables = new byte[256*(MAXPLAYERS+3+11)+255];
+	translationtables = (byte *)Z_Malloc (256*(2*MAXPLAYERS+3)+255, PU_STATIC, NULL);
 	translationtables = (byte *)(((ptrdiff_t)translationtables + 255) & ~255);
 	
 	// [RH] Each player now gets their own translation table
@@ -1000,21 +985,28 @@ void R_InitTranslationTables (void)
 	for (i = 0; i < 256; i++)
 		translationtables[i] = i;
 
-	for (i = 1; i < MAXPLAYERS+3; i++)
+	for (i = 1; i < MAXPLAYERS*2+3; i++)
 		memcpy (translationtables + i*256, translationtables, 256);
 
 	// create translation tables for dehacked patches that expect them
-	for (i = 0x70; i < 0x80; i++) {
-		// map green ramp to gray, brown, red
-		translationtables[i+(MAXPLAYERS+0)*256] = 0x60 + (i&0xf);
-		translationtables[i+(MAXPLAYERS+1)*256] = 0x40 + (i&0xf);
-		translationtables[i+(MAXPLAYERS+2)*256] = 0x20 + (i&0xf);
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		for (i = 0x70; i < 0x80; i++)
+		{ // map green ramp to gray, brown, red
+			translationtables[i+(MAXPLAYERS*2+0)*256] = 0x60 + (i&0xf);
+			translationtables[i+(MAXPLAYERS*2+1)*256] = 0x40 + (i&0xf);
+			translationtables[i+(MAXPLAYERS*2+2)*256] = 0x20 + (i&0xf);
+		}
 	}
-
-	Ranges = translationtables + (MAXPLAYERS+3)*256;
-	for (i = 0; i < 11; i++)
-		W_ReadLump (W_GetNumForName (ranges[i]), Ranges + 256 * i);
-
+	else if (gameinfo.gametype == GAME_Heretic)
+	{
+		for (i = 225; i <= 240; i++)
+		{
+			translationtables[i+(MAXPLAYERS*2+0)*256] = 114+(i-225); // yellow
+			translationtables[i+(MAXPLAYERS*2+1)*256] = 145+(i-225); // red
+			translationtables[i+(MAXPLAYERS*2+2)*256] = 190+(i-225); // blue
+		}
+	}
 }
 
 // [RH] Create a player's translation table based on
@@ -1022,51 +1014,91 @@ void R_InitTranslationTables (void)
 void R_BuildPlayerTranslation (int player, int color)
 {
 	palette_t *pal = GetDefaultPalette();
-	byte *table = &translationtables[player * 256];
-	int i;
-	float r = (float)RPART(color) / 255.0f;
-	float g = (float)GPART(color) / 255.0f;
-	float b = (float)BPART(color) / 255.0f;
+	byte *table = &translationtables[player*256*2];
+	playerskin_t *skin = &skins[players[player].userinfo.skin];
+
+	byte i;
+	byte start = skin->range0start;
+	byte end = skin->range0end;
+	float r = (float)RPART(color) / 255.f;
+	float g = (float)GPART(color) / 255.f;
+	float b = (float)BPART(color) / 255.f;
 	float h, s, v;
+	float bases, basev;
 	float sdelta, vdelta;
+	float range;
+
+	range = (float)(end-start+1);
 
 	RGBtoHSV (r, g, b, &h, &s, &v);
 
-	s -= 0.23f;
-	if (s < 0.0f)
-		s = 0.0f;
-	sdelta = 0.014375f;
+	bases = s;
+	basev = v;
 
-	v += 0.1f;
-	if (v > 1.0f)
-		v = 1.0f;
-	vdelta = -0.05882f;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		// Build player sprite translation
+		s -= 0.23f;
+		v += 0.1f;
+		sdelta = 0.23f / range;
+		vdelta = -0.94112f / range;
 
-	for (i = 0x70; i < 0x80; i++) {
-		HSVtoRGB (&r, &g, &b, h, s, v);
-		table[i] = BestColor (pal->basecolors,
-							  (int)(r * 255.0f),
-							  (int)(g * 255.0f),
-							  (int)(b * 255.0f),
-							  pal->numcolors);
-		s += sdelta;
-		if (s > 1.0f) {
-			s = 1.0f;
-			sdelta = 0.0f;
+		for (i = start; i <= end; i++)
+		{
+			float uses, usev;
+			uses = MAX (0.f, s);
+			uses = MIN (1.f, s);
+			usev = MAX (0.f, v);
+			usev = MIN (1.f, v);
+			HSVtoRGB (&r, &g, &b, h, uses, usev);
+			table[i] = BestColor (pal->basecolors,
+								  (int)(r * 255.f),
+								  (int)(g * 255.f),
+								  (int)(b * 255.f),
+								  pal->numcolors);
+			s += sdelta;
+			v += vdelta;
+		}
+	}
+	else if (gameinfo.gametype == GAME_Heretic)
+	{
+		float vdelta = 0.418916f / range;
+
+		// Build player sprite translation
+		for (i = start; i <= end; i++)
+		{
+			v = vdelta * (float)(i - start) + basev - 0.2352937f;
+			v = MIN (1.f, v);
+			v = MAX (0.f, v);
+			HSVtoRGB (&r, &g, &b, h, s, v);
+			table[i] = BestColor (pal->basecolors,
+								  (int)(r * 255.f),
+								  (int)(g * 255.f),
+								  (int)(b * 255.f),
+								  pal->numcolors);
 		}
 
-		v += vdelta;
-		if (v < 0.0f) {
-			v = 0.0f;
-			vdelta = 0.0f;
+		// Build rain/lifegem translation
+		table += 256;
+		bases = MIN (bases*1.3f, 1.f);
+		basev = MIN (basev*1.3f, 1.f);
+		for (i = 145; i <= 168; i++)
+		{
+			s = MIN (bases, 0.8965f - 0.0962f*(float)(i - 161));
+			v = MIN (1.f, (0.2102f + 0.0489f*(float)(i - 144)) * basev);
+			HSVtoRGB (&r, &g, &b, h, s, v);
+			table[i] = BestColor (pal->basecolors,
+								  (int)(r * 255.f),
+								  (int)(g * 255.f),
+								  (int)(b * 255.f),
+								  pal->numcolors);
 		}
 	}
 }
 
-
 //
 // R_InitBuffer 
-// Creats lookup tables that avoid
+// Creates lookup tables that avoid
 //	multiplies and other hassles
 //	for getting the framebuffer address
 //	of a pixel to draw.
@@ -1209,31 +1241,35 @@ BOOL BorderTopRefresh;
 void R_DrawTopBorder (void)
 {
 	int x, y;
-	
+	int offset;
+	int size;
+
 	if (realviewwidth == screen->width)
 		return;
 
 	R_DrawBorder (0, 0, screen->width, 34);
+	offset = gameinfo.border->offset;
+	size = gameinfo.border->size;
 
 	if (viewwindowy < 35)
 	{
-		for (x = viewwindowx; x < viewwindowx + realviewwidth; x += 8)
+		for (x = viewwindowx; x < viewwindowx + realviewwidth; x += size)
 		{
-			screen->DrawPatch ((patch_t *)W_CacheLumpName("brdr_t", PU_CACHE),
-				x, viewwindowy-8);
+			screen->DrawPatch ((patch_t *)W_CacheLumpName(gameinfo.border->t, PU_CACHE),
+				x, viewwindowy - offset);
 		}
-		for (y = viewwindowy; y < 35; y += 8)
+		for (y = viewwindowy; y < 35; y += size)
 		{
-			screen->DrawPatch ((patch_t *)W_CacheLumpName ("brdr_l", PU_CACHE),
-				viewwindowx-8, y);
-			screen->DrawPatch ((patch_t *)W_CacheLumpName("brdr_r", PU_CACHE),
-				viewwindowx+realviewwidth, y);
+			screen->DrawPatch ((patch_t *)W_CacheLumpName (gameinfo.border->l, PU_CACHE),
+				viewwindowx - offset, y);
+			screen->DrawPatch ((patch_t *)W_CacheLumpName(gameinfo.border->r, PU_CACHE),
+				viewwindowx + realviewwidth, y);
 		}
 
-		screen->DrawPatch ((patch_t *)W_CacheLumpName("brdr_tl", PU_CACHE),
-			viewwindowx-8, viewwindowy-8);
-		screen->DrawPatch ((patch_t *)W_CacheLumpName("brdr_tr", PU_CACHE),
-			viewwindowx+realviewwidth, viewwindowy-8);
+		screen->DrawPatch ((patch_t *)W_CacheLumpName(gameinfo.border->tl, PU_CACHE),
+			viewwindowx-offset, viewwindowy - offset);
+		screen->DrawPatch ((patch_t *)W_CacheLumpName(gameinfo.border->tr, PU_CACHE),
+			viewwindowx+realviewwidth, viewwindowy - offset);
 	}
 }
 

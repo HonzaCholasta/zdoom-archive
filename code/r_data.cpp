@@ -104,7 +104,7 @@ typedef struct
 
 int 			firstflat;
 int 			lastflat;
-static int		numflats;
+int				numflats;
 
 int 			firstspritelump;
 int 			lastspritelump;
@@ -835,7 +835,7 @@ void R_PrecacheLevel (void)
 		return;
 
 	{
-		int size = (numflats > numsprites) ? numflats : numsprites;
+		int size = (numflats > (int)sprites.Size ()) ? numflats : sprites.Size ();
 
 		hitlist = new byte[(numtextures > size) ? numtextures : size];
 	}
@@ -885,7 +885,7 @@ void R_PrecacheLevel (void)
 	}
 
 	// Precache sprites.
-	memset (hitlist, 0, numsprites);
+	memset (hitlist, 0, sprites.Size ());
 		
 	{
 		AActor *actor;
@@ -895,10 +895,10 @@ void R_PrecacheLevel (void)
 			hitlist[actor->sprite] = 1;
 	}
 
-	for (i = numsprites - 1; i >= 0; i--)
+	for (i = sprites.Size () - 1; i >= 0; i--)
 	{
 		if (hitlist[i])
-			R_CacheSprite (sprites + i);
+			R_CacheSprite (&sprites[i]);
 	}
 
 	delete[] hitlist;

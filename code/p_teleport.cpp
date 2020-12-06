@@ -25,153 +25,286 @@
 
 #include "doomtype.h"
 #include "doomdef.h"
-
 #include "s_sound.h"
-
 #include "p_local.h"
-
-
-// State.
+#include "p_terrain.h"
 #include "r_state.h"
-
+#include "gi.h"
+#include "a_sharedglobal.h"
+#include "m_random.h"
+#include "i_system.h"
 
 extern void P_CalcHeight (player_t *player);
 
+IMPLEMENT_DEF_SERIAL (ATeleportFog, AActor);
+REGISTER_ACTOR (ATeleportFog, Any);
+
+FState ATeleportFog::States[] =
+{
+#define S_DTFOG 0
+	S_BRIGHT (TFOG, 'A',	6, NULL 						, &States[S_DTFOG+1]),
+	S_BRIGHT (TFOG, 'B',	6, NULL 						, &States[S_DTFOG+2]),
+	S_BRIGHT (TFOG, 'A',	6, NULL 						, &States[S_DTFOG+3]),
+	S_BRIGHT (TFOG, 'B',	6, NULL 						, &States[S_DTFOG+4]),
+	S_BRIGHT (TFOG, 'C',	6, NULL 						, &States[S_DTFOG+5]),
+	S_BRIGHT (TFOG, 'D',	6, NULL 						, &States[S_DTFOG+6]),
+	S_BRIGHT (TFOG, 'E',	6, NULL 						, &States[S_DTFOG+7]),
+	S_BRIGHT (TFOG, 'F',	6, NULL 						, &States[S_DTFOG+8]),
+	S_BRIGHT (TFOG, 'G',	6, NULL 						, &States[S_DTFOG+9]),
+	S_BRIGHT (TFOG, 'H',	6, NULL 						, &States[S_DTFOG+10]),
+	S_BRIGHT (TFOG, 'I',	6, NULL 						, &States[S_DTFOG+11]),
+	S_BRIGHT (TFOG, 'J',	6, NULL 						, NULL),
+
+#define S_HTFOG (S_DTFOG+12)
+	S_BRIGHT (TELE, 'A',    6, NULL                         , &States[S_HTFOG+1]),
+	S_BRIGHT (TELE, 'B',    6, NULL                         , &States[S_HTFOG+2]),
+	S_BRIGHT (TELE, 'C',    6, NULL                         , &States[S_HTFOG+3]),
+	S_BRIGHT (TELE, 'D',    6, NULL                         , &States[S_HTFOG+4]),
+	S_BRIGHT (TELE, 'E',    6, NULL                         , &States[S_HTFOG+5]),
+	S_BRIGHT (TELE, 'F',    6, NULL                         , &States[S_HTFOG+6]),
+	S_BRIGHT (TELE, 'G',    6, NULL                         , &States[S_HTFOG+7]),
+	S_BRIGHT (TELE, 'H',    6, NULL                         , &States[S_HTFOG+8]),
+	S_BRIGHT (TELE, 'G',    6, NULL                         , &States[S_HTFOG+9]),
+	S_BRIGHT (TELE, 'F',    6, NULL                         , &States[S_HTFOG+10]),
+	S_BRIGHT (TELE, 'E',    6, NULL                         , &States[S_HTFOG+11]),
+	S_BRIGHT (TELE, 'D',    6, NULL                         , &States[S_HTFOG+12]),
+	S_BRIGHT (TELE, 'C',    6, NULL                         , NULL),
+};
+
+void ATeleportFog::SetDefaults (FActorInfo *info)
+{
+	INHERIT_DEFS;
+	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		info->spawnstate = &States[S_DTFOG];
+		info->translucency = TRANSLUC50;
+	}
+	else
+	{
+		info->spawnstate = &States[S_HTFOG];
+	}
+}
+
+void ATeleportFog::PostBeginPlay ()
+{
+	Super::PostBeginPlay ();
+	S_Sound (this, CHAN_BODY, "misc/teleport", 1, ATTN_NORM);
+}
+
+IMPLEMENT_DEF_SERIAL (ATeleportDest, AActor);
+REGISTER_ACTOR (ATeleportDest, Any);
+
+void ATeleportDest::SetDefaults (FActorInfo *info)
+{
+	ACTOR_DEFS_STATELESS;
+	info->doomednum = 14;
+	info->flags = MF_NOBLOCKMAP|MF_NOSECTOR;
+}
+
+class ATeleportDest2 : public ATeleportDest
+{
+	DECLARE_STATELESS_ACTOR (ATeleportDest2, ATeleportDest);
+};
+
+IMPLEMENT_DEF_SERIAL (ATeleportDest2, ATeleportDest);
+REGISTER_ACTOR (ATeleportDest2, Any);
+
+void ATeleportDest2::SetDefaults (FActorInfo *info)
+{
+	INHERIT_DEFS_STATELESS;
+	info->doomednum = 9044;
+	info->flags |= MF_NOGRAVITY;
+}
 
 //
 // TELEPORTATION
 //
-// [RH] Changed to look for a destination by ThingID
-BOOL EV_Teleport (int tid, int side, AActor *thing)
+
+BOOL P_Teleport (AActor *thing, fixed_t x, fixed_t y, fixed_t z, angle_t angle,
+				 bool useFog)
 {
-	AActor *m;
-	unsigned	an;
-	fixed_t 	oldx;
-	fixed_t 	oldy;
-	fixed_t 	oldz;
-	player_t	*player;
-
-	// don't teleport missiles
-	// Don't teleport if hit back of line,
-	//	so you can get out of teleporter.
-	if ((thing->flags & MF_MISSILE) || (side == 1))
-		return 0;
-
-	// [RH] Find destination based on it's TID rather than
-	//		the sector containing it. Also allow for destinations
-	//		that remember their vertical position.
-	if (NULL == (m = AActor::FindGoal (NULL, tid, MT_TELEPORTMAN)))
-		if (NULL == (m = AActor::FindGoal (NULL, tid, MT_TELEPORTMAN2)))
-			return false;
-
-	// killough 5/12/98: exclude voodoo dolls:
-	player = thing->player;
-	if (player && player->mo != thing)
-		player = NULL;
+	fixed_t oldx;
+	fixed_t oldy;
+	fixed_t oldz;
+	fixed_t aboveFloor;
+	player_t *player;
+	angle_t an;
+	sector_t *destsect;
+	bool resetpitch = false;
 
 	oldx = thing->x;
 	oldy = thing->y;
 	oldz = thing->z;
-
-	if (!P_TeleportMove (thing, m->x, m->y,
-			m->type == MT_TELEPORTMAN ? m->subsector->sector->floorheight : m->z, false))
+	aboveFloor = thing->z - thing->floorz;
+	destsect = R_PointInSubsector (x, y)->sector;
+	// killough 5/12/98: exclude voodoo dolls:
+	player = thing->player;
+	if (player && player->mo != thing)
+		player = NULL;
+	if (z == ONFLOORZ)
+	{
+		if (player)
+		{
+			if (player->powers[pw_flight] && aboveFloor)
+			{
+				z = destsect->floorheight + aboveFloor;
+				if (z + thing->height > destsect->ceilingheight)
+				{
+					z = destsect->ceilingheight - thing->height;
+				}
+			}
+			else
+			{
+				z = destsect->floorheight;
+				if (useFog)
+				{
+					resetpitch = 0;
+				}
+			}
+		}
+		else if (thing->flags & MF_MISSILE)
+		{
+			z = destsect->floorheight + aboveFloor;
+			if (z + thing->height > destsect->ceilingheight)
+			{
+				z = destsect->ceilingheight - thing->height;
+			}
+		}
+		else
+		{
+			z = destsect->floorheight;
+		}
+	}
+	if (!P_TeleportMove (thing, x, y, z, false))
+	{
 		return false;
-
+	}
 	if (player)
-		player->viewz = thing->z + thing->player->viewheight;
-
-	// spawn teleport fog at source and destination
-	S_Sound (new AActor (oldx, oldy, oldz, MT_TFOG), CHAN_VOICE, "misc/teleport", 1, ATTN_NORM);
-	an = m->angle >> ANGLETOFINESHIFT;
-	// emit sound at new spot
-	S_Sound (new AActor (m->x+20*finecosine[an], m->y+20*finesine[an], thing->z, MT_TFOG),
-			 CHAN_VOICE, "misc/teleport", 1, ATTN_NORM);
-	
-	// don't move for a bit
-	if (player)
-		thing->reactiontime = 18;
-
-	thing->momx = thing->momy = thing->momz = 0;
-	thing->angle = m->angle;
-
-	// killough 10/98: kill all bobbing momentum too
-	if (player)
-		player->momx = player->momy = 0;
-
+	{
+		player->viewz = thing->z + player->viewheight;
+		if (resetpitch)
+		{
+			player->mo->pitch = 0;
+		}
+	}
+	// Spawn teleport fog at source and destination
+	if (useFog)
+	{
+		fixed_t fogDelta = thing->flags & MF_MISSILE ? 0 : TELEFOGHEIGHT;
+		Spawn<ATeleportFog> (oldx, oldy, oldz + fogDelta);
+		an = angle >> ANGLETOFINESHIFT;
+		Spawn<ATeleportFog> (x + 20*finecosine[an],
+			y + 20*finesine[an], thing->z + fogDelta);
+		if (thing->player && !thing->player->powers[pw_speed])
+		{ // Freeze player for about .5 sec
+			thing->reactiontime = 18;
+		}
+		thing->angle = angle;
+	}
+	if (thing->flags2 & MF2_FLOORCLIP)
+	{
+		thing->AdjustFloorClip ();
+	}
+	if (thing->flags & MF_MISSILE)
+	{
+		angle >>= ANGLETOFINESHIFT;
+		thing->momx = FixedMul (GetInfo (thing)->speed, finecosine[angle]);
+		thing->momy = FixedMul (GetInfo (thing)->speed, finesine[angle]);
+	}
+	else if (useFog) // no fog doesn't alter the player's momentum
+	{
+		thing->momx = thing->momy = thing->momz = 0;
+		// killough 10/98: kill all bobbing momentum too
+		if (player)
+			player->momx = player->momy = 0;
+	}
 	return true;
 }
 
-//
-// Silent TELEPORTATION, by Lee Killough
-// Primarily for rooms-over-rooms etc.
-// [RH] Changed to find destination by tid rather than sector
-//
-
-BOOL EV_SilentTeleport (int tid, line_t *line, int side, AActor *thing)
+BOOL EV_Teleport (int tid, line_t *line, int side, AActor *thing, bool fog)
 {
-	AActor    *m;
+	int count;
+	AActor *searcher;
+	fixed_t z;
+	angle_t angle;
+	fixed_t s, c;
+	fixed_t momx, momy;
+	TActorIterator<ATeleportDest> iterator (tid);
 
-	// don't teleport missiles
-	// Don't teleport if hit back of line,
-	// so you can get out of teleporter.
-	// [RH] This could potentially be called without a source linedef
-
-	if (side || thing->flags & MF_MISSILE || !line)
+	if (!thing)
+	{ // Teleport function called with an invalid mobj
 		return false;
-
-	if (NULL == (m = AActor::FindGoal (NULL, tid, MT_TELEPORTMAN)))
-		if (NULL == (m = AActor::FindGoal (NULL, tid, MT_TELEPORTMAN2)))
-			return false;
-
-	// Height of thing above ground, in case of mid-air teleports:
-	fixed_t z = thing->z - thing->floorz;
-
-	// Get the angle between the exit thing and source linedef.
-	// Rotate 90 degrees, so that walking perpendicularly across
-	// teleporter linedef causes thing to exit in the direction
-	// indicated by the exit thing.
-	angle_t angle =
-		R_PointToAngle2(0, 0, line->dx, line->dy) - m->angle + ANG90;
-
-	// Sine, cosine of angle adjustment
-	fixed_t s = finesine[angle>>ANGLETOFINESHIFT];
-	fixed_t c = finecosine[angle>>ANGLETOFINESHIFT];
-
-	// Momentum of thing crossing teleporter linedef
-	fixed_t momx = thing->momx;
-	fixed_t momy = thing->momy;
-
-	// Whether this is a player, and if so, a pointer to its player_t
-	player_t *player = thing->player;
-
-	// Attempt to teleport, aborting if blocked
-	if (!P_TeleportMove (thing, m->x, m->y, z + m->floorz, false))
-		return 0;
-
-	// Rotate thing according to difference in angles
-	thing->angle += angle;
-
-	// Rotate thing's momentum to come out of exit just like it entered
-	thing->momx = FixedMul(momx, c) - FixedMul(momy, s);
-	thing->momy = FixedMul(momy, c) + FixedMul(momx, s);
-
-	// Adjust player's view, in case there has been a height change
-	// Voodoo dolls are excluded by making sure player->mo == thing.
-	if (player && player->mo == thing)
-	{
-		// Save the current deltaviewheight, used in stepping
-		fixed_t deltaviewheight = player->deltaviewheight;
-
-		// Clear deltaviewheight, since we don't want any changes
-		player->deltaviewheight = 0;
-
-		// Set player's view according to the newly set parameters
-		P_CalcHeight(player);
-
-		// Reset the delta to have the same dynamics as before
-		player->deltaviewheight = deltaviewheight;
 	}
-	return true;
+	if (thing->flags2 & MF2_NOTELEPORT)
+	{
+		return false;
+	}
+	if (side != 0)
+	{ // Don't teleport if hit back of line, so you can get out of teleporter.
+		return 0;
+	}
+	count = 0;
+	while ( (searcher = iterator.Next ()) )
+	{
+		count++;
+	}
+	if (count == 0)
+	{
+		return false;
+	}
+	count = 1 + (P_Random() % count);
+	searcher = NULL;
+	while (count > 0)
+	{
+		searcher = iterator.Next ();
+		count--;
+	}
+	if (!searcher)
+		I_Error ("Can't find teleport mapspot\n");
+	// [RH] Lee Killough's changes for silent teleporters from BOOM
+	if (!fog && line)
+	{
+		// Get the angle between the exit thing and source linedef.
+		// Rotate 90 degrees, so that walking perpendicularly across
+		// teleporter linedef causes thing to exit in the direction
+		// indicated by the exit thing.
+		angle =
+			R_PointToAngle2 (0, 0, line->dx, line->dy) - thing->angle + ANG90;
+
+		// Sine, cosine of angle adjustment
+		s = finesine[angle>>ANGLETOFINESHIFT];
+		c = finecosine[angle>>ANGLETOFINESHIFT];
+
+		// Momentum of thing crossing teleporter linedef
+		momx = thing->momx;
+		momy = thing->momy;
+
+		z = searcher->z;
+	}
+	else if (searcher->IsKindOf (RUNTIME_CLASS(ATeleportDest2)))
+	{
+		z = searcher->z;
+	}
+	else
+	{
+		z = ONFLOORZ;
+	}
+	if (P_Teleport (thing, searcher->x, searcher->y, z, searcher->angle, fog))
+	{
+		return true;
+	}
+	// [RH] Lee Killough's changes for silent teleporters from BOOM
+	if (!fog && line)
+	{
+		// Rotate thing according to difference in angles
+		thing->angle += angle;
+
+		// Rotate thing's momentum to come out of exit just like it entered
+		thing->momx = FixedMul(momx, c) - FixedMul(momy, s);
+		thing->momy = FixedMul(momy, c) + FixedMul(momx, s);
+	}
+	return false;
 }
 
 //
@@ -282,6 +415,11 @@ BOOL EV_SilentLineTeleport (line_t *line, int side, AActor *thing, int id,
 			// Rotate thing's momentum to come out of exit just like it entered
 			thing->momx = FixedMul(x, c) - FixedMul(y, s);
 			thing->momy = FixedMul(y, c) + FixedMul(x, s);
+
+			if (thing->flags2 & MF2_FLOORCLIP)
+			{
+				thing->AdjustFloorClip ();
+			}
 
 			// Adjust a player's view, in case there has been a height change
 			if (player)

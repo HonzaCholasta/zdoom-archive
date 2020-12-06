@@ -10,6 +10,7 @@ int CleanXfac, CleanYfac;
 // [RH] Virtual screen sizes as perpetuated by V_DrawPatchClean()
 int CleanWidth, CleanHeight;
 
+fixed_t V_Fade = 0x8000;
 
 // The current set of column drawers (set in V_SetResolution)
 DCanvas::vdrawfunc *DCanvas::m_Drawfuncs;
@@ -32,8 +33,8 @@ DCanvas::vdrawsfunc DCanvas::Psfuncs[6] =
 	DCanvas::DrawLucentPatchSP,
 	DCanvas::DrawTranslatedPatchSP,
 	DCanvas::DrawTlatedLucentPatchSP,
-	(vdrawsfunc)DCanvas::DrawColoredPatchP,
-	(vdrawsfunc)DCanvas::DrawColorLucentPatchP
+	DCanvas::DrawColoredPatchSP,
+	DCanvas::DrawColorLucentPatchSP
 };
 
 // Direct (true-color) versions of the column drawers
@@ -92,7 +93,7 @@ void DCanvas::DrawPatchSP (const byte *source, byte *dest, int count, int pitch,
 }
 
 
-// Translucent patch drawers (always 50%)
+// Translucent patch drawers (amount is in V_Fade)
 void DCanvas::DrawLucentPatchP (const byte *source, byte *dest, int count, int pitch)
 {
 	unsigned int *fg2rgb, *bg2rgb;
@@ -100,7 +101,7 @@ void DCanvas::DrawLucentPatchP (const byte *source, byte *dest, int count, int p
 	{
 		fixed_t fglevel, bglevel;
 
-		fglevel = 0x8000 & ~0x3ff;
+		fglevel = V_Fade & ~0x3ff;
 		bglevel = FRACUNIT-fglevel;
 		fg2rgb = Col2RGB8[fglevel>>10];
 		bg2rgb = Col2RGB8[bglevel>>10];
@@ -127,7 +128,7 @@ void DCanvas::DrawLucentPatchSP (const byte *source, byte *dest, int count, int 
 	{
 		fixed_t fglevel, bglevel;
 
-		fglevel = 0x8000 & ~0x3ff;
+		fglevel = V_Fade & ~0x3ff;
 		bglevel = FRACUNIT-fglevel;
 		fg2rgb = Col2RGB8[fglevel>>10];
 		bg2rgb = Col2RGB8[bglevel>>10];
@@ -180,7 +181,7 @@ void DCanvas::DrawTlatedLucentPatchP (const byte *source, byte *dest, int count,
 	{
 		fixed_t fglevel, bglevel;
 
-		fglevel = 0x8000 & ~0x3ff;
+		fglevel = V_Fade & ~0x3ff;
 		bglevel = FRACUNIT-fglevel;
 		fg2rgb = Col2RGB8[fglevel>>10];
 		bg2rgb = Col2RGB8[bglevel>>10];
@@ -208,7 +209,7 @@ void DCanvas::DrawTlatedLucentPatchSP (const byte *source, byte *dest, int count
 	{
 		fixed_t fglevel, bglevel;
 
-		fglevel = 0x8000 & ~0x3ff;
+		fglevel = V_Fade & ~0x3ff;
 		bglevel = FRACUNIT-fglevel;
 		fg2rgb = Col2RGB8[fglevel>>10];
 		bg2rgb = Col2RGB8[bglevel>>10];
@@ -231,9 +232,18 @@ void DCanvas::DrawTlatedLucentPatchSP (const byte *source, byte *dest, int count
 
 // Colored patch drawer
 //
-// This routine is the same for the stretched version since we don't
-// care about the patch's actual contents, just it's outline.
 void DCanvas::DrawColoredPatchP (const byte *source, byte *dest, int count, int pitch)
+{
+	byte fill = (byte)V_ColorFill;
+
+	do
+	{
+		*dest = fill;
+		dest += pitch; 
+	} while (--count);
+}
+
+void DCanvas::DrawColoredPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc)
 {
 	byte fill = (byte)V_ColorFill;
 
@@ -247,33 +257,49 @@ void DCanvas::DrawColoredPatchP (const byte *source, byte *dest, int count, int 
 
 // Colored, translucent patch drawer
 //
-// This routine is the same for the stretched version since we don't
-// care about the patch's actual contents, just it's outline.
 void DCanvas::DrawColorLucentPatchP (const byte *source, byte *dest, int count, int pitch)
 {
 	unsigned int *bg2rgb;
 	unsigned int fg;
 
 	{
-		unsigned int *fg2rgb;
-		fixed_t fglevel, bglevel;
+		fixed_t fglevel;
 
-		fglevel = 0x8000 & ~0x3ff;
-		bglevel = FRACUNIT-fglevel;
-		fg2rgb = Col2RGB8[fglevel>>10];
-		bg2rgb = Col2RGB8[bglevel>>10];
-		fg = fg2rgb[V_ColorFill];
+		fglevel = V_Fade & ~0x3ff;
+		bg2rgb = Col2RGB8[(FRACUNIT-fglevel)>>10];
+		fg = Col2RGB8[fglevel>>10][V_ColorFill];
 	}
 
 	do
 	{
-		unsigned int bg = bg2rgb[*dest];
-		bg = (bg+bg) | 0x1f07c1f;
+		unsigned int bg;
+		bg = (fg + bg2rgb[*dest]) | 0x1f07c1f;
 		*dest = RGB32k[0][0][bg & (bg>>15)];
 		dest += pitch; 
 	} while (--count);
 }
 
+void DCanvas::DrawColorLucentPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc)
+{
+	unsigned int *bg2rgb;
+	unsigned int fg;
+
+	{
+		fixed_t fglevel;
+
+		fglevel = V_Fade & ~0x3ff;
+		bg2rgb = Col2RGB8[(FRACUNIT-fglevel)>>10];
+		fg = Col2RGB8[fglevel>>10][V_ColorFill];
+	}
+
+	do
+	{
+		unsigned int bg;
+		bg = (fg + bg2rgb[*dest]) | 0x1f07c1f;
+		*dest = RGB32k[0][0][bg & (bg>>15)];
+		dest += pitch; 
+	} while (--count);
+}
 
 
 /**************************/
@@ -454,9 +480,6 @@ void DCanvas::DrawWrapper (EWrapperCode drawer, const patch_t *patch, int x, int
 		colstep = 4;
 	}
 
-	if (this == screen)
-		V_MarkRect (x, y, SHORT(patch->width), SHORT(patch->height));
-
 	col = 0;
 	desttop = buffer + y*pitch + x * colstep;
 
@@ -541,9 +564,6 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 		colstep = 4;
 	}
 
-	if (this == screen)
-		V_MarkRect (x0, y0, destwidth, destheight);
-
 	col = 0;
 	desttop = buffer + y0*pitch + x0 * colstep;
 
@@ -554,15 +574,18 @@ void DCanvas::DrawSWrapper (EWrapperCode drawer, const patch_t *patch, int x0, i
 		column = (column_t *)((byte *)patch + LONG(patch->columnofs[col >> 16]));
 
 		// step through the posts in a column
-		while (column->topdelta != 0xff )
+		while (column->topdelta != 0xff)
 		{
-			drawfunc ((byte *)column + 3,
-					  desttop + (((column->topdelta * ymul)) >> 16) * pitch,
-					  (column->length * ymul) >> 16,
-					  pitch,
-					  yinc);
-			column = (column_t *)(	(byte *)column + column->length
-									+ 4 );
+			int top = column->topdelta * ymul;
+			int bot = top + column->length * ymul;
+			bot = (bot - top + 0x8000) >> 16;
+			if (bot > 0)
+			{
+				top = (top) >> 16;
+				drawfunc ((byte *)column + 3, desttop + top * pitch,
+					bot, pitch, yinc);
+				column = (column_t *)((byte *)column + column->length + 4);
+			}
 		}
 	}
 }
@@ -635,7 +658,6 @@ void DCanvas::CopyRect (int srcx, int srcy, int _width, int _height,
 		I_Error ("Bad DCanvas::CopyRect");
 	}
 #endif
-	V_MarkRect (destx, desty, _width, _height);
 
 	Blit (srcx, srcy, _width, _height, destscrn, destx, desty, _width, _height);
 }
@@ -691,9 +713,6 @@ void DCanvas::DrawPatchFlipped (const patch_t *patch, int x0, int y0) const
 		colstep = 4;
 	}
 
-	if (this == screen)
-		V_MarkRect (x0, y0, destwidth, destheight);
-
 	w = destwidth * xinc;
 	col = w - xinc;
 	desttop = buffer + y0*pitch + x0 * colstep;
@@ -735,22 +754,71 @@ void DCanvas::DrawBlock (int x, int y, int _width, int _height, const byte *src)
 	}
 #endif
 
-	V_MarkRect (x, y, _width, _height);
-
 	x <<= (is8bit) ? 0 : 2;
 	_width <<= (is8bit) ? 0 : 2;
 
 	dest = buffer + y*pitch + x;
 
-	while (_height--)
+	do
 	{
 		memcpy (dest, src, _width);
 		src += _width;
 		dest += pitch;
-	};
+	} while (--_height);
 }
 
+void DCanvas::DrawPageBlock (const byte *src) const
+{
+	if (width == 320 && height == 200)
+	{
+		DrawBlock (0, 0, 320, 200, src);
+		return;
+	}
 
+	byte *dest;
+	fixed_t acc;
+	fixed_t xinc, yinc;
+	int h;
+
+	dest = buffer;
+	xinc = 320 * FRACUNIT / width;
+	yinc = 200 * FRACUNIT / height;
+	acc = 0;
+	h = height;
+
+	const byte *copysrc = NULL;
+
+	do
+	{
+		if (copysrc)
+		{
+			memcpy (dest, copysrc, width);
+			dest += pitch;
+		}
+		else
+		{
+			int w = width;
+			fixed_t xfrac = 0;
+			do
+			{
+				*dest++ = src[xfrac >> FRACBITS];
+				xfrac += xinc;
+			} while (--w);
+			dest += pitch - width;
+		}
+		acc += yinc;
+		if (acc >= FRACUNIT)
+		{
+			src += (acc >> FRACBITS) * 320;
+			acc &= FRACUNIT-1;
+			copysrc = NULL;
+		}
+		else
+		{
+			copysrc = dest - pitch;
+		}
+	} while (--h);
+}
 
 //
 // V_GetBlock
@@ -781,4 +849,562 @@ void DCanvas::GetBlock (int x, int y, int _width, int _height, byte *dest) const
 		src += pitch;
 		dest += _width;
 	}
+}
+
+//
+// 
+void DCanvas::DrawMaskedBlock (int x, int y, int _width, int _height,
+	const byte *src, const byte *colors) const
+{
+	byte *dest;
+	int span;
+
+#ifdef RANGECHECK
+	if ( x < 0 || x + _width > width
+		|| y<0 || y+_height>height)
+	{
+		return;
+	}
+#endif
+
+	dest = buffer + y*pitch + x;
+	span = pitch - _width;
+
+	if (colors != NULL)
+	{
+		do
+		{
+			int i;
+
+			for (i = _width; i > 0; i--, dest++)
+			{
+				byte val = *src++;
+				if (val != 255)
+				{
+					*dest = colors[val];
+				}
+			}
+			dest += span;
+		}
+		while (--_height);
+	}
+	else
+	{
+		do
+		{
+			int i;
+
+			for (i = _width; i > 0; i--, dest++)
+			{
+				byte val = *src++;
+				if (val != 255)
+				{
+					*dest = val;
+				}
+			}
+			dest += span;
+		}
+		while (--_height);
+	}
+}
+
+void DCanvas::ScaleMaskedBlock (int x, int y, int _width, int _height,
+	int dwidth, int dheight, const byte *src, const byte *colors) const
+{
+	byte *dest;
+	int span;
+	fixed_t err;
+	fixed_t xinc, yinc;
+
+	if (dwidth == _width && dheight == _height)
+	{
+		DrawMaskedBlock (x, y, _width, _height, src, colors);
+		return;
+	}
+
+#ifdef RANGECHECK
+	if ( x < 0 || x + dwidth > width
+		|| y<0 || y+dheight>height)
+	{
+		I_Error ("Bad DCanvas::ScaleMaskedBlock");
+	}
+#endif
+
+	dest = buffer + y*pitch + x;
+	span = pitch - dwidth;
+	err = 0;
+	xinc = (_width << FRACBITS) / dwidth;
+	yinc = (_height << FRACBITS) / dheight;
+
+	if (colors != NULL)
+	{
+		do
+		{
+			int i, x;
+
+			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			{
+				byte in = src[x >> FRACBITS];
+				if (in != 255)
+				{
+					*dest = colors[in];
+				}
+			}
+			dest += span;
+			err += yinc;
+			while (err >= FRACUNIT)
+			{
+				src += _width;
+				err -= FRACUNIT;
+			}
+		}
+		while (--dheight);
+	}
+	else
+	{
+		do
+		{
+			int i, x;
+
+			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			{
+				byte in = src[x >> FRACBITS];
+				if (in != 255)
+				{
+					*dest = in;
+				}
+			}
+			dest += span;
+			err += yinc;
+			while (err >= FRACUNIT)
+			{
+				src += _width;
+				err -= FRACUNIT;
+			}
+		}
+		while (--dheight);
+	}
+}
+
+void DCanvas::DrawTranslucentMaskedBlock (int x, int y, int _width, int _height,
+	const byte *src, const byte *colors, fixed_t fade) const
+{
+	byte *dest;
+	int span;
+
+#ifdef RANGECHECK
+	if ( x < 0 || x + _width > width
+		|| y<0 || y+_height>height)
+	{
+		return;
+	}
+#endif
+
+	unsigned int *fg2rgb, *bg2rgb;
+
+	{
+		fixed_t fglevel, bglevel;
+
+		fglevel = fade & ~0x3ff;
+		bglevel = FRACUNIT - fglevel;
+		fg2rgb = Col2RGB8[fglevel>>10];
+		bg2rgb = Col2RGB8[bglevel>>10];
+	}
+
+	dest = buffer + y*pitch + x;
+	span = pitch - _width;
+
+	if (colors != NULL)
+	{
+		do
+		{
+			int i;
+
+			for (i = _width; i > 0; i--, dest++)
+			{
+				byte val = *src++;
+				if (val != 255)
+				{
+					unsigned int fg;
+					fg = (fg2rgb[colors[val]] + bg2rgb[*dest]) | 0x1f07c1f;
+					*dest = RGB32k[0][0][fg & (fg>>15)];
+				}
+			}
+			dest += span;
+		}
+		while (--_height);
+	}
+	else
+	{
+		do
+		{
+			int i;
+
+			for (i = _width; i > 0; i--, dest++)
+			{
+				byte val = *src++;
+				if (val != 255)
+				{
+					unsigned int fg;
+					fg = (fg2rgb[val] + bg2rgb[*dest]) | 0x1f07c1f;
+					*dest = RGB32k[0][0][fg & (fg>>15)];
+				}
+			}
+			dest += span;
+		}
+		while (--_height);
+	}
+}
+
+void DCanvas::ScaleTranslucentMaskedBlock (int x, int y, int _width, int _height,
+	int dwidth, int dheight, const byte *src, const byte *colors, fixed_t fade) const
+{
+	byte *dest;
+	int span;
+	fixed_t err;
+	fixed_t xinc, yinc;
+
+	if (dwidth == _width && dheight == _height)
+	{
+		DrawTranslucentMaskedBlock (x, y, _width, _height, src, colors, fade);
+		return;
+	}
+
+#ifdef RANGECHECK
+	if ( x < 0 || x + dwidth > width
+		|| y<0 || y+dheight>height)
+	{
+		return;
+	}
+#endif
+
+	unsigned int *fg2rgb, *bg2rgb;
+
+	{
+		fixed_t fglevel, bglevel;
+
+		fglevel = fade & ~0x3ff;
+		bglevel = FRACUNIT - fglevel;
+		fg2rgb = Col2RGB8[fglevel>>10];
+		bg2rgb = Col2RGB8[bglevel>>10];
+	}
+
+	dest = buffer + y*pitch + x;
+	span = pitch - dwidth;
+	err = 0;
+	xinc = (_width << FRACBITS) / dwidth;
+	yinc = (_height << FRACBITS) / dheight;
+
+	if (colors != NULL)
+	{
+		do
+		{
+			int i, x;
+
+			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			{
+				byte in = src[x >> FRACBITS];
+				if (in != 255)
+				{
+					unsigned int fg;
+					fg = (fg2rgb[colors[in]] + bg2rgb[*dest]) | 0x1f07c1f;
+					*dest = RGB32k[0][0][fg & (fg>>15)];
+				}
+			}
+			dest += span;
+			err += yinc;
+			while (err >= FRACUNIT)
+			{
+				src += _width;
+				err -= FRACUNIT;
+			}
+		}
+		while (--dheight);
+	}
+	else
+	{
+		do
+		{
+			int i, x;
+
+			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			{
+				byte in = src[x >> FRACBITS];
+				if (in != 255)
+				{
+					unsigned int fg;
+					fg = (fg2rgb[in] + bg2rgb[*dest]) | 0x1f07c1f;
+					*dest = RGB32k[0][0][fg & (fg>>15)];
+				}
+			}
+			dest += span;
+			err += yinc;
+			while (err >= FRACUNIT)
+			{
+				src += _width;
+				err -= FRACUNIT;
+			}
+		}
+		while (--dheight);
+	}
+}
+
+void DCanvas::DrawShadowedMaskedBlock (int x, int y, int _width, int _height,
+	const byte *src, const byte *colors, fixed_t shade) const
+{
+	byte *dest;
+	int span;
+
+#ifdef RANGECHECK
+	if ( x < 0 || x + _width > width
+		|| y<0 || y+_height>height)
+	{
+		return;
+	}
+#endif
+
+	unsigned int fg, *bg2rgb;
+
+	{
+		fixed_t fglevel, bglevel;
+
+		fglevel = shade & ~0x3ff;
+		bglevel = FRACUNIT - fglevel;
+		fg = Col2RGB8[fglevel>>10][0];
+		bg2rgb = Col2RGB8[bglevel>>10];
+	}
+
+	dest = buffer + y*pitch + x;
+	span = pitch - _width;
+
+	if (colors != NULL)
+	{
+		do
+		{
+			int i;
+
+			for (i = _width; i > 0; i--, dest++)
+			{
+				byte val = *src++;
+				if (val != 255)
+				{
+					unsigned int bg = bg2rgb[*(dest+pitch*2+2)];
+					bg = (fg + bg) | 0x1f07c1f;
+					*(dest+pitch*2+2) = RGB32k[0][0][bg & (bg>>15)];
+					*dest = colors[val];
+				}
+			}
+			dest += span;
+		}
+		while (--_height);
+	}
+	else
+	{
+		do
+		{
+			int i;
+
+			for (i = _width; i > 0; i--, dest++)
+			{
+				byte val = *src++;
+				if (val != 255)
+				{
+					unsigned int bg = bg2rgb[*(dest+pitch*2+2)];
+					bg = (fg + bg) | 0x1f07c1f;
+					*(dest+pitch*2+2) = RGB32k[0][0][bg & (bg>>15)];
+					*dest = val;
+				}
+			}
+			dest += span;
+		}
+		while (--_height);
+	}
+}
+
+void DCanvas::ScaleShadowedMaskedBlock (int x, int y, int _width, int _height,
+	int dwidth, int dheight, const byte *src, const byte *colors, fixed_t shade) const
+{
+	byte *dest;
+	int span;
+	fixed_t err;
+	fixed_t xinc, yinc;
+
+	if (dwidth == _width && dheight == _height)
+	{
+		DrawShadowedMaskedBlock (x, y, _width, _height, src, colors, shade);
+		return;
+	}
+
+#ifdef RANGECHECK
+	if ( x < 0 || x + dwidth > width
+		|| y<0 || y+dheight>height)
+	{
+		return;
+	}
+#endif
+
+	unsigned int fg, *bg2rgb;
+
+	{
+		fixed_t fglevel, bglevel;
+
+		fglevel = shade & ~0x3ff;
+		bglevel = FRACUNIT - fglevel;
+		fg = Col2RGB8[fglevel>>10][0];
+		bg2rgb = Col2RGB8[bglevel>>10];
+	}
+
+	dest = buffer + y*pitch + x;
+	span = pitch - dwidth;
+	err = 0;
+	xinc = (_width << FRACBITS) / dwidth;
+	yinc = (_height << FRACBITS) / dheight;
+
+	if (colors != NULL)
+	{
+		do
+		{
+			int i, x;
+
+			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			{
+				byte in = src[x >> FRACBITS];
+				if (in != 255)
+				{
+					unsigned int bg;
+					bg = (fg + bg2rgb[*(dest+pitch*2+2)]) | 0x1f07c1f;
+					*(dest+pitch*2+2) = RGB32k[0][0][bg & (bg>>15)];
+					*dest = colors[in];
+				}
+			}
+			dest += span;
+			err += yinc;
+			while (err >= FRACUNIT)
+			{
+				src += _width;
+				err -= FRACUNIT;
+			}
+		}
+		while (--dheight);
+	}
+	else
+	{
+		do
+		{
+			int i, x;
+
+			for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+			{
+				byte in = src[x >> FRACBITS];
+				if (in != 255)
+				{
+					unsigned int bg;
+					bg = (fg + bg2rgb[*(dest+pitch*2+2)]) | 0x1f07c1f;
+					*(dest+pitch*2+2) = RGB32k[0][0][bg & (bg>>15)];
+					*dest = in;
+				}
+			}
+			dest += span;
+			err += yinc;
+			while (err >= FRACUNIT)
+			{
+				src += _width;
+				err -= FRACUNIT;
+			}
+		}
+		while (--dheight);
+	}
+}
+
+void DCanvas::DrawAlphaMaskedBlock (int x, int y, int _width, int _height,
+	const byte *src, int color) const
+{
+#ifdef RANGECHECK
+	if ( x < 0 || x + _width > width
+		|| y<0 || y+_height>height)
+	{
+		return;
+	}
+#endif
+
+	unsigned int *fgstart = &Col2RGB8[0][color];
+	byte *dest = buffer + y*pitch + x;
+	int span = pitch - _width;
+
+	do
+	{
+		int i;
+
+		for (i = _width; i > 0; i--, dest++)
+		{
+			unsigned int val = *src++;
+			if (val != 255)
+			{
+				val = (val + 2) >> 2;
+				unsigned int fg = fgstart[val<<8];
+				val = Col2RGB8[64-val][*dest];
+				val = (val + fg) | 0x1f07c1f;
+				*dest = RGB32k[0][0][val & (val>>15)];
+			}
+		}
+		dest += span;
+	}
+	while (--_height);
+}
+
+void DCanvas::ScaleAlphaMaskedBlock (int x, int y, int _width, int _height,
+	int dwidth, int dheight, const byte *src, int color) const
+{
+
+	if (dwidth == _width && dheight == _height)
+	{
+		DrawAlphaMaskedBlock (x, y, _width, _height, src, color);
+		return;
+	}
+
+#ifdef RANGECHECK
+	if ( x < 0 || x + dwidth > width
+		|| y<0 || y+dheight>height)
+	{
+		return;
+	}
+#endif
+
+	unsigned int *fgstart = &Col2RGB8[0][color];
+	byte *dest = buffer + y*pitch + x;
+	int span = pitch - _width;
+	fixed_t err;
+	fixed_t xinc, yinc;
+
+	dest = buffer + y*pitch + x;
+	span = pitch - dwidth;
+	err = 0;
+	xinc = (_width << FRACBITS) / dwidth;
+	yinc = (_height << FRACBITS) / dheight;
+
+	do
+	{
+		int i, x;
+
+		for (i = dwidth, x = 0; i > 0; i--, dest++, x += xinc)
+		{
+			unsigned int val = src[x >> FRACBITS];
+			if (val != 255)
+			{
+				val = (val + 2) >> 2;
+				unsigned int fg = fgstart[val<<8];
+				val = Col2RGB8[64-val][*dest];
+				val = (fg + val) | 0x1f07c1f;
+				*dest = RGB32k[0][0][val & (val>>15)];
+			}
+		}
+		dest += span;
+		err += yinc;
+		while (err >= FRACUNIT)
+		{
+			src += _width;
+			err -= FRACUNIT;
+		}
+	}
+	while (--dheight);
 }

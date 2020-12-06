@@ -42,7 +42,7 @@
 #include "p_effect.h"
 #include "p_local.h"
 #include "c_dispatch.h"
-
+#include "sbar.h"
 #include "gi.h"
 
 #define NCMD_EXIT				0x80000000
@@ -52,6 +52,8 @@
 #define NCMD_CHECKSUM			0x0fffffff
 
 extern byte		*demo_p;		// [RH] Special "ticcmds" get recorded in demos
+extern char		savedescription[32];
+extern int		savegameslot;
 
 doomcom_t*		doomcom;		
 doomdata_t* 	netbuffer;		// points inside doomcom
@@ -96,6 +98,15 @@ void D_DoAdvanceDemo (void);
  
 BOOL	 		reboundpacket;
 doomdata_t		reboundstore;
+
+int 	frameon;
+int 	frameskip[MAXPLAYERS];
+int 	oldnettics;
+
+static int 	entertic;
+static int	oldentertics;
+
+extern	BOOL	 advancedemo;
 
 // [RH] Special "ticcmds" get stored in here
 static struct TicSpecial
@@ -217,7 +228,33 @@ static struct TicSpecial
 
 } specials;
 
+void Net_ClearBuffers ()
+{
+	int i, j;
 
+	memset (localcmds, 0, sizeof(localcmds));
+	memset (netcmds, 0, sizeof(netcmds));
+	memset (nettics, 0, sizeof(nettics));
+	memset (nodeingame, 0, sizeof(nodeingame));
+	memset (remoteresend, 0, sizeof(remoteresend));
+	memset (resendto, 0, sizeof(resendto));
+	memset (resendcount, 0, sizeof(resendcount));
+	memset (lastrecvtime, 0, sizeof(lastrecvtime));
+	memset (currrecvtime, 0, sizeof(currrecvtime));
+	nodeingame[0] = true;
+
+	for (i = 0; i < MAXPLAYERS; i++)
+	{
+		for (j = 0; j < BACKUPTICS; j++)
+		{
+			NetSpecs[i][j].SetData (NULL, 0);
+		}
+	}
+
+	oldentertics = entertic;
+	gametic = 0;
+	maketic = 0;
+}
 
 //
 // [RH] Rewritten to properly calculate the packet size
@@ -485,16 +522,17 @@ void GetPackets (void)
 		nodeforplayer[netconsole] = netnode;
 		
 		// check for retransmit request
-		if ( resendcount[netnode] <= 0 
-			 && (netbuffer->checksum & NCMD_RETRANSMIT) )
+		if (resendcount[netnode] <= 0 && (netbuffer->checksum & NCMD_RETRANSMIT))
 		{
-			resendto[netnode] = ExpandTics(netbuffer->retransmitfrom);
+			resendto[netnode] = ExpandTics (netbuffer->retransmitfrom);
 			if (debugfile)
 				fprintf (debugfile,"retransmit from %i\n", resendto[netnode]);
 			resendcount[netnode] = RESENDCOUNT;
 		}
 		else
+		{
 			resendcount[netnode]--;
+		}
 		
 		// check for out of order / duplicated packet			
 		if (realend == nettics[netnode])
@@ -503,8 +541,7 @@ void GetPackets (void)
 		if (realend < nettics[netnode])
 		{
 			if (debugfile)
-				fprintf (debugfile,
-						 "out of order packet (%i + %i)\n" ,
+				fprintf (debugfile, "out of order packet (%i + %i)\n" ,
 						 realstart,netbuffer->numtics);
 			continue;
 		}
@@ -514,8 +551,7 @@ void GetPackets (void)
 		{
 			// stop processing until the other system resends the missed tics
 			if (debugfile)
-				fprintf (debugfile,
-						 "missed tics from %i (%i - %i)\n",
+				fprintf (debugfile, "missed tics from %i (%i - %i)\n",
 						 netnode, realstart, nettics[netnode]);
 			remoteresend[netnode] = true;
 			continue;
@@ -620,11 +656,13 @@ void NetUpdate (void)
 	}
 
 	for (i = 0; i < MAXPLAYERS; i++)
+	{
 		if (playeringame[i] && players[i].isbot && players[i].mo)
 		{
 			players[i].mo->angle = players[i].savedyaw;
 			players[i].mo->pitch = players[i].savedpitch;
 		}
+	}
 
 	if (singletics)
 		return; 		// singletic update is syncronous
@@ -667,7 +705,8 @@ void NetUpdate (void)
 					cmddata += specials.used[start];
 				}
 				WriteByte (DEM_USERCMD, &cmddata);
-				PackUserCmd (&localcmds[start].ucmd, &cmddata);
+				PackUserCmd (&localcmds[start].ucmd,
+					start ? &localcmds[(start-1)%BACKUPTICS].ucmd : NULL, &cmddata);
 			}
 			if (count > 1)
 			{
@@ -681,7 +720,8 @@ void NetUpdate (void)
 							int start = (realstart+j)%BACKUPTICS;
 							WriteWord (0, &cmddata);	// fake consistancy word
 							WriteByte (DEM_USERCMD, &cmddata);
-							PackUserCmd (&netcmds[k][start].ucmd, &cmddata);
+							PackUserCmd (&netcmds[k][start].ucmd,
+								start ? &netcmds[k][(start-1)%BACKUPTICS].ucmd : NULL, &cmddata);
 						}
 					}
 				}
@@ -929,18 +969,10 @@ void STACK_ARGS D_QuitNetGame (void)
 //
 // TryRunTics
 //
-int 	frameon;
-int 	frameskip[MAXPLAYERS];
-int 	oldnettics;
-
-extern	BOOL	 advancedemo;
-
 void TryRunTics (void)
 {
 	int 		i;
 	int 		lowtic;
-	int 		entertic;
-	static int	oldentertics;
 	int 		realtics;
 	int 		availabletics;
 	int 		counts;
@@ -1042,7 +1074,6 @@ void TryRunTics (void)
 	}
 
 	// run the count * ticdup tics
-	DObject::BeginFrame ();
 	while (counts--)
 	{
 		for (i = 0; i < ticdup; i++)
@@ -1051,9 +1082,11 @@ void TryRunTics (void)
 				I_Error ("gametic>lowtic");
 			if (advancedemo)
 				D_DoAdvanceDemo ();
+			DObject::BeginFrame ();
 			C_Ticker ();
 			M_Ticker ();
 			G_Ticker ();
+			DObject::EndFrame ();
 			gametic++;
 
 			// modify command for duplicated tics
@@ -1067,14 +1100,11 @@ void TryRunTics (void)
 				for (j = 0; j < MAXPLAYERS; j++)
 				{
 					cmd = &netcmds[j][buf];
-					if (cmd->ucmd.buttons & BT_SPECIAL)
-						cmd->ucmd.buttons = 0;
 				}
 			}
 		}
 		NetUpdate ();	// check for new console commands
 	}
-	DObject::EndFrame ();
 }
 
 void Net_NewMakeTic (void)
@@ -1164,13 +1194,14 @@ void Net_DoCommand (int type, byte **stream, int player)
 			byte who = ReadByte (stream);
 
 			s = ReadString (stream);
-			if ((who == 0) || players[player].userinfo.team[0] == 0) {
-				// Said to everyone
+			if ((who == 0) || players[player].userinfo.team[0] == 0)
+			{ // Said to everyone
 				Printf (PRINT_CHAT, "%s: %s\n", players[player].userinfo.netname, s);
 				S_Sound (CHAN_VOICE, gameinfo.chatSound, 1, ATTN_NONE);
-			} else if (!stricmp (players[player].userinfo.team,
-								 players[consoleplayer].userinfo.team)) {
-				// Said only to members of the player's team
+			}
+			else if (!stricmp (players[player].userinfo.team,
+								 players[consoleplayer].userinfo.team))
+			{ // Said only to members of the player's team
 				Printf (PRINT_TEAMCHAT, "(%s): %s\n", players[player].userinfo.netname, s);
 				S_Sound (CHAN_VOICE, gameinfo.chatSound, 1, ATTN_NONE);
 			}
@@ -1233,6 +1264,140 @@ void Net_DoCommand (int type, byte **stream, int player)
 		Printf (PRINT_HIGH, "Removed all bots\n");
 		break;
 
+	case DEM_INVSEL:
+		{
+			byte which = ReadByte (stream);
+
+			if (which & 0x80)
+			{
+				players[player].inventorytics = 5*TICRATE;
+			}
+			which &= 0x7f;
+			if (players[player].inventory[which] > 0)
+			{
+				players[player].readyArtifact = (artitype_t)which;
+			}
+		}
+		break;
+
+	case DEM_INVUSE:
+		{
+			byte which = ReadByte (stream);
+
+			if (which == arti_none)
+			{ // Use one of each artifact (except puzzle artifacts)
+				int i;
+
+				for (i = 1; i < arti_firstpuzzitem; i++)
+				{
+					P_PlayerUseArtifact (&players[player], (artitype_t)i);
+				}
+			}
+			else
+			{
+				if (players[player].inventorytics)
+				{
+					players[player].inventorytics = 0;
+				}
+				else
+				{
+					P_PlayerUseArtifact (&players[player], (artitype_t)which);
+				}
+			}
+		}
+		break;
+
+	case DEM_WEAPSEL:
+		{
+			byte which = ReadByte (stream);
+			FWeaponInfo **infos = (players[player].powers[pw_weaponlevel2]
+				&& deathmatch.value) ? wpnlev2info : wpnlev1info;
+
+			if (which < NUMWEAPONS
+				&& which != players[player].readyweapon
+				&& players[player].weaponowned[which]
+				&& (infos[which]->ammo >= NUMAMMO ||
+				    players[player].ammo[infos[which]->ammo] >= infos[which]->ammouse))
+			{
+				// The actual changing of the weapon is done when the weapon
+				// psprite can do it (A_WeaponReady), so it doesn't happen in
+				// the middle of an attack.
+				players[player].pendingweapon = (weapontype_t)which;
+			}
+		}
+		break;
+
+	case DEM_WEAPSLOT:
+		{
+			byte slot = ReadByte (stream);
+
+			if (slot < NUM_WEAPON_SLOTS)
+			{
+				weapontype_t newweap = WeaponSlots[slot].PickWeapon (&players[player]);
+				if (newweap < NUMWEAPONS && newweap != players[player].readyweapon)
+				{
+					players[player].pendingweapon = newweap;
+				}
+			}
+		}
+		break;
+
+	case DEM_WEAPNEXT:
+	case DEM_WEAPPREV:
+		{
+			weapontype_t newweap;
+			
+			if (type == DEM_WEAPNEXT)
+				newweap = PickNextWeapon (&players[player]);
+			else
+				newweap = PickPrevWeapon (&players[player]);
+
+			if (newweap != players[player].readyweapon)
+			{
+				players[player].pendingweapon = newweap;
+			}
+		}
+		break;
+
+	case DEM_SUMMON:
+		{
+			const TypeInfo *type;
+
+			s = ReadString (stream);
+			type = TypeInfo::FindType (s);
+			if (type != NULL && type->ActorInfo != NULL)
+			{
+				AActor *source = players[player].mo;
+				Spawn (type, source->x + 64 * finecosine[source->angle>>ANGLETOFINESHIFT],
+							 source->y + 64 * finesine[source->angle>>ANGLETOFINESHIFT],
+							 source->z + 8 * FRACUNIT);
+			}
+		}
+		break;
+
+	case DEM_PAUSE:
+		if (paused)
+		{
+			paused = 0;
+			S_ResumeSound ();
+			I_ResumeMouse ();
+		}
+		else
+		{
+			paused = player + 1;
+			S_PauseSound ();
+			I_PauseMouse ();
+		}
+		BorderNeedRefresh = true;
+		break;
+
+	case DEM_SAVEGAME:
+		if (!savedescription[0])
+			strcpy (savedescription, "NET GAME");
+		savegameslot = ReadByte (stream);
+		gameaction = ga_savegame;
+		break;
+
 	default:
 		I_Error ("Unknown net command: %d", type);
 		break;
@@ -1244,14 +1409,13 @@ void Net_DoCommand (int type, byte **stream, int player)
 
 void Net_SkipCommand (int type, byte **stream)
 {
-	char *s = NULL;
+	int skip;
 
 	switch (type)
 	{
 		case DEM_SAY:
 		case DEM_ADDBOT:
-			ReadByte (stream);
-			s = ReadString (stream);
+			skip = strlen ((char *)(*stream + 1)) + 1;
 			break;
 
 		case DEM_MUSICCHANGE:
@@ -1261,20 +1425,25 @@ void Net_SkipCommand (int type, byte **stream)
 		case DEM_SINFCHANGED:
 		case DEM_GIVECHEAT:
 		case DEM_CHANGEMAP:
-			s = ReadString (stream);
+		case DEM_SUMMON:
+			skip = strlen ((char *)(*stream));
 			break;
 
 		case DEM_GENERICCHEAT:
 		case DEM_DROPPLAYER:
-			ReadByte (stream);
+		case DEM_INVSEL:
+		case DEM_INVUSE:
+		case DEM_SAVEGAME:
+		case DEM_WEAPSEL:
+		case DEM_WEAPSLOT:
+			skip = 1;
 			break;
 
 		default:
-			break;
+			return;;
 	}
 
-	if (s)
-		delete[] s;
+	*stream += skip;
 }
 
 // [RH] List "ping" times

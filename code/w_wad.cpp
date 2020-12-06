@@ -56,6 +56,8 @@
 
 // PRIVATE FUNCTION PROTOTYPES ---------------------------------------------
 
+static void W_SkinHack (int baselump);
+
 // EXTERNAL DATA DECLARATIONS ----------------------------------------------
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
@@ -194,6 +196,7 @@ void W_AddFile (char *filename)
 		lump_p->handle = handle;
 		lump_p->position = LONG(fileinfo->filepos);
 		lump_p->size = LONG(fileinfo->size);
+		lump_p->namespc = ns_global;
 		// [RH] Convert name to uppercase during copy
 		uppercopy (lump_p->name, fileinfo->name);
 	}
@@ -218,28 +221,32 @@ void W_AddFile (char *filename)
 void W_InitMultipleFiles (wadlist_t **filenames)
 {
 	int i;
+	int numfiles;
 
 	// open all the files, load headers, and count lumps
+	numfiles = 0;
 	numlumps = 0;
 	lumpinfo = NULL; // will be realloced as lumps are added
 
 	while (*filenames)
 	{
 		wadlist_t *next = (*filenames)->next;
+		int baselump = numlumps;
 
 		W_AddFile ((*filenames)->name);
 		Z_Free (*filenames);
 		*filenames = next;
+
+		// The first two files are always zdoom.wad and the IWAD, which
+		// do not contain skins.
+		if (++numfiles > 2)
+			W_SkinHack (baselump);
 	}
 
 	if (!numlumps)
 	{
 		I_FatalError ("W_InitMultipleFiles: no files found");
 	}
-
-	// [RH] Set namespace markers to global for everything
-	for (i = 0; i < numlumps; i++)
-		lumpinfo[i].namespc = ns_global;
 
 	// [RH] Merge sprite and flat groups.
 	//		(We don't need to bother with patches, since
@@ -397,11 +404,11 @@ void *W_CacheLumpNum (int lump, int tag)
 	if (!lumpcache[lump])
 	{
 		// read the lump in
+		//DPrintf ("cache miss on lump %i\n", lump);
 		// [RH] Allocate one byte more than necessary for the
 		//		lump and set the extra byte to zero so that
 		//		various text parsing routines can just call
 		//		W_CacheLumpNum() and not choke.
-		//DPrintf ("cache miss on lump %i\n", lump);
 		lumplen = W_LumpLength (lump);
 		ptr = (byte *)Z_Malloc (lumplen + 1, tag, &lumpcache[lump]);
 		W_ReadLump (lump, lumpcache[lump]);
@@ -516,7 +523,8 @@ void W_MergeLumps (const char *start, const char *end, int space)
 	{
 		int fudge = 0, start = 0;
 
-		for (i = 0; i < numlumps; i++) {
+		for (i = 0; i < numlumps; i++)
+		{
 			if (IsMarker (lumpinfo + i, ustart))
 				fudge++, start = i;
 			else if (IsMarker (lumpinfo + i, uend))
@@ -758,12 +766,43 @@ int W_GetLumpHandle (int lump)
 
 //==========================================================================
 //
-// W_SetLumpNamespace
+// W_SkinHack
 //
+// Tests a wad file to see if it contains an S_SKIN marker. If it does,
+// every lump in the wad is moved into a new namespace. Because skins are
+// only supposed to replace player sprites, sounds, or faces, this should
+// not be a problem. Yes, there are skins that replace more than that, but
+// they are such a pain, and breaking them like this was done on purpose.
 //==========================================================================
 
-void W_SetLumpNamespace (int lump, int nmspace)
+static void W_SkinHack (int baselump)
 {
-	if (lump < numlumps)
-		lumpinfo[lump].namespc = nmspace;
+	bool skinned = false;
+	int i;
+
+	for (i = baselump; i < numlumps; i++)
+	{
+		if (lumpinfo[i].name[0] == 'S' &&
+			lumpinfo[i].name[1] == '_' &&
+			lumpinfo[i].name[2] == 'S' &&
+			lumpinfo[i].name[3] == 'K' &&
+			lumpinfo[i].name[4] == 'I' &&
+			lumpinfo[i].name[5] == 'N')
+		{ // Wad has at least one skin.
+			lumpinfo[i].name[6] = lumpinfo[i].name[7] = 0;
+			if (!skinned)
+			{
+				skinned = true;
+				int j;
+
+				for (j = baselump; j < numlumps; j++)
+				{
+					// Using the baselump as the namespace is safe, because
+					// zdoom.wad guarantees the first possible baselump
+					// passed to this function is a largish number.
+					lumpinfo[j].namespc = baselump;
+				}
+			}
+		}
+	}
 }

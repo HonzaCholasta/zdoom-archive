@@ -45,6 +45,7 @@ extern "C" int			viewheight;
 extern "C" int			realviewheight;
 
 extern int				firstflat;
+extern int				numflats;
 
 // for global animation
 extern bool*			flatwarp;
@@ -67,8 +68,7 @@ extern playerskin_t*	skins;		// [RH]
 //
 // Lookup tables for map data.
 //
-extern int				numsprites;
-extern spritedef_t* 	sprites;
+extern TArray<spritedef_t> sprites;
 
 extern int				numvertexes;
 extern vertex_t*		vertexes;
@@ -91,42 +91,15 @@ extern line_t*			lines;
 extern int				numsides;
 extern side_t*			sides;
 
-inline FArchive &operator<< (FArchive &arc, sector_t *sec)
+inline FArchive &operator<< (FArchive &arc, sector_t *&sec)
 {
-	if (sec)
-		return arc << (WORD)(sec - sectors);
-	else
-		return arc << (WORD)0xffff;
-}
-inline FArchive &operator>> (FArchive &arc, sector_t *&sec)
-{
-	WORD ofs;
-	arc >> ofs;
-	if (ofs == 0xffff)
-		sec = NULL;
-	else
-		sec = sectors + ofs;
-	return arc;
+	return arc.SerializePointer (sectors, (BYTE **)&sec, sizeof(*sectors));
 }
 
-inline FArchive &operator<< (FArchive &arc, line_t *line)
+inline FArchive &operator<< (FArchive &arc, line_t *&line)
 {
-	if (line)
-		return arc << (WORD)(line - lines);
-	else
-		return arc << (WORD)0xffff;
+	return arc.SerializePointer (lines, (BYTE **)&line, sizeof(*lines));
 }
-inline FArchive &operator>> (FArchive &arc, line_t *&line)
-{
-	WORD ofs;
-	arc >> ofs;
-	if (ofs == 0xffff)
-		line = NULL;
-	else
-		line = lines + ofs;
-	return arc;
-}
-
 
 //
 // POV data.

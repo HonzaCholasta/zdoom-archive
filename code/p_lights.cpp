@@ -66,10 +66,7 @@ DFireFlicker::DFireFlicker ()
 void DFireFlicker::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Count << m_MaxLight << m_MinLight;
-	else
-		arc >> m_Count >> m_MaxLight >> m_MinLight;
+	arc << m_Count << m_MaxLight << m_MinLight;
 }
 
 
@@ -124,10 +121,7 @@ DFlicker::DFlicker ()
 void DFlicker::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Count << m_MaxLight << m_MinLight;
-	else
-		arc >> m_Count >> m_MaxLight >> m_MinLight;
+	arc << m_Count << m_MaxLight << m_MinLight;
 }
 
 
@@ -183,10 +177,7 @@ DLightFlash::DLightFlash ()
 void DLightFlash::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Count << m_MaxLight << m_MaxTime << m_MinLight << m_MinTime;
-	else
-		arc >> m_Count >> m_MaxLight >> m_MaxTime >> m_MinLight >> m_MinTime;
+	arc << m_Count << m_MaxLight << m_MaxTime << m_MinLight << m_MinTime;
 }
 
 //
@@ -249,10 +240,7 @@ DStrobe::DStrobe ()
 void DStrobe::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Count << m_MaxLight << m_MinLight << m_DarkTime << m_BrightTime;
-	else
-		arc >> m_Count >> m_MaxLight >> m_MinLight >> m_DarkTime >> m_BrightTime;
+	arc << m_Count << m_MaxLight << m_MinLight << m_DarkTime << m_BrightTime;
 }
 
 //
@@ -436,10 +424,7 @@ DGlow::DGlow ()
 void DGlow::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_Direction << m_MaxLight << m_MinLight;
-	else
-		arc >> m_Direction >> m_MaxLight >> m_MinLight;
+	arc << m_Direction << m_MaxLight << m_MinLight;
 }
 
 void DGlow::RunThink ()
@@ -490,10 +475,7 @@ DGlow2::DGlow2 ()
 void DGlow2::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_End << m_MaxTics << m_OneShot << m_Start << m_Tics;
-	else
-		arc >> m_End >> m_MaxTics >> m_OneShot >> m_Start >> m_Tics;
+	arc << m_End << m_MaxTics << m_OneShot << m_Start << m_Tics;
 }
 
 void DGlow2::RunThink ()
@@ -580,10 +562,7 @@ DPhased::DPhased ()
 void DPhased::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-		arc << m_BaseLevel << m_Phase;
-	else
-		arc >> m_BaseLevel >> m_Phase;
+	arc << m_BaseLevel << m_Phase;
 }
 
 void DPhased::RunThink ()

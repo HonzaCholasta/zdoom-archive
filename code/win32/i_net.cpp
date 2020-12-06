@@ -653,7 +653,7 @@ void JoinGame (int i)
 	popterm ();
 
 	// Clear out any waiting packets
-	while (PreGet (&packet, sizeof(packet)))
+	while (PreGet (&doomcom->data, sizeof(doomcom->data)))
 		;
 
 	Printf (PRINT_HIGH, "Total players: %d\n", doomcom->numnodes);

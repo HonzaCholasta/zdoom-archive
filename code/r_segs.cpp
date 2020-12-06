@@ -96,7 +96,7 @@ void (*R_RenderSegLoop)(void);
 //
 // R_RenderMaskedSegRange
 //
-static void BlastMaskedColumn (void (*blastfunc)(column_t *column), int texnum)
+static void BlastMaskedColumn (void (*blastfunc)(column_t *, int), int texnum)
 {
 	if (maskedtexturecol[dc_x] != MAXSHORT)
 	{
@@ -141,7 +141,7 @@ static void BlastMaskedColumn (void (*blastfunc)(column_t *column), int texnum)
 		// when forming multipatched textures (see r_data.c).
 
 		// draw the texture
-		blastfunc ((column_t *)((byte *)R_GetColumn(texnum, maskedtexturecol[dc_x]) -3));
+		blastfunc ((column_t *)((byte *)R_GetColumn(texnum, maskedtexturecol[dc_x]) -3), MAXINT);
 		maskedtexturecol[dc_x] = MAXSHORT;
 	}
 	spryscale += rw_scalestep;

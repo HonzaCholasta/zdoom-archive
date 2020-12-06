@@ -981,7 +981,7 @@ void R_FillColumnHorizP (void)
 
 // Same as R_DrawMaskedColumn() except that it always uses
 // R_DrawColumnHoriz().
-void R_DrawMaskedColumnHoriz (column_t *column)
+void R_DrawMaskedColumnHoriz (column_t *column, int baseclip)
 {
 	dc_texturefrac = 0;
 
@@ -994,7 +994,13 @@ void R_DrawMaskedColumnHoriz (column_t *column)
 		dc_yh = (topscreen + spryscale * column->length) >> FRACBITS;
 				
 		if (dc_yh >= mfloorclip[dc_x])
+		{
 			dc_yh = mfloorclip[dc_x] - 1;
+		}
+		if (dc_yh > baseclip)
+		{
+			dc_yh = baseclip;
+		}
 		if (dc_yl <= mceilingclip[dc_x])
 		{
 			int oldyl = dc_yl;
@@ -1002,7 +1008,9 @@ void R_DrawMaskedColumnHoriz (column_t *column)
 			dc_texturefrac = (dc_yl - oldyl) * dc_iscale;
 		}
 		else
+		{
 			dc_texturefrac = 0;
+		}
 
 		if (dc_yl <= dc_yh)
 		{

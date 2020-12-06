@@ -133,6 +133,26 @@ BEGIN_COMMAND (noclip)
 }
 END_COMMAND (noclip)
 
+BEGIN_COMMAND (powerup)
+{
+	if (CheckCheatmode ())
+		return;
+
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_POWER);
+}
+END_COMMAND (powerup)
+
+BEGIN_COMMAND (morphme)
+{
+	if (CheckCheatmode ())
+		return;
+
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_MORPH);
+}
+END_COMMAND (morphme)
+
 EXTERN_CVAR (chasedemo)
 
 BEGIN_COMMAND (chase)
@@ -204,6 +224,12 @@ END_COMMAND (idclev)
 
 BEGIN_COMMAND (changemap)
 {
+	if (m_Instigator == NULL)
+	{
+		Printf (PRINT_HIGH, "Use the map command when not in a game.\n");
+		return;
+	}
+
 	if (m_Instigator->player - players != Net_Arbitrator && multiplayer)
 	{
 		Printf (PRINT_HIGH, "Only player %d can change the map.\n", Net_Arbitrator+1);
@@ -251,7 +277,7 @@ BEGIN_COMMAND (idmus)
 
 		if ( (info = FindLevelInfo (map)) )
 		{
-			if (info->music[0])
+			if (info->music)
 			{
 				S_ChangeMusic (info->music, 1);
 				Printf (PRINT_HIGH, "%s\n", STSTR_MUS);
@@ -462,9 +488,12 @@ END_COMMAND (dir)
 
 BEGIN_COMMAND (fov)
 {
+	player_t *player = m_Instigator ? m_Instigator->player
+		: &players[consoleplayer];
+
 	if (argc != 2)
-		Printf (PRINT_HIGH, "fov is %g\n", m_Instigator->player->fov);
+		Printf (PRINT_HIGH, "fov is %g\n", player->fov);
 	else
-		m_Instigator->player->fov = atof (argv[1]);
+		player->fov = atof (argv[1]);
 }
 END_COMMAND (fov)

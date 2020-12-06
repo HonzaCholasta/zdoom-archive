@@ -1,8 +1,4 @@
-This is the source code for ZDoom 1.20 released on 25 November 1999.
-
-If you want to compile this under linux, you should have gotten the
-archive zdoom-1.19.tar.gz instead. It contains everything included here,
-plus the files necessary for supporting Linux.
+This is the source code for ZDoom 1.23 beta 6.
 
 It is based on the Linux DOOM sources that were prepared by B. Krenheimer
 and generously released by John Carmack shortly before Christmas, 1997. If
@@ -10,30 +6,26 @@ you wish to obtain the original Linux source distribution, you can find it
 at ftp://ftp.idsoftware.com/source/doomsrc.zip. Portions of code were also
 taken from various other source ports, the majority of them coming from
 the BOOM Phase I source released on 27 May 1998 (credit Team TNT and Chi
-Hoang). There's even stuff from Hexen (though not much) in there. Many
-changes are, of course, my own, and I've tried to flag them as such with
-[RH] comments blocks (although I missed a few before I started the
-commenting convention).
+Hoang). Portions of this code are also from Heretic and Hexen and are
+copyrighted by Raven Software. Many changes are, of course, my own, and I've
+tried to flag them as such with [RH] comments blocks (although I missed a few
+before I started the commenting convention). At this point, the source is
+a far cry from what id originally released, featuring a fancy C++ class
+system, object serializer, pointer tracking, and multiple game support.
 
-The file rh-log.txt in the code directory lists my adventures with the
-source code on a mostly day-by-day basis. This file only goes back to the
-time when I released 1.11, because that's when I created this file. Most of
-the other text files in the code directory are from the original Linux
-source code and do not accurately reflect the state of many of the files
-used now.
-
-If you do use these sources, you should also be familiar with
-docs/doomlic.txt. This is the license agreement for the Doom sources. 
+Be warned that Visual C++ can take a *very* long time to link the release
+build of this source. The last time I timed it, it took two and a half
+minutes. The debug build links much faster.
 
 To compile this source code, you also need to download several other
 packages if you don't already have them. These are:
 
-  MIDAS Digital Audio System
-    http://www.s2.org/midas/
+  FMOD
+    http://www.fmod.org
 
-    Be sure to link with the static library and not the DLL version of
-    MIDAS! I use a hack from NTDOOM that crashes with the DLL but not the
-    static library.
+    Fill out the form on their download page to get the FMOD SDK. Unless
+    you want to use it for profit, it's free, and it's the sound engine
+    ZDoom now uses.
 
   OpenPTC 1.0.18
     http://www.gaffer.org/ptc
@@ -47,34 +39,12 @@ packages if you don't already have them. These are:
 The included project file (doom.dsp) is for Visual C++ 6 and makes a few
 assumptions about the development environment:
 
-    MIDAS is installed at the same location in the directory hierarchy as
-    the ZDoom source code. In my case, I have the source in
-    d:/games/doom/code, so MIDAS is in d:/games/doom/midas. I_music.c and
-    I_sound.c also look for MIDAS include files in the "../midas"
-    directory.
-
+    The FMOD SDK is installed in f:/fmod.
     NASM is installed in d:/nasm.
-
     PTC is installed in ../openptc.
 
-If you want to put things in different places, you'll need to adjust the
-project file's settings accordingly.
-
-This code should also compile with Watcom C 10.6 (and presumably newer
-versions as well). If you use Watcom, please tell me if the following NASM
-line generates object files for tmap.nas and misc.nas that are usable with
-the Watcom linker:
-
-    nasm -o file.obj -f obj -d M_TARGET_WATCOM file.nas
-
-(The line I use is "nasm -o file.obj -f win32 file.nas" which works with
-Microsoft's linker, but not Watcom's.)
-
-The old DOS code from 1.17c is provided, although it won't compile as-is,
-because OpenPTC for DOS still only supports text- and fake-mode graphics,
-and I don't care enough about DOS to hook the older version of PTC in with
-the new code. If someone else wants to mess with it and get it to work, be
-my guest.
+If you have things set up differently (and you probably will), be sure
+to change the project settings to point to the proper directories.
 
 
 Randy Heit

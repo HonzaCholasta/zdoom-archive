@@ -64,18 +64,17 @@
 #include "g_game.h"
 #include "g_level.h"
 #include "b_bot.h"			//Added by MC:
+#include "sbar.h"
 
 
 #define SAVESTRINGSIZE	24
 
-#define TURN180_TICKS	9				// [RH] # of ticks to complete a turn180
-
 BOOL	G_CheckDemoStatus (void); 
-void	G_ReadDemoTiccmd (ticcmd_t* cmd, int player); 
-void	G_WriteDemoTiccmd (ticcmd_t* cmd, int player, int buf); 
+void	G_ReadDemoTiccmd (ticcmd_t *cmd, int player); 
+void	G_WriteDemoTiccmd (ticcmd_t *cmd, int player, int buf); 
 void	G_PlayerReborn (int player); 
  
-void	G_DoReborn (int playernum); 
+void	G_DoReborn (int playernum, bool freshbot); 
  
 void	G_DoNewGame (void); 
 void	G_DoLoadGame (void); 
@@ -94,17 +93,18 @@ gameaction_t	gameaction;
 gamestate_t 	gamestate = GS_STARTUP; 
 BOOL 			respawnmonsters;
  
-BOOL 			paused; 
-BOOL 			sendpause;				// send a pause event next tic 
-BOOL			sendsave;				// send a save event next tic 
-BOOL 			usergame;				// ok to save / end game
-BOOL			sendcenterview;			// send a center view event next tic
+int 			paused;
+bool 			sendpause;				// send a pause event next tic 
+bool			sendsave;				// send a save event next tic 
+bool			sendturn180;			// [RH] send a 180 degree turn next tic
+bool 			usergame;				// ok to save / end game
+bool			sendcenterview;			// send a center view event next tic
  
 BOOL			timingdemo; 			// if true, exit with report on completion 
 BOOL 			nodrawers;				// for comparative timing purposes 
 BOOL 			noblit; 				// for comparative timing purposes 
  
-BOOL	 		viewactive; 
+bool	 		viewactive; 
  
 BOOL 			netgame;				// only true if packets are broadcast 
 BOOL			multiplayer;
@@ -132,7 +132,7 @@ BOOL 			precache = true;		// if true, load all graphics at start
  
 wbstartstruct_t wminfo; 				// parms for world map / intermission 
  
-short			consistancy[MAXPLAYERS][BACKUPTICS]; 
+short			consistancy[MAXPLAYERS][BACKUPTICS];
  
 byte*			savebuffer;
  
@@ -182,6 +182,18 @@ char			*shotfile;
 AActor* 		bodyque[BODYQUESIZE]; 
 int 			bodyqueslot; 
 
+extern BOOL setsizeneeded;
+void R_ExecuteSetViewSize (void);
+
+char savename[256];
+char BackupSaveName[256];
+
+bool SendLand;
+BYTE SendWeaponSlot;
+BYTE SendWeaponChoice;
+int SendItemSelect;
+artitype_t SendItemUse;
+artitype_t LocalSelectedItem;
 
 // [RH] Allow turbo setting anytime during game
 BEGIN_CUSTOM_CVAR (turbo, "100", 0)
@@ -205,29 +217,36 @@ BEGIN_CUSTOM_CVAR (turbo, "100", 0)
 	}
 }
 END_CUSTOM_CVAR (turbo)
- 
- 
-/* [RH] Impulses: Temporary hack to get weapon changing
- * working with keybindings until I can get the
- * inventory system working.
- *
- * So this turned out to not be so temporary. It *will*
- * change, though.
- */
-int Impulse;
 
-BEGIN_COMMAND (impulse)
+BEGIN_COMMAND (slot)
 {
 	if (argc > 1)
-		Impulse = atoi (argv[1]);
+	{
+		SendWeaponSlot = atoi (argv[1]);
+	}
 }
-END_COMMAND (impulse)
+END_COMMAND (slot)
+
+BEGIN_COMMAND (weapon)
+{
+	if (argc > 1)
+	{
+		SendWeaponChoice = atoi (argv[1]);
+	}
+}
+END_COMMAND (weapon)
 
 BEGIN_COMMAND (centerview)
 {
 	sendcenterview = true;
 }
 END_COMMAND (centerview)
+
+BEGIN_COMMAND (land)
+{
+	SendLand = true;
+}
+END_COMMAND (land)
 
 BEGIN_COMMAND (pause)
 {
@@ -239,80 +258,66 @@ static int turntick;
 
 BEGIN_COMMAND (turn180)
 {
-	turntick = TURN180_TICKS;
+	sendturn180 = true;
 }
 END_COMMAND (turn180)
 
-//
-// [RH] WeapNext and WeapPrev commands
-//
-
-static const char *weaponnames[] =
-{
-	"Fist",
-	"Pistol",
-	"Shotgun",
-	"Chaingun",
-	"Rocket Launcher",
-	"Plasma Gun",
-	"BFG9000",
-	"Chainsaw",
-	"Super Shotgun",
-	"Chainsaw"
-};
-
 BEGIN_COMMAND (weapnext)
 {
-	player_t *plyr = m_Instigator->player;
-	gitem_t *item = FindItem (weaponnames[plyr->readyweapon]);
-	int selected_weapon;
-	int i, index;
-
-	if (!item)
-		return;
-
-	selected_weapon = ITEM_INDEX(item);
-
-	for (i = 1; i <= num_items; i++)
-	{
-		index = (selected_weapon + i) % num_items;
-		if (!(itemlist[index].flags & IT_WEAPON))
-			continue;
-		if (!plyr->weaponowned[itemlist[index].offset])
-			continue;
-		if (!plyr->ammo[weaponinfo[itemlist[index].offset].ammo])
-			continue;
-		Impulse = itemlist[index].offset + 50;
-		return;
-	}
+	Net_WriteByte (DEM_WEAPNEXT);
 }
 END_COMMAND (weapnext)
 
 BEGIN_COMMAND (weapprev)
 {
-	player_t *plyr = m_Instigator->player;
-	gitem_t *item = FindItem (weaponnames[plyr->readyweapon]);
-	int selected_weapon;
-	int i, index;
-
-	if (!item)
-		return;
-
-	selected_weapon = ITEM_INDEX(item);
-
-	for (i = 1; i <= num_items; i++) {
-		index = (selected_weapon + num_items - i) % num_items;
-		if (!(itemlist[index].flags & IT_WEAPON))
-			continue;
-		if (!plyr->weaponowned[itemlist[index].offset])
-			continue;
-		if (!plyr->ammo[weaponinfo[itemlist[index].offset].ammo])
-			continue;
-		Impulse = itemlist[index].offset + 50;
-		return;
-	}
+	Net_WriteByte (DEM_WEAPPREV);
 }
 END_COMMAND (weapprev)
+
+BEGIN_COMMAND (invnext)
+{
+	LocalSelectedItem = P_NextInventory (m_Instigator->player, LocalSelectedItem);
+	SendItemSelect = (argc == 1) ? 2 : 1;
+}
+END_COMMAND (invnext)
+
+BEGIN_COMMAND (invprev)
+{
+	LocalSelectedItem = P_PrevInventory (m_Instigator->player, LocalSelectedItem);
+	SendItemSelect = (argc == 1) ? 2 : 1;
+}
+END_COMMAND (invprev)
+
+BEGIN_COMMAND (invuse)
+{
+	SendItemUse = LocalSelectedItem;
+}
+END_COMMAND (invuse)
+
+BEGIN_COMMAND (invuseall)
+{
+	SendItemUse = (artitype_t)-1;
+}
+END_COMMAND (invuseall)
+
+BEGIN_COMMAND (use)
+{
+	if (argc > 1)
+	{
+		SendItemUse = P_FindNamedInventory (argv[1]);
+	}
+}
+END_COMMAND (use)
+
+BEGIN_COMMAND (select)
+{
+	if (argc > 1)
+	{
+		LocalSelectedItem = P_FindNamedInventory (argv[1]);
+	}
+	SendItemSelect = 1;
+}
+END_COMMAND (select)
 
 //
 // G_BuildTiccmd
@@ -413,19 +418,6 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 	if (Actions[ACTION_JUMP])
 		cmd->ucmd.buttons |= BT_JUMP;
 
-	// [RH] Handle impulses. If they are between 1 and 7,
-	//		they get sent as weapon change events.
-	if (Impulse >= 1 && Impulse <= 7)
-	{
-		cmd->ucmd.buttons |= BT_CHANGE;
-		cmd->ucmd.buttons |= (Impulse - 1) << BT_WEAPONSHIFT;
-	}
-	else
-	{
-		cmd->ucmd.impulse = Impulse;
-	}
-	Impulse = 0;
-
 	// [RH] Scale joystick moves to full range of allowed speeds
 	if (strafe || lookstrafe.value)
 		side += (MAXPLMOVE * joyxmove) / 256;
@@ -473,53 +465,85 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 			look = -32767;
 	}
 
+	if (SendLand)
+	{
+		SendLand = false;
+		fly = -32768;
+	}
+
 	if (strafe || lookstrafe.value)
 		side += (int)((float)mousex * m_side.value);
-	else 
-		cmd->ucmd.yaw -= (int)((float)(mousex*0x8) * m_yaw.value) / ticdup; 
+	else
+		cmd->ucmd.yaw -= (int)((float)(mousex*0x8) * m_yaw.value) / ticdup;
 
-	mousex = mousey = 0; 
+	mousex = mousey = 0;
 
-	if (forward > MAXPLMOVE) 
-		forward = MAXPLMOVE; 
-	else if (forward < -MAXPLMOVE) 
-		forward = -MAXPLMOVE; 
-	if (side > MAXPLMOVE) 
-		side = MAXPLMOVE; 
-	else if (side < -MAXPLMOVE) 
-		side = -MAXPLMOVE; 
- 
-	cmd->ucmd.forwardmove += forward; 
+	if (forward > MAXPLMOVE)
+		forward = MAXPLMOVE;
+	else if (forward < -MAXPLMOVE)
+		forward = -MAXPLMOVE;
+	if (side > MAXPLMOVE)
+		side = MAXPLMOVE;
+	else if (side < -MAXPLMOVE)
+		side = -MAXPLMOVE;
+
+	cmd->ucmd.forwardmove += forward;
 	cmd->ucmd.sidemove += side;
 	cmd->ucmd.pitch = look;
 	cmd->ucmd.upmove = fly;
-	
+
 	// special buttons
-	if (sendpause) 
-	{ 
-		sendpause = false; 
-		cmd->ucmd.buttons = BT_SPECIAL | BTS_PAUSE; 
-	} 
- 
-	if (sendsave) 
-	{ 
-		sendsave = false; 
-		cmd->ucmd.buttons = BT_SPECIAL | BTS_SAVEGAME | (savegameslot<<BTS_SAVESHIFT); 
+	if (sendturn180)
+	{
+		sendturn180 = false;
+		cmd->ucmd.buttons |= BT_TURN180;
+	}
+	if (sendpause)
+	{
+		sendpause = false;
+		Net_WriteByte (DEM_PAUSE);
+	}
+	if (sendsave)
+	{
+		sendsave = false;
+		Net_WriteByte (DEM_SAVEGAME);
+		Net_WriteByte (savegameslot);
+	}
+	if (SendWeaponSlot != 255)
+	{
+		Net_WriteByte (DEM_WEAPSLOT);
+		Net_WriteByte (SendWeaponSlot);
+		SendWeaponSlot = 255;
+	}
+	if (SendWeaponChoice != 255)
+	{
+		Net_WriteByte (DEM_WEAPSEL);
+		Net_WriteByte (SendWeaponChoice);
+		SendWeaponChoice = 255;
+	}
+	if (SendItemSelect)
+	{
+		Net_WriteByte (DEM_INVSEL);
+		if (SendItemSelect == 2)
+			Net_WriteByte (LocalSelectedItem | 0x80);
+		else
+			Net_WriteByte (LocalSelectedItem);
+		SendItemSelect = 0;
+	}
+	if (SendItemUse != arti_none)
+	{
+		Net_WriteByte (DEM_INVUSE);
+		Net_WriteByte (SendItemUse != -1 ? (byte)SendItemUse : 0);
+		SendItemUse = arti_none;
 	}
 
 	cmd->ucmd.forwardmove <<= 8;
 	cmd->ucmd.sidemove <<= 8;
 
-	// [RH] 180-degree turn overrides all other yaws
-	if (turntick) {
-		turntick--;
-		cmd->ucmd.yaw = (ANG180 / TURN180_TICKS) >> 16;
-	}
-
 	joyxmove = 0;
 	joyymove = 0;
-} 
- 
+}
+
 
 // [RH] Spy mode has been separated into two console commands.
 //		One goes forward; the other goes backward.
@@ -527,7 +551,11 @@ static void ChangeSpy (void)
 {
 	players[consoleplayer].camera = players[displayplayer].mo;
 	S_UpdateSounds(players[consoleplayer].camera);
-	ST_Start();		// killough 3/7/98: switch status bar views too
+	StatusBar->AttachToPlayer (&players[displayplayer]);
+	if (demoplayback || multiplayer)
+	{
+		StatusBar->ShowPlayerName ();
+	}
 }
 
 CVAR (bot_allowspy, "0", 0)
@@ -539,11 +567,11 @@ BEGIN_COMMAND (spynext)
 	{
 		if (deathmatch.value && bglobal.botnum && !bot_allowspy.value)
 			return;
-		do 
-		{ 
-			displayplayer++; 
-			if (displayplayer == MAXPLAYERS) 
-				displayplayer = 0; 
+		do
+		{
+			displayplayer++;
+			if (displayplayer == MAXPLAYERS)
+				displayplayer = 0;
 		} while (!playeringame[displayplayer] && displayplayer != consoleplayer);
 
 		ChangeSpy ();
@@ -572,19 +600,19 @@ END_COMMAND (spyprev)
 
 
 //
-// G_Responder	
+// G_Responder
 // Get info needed to make ticcmd_ts for the players.
-// 
-BOOL G_Responder (event_t *ev) 
-{ 
+//
+BOOL G_Responder (event_t *ev)
+{
 	// any other key pops up menu if in demos
 	// [RH] But only if the key isn't bound to a "special" command
 	if (gameaction == ga_nothing && 
-		(demoplayback || gamestate == GS_DEMOSCREEN)) 
+		(demoplayback || gamestate == GS_DEMOSCREEN))
 	{
 		char *cmd = C_GetBinding (ev->data1);
 
-		if (ev->type == ev_keydown) 
+		if (ev->type == ev_keydown)
 		{
 
 			if (!cmd || (
@@ -600,9 +628,8 @@ BOOL G_Responder (event_t *ev)
 				stricmp (cmd, "bumpgamma") &&
 				stricmp (cmd, "screenshot")))
 			{
-				S_Sound (CHAN_VOICE, "switches/normbutn", 1, ATTN_NONE);
-				M_StartControlPanel (); 
-				return true; 
+				M_StartControlPanel (true);
+				return true;
 			}
 			else
 			{
@@ -612,47 +639,45 @@ BOOL G_Responder (event_t *ev)
 		if (cmd && cmd[0] == '+')
 			return C_DoKey (ev);
 
-		return false; 
-	} 
- 
-	if (gamestate == GS_LEVEL) 
-	{ 
-		if (CT_Responder (ev)) 
-			return true;		// chat ate the event 
-		if (ST_Responder (ev)) 
-			return true;		// status window ate it 
-		if (!viewactive)
-			if (AM_Responder (ev))
-				return true;	// automap ate it 
+		return false;
 	}
-	else if (gamestate == GS_FINALE) 
-	{ 
-		if (F_Responder (ev)) 
-			return true;		// finale ate the event 
-	} 
-		 
-	switch (ev->type) 
-	{ 
-	  case ev_keydown:
+
+	if (gamestate == GS_LEVEL)
+	{
+		if (CT_Responder (ev))
+			return true;		// chat ate the event
+		if (ST_Responder (ev))
+			return true;		// status window ate it
+		if (!viewactive && AM_Responder (ev))
+			return true;		// automap ate it
+	}
+	else if (gamestate == GS_FINALE)
+	{
+		if (F_Responder (ev))
+			return true;		// finale ate the event
+	}
+
+	switch (ev->type)
+	{
+	case ev_keydown:
 		if (C_DoKey (ev))
 			return true;
 		break;
- 
-	  case ev_keyup: 
+
+	case ev_keyup:
 		C_DoKey (ev);
 		break;
 
-	  // [RH] mouse buttons are now sent with key up/down events
-	  case ev_mouse: 
-		mousex = (int)(ev->data2 * mouse_sensitivity.value); 
-		mousey = (int)(ev->data3 * mouse_sensitivity.value); 
+	// [RH] mouse buttons are sent as key up/down events
+	case ev_mouse: 
+		mousex = (int)(ev->data2 * mouse_sensitivity.value);
+		mousey = (int)(ev->data3 * mouse_sensitivity.value);
 		break;
- 
-	  case ev_joystick: 
-		joyxmove = ev->data2; 
-		joyymove = ev->data3; 
+
+	case ev_joystick:
+		joyxmove = ev->data2;
+		joyymove = ev->data3;
 		break;
- 
 	}
 
 	// [RH] If the view is active, give the automap a chance at
@@ -660,80 +685,81 @@ BOOL G_Responder (event_t *ev)
 
 	if (gamestate == GS_LEVEL && viewactive)
 		return AM_Responder (ev);
- 
-	if (ev->type == ev_keydown ||
-		ev->type == ev_mouse ||
-		ev->type == ev_joystick)
-		return true;
-	else
-		return false; 
-} 
- 
- 
- 
+
+	return (ev->type == ev_keydown ||
+			ev->type == ev_mouse ||
+			ev->type == ev_joystick);
+}
+
+
+
 //
 // G_Ticker
 // Make ticcmd_ts for the players.
 //
 extern DCanvas *page;
 
-void G_Ticker (void) 
-{ 
-	int 		i;
-	int 		buf; 
-	ticcmd_t*	cmd;
+void G_Ticker ()
+{
+	int i;
 	gamestate_t	oldgamestate;
 
 	// do player reborns if needed
-	for (i=0 ; i<MAXPLAYERS ; i++) 
+	for (i = 0; i < MAXPLAYERS; i++)
 		if (playeringame[i] && players[i].playerstate == PST_REBORN) 
-			G_DoReborn (i);
+			G_DoReborn (i, false);
 
 	// do things to change the game state
 	oldgamestate = gamestate;
-	while (gameaction != ga_nothing) 
-	{ 
-		switch (gameaction) 
-		{ 
-		case ga_loadlevel: 
-			G_DoLoadLevel (-1); 
-			break; 
-		case ga_newgame: 
-			G_DoNewGame (); 
-			break; 
-		case ga_loadgame: 
-			G_DoLoadGame (); 
-			break; 
-		case ga_savegame: 
-			G_DoSaveGame (); 
-			break; 
-		case ga_playdemo: 
-			G_DoPlayDemo (); 
-			break; 
-		case ga_completed: 
-			G_DoCompleted (); 
-			break; 
-		case ga_victory: 
-//			F_StartFinale (); 
-		    gameaction = ga_nothing;
-			break; 
-		case ga_worlddone: 
-			G_DoWorldDone (); 
-			break; 
-		case ga_screenshot: 
+	while (gameaction != ga_nothing)
+	{
+		if (gameaction == ga_newgame2)
+		{
+			gameaction = ga_newgame;
+			break;
+		}
+		switch (gameaction)
+		{
+		case ga_loadlevel:
+			G_DoLoadLevel (-1);
+			break;
+		case ga_newgame:
+			G_DoNewGame ();
+			break;
+		case ga_loadgame:
+			G_DoLoadGame ();
+			break;
+		case ga_savegame:
+			G_DoSaveGame ();
+			break;
+		case ga_playdemo:
+			G_DoPlayDemo ();
+			break;
+		case ga_completed:
+			G_DoCompleted ();
+			break;
+		case ga_victory:
+//			F_StartFinale ();
+			gameaction = ga_nothing;
+			break;
+		case ga_worlddone:
+			G_DoWorldDone ();
+			break;
+		case ga_screenshot:
 			M_ScreenShot (shotfile);
-			if (shotfile) {
+			if (shotfile)
+			{
 				free (shotfile);
 				shotfile = NULL;
 			}
-			gameaction = ga_nothing; 
-			break; 
+			gameaction = ga_nothing;
+			break;
 		case ga_fullconsole:
 			C_FullConsole ();
 			gameaction = ga_nothing;
 			break;
-		case ga_nothing: 
-			break; 
+		case ga_nothing:
+			break;
 		}
 		C_AdjustBottom ();
 	}
@@ -744,24 +770,29 @@ void G_Ticker (void)
 		page = NULL;
 	}
 
-	// get commands, check consistancy,
-	// and build new consistancy check
-	buf = (gametic/ticdup)%BACKUPTICS;
+	// get commands, check consistancy, and build new consistancy check
+	int buf = (gametic/ticdup)%BACKUPTICS;
 
 	for (i = 0; i < MAXPLAYERS; i++)
 	{
 		if (playeringame[i])
 		{
-			cmd = &players[i].cmd;
-
-			memcpy (cmd, &netcmds[i][buf], sizeof(ticcmd_t));
+			ticcmd_t *cmd = &players[i].cmd;
+			ticcmd_t *newcmd = &netcmds[i][buf];
 
 			RunNetSpecs (i, buf);
-
 			if (demorecording)
-				G_WriteDemoTiccmd (cmd, i, buf);
+			{
+				G_WriteDemoTiccmd (newcmd, i, buf);
+			}
 			if (demoplayback)
+			{
 				G_ReadDemoTiccmd (cmd, i);
+			}
+			else
+			{
+				memcpy (cmd, newcmd, sizeof(ticcmd_t));
+			}
 
 			// check for turbo cheats
 			if (cmd->ucmd.forwardmove > TURBOTHRESHOLD
@@ -772,8 +803,7 @@ void G_Ticker (void)
 
 			if (netgame && !players[i].isbot && !netdemo && !(gametic%ticdup))
 			{
-				if (gametic > BACKUPTICS
-					&& consistancy[i][buf] != cmd->consistancy)
+				if (gametic > BACKUPTICS && consistancy[i][buf] != cmd->consistancy)
 				{
 					players[i].inconsistant = 1;
 				}
@@ -785,44 +815,12 @@ void G_Ticker (void)
 		}
 	}
 
-	// check for special buttons
-	for (i = 0; i < MAXPLAYERS; i++)
-	{
-		if (playeringame[i])
-		{
-			if (players[i].cmd.ucmd.buttons & BT_SPECIAL)
-			{
-				switch (players[i].cmd.ucmd.buttons & BT_SPECIALMASK)
-				{
-				case BTS_PAUSE:
-					paused ^= 1;
-					if (paused) {
-						S_PauseSound ();
-						I_PauseMouse ();
-					} else {
-						S_ResumeSound ();
-						I_ResumeMouse ();
-					}
-					break;
-
-				case BTS_SAVEGAME:
-					if (!savedescription[0])
-						strcpy (savedescription, "NET GAME");
-					savegameslot =
-						(players[i].cmd.ucmd.buttons & BTS_SAVEMASK)>>BTS_SAVESHIFT;
-					gameaction = ga_savegame;
-					break;
-				}
-			}
-		}
-	}
-
 	// do main actions
 	switch (gamestate)
 	{
 	case GS_LEVEL:
 		P_Ticker ();
-		ST_Ticker ();
+		StatusBar->Tick ();
 		AM_Ticker ();
 		break;
 
@@ -848,21 +846,52 @@ void G_Ticker (void)
 
 //
 // G_PlayerFinishLevel
-// Call when a player completes a level.
+// Called when a player completes a level.
 //
-void G_PlayerFinishLevel (int player)
+void G_PlayerFinishLevel (int player, EFinishLevelType mode)
 {
 	player_t *p;
+	int i;
+	int flightPower;
 
 	p = &players[player];
 
+	// Strip all current powers
+	flightPower = p->powers[pw_flight];
 	memset (p->powers, 0, sizeof (p->powers));
-	memset (p->cards, 0, sizeof (p->cards));
+	if (!deathmatch.value && mode == FINISH_SameHub)
+	{ // Keep flight if moving to another level in same hub
+		p->powers[pw_flight] = flightPower;
+	}
 	p->mo->flags &= ~MF_SHADOW; 		// cancel invisibility
 	p->extralight = 0;					// cancel gun flashes
 	p->fixedcolormap = 0;				// cancel ir goggles
 	p->damagecount = 0; 				// no palette changes
 	p->bonuscount = 0;
+	p->poisoncount = 0;
+	p->rain1 = NULL;
+	p->rain2 = NULL;
+	p->inventorytics = 0;
+
+	if (mode != FINISH_SameHub)
+	{
+		memset (p->keys, 0, sizeof (p->keys));	// Take away keys
+		p->inventory[arti_fly] = 0;				// Take away flight
+	}
+
+	if (mode == FINISH_NoHub)
+	{ // Reduce all owned inventory to 1 item
+		for (i = 0; i < NUMINVENTORYSLOTS; i++)
+		{
+			if (p->inventory[i])
+				p->inventory[i] = 1;
+		}
+	}
+
+	if (p->morphTics)
+	{ // Undo morph
+		P_UndoPlayerMorph (p, true);
+	}
 }
 
 
@@ -882,6 +911,8 @@ void G_PlayerReborn (int player)
 	int 		secretcount;
 	userinfo_t  userinfo;	// [RH] Save userinfo
 	botskill_t  b_skill;//Added by MC:
+	APlayerPawn *actor;
+	const TypeInfo *cls;
 
 	p = &players[player];
 
@@ -892,6 +923,8 @@ void G_PlayerReborn (int player)
 	secretcount = p->secretcount;
     b_skill = p->skill;    //Added by MC:
 	memcpy (&userinfo, &p->userinfo, sizeof(userinfo));
+	actor = p->mo;
+	cls = p->cls;
 
 	memset (p, 0, sizeof(*p));
 
@@ -901,19 +934,18 @@ void G_PlayerReborn (int player)
 	p->itemcount = itemcount;
 	p->secretcount = secretcount;
 	memcpy (&p->userinfo, &userinfo, sizeof(userinfo));
+	p->mo = actor;
+	p->cls = cls;
 
     p->skill = b_skill;	//Added by MC:
 
-	p->usedown = p->attackdown = true;	// don't do anything immediately
+	p->oldbuttons = 255;	// don't do anything immediately
 	p->playerstate = PST_LIVE;
-	p->health = deh.StartHealth;		// [RH] Used to be MAXHEALTH
-	p->readyweapon = p->pendingweapon = wp_pistol;
-	p->weaponowned[wp_fist] = true;
-	p->weaponowned[wp_pistol] = true;
-	p->ammo[am_clip] = deh.StartBullets; // [RH] Used to be 50
 
 	for (i = 0; i < NUMAMMO; i++)
 		p->maxammo[i] = maxammo[i];
+
+	actor->GiveDefaultInventory ();
 
     //Added by MC: Init bot structure.
     if (bglobal.botingame[player])
@@ -932,24 +964,19 @@ void P_SpawnPlayer (mapthing2_t* mthing);
 
 BOOL G_CheckSpot (int playernum, mapthing2_t *mthing)
 {
-	fixed_t 			x;
-	fixed_t 			y;
-	fixed_t				z, oldz;
-	subsector_t*		ss;
-	unsigned			an;
-	AActor* 			mo;
-	int 				i;
+	fixed_t x;
+	fixed_t y;
+	fixed_t z, oldz;
+	int i;
 
 	x = mthing->x << FRACBITS;
 	y = mthing->y << FRACBITS;
 	z = mthing->z << FRACBITS;
 
-	ss = R_PointInSubsector (x,y);
-	z += ss->sector->floorheight;
+	z += R_PointInSubsector (x, y)->sector->floorheight;
 
 	if (!players[playernum].mo)
-	{
-		// first spawn of level, before corpses
+	{ // first spawn of level, before corpses
 		for (i = 0; i < playernum; i++)
 			if (players[i].mo && players[i].mo->x == x && players[i].mo->y == y)
 				return false;
@@ -972,20 +999,6 @@ BOOL G_CheckSpot (int playernum, mapthing2_t *mthing)
 	players[playernum].mo->z = oldz;	// [RH] Restore corpse's height
 	if (!i)
 		return false;
-
-	// flush an old corpse if needed
-	if (bodyqueslot >= BODYQUESIZE)
-		bodyque[bodyqueslot%BODYQUESIZE]->Destroy ();
-	bodyque[bodyqueslot%BODYQUESIZE] = players[playernum].mo;
-	bodyqueslot++;
-
-	// spawn a teleport fog
-	an = ( ANG45 * (mthing->angle/45) ) >> ANGLETOFINESHIFT;
-
-	mo = new AActor (x+20*finecosine[an], y+20*finesine[an], z, MT_TFOG);
-
-	if (level.time)
-		S_Sound (mo, CHAN_VOICE, "misc/teleport", 1, ATTN_NORM);	// don't start sound on first frame 
 
 	return true;
 }
@@ -1063,7 +1076,7 @@ void G_DeathMatchSpawnPlayer (int playernum)
 	int selections;
 	mapthing2_t *spot;
 
-	selections = deathmatch_p - deathmatchstarts;
+	selections = deathmatchstarts.Size ();
 	// [RH] We can get by with just 1 deathmatch start
 	if (selections < 1)
 		I_Error ("No deathmatch starts");
@@ -1076,10 +1089,12 @@ void G_DeathMatchSpawnPlayer (int playernum)
 	else
 		spot = SelectRandomDeathmatchSpot (playernum, selections);
 
-	if (!spot) {
-		// no good spot, so the player will probably get stuck
+	if (!spot)
+	{ // no good spot, so the player will probably get stuck
 		spot = &playerstarts[playernum];
-	} else {
+	}
+	else
+	{
 		if (playernum < 4)
 			spot->type = playernum+1;
 		else
@@ -1090,16 +1105,35 @@ void G_DeathMatchSpawnPlayer (int playernum)
 }
 
 //
+// G_QueueBody
+//
+static void G_QueueBody (AActor *body)
+{
+	// flush an old corpse if needed
+	if (bodyqueslot >= BODYQUESIZE)
+		bodyque[bodyqueslot%BODYQUESIZE]->Destroy ();
+	bodyque[bodyqueslot%BODYQUESIZE] = body;
+	bodyqueslot++;
+}
+
+//
 // G_DoReborn
 //
-void G_DoReborn (int playernum)
+void G_DoReborn (int playernum, bool freshbot)
 {
 	int i;
 
 	if (!multiplayer)
 	{
-		// reload the level from scratch
-		gameaction = ga_loadlevel;
+		if (BackupSaveName[0])
+		{ // Load game from the last point it was saved
+			strcpy (savename, BackupSaveName);
+			gameaction = ga_loadgame;
+		}
+		else
+		{ // Reload the level from scratch
+			gameaction = ga_loadlevel;
+		}
 	}
 	else
 	{
@@ -1108,8 +1142,8 @@ void G_DoReborn (int playernum)
 		// first disassociate the corpse
 		if (players[playernum].mo)
 		{
+			G_QueueBody (players[playernum].mo);
 			players[playernum].mo->player = NULL;
-			players[playernum].mo = NULL;
 		}
 
 		// spawn at random spot if in death match
@@ -1119,31 +1153,61 @@ void G_DoReborn (int playernum)
 			return;
 		}
 
+		// Cooperative net-play, retain keys and weapons
+		bool oldweapons[NUMWEAPONS];
+		bool oldkeys[NUMKEYS];
+		int oldpieces;
+
+		if (!freshbot)
+		{
+			memcpy (oldweapons, players[playernum].weaponowned, sizeof(oldweapons));
+			memcpy (oldkeys, players[playernum].keys, sizeof(oldkeys));
+			oldpieces = players[playernum].pieces;
+		}
+
 		if (G_CheckSpot (playernum, &playerstarts[playernum]) )
 		{
 			P_SpawnPlayer (&playerstarts[playernum]);
-			return;
 		}
-
-		// try to spawn at one of the other players' spots
-		for (i = 0; i < MAXPLAYERS; i++)
+		else
 		{
-			if (G_CheckSpot (playernum, &playerstarts[i]) )
+			// try to spawn at one of the other players' spots
+			for (i = 0; i < MAXPLAYERS; i++)
 			{
-				int oldtype = playerstarts[i].type;
+				if (G_CheckSpot (playernum, &playerstarts[i]) )
+				{
+					int oldtype = playerstarts[i].type;
 
-				// fake as other player
-				playerstarts[i].type = (playernum < 4) ? playernum + 1 : playernum + 4001 - 4;
-				P_SpawnPlayer (&playerstarts[i]);
-				playerstarts[i].type = oldtype; 			// restore 
-				return;
+					// fake as other player
+					playerstarts[i].type = (playernum < 4) ? playernum + 1 : playernum + 4001 - 4;
+					P_SpawnPlayer (&playerstarts[i]);
+					playerstarts[i].type = oldtype; 			// restore 
+					return;
+				}
+				// he's going to be inside something.  Too bad.
 			}
-			// he's going to be inside something.  Too bad.
+			P_SpawnPlayer (&playerstarts[playernum]);
 		}
-		P_SpawnPlayer (&playerstarts[playernum]);
+
+		if (!freshbot)
+		{ // Restore keys and weapons
+			memcpy (players[playernum].weaponowned, oldweapons, sizeof(oldweapons));
+			memcpy (players[playernum].keys, oldkeys, sizeof(oldkeys));
+			players[playernum].pieces = oldpieces;
+
+			// Give the player some ammo, based on the weapons owned
+			for (i = 0; i < NUMWEAPONS; i++)
+			{
+				if (players[playernum].weaponowned[i])
+				{
+					int ammo = wpnlev1info[i]->ammo;
+					players[playernum].ammo[ammo] =
+						MAX (25, players[playernum].ammo[ammo]);
+				}
+			}
+		}
 	}
 }
-
 
 void G_ScreenShot (char *filename)
 {
@@ -1159,11 +1223,6 @@ void G_ScreenShot (char *filename)
 // G_InitFromSavegame
 // Can be called by the startup code or the menu task.
 //
-extern BOOL setsizeneeded;
-void R_ExecuteSetViewSize (void);
-
-char savename[256];
-
 void G_LoadGame (char* name)
 {
 	strcpy (savename, name);
@@ -1223,17 +1282,24 @@ void G_DoLoadGame (void)
 	G_InitNew (text);
 	savegamerestore = false;
 
-	arc >> level.time;
+	arc << level.time;
 
 	for (i = 0; i < NUM_WORLDVARS; i++)
-		arc >> WorldVars[i];
+		arc << WorldVars[i];
 
-	arc >> text[9];
+	arc << text[9];
 
 	arc.Close ();
 
 	if (text[9] != 0x1d)
 		I_Error ("Bad savegame");
+
+	LocalSelectedItem = players[consoleplayer].readyArtifact;
+
+	delete level.info->snapshot;
+	level.info->snapshot = NULL;
+
+	strcpy (BackupSaveName, savename);
 }
 
 
@@ -1266,7 +1332,7 @@ void G_BuildSaveName (char *name, int slot)
 
 void G_DoSaveGame (void)
 {
-	char name[100];
+	char name[256];
 	char *description;
 	int i;
 
@@ -1306,7 +1372,8 @@ void G_DoSaveGame (void)
 	for (i = 0; i < NUM_WORLDVARS; i++)
 		arc << WorldVars[i];
 
-	arc << (BYTE)0x1d;			// consistancy marker
+	BYTE consist = 0x1d;			// consistancy marker
+	arc << consist;
 
 	gameaction = ga_nothing;
 	savedescription[0] = 0;
@@ -1314,8 +1381,7 @@ void G_DoSaveGame (void)
 	Printf (PRINT_HIGH, "%s\n", GGSAVED);
 	arc.Close ();
 
-	delete level.info->snapshot;
-	level.info->snapshot = NULL;
+	strcpy (BackupSaveName, name);
 }
 
 
@@ -1324,22 +1390,12 @@ void G_DoSaveGame (void)
 //
 // DEMO RECORDING
 //
-#define DEMOMARKER				0x80
-
-static usercmd_t LastUserCmd;
-
-static void MakeEmptyUserCmd (void)
-{
-	memset (&LastUserCmd, 0, sizeof(usercmd_t));
-}
 
 void G_ReadDemoTiccmd (ticcmd_t *cmd, int player)
 {
-	static int clonecount = 0;
-	int i;
 	int id = DEM_BAD;
 
-	while (!clonecount && id != DEM_USERCMD && id != DEM_USERCMDCLONE)
+	while (id != DEM_USERCMD)
 	{
 		if (!demorecording && demo_p >= zdembodyend)
 		{
@@ -1356,28 +1412,23 @@ void G_ReadDemoTiccmd (ticcmd_t *cmd, int player)
 			// end of demo stream
 			G_CheckDemoStatus ();
 			break;
+
 		case DEM_USERCMD:
-			UnpackUserCmd (&cmd->ucmd, &demo_p);
-			memcpy (&LastUserCmd, &cmd->ucmd, sizeof(usercmd_t));
-			break;
-		case DEM_USERCMDCLONE:
-			clonecount = ReadByte (&demo_p) + 1;
+			UnpackUserCmd (&cmd->ucmd, &cmd->ucmd, &demo_p);
 			break;
 
 		case DEM_DROPPLAYER:
-			i = ReadByte (&demo_p);
-			if (i < MAXPLAYERS)
-				playeringame[i] = false;
+			{
+				byte i = ReadByte (&demo_p);
+				if (i < MAXPLAYERS)
+					playeringame[i] = false;
+			}
+			break;
 
 		default:
 			Net_DoCommand (id, &demo_p, player);
 			break;
 		}
-	}
-	if (clonecount)
-	{
-		clonecount--;
-		memcpy (&cmd->ucmd, &LastUserCmd, sizeof(usercmd_t));
 	}
 } 
 
@@ -1393,8 +1444,6 @@ extern byte *lenspot;
 
 void G_WriteDemoTiccmd (ticcmd_t *cmd, int player, int buf)
 {
-	static int clonecount = 0;
-	static byte *clonepos = NULL;
 	byte *specdata;
 	int speclen;
 
@@ -1413,28 +1462,8 @@ void G_WriteDemoTiccmd (ticcmd_t *cmd, int player, int buf)
 		NetSpecs[player][buf].SetData (NULL, 0);
 	}
 
-	// [RH] Now write out a "normal" ticcmd. Use the clone command if this
-	//		one is identical to the previous one.
-	if (!memcmp (&LastUserCmd, &cmd->ucmd, sizeof(usercmd_t)))
-	{
-		if (!clonecount || clonecount == 256 || clonepos != demo_p)
-		{
-			WriteByte (DEM_USERCMDCLONE, &demo_p);
-			WriteByte (0, &demo_p);
-			clonecount = 1;
-			clonepos = demo_p;
-		}
-		else
-		{
-			*(demo_p - 1) = clonecount++;
-		}
-	}
-	else
-	{
-		WriteUserCmdMessage (&cmd->ucmd, &demo_p);
-		clonecount = 0;
-		memcpy (&LastUserCmd, &cmd->ucmd, sizeof(usercmd_t));
-	}
+	// [RH] Now write out a "normal" ticcmd.
+	WriteUserCmdMessage (&cmd->ucmd, &players[player].cmd.ucmd, &demo_p);
 
 	// [RH] Bigger safety margin
 	if (demo_p > demobuffer + maxdemosize - 64)
@@ -1447,9 +1476,6 @@ void G_WriteDemoTiccmd (ticcmd_t *cmd, int player, int buf)
 		demo_p = demobuffer + pos;
 		lenspot = demobuffer + spot;
 	}
-
-//	if (!clonecount)
-//		G_ReadDemoTiccmd (cmd); 	// make SURE it is exactly the same
 }
 
 
@@ -1483,8 +1509,6 @@ void G_RecordDemo (char* name)
 void G_BeginRecording (void)
 {
 	int i;
-
-	MakeEmptyUserCmd();
 
 	demo_p = demobuffer;
 
@@ -1670,7 +1694,6 @@ void G_DoPlayDemo (void)
 	Printf (PRINT_HIGH, "Playing demo %s\n", defdemoname);
 
 	C_BackupCVars ();		// [RH] Save cvars that might be affected by demo
-	MakeEmptyUserCmd ();
 
 	if (ReadLong (&demo_p) != FORM_ID) {
 		if (singledemo)

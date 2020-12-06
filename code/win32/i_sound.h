@@ -23,11 +23,13 @@
 #ifndef __I_SOUND__
 #define __I_SOUND__
 
+#include <io.h>
+
 #include "doomdef.h"
 
 #include "doomstat.h"
 #include "s_sound.h"
-
+#include "w_wad.h"
 
 
 // Init at program start...
@@ -75,5 +77,38 @@ I_UpdateSoundParams
   int			vol,
   int			sep,
   int			pitch );
+
+struct FileHandle
+{
+	FileHandle (int hndl, int start, int size)
+		: base (start),
+		  len (size),
+		  pos (0),
+		  bNeedClose (true)
+	{
+		handle = dup (hndl);
+	}
+
+	FileHandle (int lump)
+		: pos (0),
+		  bNeedClose (false)
+	{
+		handle = lumpinfo[lump].handle;
+		base = lumpinfo[lump].position;
+		len = lumpinfo[lump].size;
+	}
+
+	~FileHandle ()
+	{
+		if (bNeedClose)
+			close (handle);
+	}
+
+	int handle;
+	int len;
+	int pos;
+	int base;
+	bool bNeedClose;
+};
 
 #endif

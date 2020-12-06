@@ -29,14 +29,14 @@
 
 #include <stdlib.h>
 
-// [RH] Borrowed from Q2's g_local.h
-//#define crandom(a)	((fixed_t)((P_Random(a)-128)*512))
-
 #define FLOATSPEED		(FRACUNIT*4)
 
 
 #define MAXHEALTH		100
+#define MAXMORPHHEALTH	30
 #define VIEWHEIGHT		(41*FRACUNIT)
+
+#define BONUSADD		6
 
 // mapblocks are used to check movement
 // against lines and things
@@ -73,6 +73,8 @@
 void P_SetupPsprites (player_t* curplayer);
 void P_MovePsprites (player_t* curplayer);
 void P_DropWeapon (player_t* player);
+void P_ActivateMorphWeapon (player_t *player);
+void P_PostMorphWeapon (player_t *player, weapontype_t weapon);
 
 
 //
@@ -80,51 +82,52 @@ void P_DropWeapon (player_t* player);
 //
 void	P_FallingDamage (AActor *ent);
 void	P_PlayerThink (player_t *player);
-
+bool	P_UndoPlayerMorph (player_t *player, bool force=false);
 
 //
 // P_MOBJ
 //
+
 #define ONFLOORZ		MININT
 #define ONCEILINGZ		MAXINT
 #define FLOATRANDZ		(MAXINT-1)
 #define FROMCEILINGZ128	(MAXINT-2)
 
-// Time interval for item respawning.
-#define ITEMQUESIZE 	128
+extern fixed_t FloatBobOffsets[64];
+extern const TypeInfo *PuffType;
+extern const TypeInfo *HitPuffType;
+extern AActor *MissileActor;
 
-extern mapthing2_t		itemrespawnque[ITEMQUESIZE];
-extern int				itemrespawntime[ITEMQUESIZE];
-extern int				iquehead;
-extern int				iquetail;
+void P_ThrustMobj (AActor *mo, angle_t angle, fixed_t move);
+int P_FaceMobj (AActor *source, AActor *target, angle_t *delta);
+bool P_SeekerMissile (AActor *actor, angle_t thresh, angle_t turnMax);
 
-
-void	P_RespawnSpecials (void);
-
-BOOL	P_SetMobjState (AActor* mobj, statenum_t state);
-
-void	P_SpawnPuff (fixed_t x, fixed_t y, fixed_t z, angle_t dir, int updown);
+void	P_SpawnPuff (fixed_t x, fixed_t y, fixed_t z, angle_t dir, int updown, bool hit=false);
 void	P_SpawnBlood (fixed_t x, fixed_t y, fixed_t z, angle_t dir, int damage);
-AActor* P_SpawnMissile (AActor* source, AActor* dest, mobjtype_t type);
-void	P_SpawnPlayerMissile (AActor* source, mobjtype_t type);
+void	P_BloodSplatter (fixed_t x, fixed_t y, fixed_t z, AActor *originator);
+void	P_BloodSplatter2 (fixed_t x, fixed_t y, fixed_t z, AActor *originator);
+void	P_RipperBlood (AActor *mo);
+int		P_GetThingFloorType (AActor *thing);
 
-// [RH] Throws gibs about
-void	ThrowGib (AActor *self, mobjtype_t gibtype, int damage);
+AActor *P_SpawnMissile (AActor* source, AActor* dest, const TypeInfo *type);
+AActor *P_SpawnMissileZ (AActor* source, fixed_t z, AActor* dest, const TypeInfo *type);
+AActor *P_SpawnMissileAngle (AActor *source, const TypeInfo *type, angle_t angle, fixed_t momz);
+AActor *P_SpawnMissileAngleZ (AActor *source, fixed_t z, const TypeInfo *type, angle_t angle, fixed_t momz);
+
+AActor *P_SpawnPlayerMissile (AActor* source, const TypeInfo *type);
+AActor *P_SpawnPlayerMissile (AActor *source, const TypeInfo *type, angle_t angle);
+AActor *P_SpawnPlayerMissile (AActor *source, fixed_t x, fixed_t y, fixed_t z, const TypeInfo *type, angle_t angle);
 
 
 //
 // [RH] P_THINGS
 //
-extern int SpawnableThings[];
-extern const int NumSpawnableThings;
+#define MAX_SPAWNABLES	(256)
+extern const TypeInfo *SpawnableThings[MAX_SPAWNABLES];
 
 BOOL	P_Thing_Spawn (int tid, int type, angle_t angle, BOOL fog);
 BOOL	P_Thing_Projectile (int tid, int type, angle_t angle,
 							fixed_t speed, fixed_t vspeed, BOOL gravity);
-BOOL	P_ActivateMobj (AActor *mobj, AActor *activator);
-BOOL	P_DeactivateMobj (AActor *mobj);
-
-
 //
 // P_ENEMY
 //
@@ -151,17 +154,14 @@ typedef struct
 typedef struct
 {
 	fixed_t 	frac;			// along trace line
-	BOOL 	isaline;
+	bool	 	isaline;
 	union {
-		AActor* thing;
-		line_t* line;
-	}					d;
+		AActor *thing;
+		line_t *line;
+	} d;
 } intercept_t;
 
-#define MAXINTERCEPTS	128
-
-extern intercept_t		intercepts[MAXINTERCEPTS];
-extern intercept_t* 	intercept_p;
+extern TArray<intercept_t> intercepts;
 
 typedef BOOL (*traverser_t) (intercept_t *in);
 
@@ -179,8 +179,8 @@ extern fixed_t			lowfloor;
 
 void	P_LineOpening (const line_t *linedef);
 
-BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*) );
-BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(AActor*) );
+BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*));
+BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(AActor*), AActor *start=NULL);
 
 #define PT_ADDLINES 	1
 #define PT_ADDTHINGS	2
@@ -216,9 +216,12 @@ extern line_t			*BlockingLine;		// Used only by P_Move
 extern fixed_t			tmdropoffz; //Needed in b_move.c
 extern sector_t			*tmsector;
 
-extern	line_t* 		ceilingline;
+extern line_t			*ceilingline;
+
+extern TArray<line_t *> spechit;
 
 BOOL	P_TestMobjLocation (AActor *mobj);
+bool	P_TestMobjZ (AActor *mobj);
 BOOL	P_CheckPosition (AActor *thing, fixed_t x, fixed_t y);
 AActor	*P_CheckOnmobj (AActor *thing);
 void	P_FakeZMovement (AActor *mo);
@@ -228,22 +231,25 @@ void	P_SlideMove (AActor* mo);
 void	P_BounceWall (AActor *mo);
 BOOL	P_CheckSight (const AActor* t1, const AActor* t2, BOOL ignoreInvisibility=false);
 void	P_UseLines (player_t* player);
+bool	P_UsePuzzleItem (player_t *player, int itemType);
+void	PIT_ThrustSpike (AActor *actor);
 
-bool	P_ChangeSector (sector_t* sector, int crunch);
+bool	P_ChangeSector (sector_t* sector, int crunch, int amt, int floorOrCeil);
 
 extern	AActor*	linetarget; 	// who got hit (or NULL)
 
 fixed_t P_AimLineAttack (AActor *t1, angle_t angle, fixed_t distance);
 void	P_LineAttack (AActor *t1, angle_t angle, fixed_t distance, fixed_t slope, int damage);
 void	P_RailAttack (AActor *source, int damage, int offset);	// [RH] Shoot a railgun
-int		P_HitFloor (AActor *thing);
+bool	P_HitFloor (AActor *thing);
+bool	P_CheckMissileSpawn (AActor *missile);
 
 // [RH] Position the chasecam
 void	P_AimCamera (AActor *t1);
 extern	fixed_t CameraX, CameraY, CameraZ;
 
 // [RH] Means of death
-void	P_RadiusAttack (AActor *spot, AActor *source, int damage, int mod);
+void	P_RadiusAttack (AActor *spot, AActor *source, int damage, int distance, bool hurtSelf, int mod);
 
 void	P_DelSeclist(msecnode_t *);							// phares 3/16/98
 void	P_CreateSecNodeList(AActor*,fixed_t,fixed_t);		// phares 3/14/98
@@ -277,34 +283,17 @@ void P_TouchSpecialThing (AActor *special, AActor *toucher);
 
 void P_DamageMobj (AActor *target, AActor *inflictor, AActor *source, int damage, int mod=0, int flags=0);
 
-#define DMG_NO_ARMOR		1
+bool P_GiveAmmo (player_t *player, ammotype_t ammo, int count);
+bool P_GiveArtifact (player_t *player, artitype_t arti);
+bool P_GiveArmor (player_t *player, armortype_t armortype, int amount);
+bool P_GiveBody (player_t *player, int num);
+bool P_GivePower (player_t *player, powertype_t power);
+bool P_MorphPlayer (player_t *player);
+void P_PoisonDamage (player_t *player, AActor *source, int damage, bool playPainSound);
 
-// [RH] Means of death flags (based on Quake2's)
-#define MOD_UNKNOWN			0
-#define MOD_FIST			1
-#define MOD_PISTOL			2
-#define MOD_SHOTGUN			3
-#define MOD_CHAINGUN		4
-#define MOD_ROCKET			5
-#define MOD_R_SPLASH		6
-#define MOD_PLASMARIFLE		7
-#define MOD_BFG_BOOM		8
-#define MOD_BFG_SPLASH		9
-#define MOD_CHAINSAW		10
-#define MOD_SSHOTGUN		11
-#define MOD_WATER			12
-#define MOD_SLIME			13
-#define MOD_LAVA			14
-#define MOD_CRUSH			15
-#define MOD_TELEFRAG		16
-#define MOD_FALLING			17
-#define MOD_SUICIDE			18
-#define MOD_BARREL			19
-#define MOD_EXIT			20
-#define MOD_SPLASH			21
-#define MOD_HIT				22
-#define MOD_RAILGUN			23
-#define MOD_FRIENDLY_FIRE	0x80000000
+#define DMG_NO_ARMOR		1
+#define DMG_FIRE_DAMAGE		2
+#define DMG_ICE_DAMAGE		4
 
 extern	int MeansOfDeath;
 
@@ -320,11 +309,10 @@ typedef enum
 
 inline FArchive &operator<< (FArchive &arc, podoortype_t type)
 {
-	return arc << (BYTE)type;
-}
-inline FArchive &operator>> (FArchive &arc, podoortype_t &out)
-{
-	BYTE in; arc >> in; out = (podoortype_t)in; return arc;
+	BYTE val = (BYTE)type;
+	arc << val;
+	type = (podoortype_t)val;
+	return arc;
 }
 
 class DPolyAction : public DThinker
@@ -423,7 +411,6 @@ BOOL PO_RotatePolyobj (int num, angle_t angle);
 void PO_Init (void);
 BOOL PO_Busy (int polyobj);
 
-
 //
 // P_SPEC
 //
@@ -431,10 +418,3 @@ BOOL PO_Busy (int polyobj);
 
 
 #endif	// __P_LOCAL__
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------
-
-

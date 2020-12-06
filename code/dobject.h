@@ -45,6 +45,8 @@ class						DFloorWaggle;
 class						DPlat;
 class					DPillar;
 
+struct FActorInfo;
+
 struct TypeInfo
 {
 	TypeInfo () : Pointers (NULL) {}
@@ -53,7 +55,9 @@ struct TypeInfo
 		  ParentType (inParentType),
 		  SizeOf (inSize),
 		  Pointers (p),
-		  TypeIndex(0)
+		  TypeIndex (0),
+		  ActorInfo (NULL),
+		  HashNext (0)
 	{}
 	TypeInfo (const size_t *p, const char *inName, const TypeInfo *inParentType, unsigned int inSize, DObject *(*inNew)())
 		: Name (inName),
@@ -61,7 +65,9 @@ struct TypeInfo
 		  SizeOf (inSize),
 		  Pointers (p),
 		  CreateNew (inNew),
-		  TypeIndex(0)
+		  TypeIndex(0),
+		  ActorInfo (NULL),
+		  HashNext (0)
 	{}
 
 	const char *Name;
@@ -70,10 +76,12 @@ struct TypeInfo
 	const size_t *const Pointers;
 	DObject *(*CreateNew)();
 	unsigned short TypeIndex;
+	FActorInfo *ActorInfo;
+	unsigned int HashNext;
 
 	void RegisterType ();
 
-	// Returns true if this type is an ansector of (or same as) the passed type.
+	// Returns true if this type is an ancestor of (or same as) the passed type.
 	bool IsAncestorOf (const TypeInfo *ti) const
 	{
 		while (ti)
@@ -90,9 +98,13 @@ struct TypeInfo
 	}
 
 	static const TypeInfo *FindType (const char *name);
+	static const TypeInfo *IFindType (const char *name);
 	
 	static unsigned short m_NumTypes, m_MaxTypes;
 	static TypeInfo **m_Types;
+
+	enum { HASH_SIZE = 256 };
+	static unsigned int TypeHash[HASH_SIZE];
 };
 
 struct ClassInit
@@ -121,9 +133,12 @@ public: \
 public: \
 	bool CanSerialize() { return true; } \
 	void Serialize (FArchive &); \
-	inline friend FArchive &operator>> (FArchive &arc, cls* &object) \
+	inline friend FArchive &operator<< (FArchive &arc, cls* &object) \
 	{ \
-		return arc.ReadObject ((DObject* &)object, RUNTIME_CLASS(cls)); \
+		if (arc.IsStoring ()) \
+			return arc.WriteObject (object); \
+		else \
+			return arc.ReadObject ((DObject* &)object, RUNTIME_CLASS(cls)); \
 	}
 
 #define BEGIN_POINTERS(cls)		const size_t cls::cls##Pointers[] = {
@@ -159,10 +174,21 @@ public: \
 	_IMPLEMENT_SERIAL(cls,parent) \
 	NO_POINTERS(cls)
 
+#define _DEF_SERIAL(cls) \
+	void cls::Serialize (FArchive &arc) { \
+		Super::Serialize (arc); \
+	}
+
+#define IMPLEMENT_DEF_SERIAL(cls,parent) \
+	_IMPLEMENT_SERIAL(cls,parent) \
+	_DEF_SERIAL(cls) \
+	NO_POINTERS(cls)
+
 enum EObjectFlags
 {
 	OF_MassDestruction	= 0x00000001,	// Object is queued for deletion
-	OF_Cleanup			= 0x00000002	// Object is being deconstructed as a result of a queued deletion
+	OF_Cleanup			= 0x00000002,	// Object is being deconstructed as a result of a queued deletion
+	OF_JustSpawned		= 0x00000004	// Actor was spawned this tic
 };
 
 class DObject

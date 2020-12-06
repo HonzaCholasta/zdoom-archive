@@ -38,29 +38,33 @@ typedef struct sfxinfo_struct sfxinfo_t;
 struct sfxinfo_struct
 {
 	char		name[MAX_SNDNAME+1];	// [RH] Sound name defined in SNDINFO
-	unsigned	normal;					// Normal sample handle
-	unsigned	looping;				// Looping sample handle
-	void*		data;
+	int 		lumpnum;				// lump number of sfx
 
-	struct sfxinfo_struct *link;
+	// Next five fields are for use by i_sound.cpp. Non-null data means the
+	// sound has been loaded. The other fields are dependant on whether MIDAS
+	// or FMOD is used for sound.
+	void*		data;
+	void*		altdata;
+	long		normal;
+	long		looping;
+	bool		bHaveLoop;
+
+	int			link;
 
 	// this is checked every second to see if sound
 	// can be thrown out (if 0, then decrement, if -1,
 	// then throw out, if > 0, then it is in use)
 	int 		usefulness;
 
-	int 		lumpnum;				// lump number of sfx
 	unsigned int ms;					// [RH] length of sfx in milliseconds
 	unsigned int next, index;			// [RH] For hashing
 	unsigned int frequency;				// [RH] Preferred playback rate
-	unsigned int length;				// [RH] Length of the sound in bytes
+	unsigned int length;				// [RH] Length of the sound in samples or bytes
+										//		(FSOUND or MIDAS respectively)
 };
 
 // the complete set of sound effects
-extern sfxinfo_t *S_sfx;
-
-// [RH] Number of defined sounds
-extern int numsfx;
+extern TArray<sfxinfo_t> S_sfx;
 
 // Initializes sound stuff, including volume
 // Sets channels, SFX and music volume,
@@ -72,20 +76,25 @@ void S_Init (int sfxVolume, int musicVolume);
 // Kills playing sounds at start of level,
 //	determines music if any, changes music.
 //
-void S_Start(void);
+void S_Start ();
 
 // Start sound for thing at <ent>
-void S_Sound (int channel, char *name, float volume, int attenuation);
-void S_Sound (AActor *ent, int channel, char *name, float volume, int attenuation);
-void S_Sound (fixed_t *pt, int channel, char *name, float volume, int attenuation);
-void S_Sound (fixed_t x, fixed_t y, int channel, char *name, float volume, int attenuation);
-void S_LoopedSound (AActor *ent, int channel, char *name, float volume, int attenuation);
-void S_LoopedSound (fixed_t *pt, int channel, char *name, float volume, int attenuation);
+void S_Sound (int channel, const char *name, float volume, int attenuation);
+void S_Sound (AActor *ent, int channel, const char *name, float volume, int attenuation);
+void S_Sound (fixed_t *pt, int channel, const char *name, float volume, int attenuation);
+void S_Sound (fixed_t x, fixed_t y, int channel, const char *name, float volume, int attenuation);
+void S_LoopedSound (AActor *ent, int channel, const char *name, float volume, int attenuation);
+void S_LoopedSound (fixed_t *pt, int channel, const char *name, float volume, int attenuation);
 void S_SoundID (int channel, int sfxid, float volume, int attenuation);
 void S_SoundID (AActor *ent, int channel, int sfxid, float volume, int attenuation);
 void S_SoundID (fixed_t *pt, int channel, int sfxid, float volume, int attenuation);
 void S_LoopedSoundID (AActor *ent, int channel, int sfxid, float volume, int attenuation);
 void S_LoopedSoundID (fixed_t *pt, int channel, int sfxid, float volume, int attenuation);
+
+// Returns true if the max of the named sound are already playing.
+// Does not handle player sounds.
+bool S_CheckSound (const char *name);
+bool S_CheckSound (int sfxid);
 
 // sound channels
 // channel 0 never willingly overrides
@@ -132,13 +141,14 @@ void S_StartMusic (char *music_name);
 // Start music using <music_name>, and set whether looping
 void S_ChangeMusic (const char *music_name, int looping);
 
+void S_RestartMusic ();
+
 // Stops the music fer sure.
-void S_StopMusic (void);
+void S_StopMusic ();
 
 // Stop and resume music, during game PAUSE.
-void S_PauseSound (void);
-void S_ResumeSound (void);
-
+void S_PauseSound ();
+void S_ResumeSound ();
 
 //
 // Updates music & sounds
@@ -149,22 +159,19 @@ void S_SetMusicVolume (int volume);
 void S_SetSfxVolume (int volume);
 
 
-// [RH] Activates an ambient sound. Called when the thing is added to the map.
-//		(0-biased)
-void S_ActivateAmbient (AActor *mobj, int ambient);
-
 // [RH] S_sfx "maintenance" routines
-void S_ParseSndInfo (void);
+void S_ParseSndInfo ();
 
-void S_HashSounds (void);
+void S_HashSounds ();
 int S_FindSound (const char *logicalname);
+int S_FindSkinnedSound (AActor *actor, const char *logicalname);
 int S_FindSoundByLump (int lump);
 int S_AddSound (char *logicalname, char *lumpname);	// Add sound by lumpname
 int S_AddSoundLump (char *logicalname, int lump);	// Add sound by lump index
 
 // [RH] Prints sound debug info to the screen.
 //		Modelled after Hexen's noise cheat.
-void S_NoiseDebug (void);
+void S_NoiseDebug ();
 
 class cvar_t;
 extern cvar_t noisedebug;

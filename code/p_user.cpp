@@ -23,21 +23,29 @@
 //
 //-----------------------------------------------------------------------------
 
-
-
-
 #include "doomdef.h"
 #include "d_event.h"
 #include "p_local.h"
 #include "doomstat.h"
 #include "s_sound.h"
 #include "i_system.h"
+#include "r_draw.h"
+#include "gi.h"
+#include "m_random.h"
+#include "p_pspr.h"
+#include "p_enemy.h"
+#include "s_sound.h"
+#include "a_sharedglobal.h"
 
-
+extern void P_UpdateBeak (player_t *, pspdef_t *);
 
 // Index of the special effects (INVUL inverse) map.
 #define INVERSECOLORMAP 		32
 
+// [RH] # of ticks to complete a turn180
+#define TURN180_TICKS	9
+
+CVAR (weapondrop, "0", CVAR_SERVERINFO)
 
 //
 // Movement.
@@ -47,6 +55,9 @@
 #define MAXBOB			0x100000
 
 BOOL onground;
+int newtorch; // used in the torch flicker effect.
+int newtorchdelta;
+
 
 // This function supplements the pointer cleanup in dobject.cpp, because
 // player_s is not derived from DObject. (I tried it, and DestroyScan was
@@ -61,8 +72,14 @@ void player_s::FixPointers (const DObject *obj)
 {
 	if (mo == obj)
 		mo = NULL;
+	if (poisoner == obj)
+		poisoner = NULL;
 	if (attacker == obj)
 		attacker = NULL;
+	if (rain1 == obj)
+		rain1 = NULL;
+	if (rain2 == obj)
+		rain2 = NULL;
 	if (camera == obj)
 		camera = NULL;
 	if (dest == obj)
@@ -79,11 +96,85 @@ void player_s::FixPointers (const DObject *obj)
 		last_mate = NULL;
 }
 
+IMPLEMENT_DEF_SERIAL (APlayerPawn, AActor);
+IMPLEMENT_DEF_SERIAL (APlayerChunk, APlayerPawn);
 
-//
-// P_Thrust
-// Moves the given origin along a given angle.
-//
+REGISTER_ACTOR (APlayerPawn, Any);
+REGISTER_ACTOR (APlayerChunk, Any);
+
+void APlayerPawn::SetDefaults (FActorInfo *info)
+{
+	ACTOR_DEFS_STATELESS;
+}
+
+void APlayerChunk::SetDefaults (FActorInfo *info)
+{
+	INHERIT_DEFS_STATELESS;
+}
+
+const TypeInfo *APlayerPawn::GetDropType ()
+{
+	if (player == NULL ||
+		player->readyweapon >= NUMWEAPONS)
+	{
+		return NULL;
+	}
+	else
+	{
+		return wpnlev1info[player->readyweapon]->droptype;
+	}
+}
+
+void APlayerPawn::NoBlockingSet ()
+{
+	if (weapondrop.value)
+	{
+		const TypeInfo *droptype = GetDropType ();
+		if (droptype)
+		{
+			P_DropItem (this, droptype, droptype->ActorInfo->spawnhealth, 256);
+		}
+	}
+}
+
+class APlayerSpeedTrail : public AActor
+{
+	DECLARE_STATELESS_ACTOR (APlayerSpeedTrail, AActor);
+public:
+	void RunThink ();
+};
+
+IMPLEMENT_DEF_SERIAL (APlayerSpeedTrail, AActor);
+REGISTER_ACTOR (APlayerSpeedTrail, Any);
+
+void APlayerSpeedTrail::SetDefaults (FActorInfo *info)
+{
+	ACTOR_DEFS_STATELESS;
+	info->flags = MF_NOBLOCKMAP|MF_NOGRAVITY;
+	info->translucency = OPAQUE*6/10;
+}
+
+void APlayerSpeedTrail::RunThink ()
+{
+	const int fade = OPAQUE*6/10/8;
+	if (translucency <= fade)
+	{
+		Destroy ();
+		return;
+	}
+	translucency -= fade;
+}
+
+/*
+==================
+=
+= P_Thrust
+=
+= moves the given origin along a given angle
+=
+==================
+*/
+
 void P_SideThrust (player_t *player, angle_t angle, fixed_t move)
 {
 	angle = (angle - ANGLE_90) >> ANGLETOFINESHIFT;
@@ -129,10 +220,17 @@ void P_Bob (player_t *player, angle_t angle, fixed_t move)
 	player->momy += FixedMul(move,finesine[angle]);
 }
 
-//
-// P_CalcHeight
-// Calculate the walking / running height adjustment
-//
+/*
+==================
+=
+= P_CalcHeight
+=
+=
+Calculate the walking / running height adjustment
+=
+==================
+*/
+
 void P_CalcHeight (player_t *player) 
 {
 	int 		angle;
@@ -162,7 +260,7 @@ void P_CalcHeight (player_t *player)
 			player->bob = MAXBOB;
 	}
 
-	if (!onground || (player->cheats & CF_NOMOMENTUM))
+	if (player->cheats & CF_NOMOMENTUM)
 	{
 		player->viewz = player->mo->z + VIEWHEIGHT;
 
@@ -199,23 +297,58 @@ void P_CalcHeight (player_t *player)
 				player->deltaviewheight = 1;
 		}
 	}
-	player->viewz = player->mo->z + player->viewheight + bob;
 
-	if (player->viewz > player->mo->ceilingz-4*FRACUNIT)
-		player->viewz = player->mo->ceilingz-4*FRACUNIT;
+	if (player->morphTics)
+	{
+		player->viewz = player->mo->z + player->viewheight - (20 * FRACUNIT);
+	}
+	else
+	{
+		player->viewz = player->mo->z + player->viewheight + bob;
+	}
+	if (player->mo->floorclip && player->playerstate != PST_DEAD
+		&& player->mo->z <= player->mo->floorz)
+	{
+		player->viewz -= player->mo->floorclip;
+	}
+	if (player->viewz > player->mo->ceilingz - 4*FRACUNIT)
+	{
+		player->viewz = player->mo->ceilingz - 4*FRACUNIT;
+	}
+	if (player->viewz < player->mo->floorz + 4*FRACUNIT)
+	{
+		player->viewz = player->mo->floorz + 4*FRACUNIT;
+	}
 }
 
+/*
+=================
+=
+= P_MovePlayer
+=
+=================
+*/
+BEGIN_CUSTOM_CVAR (sv_aircontrol, "0.00390625", CVAR_SERVERINFO)
+{
+	level.aircontrol = (fixed_t)(var.value * 65536.f);
+}
+END_CUSTOM_CVAR (sv_aircontrol)
 
-
-//
-// P_MovePlayer
-//
 void P_MovePlayer (player_t *player)
 {
 	ticcmd_t *cmd = &player->cmd;
 	AActor *mo = player->mo;
 
-	mo->angle += cmd->ucmd.yaw << 16;
+	// [RH] 180-degree turn overrides all other yaws
+	if (player->turnticks)
+	{
+		player->turnticks--;
+		mo->angle += (ANGLE_180 / TURN180_TICKS);
+	}
+	else
+	{
+		mo->angle += cmd->ucmd.yaw << 16;
+	}
 
 	onground = (mo->z <= mo->floorz) || (mo->flags2 & MF2_ONMOBJ);
 
@@ -237,12 +370,16 @@ void P_MovePlayer (player_t *player)
 		int friction, movefactor;
 
 		movefactor = P_GetMoveFactor (mo, &friction);
+		if (player->morphTics && gameinfo.gametype == GAME_Heretic)
+		{ // Chicken speed
+			movefactor = movefactor * 2500 / 2048;
+		}
 		bobfactor = friction < ORIG_FRICTION ? movefactor : ORIG_FRICTION_FACTOR;
 		if (!onground && !(player->mo->flags2 & MF2_FLY) && !player->mo->waterlevel)
 		{
 			// [RH] allow very limited movement if not on ground.
-			movefactor >>= 8;
-			bobfactor >>= 8;
+			movefactor = FixedMul (movefactor, level.aircontrol);
+			bobfactor = FixedMul (bobfactor, level.aircontrol);
 		}
 		forwardmove = (cmd->ucmd.forwardmove * movefactor) >> 8;
 		sidemove = (cmd->ucmd.sidemove * movefactor) >> 8;
@@ -258,10 +395,7 @@ void P_MovePlayer (player_t *player)
 			P_SideThrust (player, mo->angle, sidemove);
 		}
 
-		if (mo->state == &states[S_PLAY])
-		{
-			P_SetMobjState (player->mo, S_PLAY_RUN1);
-		}
+		player->mo->PlayRunning ();
 
 		if (player->cheats & CF_REVERTPLEASE)
 		{
@@ -326,76 +460,190 @@ void P_FallingDamage (AActor *ent)
 
 }
 
-
+//==========================================================================
 //
 // P_DeathThink
-// Fall on your face when dying.
-// Decrease POV height to floor height.
 //
-#define ANG5	(ANG90/18)
+//==========================================================================
 
 void P_DeathThink (player_t *player)
 {
-	angle_t 			angle;
-	angle_t 			delta;
+	int dir;
+	angle_t delta;
+	int lookDelta;
 
 	P_MovePsprites (player);
+
 	onground = (player->mo->z <= player->mo->floorz);
-		
-	// fall to the ground
-	if (player->viewheight > 6*FRACUNIT)
-		player->viewheight -= FRACUNIT;
-
-	if (player->viewheight < 6*FRACUNIT)
-		player->viewheight = 6*FRACUNIT;
-
-	player->deltaviewheight = 0;
+	if (player->mo->IsKindOf (RUNTIME_CLASS(APlayerChunk)))
+	{ // Flying bloody skull or flying ice chunk
+		player->viewheight = 6 * FRACUNIT;
+		player->deltaviewheight = 0;
+		if (onground)
+		{
+			if (player->mo->pitch > -ANGLE_1*19)
+			{
+				lookDelta = (-ANGLE_1*19 - player->mo->pitch) / 8;
+				player->mo->pitch += lookDelta;
+			}
+		}
+	}
+	else if (!(player->mo->flags2 & MF2_ICEDAMAGE))
+	{ // Fall to ground (if not frozen)
+		player->deltaviewheight = 0;
+		if (player->viewheight > 6*FRACUNIT)
+		{
+			player->viewheight -= FRACUNIT;
+		}
+		if (player->viewheight < 6*FRACUNIT)
+		{
+			player->viewheight = 6*FRACUNIT;
+		}
+		if (player->mo->pitch < 0)
+		{
+			player->mo->pitch += ANGLE_1*3;
+		}
+		else if (player->mo->pitch > 0)
+		{
+			player->mo->pitch -= ANGLE_1*3;
+		}
+		if (abs(player->mo->pitch) < ANGLE_1*3)
+		{
+			player->mo->pitch = 0;
+		}
+	}
 	P_CalcHeight (player);
 		
 	if (player->attacker && player->attacker != player->mo)
-	{
-		angle = R_PointToAngle2 (player->mo->x,
-								 player->mo->y,
-								 player->attacker->x,
-								 player->attacker->y);
-		
-		delta = angle - player->mo->angle;
-		
-		if (delta < ANG5 || delta > (unsigned)-ANG5)
-		{
-			// Looking at killer,
-			//	so fade damage flash down.
-			player->mo->angle = angle;
-
+	{ // Watch killer
+		dir = P_FaceMobj (player->mo, player->attacker, &delta);
+		if (delta < ANGLE_1*10)
+		{ // Looking at killer, so fade damage and poison counters
 			if (player->damagecount)
+			{
 				player->damagecount--;
+			}
+			if (player->poisoncount)
+			{
+				player->poisoncount--;
+			}
 		}
-		else if (delta < ANG180)
-			player->mo->angle += ANG5;
+		delta /= 8;
+		if (delta > ANGLE_1*5)
+		{
+			delta = ANGLE_1*5;
+		}
+		if (dir)
+		{ // Turn clockwise
+			player->mo->angle += delta;
+		}
 		else
-			player->mo->angle -= ANG5;
+		{ // Turn counter clockwise
+			player->mo->angle -= delta;
+		}
 	}
-	else if (player->damagecount)
-		player->damagecount--;
-		
+	else
+	{
+		if (player->damagecount)
+		{
+			player->damagecount--;
+		}
+		if (player->poisoncount)
+		{
+			player->poisoncount--;
+		}
+	}		
 
 	// [RH] Delay rebirth slightly
-	if (level.time >= player->respawn_time) {
+	if (level.time >= player->respawn_time)
+	{
 		if (player->cmd.ucmd.buttons & BT_USE ||
-			((deathmatch.value || alwaysapplydmflags.value) && dmflags & DF_FORCE_RESPAWN))
+			((deathmatch.value || alwaysapplydmflags.value) && (dmflags & DF_FORCE_RESPAWN)))
+		{
 			player->playerstate = PST_REBORN;
+			if (player->mo->special1 > 2)
+			{
+				player->mo->special1 = 0;
+			}
+			// Let the mobj know the player has entered the reborn state. Some
+			// mobjs need to know when it's ok to remove themselves
+			player->mo->special2 = 666;
+		}
 	}
 }
 
 
+//----------------------------------------------------------------------------
+//
+// PROC P_MorphPlayerThink
+//
+//----------------------------------------------------------------------------
 
+void P_MorphPlayerThink (player_t *player)
+{
+	APlayerPawn *pmo;
+
+	if (gameinfo.gametype == GAME_Heretic)
+	{ // Chicken think
+		if (player->health > 0)
+		{ // Handle beak movement
+			P_UpdateBeak (player, &player->psprites[ps_weapon]);
+		}
+		if (player->morphTics & 15)
+		{
+			return;
+		}
+		pmo = player->mo;
+		if (!(pmo->momx + pmo->momy) && P_Random () < 160)
+		{ // Twitch view angle
+			pmo->angle += PS_Random () << 19;
+		}
+		if ((pmo->z <= pmo->floorz) && (P_Random() < 32))
+		{ // Jump and noise
+			pmo->momz += pmo->GetJumpZ ();
+			pmo->SetState (GetInfo (pmo)->painstate);
+		}
+		if (P_Random () < 48)
+		{ // Just noise
+			S_Sound (pmo, CHAN_VOICE, "chicken/active", 1, ATTN_NORM);
+		}
+	}
+	else
+	{ // Pig think
+		if (player->morphTics&15)
+		{
+			return;
+		}
+		pmo = player->mo;
+		if(!(pmo->momx + pmo->momy) && P_Random() < 64)
+		{ // Snout sniff
+			P_SetPspriteNF (player, ps_weapon, wpnlev1info[wp_snout]->atkstate + 1);
+			S_Sound (pmo, CHAN_VOICE, "PigActive1", 1, ATTN_NORM); // snort
+			return;
+		}
+		if (P_Random() < 48)
+		{
+			if (P_Random() < 128)
+			{
+				S_Sound (pmo, CHAN_VOICE, "PigActive1", 1, ATTN_NORM);
+			}
+			else
+			{
+				S_Sound (pmo, CHAN_VOICE, "PigActive2", 1, ATTN_NORM);
+			}
+		}
+	}
+}
+
+//----------------------------------------------------------------------------
 //
-// P_PlayerThink
+// PROC P_PlayerThink
 //
+//----------------------------------------------------------------------------
+
 void P_PlayerThink (player_t *player)
 {
 	ticcmd_t *cmd;
-	weapontype_t newweapon;
 
 	// [RH] Error out if player doesn't have an mobj, but just make
 	//		it a warning if the player trying to spawn is a bot
@@ -409,25 +657,37 @@ void P_PlayerThink (player_t *player)
 			return;
 		}
 		else
+		{
 			I_Error ("No player %ld start\n", player - players + 1);
+		}
 	}
 
 	player->xviewshift = 0;		// [RH] Make sure view is in right place
 
-	// fixme: do this in the cheat code
+	if (player->inventorytics)
+	{
+		player->inventorytics--;
+	}
+	// No-clip cheat
 	if (player->cheats & CF_NOCLIP)
+	{
 		player->mo->flags |= MF_NOCLIP;
+	}
 	else
+	{
 		player->mo->flags &= ~MF_NOCLIP;
+	}
 	if (player->cheats & CF_FLY)
+	{
 		player->mo->flags |= MF_NOGRAVITY, player->mo->flags2 |= MF2_FLY;
-	else
+	}
+	else if (player->powers[pw_flight] == 0)
+	{
 		player->mo->flags &= ~MF_NOGRAVITY, player->mo->flags2 &= ~MF2_FLY;
-
-	// chain saw run forward
+	}
 	cmd = &player->cmd;
 	if (player->mo->flags & MF_JUSTATTACKED)
-	{
+	{ // Chainsaw/Gauntlets attack auto forward motion
 		cmd->ucmd.yaw = 0;
 		cmd->ucmd.forwardmove = 0xc800/2;
 		cmd->ucmd.sidemove = 0;
@@ -442,6 +702,10 @@ void P_PlayerThink (player_t *player)
 	if (player->jumpTics)
 	{
 		player->jumpTics--;
+	}
+	if (player->morphTics)
+	{
+		P_MorphPlayerThink (player);
 	}
 
 	// [RH] Look up/down stuff
@@ -463,30 +727,62 @@ void P_PlayerThink (player_t *player)
 			{ // center view
 				player->mo->pitch = 0;
 			}
-			else if (look > 0)
-			{ // look up
-				player->mo->pitch -= look;
-				if (player->mo->pitch < -ANGLE_1*32)
-					player->mo->pitch = -ANGLE_1*32;
-			}
 			else
-			{ // look down
+			{
 				player->mo->pitch -= look;
-				if (player->mo->pitch > ANGLE_1*56)
-					player->mo->pitch = ANGLE_1*56;
+				if (look > 0)
+				{ // look up
+					if (player->mo->pitch < -ANGLE_1*32)
+						player->mo->pitch = -ANGLE_1*32;
+				}
+				else
+				{ // look down
+					if (player->mo->pitch > ANGLE_1*56)
+						player->mo->pitch = ANGLE_1*56;
+				}
 			}
 		}
 	}
 
-	// Move around.
-	// Reactiontime is used to prevent movement
-	//	for a bit after a teleport.
+	// [RH] Check for fast turn around
+	if (cmd->ucmd.buttons & BT_TURN180 && !(player->oldbuttons & BT_TURN180))
+	{
+		player->turnticks = TURN180_TICKS;
+	}
+
+	// Handle movement
 	if (player->mo->reactiontime)
+	{ // Player is frozen
 		player->mo->reactiontime--;
+	}
 	else
 	{
+		P_MovePlayer (player);
+		AActor *pmo = player->mo;
+
+		if (player->powers[pw_speed] && !(level.time & 1)
+			&& P_AproxDistance (pmo->momx, pmo->momy) > 12*FRACUNIT)
+		{
+			AActor *speedMo;
+
+			speedMo = Spawn<APlayerSpeedTrail> (pmo->x, pmo->y, pmo->z);
+			if (speedMo)
+			{
+				speedMo->angle = pmo->angle;
+				speedMo->translation = pmo->translation;
+				speedMo->target = pmo;
+				speedMo->sprite = pmo->sprite;
+				speedMo->frame = pmo->frame & FF_FRAMEMASK;
+				speedMo->floorclip = pmo->floorclip;
+				if (player == &players[consoleplayer])
+				{
+					speedMo->flags2 |= MF2_DONTDRAW;
+				}
+			}
+		}
+
 		// [RH] check for jump
-		if ((cmd->ucmd.buttons & BT_JUMP) == BT_JUMP)
+		if (cmd->ucmd.buttons & BT_JUMP)
 		{
 			if (player->mo->waterlevel >= 2)
 			{
@@ -498,131 +794,269 @@ void P_PlayerThink (player_t *player)
 			}
 			else if (!(dmflags & DF_NO_JUMP) && onground && !player->jumpTics)
 			{
-				player->mo->momz += 8*FRACUNIT;
+				player->mo->momz += player->mo->GetJumpZ ();
 				S_Sound (player->mo, CHAN_BODY, "*jump1", 1, ATTN_NORM);
 				player->mo->flags2 &= ~MF2_ONMOBJ;
 				player->jumpTics = 18;
 			}
 		}
 
-		if (cmd->ucmd.upmove &&
-			(player->mo->waterlevel >= 2 || player->mo->flags2 & MF2_FLY))
-		{
-			player->mo->momz = cmd->ucmd.upmove << 8;
+		if (cmd->ucmd.upmove == -32768)
+		{ // Only land if in the air
+			if ((player->mo->flags2 & MF2_FLY) && player->mo->waterlevel < 2)
+			{
+				player->mo->flags2 &= ~MF2_FLY;
+				player->mo->flags &= ~MF_NOGRAVITY;
+			}
 		}
-
-		P_MovePlayer (player);
+		else if (cmd->ucmd.upmove != 0)
+		{
+			if (player->mo->waterlevel >= 2 || player->powers[pw_flight])
+			{
+				player->mo->momz = cmd->ucmd.upmove << 9;
+				if (player->mo->waterlevel < 2 && !(player->mo->flags2 & MF2_FLY))
+				{
+					player->mo->flags2 |= MF2_FLY;
+					player->mo->flags |= MF_NOGRAVITY;
+					if (player->mo->momz <= -39*FRACUNIT)
+					{ // Stop falling scream
+						S_StopSound (player->mo, CHAN_VOICE);
+					}
+				}
+			}
+			else if (cmd->ucmd.upmove > 0)
+			{
+				P_PlayerUseArtifact (player, arti_fly);
+			}
+		}
 	}
 
 	P_CalcHeight (player);
 
-	if (player->mo->subsector->sector->special || player->mo->subsector->sector->damage)
+	if (player->mo->subsector->sector->special
+		|| player->mo->subsector->sector->damage)
+	{
 		P_PlayerInSpecialSector (player);
-
-	// Check for weapon change.
-
-	// A special event has no other buttons.
-	if (cmd->ucmd.buttons & BT_SPECIAL)
-		cmd->ucmd.buttons = 0;						
-	
-	if ((cmd->ucmd.buttons & BT_CHANGE) || cmd->ucmd.impulse >= 50)
+	}
+	P_PlayerOnSpecialFlat (player, P_GetThingFloorType (player->mo));
+	if (player->mo->momz <= -35*FRACUNIT
+		&& player->mo->momz >= -40*FRACUNIT && !player->morphTics)
 	{
-		// [RH] Support direct weapon changes
-		if (cmd->ucmd.impulse) {
-			newweapon = (weapontype_t)(cmd->ucmd.impulse - 50);
-		} else {
-			// The actual changing of the weapon is done
-			//	when the weapon psprite can do it
-			//	(read: not in the middle of an attack).
-			newweapon = (weapontype_t)((cmd->ucmd.buttons&BT_WEAPONMASK)>>BT_WEAPONSHIFT);
-			
-			if (newweapon == wp_fist
-				&& player->weaponowned[wp_chainsaw]
-				&& !(player->readyweapon == wp_chainsaw
-					 && player->powers[pw_strength]))
-			{
-				newweapon = wp_chainsaw;
-			}
-			
-			if (newweapon == wp_shotgun 
-				&& player->weaponowned[wp_supershotgun]
-				&& player->readyweapon != wp_supershotgun)
-			{
-				newweapon = wp_supershotgun;
-			}
-		}
-
-		if ((newweapon >= 0 && newweapon < NUMWEAPONS)
-			&& player->weaponowned[newweapon]
-			&& newweapon != player->readyweapon)
+		int id = S_FindSkinnedSound (player->mo, "*falling");
+		if (id != -1 && !S_GetSoundPlayingInfo (player->mo, id))
 		{
-			player->pendingweapon = newweapon;
+			S_SoundID (player->mo, CHAN_VOICE, id, 1, ATTN_NORM);
 		}
 	}
-
 	// check for use
-	if (cmd->ucmd.buttons & BT_USE)
+	if ((cmd->ucmd.buttons & BT_USE) && !(player->oldbuttons & BT_USE))
 	{
-		if (!player->usedown)
-		{
-			P_UseLines (player);
-			player->usedown = true;
+		P_UseLines (player);
+	}
+	// Morph counter
+	if (player->morphTics)
+	{
+		if (player->chickenPeck)
+		{ // Chicken attack counter
+			player->chickenPeck -= 3;
+		}
+		if (!--player->morphTics)
+		{ // Attempt to undo the chicken/pig
+			P_UndoPlayerMorph (player);
 		}
 	}
-	else
-		player->usedown = false;
-
-	// cycle psprites
+	// Cycle psprites
 	P_MovePsprites (player);
-
-	// Counters, time dependent power ups.
-
+	// Other Counters
+	if (player->powers[pw_invulnerability])
+	{
+		if (player->mo->flags3 & MF3_CLERICINVUL)
+		{
+			if (!(level.time & 7) && player->mo->translucency > 0
+				&& player->mo->translucency < OPAQUE)
+			{
+				if (player->mo->translucency == HX_SHADOW)
+				{
+					player->mo->translucency = HX_ALTSHADOW;
+				}
+				else
+				{
+					player->mo->translucency = 0;
+					player->mo->flags2 |= MF2_NONSHOOTABLE;
+				}
+			}
+			if (!(level.time & 31))
+			{
+				if (player->mo->translucency == 0)
+				{
+					player->mo->flags2 &= ~MF2_NONSHOOTABLE;
+					player->mo->translucency = HX_ALTSHADOW;
+				}
+				else
+				{
+					player->mo->translucency = HX_SHADOW;
+				}
+			}
+		}
+		if (!(--player->powers[pw_invulnerability]))
+		{
+			player->mo->flags2 &= ~(MF2_INVULNERABLE|MF2_REFLECTIVE);
+			if (player->mo->flags3 & MF3_CLERICINVUL)
+			{
+				player->mo->flags2 &= ~MF2_NONSHOOTABLE;
+				player->mo->translucency = OPAQUE;
+			}
+		}
+	}
 	// Strength counts up to diminish fade.
 	if (player->powers[pw_strength])
-		player->powers[pw_strength]++;	
-				
-	if (player->powers[pw_invulnerability])
-		player->powers[pw_invulnerability]--;
+		player->powers[pw_strength]++;
 
 	if (player->powers[pw_invisibility])
-		if (! --player->powers[pw_invisibility] )
+		if (!--player->powers[pw_invisibility])
+		{
 			player->mo->flags &= ~MF_SHADOW;
-						
+			player->mo->translucency = OPAQUE;
+		}
+
 	if (player->powers[pw_infrared])
 		player->powers[pw_infrared]--;
-				
+
 	if (player->powers[pw_ironfeet])
 		player->powers[pw_ironfeet]--;
-				
+
+	if (player->powers[pw_minotaur])
+		player->powers[pw_minotaur]--;
+
+	if (player->powers[pw_speed])
+		player->powers[pw_speed]--;
+
+	if (player->powers[pw_flight] && (multiplayer ||
+		((player->mo->flags2 & MF2_FLY) && (player->mo->waterlevel < 2))))
+	{
+		if (!--player->powers[pw_flight])
+		{
+			if (player->mo->z != player->mo->floorz)
+			{
+				player->centering = true;
+			}
+			player->mo->flags2 &= ~MF2_FLY;
+			player->mo->flags &= ~MF_NOGRAVITY;
+			BorderTopRefresh = true; //make sure the sprite's cleared out
+		}
+	}
+
+	if (player->powers[pw_weaponlevel2])
+	{
+		if (!--player->powers[pw_weaponlevel2])
+		{
+			if ((player->readyweapon == wp_phoenixrod)
+				&& (player->psprites[ps_weapon].state
+					!= wpnlev2info[wp_phoenixrod]->readystate)
+				&& (player->psprites[ps_weapon].state
+					!= wpnlev2info[wp_phoenixrod]->upstate))
+			{
+				P_SetPsprite (player, ps_weapon,
+					wpnlev1info[wp_phoenixrod]->readystate);
+				player->ammo[am_phoenixrod] -=
+					wpnlev2info[wp_phoenixrod]->ammouse;
+				player->refire = 0;
+				S_StopSound (player->mo, CHAN_WEAPON);
+			}
+			else if ((player->readyweapon == wp_gauntlets)
+				|| (player->readyweapon == wp_staff))
+			{
+				player->pendingweapon = player->readyweapon;
+			}
+			BorderTopRefresh = true;
+		}
+	}
+
 	if (player->damagecount)
 		player->damagecount--;
-				
+
 	if (player->bonuscount)
 		player->bonuscount--;
 
+	if (player->poisoncount && !(level.time & 15))
+	{
+		player->poisoncount -= 5;
+		if (player->poisoncount < 0)
+		{
+			player->poisoncount = 0;
+		}
+		P_PoisonDamage (player, player->poisoner, 1, true);
+	}
 
 	// Handling colormaps.
-	if (player->powers[pw_invulnerability])
+	if (player->powers[pw_invulnerability] && gameinfo.gametype != GAME_Hexen)
 	{
-		if (player->powers[pw_invulnerability] > 4*32
-			|| (player->powers[pw_invulnerability]&8) )
+		if (player->powers[pw_invulnerability] > BLINKTHRESHOLD
+			|| (player->powers[pw_invulnerability] & 8))
+		{
 			player->fixedcolormap = INVERSECOLORMAP;
+		}
 		else
+		{
 			player->fixedcolormap = 0;
+		}
 	}
 	else if (player->powers[pw_infrared])		
 	{
-		if (player->powers[pw_infrared] > 4*32
-			|| (player->powers[pw_infrared]&8) )
+		if (gameinfo.gametype == GAME_Doom)
 		{
-			// almost full bright
-			player->fixedcolormap = 1;
+			if (player->powers[pw_infrared] > BLINKTHRESHOLD
+				|| (player->powers[pw_infrared] & 8))
+			{	// almost full bright
+				player->fixedcolormap = 1;
+			}
+			else
+			{
+				player->fixedcolormap = 0;
+			}
 		}
 		else
-			player->fixedcolormap = 0;
+		{
+			if (player->powers[pw_infrared] <= BLINKTHRESHOLD)
+			{
+				if (player->powers[pw_infrared] & 8)
+				{
+					player->fixedcolormap = 0;
+				}
+				else
+				{
+					player->fixedcolormap = 1;
+				}
+			}
+			else if (!(level.time & 16) &&
+				player->mo == players[consoleplayer].camera)
+			{
+				if (newtorch)
+				{
+					if (player->fixedcolormap + newtorchdelta > 7
+						|| player->fixedcolormap + newtorchdelta < 1
+						|| newtorch == player->fixedcolormap)
+					{
+						newtorch = 0;
+					}
+					else
+					{
+						player->fixedcolormap += newtorchdelta;
+					}
+				}
+				else
+				{
+					newtorch = (P_Random(pr_torch) & 7) + 1;
+					newtorchdelta = (newtorch == player->fixedcolormap) ?
+						0 : ((newtorch > player->fixedcolormap) ? 1 : -1);
+				}
+			}
+		}
 	}
 	else
+	{
 		player->fixedcolormap = 0;
+	}
 
 	// Handle air supply
 	if (player->mo->waterlevel < 3 || player->powers[pw_ironfeet])
@@ -633,176 +1067,124 @@ void P_PlayerThink (player_t *player)
 	{
 		P_DamageMobj (player->mo, NULL, NULL, 2 + 2*((level.time-player->air_finished)/TICRATE), MOD_WATER, DMG_NO_ARMOR);
 	}
+
+	// Save buttons
+	player->oldbuttons = cmd->ucmd.buttons;
 }
 
 void player_s::Serialize (FArchive &arc)
 {
 	int i;
+	userinfo_t *ui;
+	userinfo_t dummy;
 
 	if (arc.IsStoring ())
-	{ // saving to archive
-		arc << mo
-			<< playerstate
-			<< cmd
-			<< userinfo
-			<< viewz
-			<< viewheight
-			<< deltaviewheight
-			<< bob
-			<< momx
-			<< momy
-			<< health
-			<< armorpoints
-			<< armortype
-			<< backpack
-			<< fragcount
-			<< readyweapon
-			<< pendingweapon
-			<< attackdown
-			<< usedown
-			<< cheats
-			<< refire
-			<< inconsistant
-			<< killcount
-			<< itemcount
-			<< secretcount
-			<< damagecount
-			<< bonuscount
-			<< attacker
-			<< extralight
-			<< fixedcolormap
-			<< xviewshift
-			<< jumpTics
-			<< respawn_time
-			<< air_finished
-			<< isbot;
-		for (i = 0; i < NUMPOWERS; i++)
-			arc << powers[i];
-		for (i = 0; i < NUMCARDS; i++)
-			arc << cards[i];
-		for (i = 0; i < MAXPLAYERS; i++)
-			arc << frags[i];
-		for (i = 0; i < NUMWEAPONS; i++)
-			arc << weaponowned[i];
-		for (i = 0; i < NUMAMMO; i++)
-			arc << ammo[i] << maxammo[i];
-		for (i = 0; i < NUMPSPRITES; i++)
-			arc << psprites[i];
-		for (i = 0; i < 3; i++)
-			arc << oldvelocity[i];
-
-		if (isbot)
-		{
-			arc	<< angle
-				<< dest
-				<< prev
-				<< enemy
-				<< missile
-				<< mate
-				<< last_mate
-				<< skill
-				<< t_active
-				<< t_respawn
-				<< t_strafe
-				<< t_react
-				<< t_fight
-				<< t_roam
-				<< t_rocket
-				<< first_shot
-				<< sleft
-				<< allround
-				<< redteam
-				<< oldx
-				<< oldy
-				<< chat;
-			arc.Write (c_target, 256);
-		}
+	{
+		arc.UserWriteClass (cls);
+		ui = &userinfo;
 	}
 	else
-	{ // Restoring from archive
-		userinfo_t dummyuserinfo;
+	{
+		arc.UserReadClass (cls);
+		ui = &dummy;
+	}
 
-		arc >> mo
-			>> playerstate
-			>> cmd
-			>> dummyuserinfo // Q: Would it be better to restore the userinfo from the archive?
-			>> viewz
-			>> viewheight
-			>> deltaviewheight
-			>> bob
-			>> momx
-			>> momy
-			>> health
-			>> armorpoints
-			>> armortype
-			>> backpack
-			>> fragcount
-			>> readyweapon
-			>> pendingweapon
-			>> attackdown
-			>> usedown
-			>> cheats
-			>> refire
-			>> inconsistant
-			>> killcount
-			>> itemcount
-			>> secretcount
-			>> damagecount
-			>> bonuscount
-			>> attacker
-			>> extralight
-			>> fixedcolormap
-			>> xviewshift
-			>> jumpTics
-			>> respawn_time
-			>> air_finished
-			>> isbot;
-		for (i = 0; i < NUMPOWERS; i++)
-			arc >> powers[i];
-		for (i = 0; i < NUMCARDS; i++)
-			arc >> cards[i];
-		for (i = 0; i < MAXPLAYERS; i++)
-			arc >> frags[i];
-		for (i = 0; i < NUMWEAPONS; i++)
-			arc >> weaponowned[i];
-		for (i = 0; i < NUMAMMO; i++)
-			arc >> ammo[i] >> maxammo[i];
-		for (i = 0; i < NUMPSPRITES; i++)
-			arc >> psprites[i];
-		for (i = 0; i < 3; i++)
-			arc >> oldvelocity[i];
+	arc << mo
+		<< playerstate
+		<< cmd
+		<< *ui
+		<< fov
+		<< viewz
+		<< viewheight
+		<< deltaviewheight
+		<< bob
+		<< momx
+		<< momy
+		<< centering
+		<< health
+		<< armortype
+		<< readyArtifact
+		<< artifactCount
+		<< inventorytics
+		<< inventorySlotNum
+		<< pieces
+		<< backpack
+		<< fragcount
+		<< readyweapon
+		<< pendingweapon
+		<< cheats
+		<< refire
+		<< inconsistant
+		<< killcount
+		<< itemcount
+		<< secretcount
+		<< damagecount
+		<< bonuscount
+		<< flamecount
+		<< poisoncount
+		<< poisoner
+		<< attacker
+		<< extralight
+		<< fixedcolormap
+		<< xviewshift
+		<< morphTics
+		<< chickenPeck
+		<< rain1
+		<< rain2
+		<< jumpTics
+		<< respawn_time
+		<< air_finished
+		<< turnticks
+		<< oldbuttons
+		<< isbot;
+	for (i = 0; i < NUMARMOR; i++)
+		arc << armorpoints[i];
+	for (i = 0; i < NUMINVENTORYSLOTS; i++)
+		arc << inventory[i];
+	for (i = 0; i < NUMPOWERS; i++)
+		arc << powers[i];
+	for (i = 0; i < NUMKEYS; i++)
+		arc << keys[i];
+	for (i = 0; i < MAXPLAYERS; i++)
+		arc << frags[i];
+	for (i = 0; i < NUMWEAPONS; i++)
+		arc << weaponowned[i];
+	for (i = 0; i < NUMAMMO; i++)
+		arc << ammo[i] << maxammo[i];
+	for (i = 0; i < NUMPSPRITES; i++)
+		arc << psprites[i];
+	for (i = 0; i < 3; i++)
+		arc << oldvelocity[i];
 
-		camera = mo;
-
-		if (consoleplayer != this - players)
-			userinfo = dummyuserinfo;
-
-		if (isbot)
+	if (isbot)
+	{
+		arc	<< angle
+			<< dest
+			<< prev
+			<< enemy
+			<< missile
+			<< mate
+			<< last_mate
+			<< skill
+			<< t_active
+			<< t_respawn
+			<< t_strafe
+			<< t_react
+			<< t_fight
+			<< t_roam
+			<< t_rocket
+			<< first_shot
+			<< sleft
+			<< allround
+			<< redteam
+			<< oldx
+			<< oldy;
+		if (arc.IsLoading ())
 		{
-			arc	>> angle
-				>> dest
-				>> prev
-				>> enemy
-				>> missile
-				>> mate
-				>> last_mate
-				>> skill
-				>> t_active
-				>> t_respawn
-				>> t_strafe
-				>> t_react
-				>> t_fight
-				>> t_roam
-				>> t_rocket
-				>> first_shot
-				>> sleft
-				>> allround
-				>> redteam
-				>> oldx
-				>> oldy
-				>> chat;
-			arc.Read (c_target, 256);
-
+			if (consoleplayer != this - players)
+			{
+				userinfo = *ui;
+			}
 			botinfo_t *thebot = bglobal.botinfo;
 			while (thebot && stricmp (userinfo.netname, thebot->name))
 				thebot = thebot->next;
@@ -813,5 +1195,13 @@ void player_s::Serialize (FArchive &arc)
 			bglobal.botnum++;
 			bglobal.botingame[this - players] = true;
 		}
+	}
+	else
+	{
+		dest = prev = enemy = missile = mate = last_mate = NULL;
+	}
+	if (arc.IsLoading ())
+	{
+		camera = mo;
 	}
 }

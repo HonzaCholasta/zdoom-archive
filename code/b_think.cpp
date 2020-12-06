@@ -58,8 +58,11 @@ void DCajunMaster::Think (AActor *actor, ticcmd_t *cmd)
 	//Respawn ticker
 	if (actor->player->t_respawn)
 	{
-		if (--actor->player->t_respawn == 1)
-			cmd->ucmd.buttons |= BT_USE; //Press to respawn.
+		actor->player->t_respawn--;
+	}
+	else if (actor->health <= 0)
+	{ // Time to respawn
+		cmd->ucmd.buttons |= BT_USE;
 	}
 }
 
@@ -118,10 +121,25 @@ void DCajunMaster::ThinkForMove (AActor *actor, ticcmd_t *cmd)
 		//Check if it's more important to get an item than fight.
 		if (b->dest && (b->dest->flags&MF_SPECIAL)) //Must be an item, that is close enough.
 		{
-#define is b->dest->type==(mobjtype_t)
-			if (((actor->health<b->skill.isp && (is Medikit || is Stimpack || is Soul || is Mega)) || (is Invul || is Invis || is Mega) || dist<(GETINCOMBAT/4) || (b->readyweapon==wp_pistol || b->readyweapon==wp_fist))
-				&& (dist<GETINCOMBAT || (b->readyweapon==wp_pistol || b->readyweapon==wp_fist))
-				&& Reachable(actor, b->dest))
+#define is(x) b->dest->IsKindOf (TypeInfo::FindType (#x))
+			if (
+				(
+				 (actor->health < b->skill.isp &&
+				  (is (AMedikit) ||
+				   is (AStimpack) ||
+				   is (ASoulsphere) ||
+				   is (AMegasphere)
+				  )
+				 ) || (
+				  is (AInvulnerability) ||
+				  is (AInvisibility) ||
+				  is (AMegasphere)
+				 ) || 
+				 dist < (GETINCOMBAT/4) ||
+				 (b->readyweapon == wp_pistol || b->readyweapon == wp_fist)
+				)
+				&& (dist < GETINCOMBAT || (b->readyweapon == wp_pistol || b->readyweapon == wp_fist))
+				&& Reachable (actor, b->dest))
 #undef is
 			{
 				goto roam; //Pick it up, no matter the situation. All bonuses are nice close up.
@@ -256,31 +274,31 @@ void DCajunMaster::WhatToGet (AActor *actor, AActor *item)
 {
 	player_t *b = actor->player;
 
-#define typeis item->type==(mobjtype_t)
+#define typeis(x) item->IsKindOf (TypeInfo::FindType (#x))
     if (!item //Under respawn and away. (handled in P_Mobj.c)
 		|| item == b->prev)
 	{
 		return;
 	}
 	//if(pos && !bglobal.thingvis[pos->id][item->id]) continue;
-	if ((typeis Stimpack || typeis Medikit) && actor->health>=MAXHEALTH)
+	if ((typeis (AStimpack) || typeis (AMedikit)) && actor->health >= MAXHEALTH)
 		return;
-	else if((typeis Mega || typeis Soul || typeis Potion) && actor->health>=(MAXHEALTH*2))
+	else if ((typeis (AMegasphere) || typeis (ASoulsphere) || typeis (AHealthBonus)) && actor->health >= deh.MaxSoulsphere)
 		return;
-	else if(((typeis Ssg || typeis Shotgun || typeis Shell || typeis ShellBox) && b->ammo[am_shell]==b->maxammo[am_shell]) || (deathmatch.value!=2 && ((typeis Shotgun && b->weaponowned[wp_shotgun]) || (typeis Ssg && b->weaponowned[wp_supershotgun]))))
+	else if (((typeis (ASuperShotgun) || typeis (AShotgun) || typeis (AShell) || typeis (AShellBox)) && b->ammo[am_shell] == b->maxammo[am_shell]) || (deathmatch.value != 2 && ((typeis (AShotgun) && b->weaponowned[wp_shotgun]) || (typeis (ASuperShotgun) && b->weaponowned[wp_supershotgun]))))
 		return;
-	else if(((typeis Chain ||  typeis Clip|| typeis AmmoBox) && b->ammo[am_clip]==b->maxammo[am_clip]) || (deathmatch.value!=2 && (typeis Chain && b->weaponowned[wp_chaingun])))
+	else if (((typeis (AChaingun) || typeis (AClip) || typeis (AClipBox)) && b->ammo[am_clip] == b->maxammo[am_clip]) || (deathmatch.value != 2 && (typeis (AChaingun) && b->weaponowned[wp_chaingun])))
 		return;
-	else if(((typeis Plasma || typeis Bfg || typeis Cell || typeis CellPack) && b->ammo[am_cell]==b->maxammo[am_cell]) || (deathmatch.value!=2 && ((typeis Bfg && b->weaponowned[wp_bfg]) || (typeis Plasma && b->weaponowned[wp_plasma]))))
+	else if (((typeis (APlasmaRifle) || typeis (ABigFreakingGun) || typeis (ACell) || typeis (ACellPack)) && b->ammo[am_cell] == b->maxammo[am_cell]) || (deathmatch.value != 2 && ((typeis (ABigFreakingGun) && b->weaponowned[wp_bfg]) || (typeis (APlasmaRifle) && b->weaponowned[wp_plasma]))))
 		return;
-	else if(((typeis Rl || typeis Rocket || typeis RoxBox) && b->ammo[am_misl]==b->maxammo[am_misl]) || (deathmatch.value!=2 && (typeis Rl && b->weaponowned[wp_missile])))
+	else if (((typeis (ARocketLauncher) || typeis (ARocketAmmo) || typeis (ARocketBox)) && b->ammo[am_misl] == b->maxammo[am_misl]) || (deathmatch.value != 2 && (typeis (ARocketLauncher) && b->weaponowned[wp_missile])))
 		return;
-	else if(typeis Saw && b->weaponowned[wp_chainsaw])
+	else if (typeis (AChainsaw) && b->weaponowned[wp_chainsaw])
 		return;
 	if (!Reachable(actor, item))
 		return;
 
-	if(!b->dest || !(b->dest && b->dest->flags&MF_SPECIAL) || (b->dest && !Reachable(actor, b->dest)))
+	if(!b->dest || !(b->dest && b->dest->flags & MF_SPECIAL) || (b->dest && !Reachable (actor, b->dest)))
 	{
 		b->prev = b->dest;
 		b->dest = item;

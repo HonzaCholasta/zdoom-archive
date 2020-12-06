@@ -25,9 +25,10 @@
 
 // HEADER FILES ------------------------------------------------------------
 
-#include "m_alloc.h"
 #include <stdlib.h>
 #include <math.h>
+
+#include "m_alloc.h"
 #include "doomdef.h"
 #include "d_net.h"
 #include "doomstat.h"
@@ -61,7 +62,7 @@ void R_SpanInitData ();
 
 extern int dmflags;
 extern int *walllights;
-extern BOOL DrawNewHUD;		// [RH] Defined in d_main.cpp
+extern bool DrawFSHUD;		// [RH] Defined in d_main.cpp
 extern dyncolormap_t NormalLight;
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
@@ -608,7 +609,8 @@ void R_ExecuteSetViewSize (void)
 		realviewwidth = screen->width;
 		freelookviewheight = realviewheight = screen->height;
 	}
-	else if (setblocks == 10) {
+	else if (setblocks == 10)
+	{
 		realviewwidth = screen->width;
 		realviewheight = ST_Y;
 		freelookviewheight = screen->height;
@@ -621,9 +623,9 @@ void R_ExecuteSetViewSize (void)
 	}
 
 	if (setblocks == 11)
-		DrawNewHUD = true;
+		DrawFSHUD = true;
 	else
-		DrawNewHUD = false;
+		DrawFSHUD = false;
 	
 	viewwidth = realviewwidth >> detailxshift;
 	viewheight = realviewheight >> detailyshift;
@@ -645,7 +647,7 @@ void R_ExecuteSetViewSize (void)
 	virtwidth = screen->width >> detailxshift;
 	virtheight = screen->height >> detailyshift;
 
-	yaspectmul = (fixed_t)(65536.0f*(320.0f*(float)virtheight/(200.0f*(float)virtwidth)));
+	yaspectmul = (fixed_t)(65536.f*(320.f*(float)virtheight/(200.f*(float)virtwidth)));
 
 	colfunc = basecolfunc = R_DrawColumn;
 	lucentcolfunc = R_DrawTranslucentColumn;
@@ -823,13 +825,13 @@ void R_SetupFrame (player_t *player)
 	if (camera->player && camera->player->xviewshift && !paused)
 	{
 		int intensity = camera->player->xviewshift;;
-		viewx += ((M_Random() % (intensity<<2))
+		viewx += ((P_Random(pr_torch) % (intensity<<2))
 					-(intensity<<1))<<FRACBITS;
-		viewy += ((M_Random()%(intensity<<2))
+		viewy += ((P_Random(pr_torch)%(intensity<<2))
 					-(intensity<<1))<<FRACBITS;
 	}
 
-	extralight = camera == player->mo ? player->extralight : 0;
+	extralight = camera->player ? camera->player->extralight : 0;
 
 	viewsin = finesine[viewangle>>ANGLETOFINESHIFT];
 	viewcos = finecosine[viewangle>>ANGLETOFINESHIFT];

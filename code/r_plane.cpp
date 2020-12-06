@@ -46,6 +46,7 @@
 
 #include "m_alloc.h"
 #include "v_video.h"
+#include "gi.h"
 
 planefunction_t 		floorfunc;
 planefunction_t 		ceilingfunc;
@@ -425,6 +426,8 @@ static void _skycolumn (void (*drawfunc)(void), int x)
 		if (backskytex == -1)
 		{
 			dc_source = R_GetColumn (frontskytex, angle);
+			if (gameinfo.gametype == GAME_Heretic)
+				dc_mask = 255;
 			drawfunc ();
 		}
 		else

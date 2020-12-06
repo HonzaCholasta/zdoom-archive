@@ -79,6 +79,8 @@
 #include "gi.h"
 #include "b_bot.h"		//Added by MC:
 #include "stats.h"
+#include "a_doomglobal.h"
+#include "sbar.h"
 
 // MACROS ------------------------------------------------------------------
 
@@ -86,25 +88,27 @@
 
 // EXTERNAL FUNCTION PROTOTYPES --------------------------------------------
 
-extern void M_RestoreMode (void);
-extern void R_ExecuteSetViewSize (void);
+extern void M_RestoreMode ();
+extern void R_ExecuteSetViewSize ();
+extern void P_InitXlat ();
+extern void G_NewInit ();
 
 // PUBLIC FUNCTION PROTOTYPES ----------------------------------------------
 
-void D_CheckNetGame (void);
-void D_ProcessEvents (void);
+void D_CheckNetGame ();
+void D_ProcessEvents ();
 void G_BuildTiccmd (ticcmd_t* cmd);
-void D_DoAdvanceDemo (void);
+void D_DoAdvanceDemo ();
 
 // PRIVATE FUNCTION PROTOTYPES ---------------------------------------------
 
-void D_DoomLoop (void);
+void D_DoomLoop ();
 static void D_AddFile (const char *file);
-//static void DoLooseFiles (void);
 
 // EXTERNAL DATA DECLARATIONS ----------------------------------------------
 
 EXTERN_CVAR (turbo)
+EXTERN_CVAR (crosshair)
 
 extern gameinfo_t SharewareGameInfo;
 extern gameinfo_t RegisteredGameInfo;
@@ -122,8 +126,7 @@ extern int NewWidth, NewHeight, NewBits, DisplayBits;
 EXTERN_CVAR (st_scale)
 extern BOOL gameisdead;
 extern BOOL demorecording;
-extern BOOL M_DemoNoPlay;	// [RH] if true, then skip any demos in the loop
-extern DThinker ThinkerCap;
+extern bool M_DemoNoPlay;	// [RH] if true, then skip any demos in the loop
 
 extern cycle_t WallCycles, PlaneCycles, MaskedCycles;
 
@@ -133,7 +136,7 @@ CVAR (fraglimit, "0", CVAR_SERVERINFO);
 CVAR (timelimit, "0", CVAR_SERVERINFO);
 CVAR (def_patch, "", CVAR_ARCHIVE);
 
-
+bool DrawFSHUD;				// [RH] Draw fullscreen HUD?
 wadlist_t *wadfiles;		// [RH] remove limit on # of loaded wads
 BOOL devparm;				// started game with -devparm
 char *D_DrawIcon;			// [RH] Patch name of icon to draw on next refresh
@@ -274,6 +277,8 @@ void D_Display (void)
 		SB_state = -1;
 		// Refresh the console.
 		C_NewModeAdjust ();
+		// Reload crosshair if transitioned to different size
+		crosshair.Set (crosshair.value);
 	}
 
 	// change the view size if needed
@@ -307,36 +312,42 @@ void D_Display (void)
 
 	switch (gamestate)
 	{
-		case GS_FULLCONSOLE:
-			C_DrawConsole ();
-			M_Drawer ();
-			I_FinishUpdate ();
-			return;
+	case GS_FULLCONSOLE:
+		C_DrawConsole ();
+		M_Drawer ();
+		I_FinishUpdate ();
+		return;
 
-		case GS_LEVEL:
-			if (!gametic)
-				break;
-
-			if (viewactive)
-				R_RenderPlayerView (&players[consoleplayer]);
-			if (automapactive)
-				AM_Drawer ();
-			C_DrawMid ();
-			ST_Drawer ();
-			CT_Drawer ();
+	case GS_LEVEL:
+		if (!gametic)
 			break;
 
-		case GS_INTERMISSION:
-			WI_Drawer ();
-			break;
+		if (viewactive)
+			R_RenderPlayerView (&players[consoleplayer]);
+		if (automapactive)
+			AM_Drawer ();
+		if (realviewheight == screen->height && viewactive)
+		{
+			StatusBar->Draw (DrawFSHUD ? HUD_Fullscreen : HUD_None);
+		}
+		else
+		{
+			StatusBar->Draw (HUD_StatusBar);
+		}
+		CT_Drawer ();
+		break;
 
-		case GS_FINALE:
-			F_Drawer ();
-			break;
+	case GS_INTERMISSION:
+		WI_Drawer ();
+		break;
 
-		case GS_DEMOSCREEN:
-			D_PageDrawer ();
-			break;
+	case GS_FINALE:
+		F_Drawer ();
+		break;
+
+	case GS_DEMOSCREEN:
+		D_PageDrawer ();
+		break;
 
 	default:
 	    break;
@@ -345,11 +356,23 @@ void D_Display (void)
 	// draw pause pic
 	if (paused && !menuactive)
 	{
-		patch_t *pause = (patch_t *)W_CacheLumpName ("M_PAUSE", PU_CACHE);
-		int y;
+		int lump;
 
-		y = (automapactive && !viewactive) ? 4 : viewwindowy + 4;
-		screen->DrawPatchCleanNoMove (pause, (screen->width-(pause->width)*CleanXfac)/2, y);
+		if (gameinfo.gametype == GAME_Doom)
+		{
+			lump = W_CheckNumForName ("M_PAUSE");
+		}
+		else
+		{
+			lump = W_CheckNumForName ("PAUSED");
+		}
+		if (lump >= 0)
+		{
+			patch_t *pause = (patch_t *)W_CacheLumpNum (lump, PU_CACHE);
+			int x = (screen->width - SHORT(pause->width)*CleanXfac)/2 +
+				SHORT(pause->leftoffset)*CleanXfac;
+			screen->DrawPatchCleanNoMove (pause, x, 4);
+		}
 	}
 
 	// [RH] Draw icon, if any
@@ -410,6 +433,27 @@ void D_Display (void)
 
 //==========================================================================
 //
+// D_ErrorCleanup ()
+//
+// Cleanup after a recoverable error.
+//==========================================================================
+
+void D_ErrorCleanup ()
+{
+	bglobal.RemoveAllBots (true);
+	D_QuitNetGame ();
+	Net_ClearBuffers ();
+	G_NewInit ();
+	singletics = false;
+	if (demorecording || demoplayback)
+		G_CheckDemoStatus ();
+	playeringame[0] = 1;
+	players[0].playerstate = PST_LIVE;
+	gameaction = ga_fullconsole;
+}
+
+//==========================================================================
+//
 // D_DoomLoop
 //
 // Manages timing and IO, calls all ?_Responder, ?_Ticker, and ?_Drawer,
@@ -417,7 +461,7 @@ void D_Display (void)
 //
 //==========================================================================
 
-void D_DoomLoop (void)
+void D_DoomLoop ()
 {
 	while (1)
 	{
@@ -471,28 +515,9 @@ void D_DoomLoop (void)
 		}
 		catch (CRecoverableError &error)
 		{
-			int i;
-
-			bglobal.RemoveAllBots (true);
-
 			if (error.GetMessage ())
 				Printf_Bold ("\n%s\n", error.GetMessage());
-
-			D_QuitNetGame ();
-			G_ClearSnapshots ();
-			netgame = false;
-			netdemo = false;
-			multiplayer = false;
-			singletics = false;
-			if (demorecording || demoplayback)
-				G_CheckDemoStatus ();
-
-			for (i = 1; i < MAXPLAYERS; i++)
-				playeringame[i] = 0;
-			consoleplayer = 0;
-			playeringame[0] = 1;
-			players[0].playerstate = PST_LIVE;
-			gameaction = ga_fullconsole;
+			D_ErrorCleanup ();
 		}
 	}
 }
@@ -525,7 +550,7 @@ void D_PageDrawer (void)
 	else
 	{
 		screen->Clear (0, 0, screen->width, screen->height, 0);
-		screen->PrintStr (0, 0, "Page graphic goes here", 22);
+		screen->DrawText (CR_WHITE, 0, 0, "Page graphic goes here");
 	}
 }
 
@@ -558,7 +583,7 @@ void D_DoAdvanceDemo (void)
 	players[consoleplayer].playerstate = PST_LIVE;	// not reborn
 	advancedemo = false;
 	usergame = false;				// no save / end game here
-	paused = false;
+	paused = 0;
 	gameaction = ga_nothing;
 
 	switch (demosequence)
@@ -726,6 +751,9 @@ static bool CheckIWAD (const char *doomwaddir, const char *parm, const char* &ti
 		"doomu.wad", // Hack from original Linux version. Not necessary, but I threw it in anyway.
 		"doom.wad",
 		"doom1.wad",
+		"heretic.wad",
+		"heretic1.wad",
+		"hexen.wad",
 		NULL
 	};
 	char iwad[256];
@@ -746,11 +774,16 @@ static bool CheckIWAD (const char *doomwaddir, const char *parm, const char* &ti
 	// Now scan the contents of the IWAD to determine which one it is
 	if (iwad[0])
 	{
-#define NUM_CHECKLUMPS 9
-		static const char checklumps[NUM_CHECKLUMPS][8] = {
-			"E1M1", "E2M1", "E4M1", "MAP01",
-			{ 'A','N','I','M','D','E','F','S'},
-			"FINAL2", "REDTNT2", "CAMO1",
+#define NUM_CHECKLUMPS 8
+		static const char checklumps[NUM_CHECKLUMPS][8] =
+		{
+			"E1M1",
+			"E2M1",
+			"E4M1",
+			"MAP01",
+			"TITLE",
+			"REDTNT2",
+			"CAMO1",
 			{ 'E','X','T','E','N','D','E','D'}
 		};
 		int lumpsfound[NUM_CHECKLUMPS];
@@ -785,16 +818,16 @@ static bool CheckIWAD (const char *doomwaddir, const char *parm, const char* &ti
 
 		gamemode = undetermined;
 
-		if (lumpsfound[3])
+		if (lumpsfound[3])	// MAP01
 		{
 			gamemode = commercial;
 			gameinfo = CommercialGameInfo;
-			if (lumpsfound[6])
+			if (lumpsfound[5])	// REDTNT2
 			{
 				gamemission = pack_tnt;
 				titlestring = "DOOM 2: TNT - Evilution";
 			}
-			else if (lumpsfound[7])
+			else if (lumpsfound[6])	// CAMO1
 			{
 				gamemission = pack_plut;
 				titlestring = "DOOM 2: Plutonia Experiment";
@@ -802,56 +835,63 @@ static bool CheckIWAD (const char *doomwaddir, const char *parm, const char* &ti
 			else
 			{
 				gamemission = doom2;
-				if (lumpsfound[4])
+				if (lumpsfound[4])	// TITLE
 				{
 					gameinfo = HexenGameInfo;
 					titlestring = "Hexen: Beyond Heretic";
 				}
 				else
+				{
 					titlestring = "DOOM 2: Hell on Earth";
+				}
 			}
 		}
-		else if (lumpsfound[0])
+		else if (lumpsfound[0])	// E1M1
 		{
 			gamemission = doom;
-			if (lumpsfound[1])
+			if (lumpsfound[4])	// TITLE
 			{
-				if (lumpsfound[2])
-				{
-					gamemode = retail;
-					gameinfo = RetailGameInfo;
-					titlestring = "The Ultimate DOOM";
-				}
-				else
-				{
-					gamemode = registered;
-					gameinfo = RegisteredGameInfo;
-					titlestring = "DOOM Registered";
-				}
-			}
-			else
-			{
-				gamemode = shareware;
-				gameinfo = SharewareGameInfo;
-				titlestring = "DOOM Shareware";
-			}
-			if (lumpsfound[5])
-			{
-				if (lumpsfound[1])
+				if (!lumpsfound[1])	// E2M1
 				{
 					gameinfo = HereticSWGameInfo;
+					gamemode = shareware;
 					titlestring = "Heretic Shareware";
 				}
 				else
 				{
 					gameinfo = HereticGameInfo;
-					if (lumpsfound[8])
+					gamemode = retail;
+					if (lumpsfound[7])	// EXTENDED
 					{
 						gameinfo.flags |= GI_MENUHACK_EXTENDED;
 						titlestring = "Heretic: Shadow of the Serpent Riders";
 					}
 					else
 						titlestring = "Heretic";
+				}
+			}
+			else
+			{
+				if (lumpsfound[1])	// E2M1
+				{
+					if (lumpsfound[2])	// E4M1
+					{
+						gamemode = retail;
+						gameinfo = RetailGameInfo;
+						titlestring = "The Ultimate DOOM";
+					}
+					else
+					{
+						gamemode = registered;
+						gameinfo = RegisteredGameInfo;
+						titlestring = "DOOM Registered";
+					}
+				}
+				else
+				{
+					gamemode = shareware;
+					gameinfo = SharewareGameInfo;
+					titlestring = "DOOM Shareware";
 				}
 			}
 		}
@@ -948,46 +988,6 @@ static const char *IdentifyVersion (void)
 
 	return titlestring;
 }
-
-//==========================================================================
-//
-// TransSoulsCallabck
-//
-// [RH] This function is called whenever the lost soul translucency level
-// changes. It searches through the entire world for any lost souls and sets
-// their translucency levels as appropriate. New skulls are also set to
-// spawn with the desired translucency.
-//
-//==========================================================================
-
-BEGIN_CUSTOM_CVAR (transsouls, "0.75", CVAR_ARCHIVE)
-{
-	if (var.value < 0.25)
-	{
-		var.Set (0.25);
-	}
-	else if (var.value > 1)
-	{
-		var.Set (1);
-	}
-	else
-	{
-		fixed_t newlucent = (fixed_t)(FRACUNIT * var.value);
-
-		mobjinfo[MT_SKULL].translucency = newlucent;
-
-		// Find all the lost souls in the world and change them, too.
-		AActor *actor;
-		TThinkerIterator<AActor> iterator;
-
-		while ( (actor = iterator.Next ()) )
-		{
-			if (actor->type == MT_SKULL)
-				actor->translucency = newlucent;
-		}
-	}
-}
-END_CUSTOM_CVAR (transsouls)
 
 //==========================================================================
 //
@@ -1089,9 +1089,6 @@ void D_DoomMain (void)
 	if (lzo_init () != LZO_E_OK)	// [RH] Initialize the minilzo package.
 		I_FatalError ("Could not initialize LZO routines");
 
-	M_LoadDefaults ();			// load before initing other systems
-	C_ExecCmdLineParams (true);	// [RH] do all +set commands on the command line
-
 	{
 		// [RH] Make sure zdoom.wad is always loaded,
 		// as it contains magic stuff we need.
@@ -1108,6 +1105,8 @@ void D_DoomMain (void)
 	}
 
 	I_SetTitleString (IdentifyVersion ());
+	M_LoadDefaults ();			// load before initing other systems
+	C_ExecCmdLineParams (true);	// [RH] do all +set commands on the command line
 
 	// [RH] Add any .wad files in the skins directory
 	{
@@ -1182,12 +1181,20 @@ void D_DoomMain (void)
 		{
 			const char *f = BaseFileSearch (files->GetArg (i), ".wad");
 			if (f)
+			{
 				D_AddFile (files->GetArg (i));
+			}
+			else
+			{
+				Printf (PRINT_HIGH, "Can't find '%s'\n", files->GetArg (i));
+			}
 		}
 	}
 	delete files;
 	
 	W_InitMultipleFiles (&wadfiles);
+
+	P_InitXlat ();
 
 	// [RH] Moved these up here so that we can do most of our
 	//		startup output in a fullscreen console.
@@ -1201,6 +1208,8 @@ void D_DoomMain (void)
 
 	// [RH] Initialize configurable strings.
 	D_InitStrings ();
+
+	FActorInfoInitializer::StaticInit (gameinfo.gametype);
 
 	// [RH] Apply any DeHackEd patch
 	{
@@ -1378,18 +1387,18 @@ void D_DoomMain (void)
 
 	// Check for -file in shareware
 	if (modifiedgame && (gameinfo.flags & GI_SHAREWARE))
-		I_FatalError ("\nYou cannot -file with the shareware version. Register!");
+		I_FatalError ("You cannot -file with the shareware version. Register!");
 	
 	Printf (PRINT_HIGH, "M_Init: Init miscellaneous info.\n");
 	M_Init ();
 
-	Printf (PRINT_HIGH, "R_Init: Init DOOM refresh daemon");
+	Printf (PRINT_HIGH, "R_Init: Init DOOM refresh daemon\n");
 	R_Init ();
 
-	Printf (PRINT_HIGH, "\nP_Init: Init Playloop state.");
+	Printf (PRINT_HIGH, "P_Init: Init Playloop state.\n");
 	P_Init ();
 
-	Printf (PRINT_HIGH, "\nS_Init: Setting up sound.\n");
+	Printf (PRINT_HIGH, "S_Init: Setting up sound.\n");
 	S_Init ((int)snd_sfxvolume.value /* *8 */, (int)snd_musicvolume.value /* *8*/ );
 
 	I_FinishClockCalibration ();
@@ -1398,7 +1407,19 @@ void D_DoomMain (void)
 	D_CheckNetGame ();
 
 	Printf (PRINT_HIGH, "ST_Init: Init status bar.\n");
-	ST_Init ();
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		StatusBar = CreateDoomStatusBar ();
+	}
+	else if (gameinfo.gametype == GAME_Heretic)
+	{
+		StatusBar = CreateHereticStatusBar ();
+	}
+	else
+	{
+		StatusBar = new FBaseStatusBar (0);
+	}
+	StatusBar->AttachToPlayer (&players[consoleplayer]);
 
 	// start the apropriate game based on parms
 	v = Args.CheckValue ("-record");

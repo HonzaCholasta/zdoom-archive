@@ -279,254 +279,276 @@ gamestring_t Strings[NUMSTRINGS] = {
 	{ str_notchanged, "STSTR_BEHOLDX", "Power-up Toggled", NULL },
 	{ str_notchanged, "STSTR_CHOPPERS", "... doesn't suck - GM", NULL },
 	{ str_notchanged, "STSTR_CLEV", "Changing Level...\n", NULL },
-	{ str_notchanged, "E1TEXT", "Once you beat the big badasses and\n"\
-		"clean out the moon base you're supposed\n"\
-		"to win, aren't you? Aren't you? Where's\n"\
-		"your fat reward and ticket home? What\n"\
-		"the hell is this? It's not supposed to\n"\
-		"end this way!\n"\
-		"\n" \
-		"It stinks like rotten meat, but looks\n"\
-		"like the lost Deimos base.  Looks like\n"\
-		"you're stuck on The Shores of Hell.\n"\
-		"The only way out is through.\n"\
-		"\n"\
-		"To continue the DOOM experience, play\n"\
-		"The Shores of Hell and its amazing\n"\
+	{ str_notchanged, "E1TEXT",
+		"Once you beat the big badasses and\n"
+		"clean out the moon base you're supposed\n"
+		"to win, aren't you? Aren't you? Where's\n"
+		"your fat reward and ticket home? What\n"
+		"the hell is this? It's not supposed to\n"
+		"end this way!\n"
+		"\n"
+		"It stinks like rotten meat, but looks\n"
+		"like the lost Deimos base.  Looks like\n"
+		"you're stuck on The Shores of Hell.\n"
+		"The only way out is through.\n"
+		"\n"
+		"To continue the DOOM experience, play\n"
+		"The Shores of Hell and its amazing\n"
 		"sequel, Inferno!\n"
 		, NULL },
-	{ str_notchanged, "E2TEXT", "You've done it! The hideous cyber-\n"\
-		"demon lord that ruled the lost Deimos\n"\
-		"moon base has been slain and you\n"\
-		"are triumphant! But ... where are\n"\
-		"you? You clamber to the edge of the\n"\
-		"moon and look down to see the awful\n"\
-		"truth.\n" \
-		"\n"\
-		"Deimos floats above Hell itself!\n"\
-		"You've never heard of anyone escaping\n"\
-		"from Hell, but you'll make the bastards\n"\
-		"sorry they ever heard of you! Quickly,\n"\
-		"you rappel down to  the surface of\n"\
-		"Hell.\n"\
-		"\n" \
-		"Now, it's on to the final chapter of\n"\
+	{ str_notchanged, "E2TEXT",
+		"You've done it! The hideous cyber-\n"
+		"demon lord that ruled the lost Deimos\n"
+		"moon base has been slain and you\n"
+		"are triumphant! But ... where are\n"
+		"you? You clamber to the edge of the\n"
+		"moon and look down to see the awful\n"
+		"truth.\n"
+		"\n"
+		"Deimos floats above Hell itself!\n"
+		"You've never heard of anyone escaping\n"
+		"from Hell, but you'll make the bastards\n"
+		"sorry they ever heard of you! Quickly,\n"
+		"you rappel down to  the surface of\n"
+		"Hell.\n"
+		"\n"
+		"Now, it's on to the final chapter of\n"
 		"DOOM! -- Inferno."
 		, NULL },
-	{ str_notchanged, "E3TEXT", "The loathsome spiderdemon that\n"\
-		"masterminded the invasion of the moon\n"\
-		"bases and caused so much death has had\n"\
-		"its ass kicked for all time.\n"\
-		"\n"\
-		"A hidden doorway opens and you enter.\n"\
-		"You've proven too tough for Hell to\n"\
-		"contain, and now Hell at last plays\n"\
-		"fair -- for you emerge from the door\n"\
-		"to see the green fields of Earth!\n"\
-		"Home at last.\n" \
-		"\n"\
-		"You wonder what's been happening on\n"\
-		"Earth while you were battling evil\n"\
-		"unleashed. It's good that no Hell-\n"\
-		"spawn could have come through that\n"\
+	{ str_notchanged, "E3TEXT",
+		"The loathsome spiderdemon that\n"
+		"masterminded the invasion of the moon\n"
+		"bases and caused so much death has had\n"
+		"its ass kicked for all time.\n"
+		"\n"
+		"A hidden doorway opens and you enter.\n"
+		"You've proven too tough for Hell to\n"
+		"contain, and now Hell at last plays\n"
+		"fair -- for you emerge from the door\n"
+		"to see the green fields of Earth!\n"
+		"Home at last.\n"
+		"\n"
+		"You wonder what's been happening on\n"
+		"Earth while you were battling evil\n"
+		"unleashed. It's good that no Hell-\n"
+		"spawn could have come through that\n"
 		"door with you ..."
 		, NULL },
-	{ str_notchanged, "E4TEXT", "the spider mastermind must have sent forth\n"\
-		"its legions of hellspawn before your\n"\
-		"final confrontation with that terrible\n"\
-		"beast from hell.  but you stepped forward\n"\
-		"and brought forth eternal damnation and\n"\
-		"suffering upon the horde as a true hero\n"\
-		"would in the face of something so evil.\n"\
-		"\n"\
-		"besides, someone was gonna pay for what\n"\
-		"happened to daisy, your pet rabbit.\n"\
-		"\n"\
-		"but now, you see spread before you more\n"\
-		"potential pain and gibbitude as a nation\n"\
-		"of demons run amok among our cities.\n"\
-		"\n"\
+	{ str_notchanged, "E4TEXT",
+		"the spider mastermind must have sent forth\n"
+		"its legions of hellspawn before your\n"
+		"final confrontation with that terrible\n"
+		"beast from hell.  but you stepped forward\n"
+		"and brought forth eternal damnation and\n"
+		"suffering upon the horde as a true hero\n"
+		"would in the face of something so evil.\n"
+		"\n"
+		"besides, someone was gonna pay for what\n"
+		"happened to daisy, your pet rabbit.\n"
+		"\n"
+		"but now, you see spread before you more\n"
+		"potential pain and gibbitude as a nation\n"
+		"of demons run amok among our cities.\n"
+		"\n"
 		"next stop, hell on earth!"
 		, NULL },
-	{ str_notchanged, "C1TEXT", "YOU HAVE ENTERED DEEPLY INTO THE INFESTED\n" \
-		"STARPORT. BUT SOMETHING IS WRONG. THE\n" \
-		"MONSTERS HAVE BROUGHT THEIR OWN REALITY\n" \
-		"WITH THEM, AND THE STARPORT'S TECHNOLOGY\n" \
-		"IS BEING SUBVERTED BY THEIR PRESENCE.\n" \
-		"\n"\
-		"AHEAD, YOU SEE AN OUTPOST OF HELL, A\n" \
-		"FORTIFIED ZONE. IF YOU CAN GET PAST IT,\n" \
-		"YOU CAN PENETRATE INTO THE HAUNTED HEART\n" \
-		"OF THE STARBASE AND FIND THE CONTROLLING\n" \
-		"SWITCH WHICH HOLDS EARTH'S POPULATION\n" \
+	{ str_notchanged, "C1TEXT",
+		"YOU HAVE ENTERED DEEPLY INTO THE INFESTED\n"
+		"STARPORT. BUT SOMETHING IS WRONG. THE\n"
+		"MONSTERS HAVE BROUGHT THEIR OWN REALITY\n"
+		"WITH THEM, AND THE STARPORT'S TECHNOLOGY\n"
+		"IS BEING SUBVERTED BY THEIR PRESENCE.\n"
+		"\n"
+		"AHEAD, YOU SEE AN OUTPOST OF HELL, A\n"
+		"FORTIFIED ZONE. IF YOU CAN GET PAST IT,\n"
+		"YOU CAN PENETRATE INTO THE HAUNTED HEART\n"
+		"OF THE STARBASE AND FIND THE CONTROLLING\n"
+		"SWITCH WHICH HOLDS EARTH'S POPULATION\n"
 		"HOSTAGE."
 		, NULL },
-	{ str_notchanged, "C2TEXT", "YOU HAVE WON! YOUR VICTORY HAS ENABLED\n" \
-		"HUMANKIND TO EVACUATE EARTH AND ESCAPE\n"\
-		"THE NIGHTMARE.  NOW YOU ARE THE ONLY\n"\
-		"HUMAN LEFT ON THE FACE OF THE PLANET.\n"\
-		"CANNIBAL MUTATIONS, CARNIVOROUS ALIENS,\n"\
-		"AND EVIL SPIRITS ARE YOUR ONLY NEIGHBORS.\n"\
-		"YOU SIT BACK AND WAIT FOR DEATH, CONTENT\n"\
-		"THAT YOU HAVE SAVED YOUR SPECIES.\n"\
-		"\n"\
-		"BUT THEN, EARTH CONTROL BEAMS DOWN A\n"\
-		"MESSAGE FROM SPACE: \"SENSORS HAVE LOCATED\n"\
-		"THE SOURCE OF THE ALIEN INVASION. IF YOU\n"\
-		"GO THERE, YOU MAY BE ABLE TO BLOCK THEIR\n"\
-		"ENTRY.  THE ALIEN BASE IS IN THE HEART OF\n"\
-		"YOUR OWN HOME CITY, NOT FAR FROM THE\n"\
-		"STARPORT.\" SLOWLY AND PAINFULLY YOU GET\n"\
+	{ str_notchanged, "C2TEXT",
+		"YOU HAVE WON! YOUR VICTORY HAS ENABLED\n"
+		"HUMANKIND TO EVACUATE EARTH AND ESCAPE\n"
+		"THE NIGHTMARE.  NOW YOU ARE THE ONLY\n"
+		"HUMAN LEFT ON THE FACE OF THE PLANET.\n"
+		"CANNIBAL MUTATIONS, CARNIVOROUS ALIENS,\n"
+		"AND EVIL SPIRITS ARE YOUR ONLY NEIGHBORS.\n"
+		"YOU SIT BACK AND WAIT FOR DEATH, CONTENT\n"
+		"THAT YOU HAVE SAVED YOUR SPECIES.\n"
+		"\n"
+		"BUT THEN, EARTH CONTROL BEAMS DOWN A\n"
+		"MESSAGE FROM SPACE: \"SENSORS HAVE LOCATED\n"
+		"THE SOURCE OF THE ALIEN INVASION. IF YOU\n"
+		"GO THERE, YOU MAY BE ABLE TO BLOCK THEIR\n"
+		"ENTRY.  THE ALIEN BASE IS IN THE HEART OF\n"
+		"YOUR OWN HOME CITY, NOT FAR FROM THE\n"
+		"STARPORT.\" SLOWLY AND PAINFULLY YOU GET\n"
 		"UP AND RETURN TO THE FRAY."
 		, NULL },
-	{ str_notchanged, "C3TEXT", "YOU ARE AT THE CORRUPT HEART OF THE CITY,\n"\
-		"SURROUNDED BY THE CORPSES OF YOUR ENEMIES.\n"\
-		"YOU SEE NO WAY TO DESTROY THE CREATURES'\n"\
-		"ENTRYWAY ON THIS SIDE, SO YOU CLENCH YOUR\n"\
-		"TEETH AND PLUNGE THROUGH IT.\n"\
-		"\n"\
-		"THERE MUST BE A WAY TO CLOSE IT ON THE\n"\
-		"OTHER SIDE. WHAT DO YOU CARE IF YOU'VE\n"\
+	{ str_notchanged, "C3TEXT",
+		"YOU ARE AT THE CORRUPT HEART OF THE CITY,\n"
+		"SURROUNDED BY THE CORPSES OF YOUR ENEMIES.\n"
+		"YOU SEE NO WAY TO DESTROY THE CREATURES'\n"
+		"ENTRYWAY ON THIS SIDE, SO YOU CLENCH YOUR\n"
+		"TEETH AND PLUNGE THROUGH IT.\n"
+		"\n"
+		"THERE MUST BE A WAY TO CLOSE IT ON THE\n"
+		"OTHER SIDE. WHAT DO YOU CARE IF YOU'VE\n"
 		"GOT TO GO THROUGH HELL TO GET TO IT?"
 		, NULL },
-	{ str_notchanged, "C4TEXT", "THE HORRENDOUS VISAGE OF THE BIGGEST\n"\
-		"DEMON YOU'VE EVER SEEN CRUMBLES BEFORE\n"\
-		"YOU, AFTER YOU PUMP YOUR ROCKETS INTO\n"\
-		"HIS EXPOSED BRAIN. THE MONSTER SHRIVELS\n"\
-		"UP AND DIES, ITS THRASHING LIMBS\n"\
-		"DEVASTATING UNTOLD MILES OF HELL'S\n"\
-		"SURFACE.\n"\
-		"\n"\
-		"YOU'VE DONE IT. THE INVASION IS OVER.\n"\
-		"EARTH IS SAVED. HELL IS A WRECK. YOU\n"\
-		"WONDER WHERE BAD FOLKS WILL GO WHEN THEY\n"\
-		"DIE, NOW. WIPING THE SWEAT FROM YOUR\n"\
-		"FOREHEAD YOU BEGIN THE LONG TREK BACK\n"\
-		"HOME. REBUILDING EARTH OUGHT TO BE A\n"\
+	{ str_notchanged, "C4TEXT",
+		"THE HORRENDOUS VISAGE OF THE BIGGEST\n"
+		"DEMON YOU'VE EVER SEEN CRUMBLES BEFORE\n"
+		"YOU, AFTER YOU PUMP YOUR ROCKETS INTO\n"
+		"HIS EXPOSED BRAIN. THE MONSTER SHRIVELS\n"
+		"UP AND DIES, ITS THRASHING LIMBS\n"
+		"DEVASTATING UNTOLD MILES OF HELL'S\n"
+		"SURFACE.\n"
+		"\n"
+		"YOU'VE DONE IT. THE INVASION IS OVER.\n"
+		"EARTH IS SAVED. HELL IS A WRECK. YOU\n"
+		"WONDER WHERE BAD FOLKS WILL GO WHEN THEY\n"
+		"DIE, NOW. WIPING THE SWEAT FROM YOUR\n"
+		"FOREHEAD YOU BEGIN THE LONG TREK BACK\n"
+		"HOME. REBUILDING EARTH OUGHT TO BE A\n"
 		"LOT MORE FUN THAN RUINING IT WAS.\n"
 		, NULL },
-	{ str_notchanged, "C5TEXT", "CONGRATULATIONS, YOU'VE FOUND THE SECRET\n"\
-		"LEVEL! LOOKS LIKE IT'S BEEN BUILT BY\n"\
-		"HUMANS, RATHER THAN DEMONS. YOU WONDER\n"\
-		"WHO THE INMATES OF THIS CORNER OF HELL\n"\
+	{ str_notchanged, "C5TEXT",
+		"CONGRATULATIONS, YOU'VE FOUND THE SECRET\n"
+		"LEVEL! LOOKS LIKE IT'S BEEN BUILT BY\n"
+		"HUMANS, RATHER THAN DEMONS. YOU WONDER\n"
+		"WHO THE INMATES OF THIS CORNER OF HELL\n"
 		"WILL BE."
 		, NULL },
-	{ str_notchanged, "C6TEXT", "CONGRATULATIONS, YOU'VE FOUND THE\n"\
-		"SUPER SECRET LEVEL!  YOU'D BETTER\n"\
+	{ str_notchanged, "C6TEXT",
+		"CONGRATULATIONS, YOU'VE FOUND THE\n"
+		"SUPER SECRET LEVEL!  YOU'D BETTER\n"
 		"BLAZE THROUGH THIS ONE!\n"
 		, NULL },
-	{ str_notchanged, "P1TEXT", "You gloat over the steaming carcass of the\n"\
-		"Guardian.  With its death, you've wrested\n"\
-		"the Accelerator from the stinking claws\n"\
-		"of Hell.  You relax and glance around the\n"\
-		"room.  Damn!  There was supposed to be at\n"\
-		"least one working prototype, but you can't\n"\
-		"see it. The demons must have taken it.\n"\
-		"\n"\
-		"You must find the prototype, or all your\n"\
-		"struggles will have been wasted. Keep\n"\
-		"moving, keep fighting, keep killing.\n"\
+	{ str_notchanged, "P1TEXT",
+		"You gloat over the steaming carcass of the\n"
+		"Guardian.  With its death, you've wrested\n"
+		"the Accelerator from the stinking claws\n"
+		"of Hell.  You relax and glance around the\n"
+		"room.  Damn!  There was supposed to be at\n"
+		"least one working prototype, but you can't\n"
+		"see it. The demons must have taken it.\n"
+		"\n"
+		"You must find the prototype, or all your\n"
+		"struggles will have been wasted. Keep\n"
+		"moving, keep fighting, keep killing.\n"
 		"Oh yes, keep living, too."
 		, NULL },
-	{ str_notchanged, "P2TEXT", "Even the deadly Arch-Vile labyrinth could\n"\
-		"not stop you, and you've gotten to the\n"\
-		"prototype Accelerator which is soon\n"\
-		"efficiently and permanently deactivated.\n"\
-		"\n"\
+	{ str_notchanged, "P2TEXT",
+		"Even the deadly Arch-Vile labyrinth could\n"
+		"not stop you, and you've gotten to the\n"
+		"prototype Accelerator which is soon\n"
+		"efficiently and permanently deactivated.\n"
+		"\n"
 		"You're good at that kind of thing."
 		, NULL },
-	{ str_notchanged, "P3TEXT", "You've bashed and battered your way into\n"\
-		"the heart of the devil-hive.  Time for a\n"\
-		"Search-and-Destroy mission, aimed at the\n"\
-		"Gatekeeper, whose foul offspring is\n"\
-		"cascading to Earth.  Yeah, he's bad. But\n"\
-		"you know who's worse!\n"\
-		"\n"\
-		"Grinning evilly, you check your gear, and\n"\
-		"get ready to give the bastard a little Hell\n"\
+	{ str_notchanged, "P3TEXT",
+		"You've bashed and battered your way into\n"
+		"the heart of the devil-hive.  Time for a\n"
+		"Search-and-Destroy mission, aimed at the\n"
+		"Gatekeeper, whose foul offspring is\n"
+		"cascading to Earth.  Yeah, he's bad. But\n"
+		"you know who's worse!\n"
+		"\n"
+		"Grinning evilly, you check your gear, and\n"
+		"get ready to give the bastard a little Hell\n"
 		"of your own making!"
 		, NULL },
-	{ str_notchanged, "P4TEXT", "The Gatekeeper's evil face is splattered\n"\
-		"all over the place.  As its tattered corpse\n"\
-		"collapses, an inverted Gate forms and\n"\
-		"sucks down the shards of the last\n"\
-		"prototype Accelerator, not to mention the\n"\
-		"few remaining demons.  You're done. Hell\n"\
-		"has gone back to pounding bad dead folks \n"\
-		"instead of good live ones.  Remember to\n"\
-		"tell your grandkids to put a rocket\n"\
-		"launcher in your coffin. If you go to Hell\n"\
-		"when you die, you'll need it for some\n"\
+	{ str_notchanged, "P4TEXT",
+		"The Gatekeeper's evil face is splattered\n"
+		"all over the place.  As its tattered corpse\n"
+		"collapses, an inverted Gate forms and\n"
+		"sucks down the shards of the last\n"
+		"prototype Accelerator, not to mention the\n"
+		"few remaining demons.  You're done. Hell\n"
+		"has gone back to pounding bad dead folks \n"
+		"instead of good live ones.  Remember to\n"
+		"tell your grandkids to put a rocket\n"
+		"launcher in your coffin. If you go to Hell\n"
+		"when you die, you'll need it for some\n"
 		"final cleaning-up ..."
 		, NULL },
-	{ str_notchanged, "P5TEXT", "You've found the second-hardest level we\n"\
-		"got. Hope you have a saved game a level or\n"\
-		"two previous.  If not, be prepared to die\n"\
+	{ str_notchanged, "P5TEXT",
+		"You've found the second-hardest level we\n"
+		"got. Hope you have a saved game a level or\n"
+		"two previous.  If not, be prepared to die\n"
 		"aplenty. For master marines only."
 		, NULL },
-	{ str_notchanged, "P6TEXT", "Betcha wondered just what WAS the hardest\n"\
-		"level we had ready for ya?  Now you know.\n"\
+	{ str_notchanged, "P6TEXT",
+		"Betcha wondered just what WAS the hardest\n"
+		"level we had ready for ya?  Now you know.\n"
 		"No one gets out alive."
 		, NULL },
-	{ str_notchanged, "T1TEXT", "You've fought your way out of the infested\n"\
-		"experimental labs.   It seems that UAC has\n"\
-		"once again gulped it down.  With their\n"\
-		"high turnover, it must be hard for poor\n"\
-		"old UAC to buy corporate health insurance\n"\
-		"nowadays..\n"\
-		"\n"\
-		"Ahead lies the military complex, now\n"\
-		"swarming with diseased horrors hot to get\n"\
-		"their teeth into you. With luck, the\n"\
-		"complex still has some warlike ordnance\n"\
+	{ str_notchanged, "T1TEXT",
+		"You've fought your way out of the infested\n"
+		"experimental labs.   It seems that UAC has\n"
+		"once again gulped it down.  With their\n"
+		"high turnover, it must be hard for poor\n"
+		"old UAC to buy corporate health insurance\n"
+		"nowadays..\n"
+		"\n"
+		"Ahead lies the military complex, now\n"
+		"swarming with diseased horrors hot to get\n"
+		"their teeth into you. With luck, the\n"
+		"complex still has some warlike ordnance\n"
 		"laying around."
 		, NULL },
-	{ str_notchanged, "T2TEXT", "You hear the grinding of heavy machinery\n"\
-		"ahead.  You sure hope they're not stamping\n"\
-		"out new hellspawn, but you're ready to\n"\
-		"ream out a whole herd if you have to.\n"\
-		"They might be planning a blood feast, but\n"\
-		"you feel about as mean as two thousand\n"\
-		"maniacs packed into one mad killer.\n"\
-		"\n"\
+	{ str_notchanged, "T2TEXT",
+		"You hear the grinding of heavy machinery\n"
+		"ahead.  You sure hope they're not stamping\n"
+		"out new hellspawn, but you're ready to\n"
+		"ream out a whole herd if you have to.\n"
+		"They might be planning a blood feast, but\n"
+		"you feel about as mean as two thousand\n"
+		"maniacs packed into one mad killer.\n"
+		"\n"
 		"You don't plan to go down easy."
 		, NULL },
-	{ str_notchanged, "T3TEXT", "The vista opening ahead looks real damn\n"\
-		"familiar. Smells familiar, too -- like\n"\
-		"fried excrement. You didn't like this\n"\
-		"place before, and you sure as hell ain't\n"\
-		"planning to like it now. The more you\n"\
-		"brood on it, the madder you get.\n"\
-		"Hefting your gun, an evil grin trickles\n"\
+	{ str_notchanged, "T3TEXT",
+		"The vista opening ahead looks real damn\n"
+		"familiar. Smells familiar, too -- like\n"
+		"fried excrement. You didn't like this\n"
+		"place before, and you sure as hell ain't\n"
+		"planning to like it now. The more you\n"
+		"brood on it, the madder you get.\n"
+		"Hefting your gun, an evil grin trickles\n"
 		"onto your face. Time to take some names."
 		, NULL },
-	{ str_notchanged, "T4TEXT", "Suddenly, all is silent, from one horizon\n"\
-		"to the other. The agonizing echo of Hell\n"\
-		"fades away, the nightmare sky turns to\n"\
-		"blue, the heaps of monster corpses start \n"\
-		"to evaporate along with the evil stench \n"\
-		"that filled the air. Jeeze, maybe you've\n"\
-		"done it. Have you really won?\n"\
+	{ str_notchanged, "T4TEXT",
+		"Suddenly, all is silent, from one horizon\n"
+		"to the other. The agonizing echo of Hell\n"
+		"fades away, the nightmare sky turns to\n"
+		"blue, the heaps of monster corpses start \n"
+		"to evaporate along with the evil stench \n"
+		"that filled the air. Jeeze, maybe you've\n"
+		"done it. Have you really won?\n"
 		"\n"\
-		"Something rumbles in the distance.\n"\
-		"A blue light begins to glow inside the\n"\
+		"Something rumbles in the distance.\n"
+		"A blue light begins to glow inside the\n"
 		"ruined skull of the demon-spitter."
 		, NULL },
-	{ str_notchanged, "T5TEXT", "What now? Looks totally different. Kind\n"\
-		"of like King Tut's condo. Well,\n"\
-		"whatever's here can't be any worse\n"\
-		"than usual. Can it?  Or maybe it's best\n"\
+	{ str_notchanged, "T5TEXT",
+		"What now? Looks totally different. Kind\n"
+		"of like King Tut's condo. Well,\n"
+		"whatever's here can't be any worse\n"
+		"than usual. Can it?  Or maybe it's best\n"
 		"to let sleeping gods lie.."
 		, NULL },
-	{ str_notchanged, "T6TEXT", "Time for a vacation. You've burst the\n"\
-		"bowels of hell and by golly you're ready\n"\
-		"for a break. You mutter to yourself,\n"\
-		"Maybe someone else can kick Hell's ass\n"\
-		"next time around. Ahead lies a quiet town,\n"\
-		"with peaceful flowing water, quaint\n"\
-		"buildings, and presumably no Hellspawn.\n"\
-		"\n"\
-		"As you step off the transport, you hear\n"\
+	{ str_notchanged, "T6TEXT",
+		"Time for a vacation. You've burst the\n"
+		"bowels of hell and by golly you're ready\n"
+		"for a break. You mutter to yourself,\n"
+		"Maybe someone else can kick Hell's ass\n"
+		"next time around. Ahead lies a quiet town,\n"
+		"with peaceful flowing water, quaint\n"
+		"buildings, and presumably no Hellspawn.\n"
+		"\n"
+		"As you step off the transport, you hear\n"
 		"the stomp of a cyberdemon's iron shoe."
 		, NULL },
 	{ str_notchanged, "CC_ZOMBIE", "ZOMBIEMAN", NULL },
@@ -629,13 +651,169 @@ gamestring_t Strings[NUMSTRINGS] = {
 	{ str_notchanged, "STARTUP3", "", NULL },
 	{ str_notchanged, "STARTUP4", "", NULL },
 	{ str_notchanged, "STARTUP5", "", NULL },
+
+	// Heretic strings
+	{ str_notchanged, "HE1TEXT",
+		"with the destruction of the iron\n"
+		"liches and their minions, the last\n"
+		"of the undead are cleared from this\n"
+		"plane of existence.\n\n"
+		"those creatures had to come from\n"
+		"somewhere, though, and you have the\n"
+		"sneaky suspicion that the fiery\n"
+		"portal of hell's maw opens onto\n"
+		"their home dimension.\n\n"
+		"to make sure that more undead\n"
+		"(or even worse things) don't come\n"
+		"through, you'll have to seal hell's\n"
+		"maw from the other side. of course\n"
+		"this means you may get stuck in a\n"
+		"very unfriendly world, but no one\n"
+		"ever said being a Heretic was easy!",
+		NULL },
+	{ str_notchanged, "HE2TEXT",
+		"the mighty maulotaurs have proved\n"
+		"to be no match for you, and as\n"
+		"their steaming corpses slide to the\n"
+		"ground you feel a sense of grim\n"
+		"satisfaction that they have been\n"
+		"destroyed.\n\n"
+		"the gateways which they guarded\n"
+		"have opened, revealing what you\n"
+		"hope is the way home. but as you\n"
+		"step through, mocking laughter\n"
+		"rings in your ears.\n\n"
+		"was some other force controlling\n"
+		"the maulotaurs? could there be even\n"
+		"more horrific beings through this\n"
+		"gate? the sweep of a crystal dome\n"
+		"overhead where the sky should be is\n"
+		"certainly not a good sign....",
+		NULL },
+	{ str_notchanged, "HE3TEXT",
+		"the death of d'sparil has loosed\n"
+		"the magical bonds holding his\n"
+		"creatures on this plane, their\n"
+		"dying screams overwhelming his own\n"
+		"cries of agony.\n\n"
+		"your oath of vengeance fulfilled,\n"
+		"you enter the portal to your own\n"
+		"world, mere moments before the dome\n"
+		"shatters into a million pieces.\n\n"
+		"but if d'sparil's power is broken\n"
+		"forever, why don't you feel safe?\n"
+		"was it that last shout just before\n"
+		"his death, the one that sounded\n"
+		"like a curse? or a summoning? you\n"
+		"can't really be sure, but it might\n"
+		"just have been a scream.\n\n"
+		"then again, what about the other\n"
+		"serpent riders?",
+		NULL },
+	{ str_notchanged, "HE4TEXT",
+		"you thought you would return to your\n"
+		"own world after d'sparil died, but\n"
+		"his final act banished you to his\n"
+		"own plane. here you entered the\n"
+		"shattered remnants of lands\n"
+		"conquered by d'sparil. you defeated\n"
+		"the last guardians of these lands,\n"
+		"but now you stand before the gates\n"
+		"to d'sparil's stronghold. until this\n"
+		"moment you had no doubts about your\n"
+		"ability to face anything you might\n"
+		"encounter, but beyond this portal\n"
+		"lies the very heart of the evil\n"
+		"which invaded your world. d'sparil\n"
+		"might be dead, but the pit where he\n"
+		"was spawned remains. now you must\n"
+		"enter that pit in the hopes of\n"
+		"finding a way out. and somewhere,\n"
+		"in the darkest corner of d'sparil's\n"
+		"demesne, his personal bodyguards\n"
+		"await your arrival ...",
+		NULL },
+	{ str_notchanged, "HE5TEXT",
+		"as the final maulotaur bellows his\n"
+		"death-agony, you realize that you\n"
+		"have never come so close to your own\n"
+		"destruction. not even the fight with\n"
+		"d'sparil and his disciples had been\n"
+		"this desperate. grimly you stare at\n"
+		"the gates which open before you,\n"
+		"wondering if they lead home, or if\n"
+		"they open onto some undreamed-of\n"
+		"horror. you find yourself wondering\n"
+		"if you have the strength to go on,\n"
+		"if nothing but death and pain await\n"
+		"you. but what else can you do, if\n"
+		"the will to fight is gone? can you\n"
+		"force yourself to continue in the\n"
+		"face of such despair? do you have\n"
+		"the courage? you find, in the end,\n"
+		"that it is not within you to\n"
+		"surrender without a fight. eyes\n"
+		"wide, you go to meet your fate.",
+		NULL },
+// EPISODE 1 - THE CITY OF THE DAMNED
+	{ str_notchanged, "HHUSTR_E1M1", "THE DOCKS", NULL },
+ 	{ str_notchanged, "HHUSTR_E1M2", "THE DUNGEONS", NULL },
+ 	{ str_notchanged, "HHUSTR_E1M3", "THE GATEHOUSE", NULL },
+ 	{ str_notchanged, "HHUSTR_E1M4", "THE GUARD TOWER", NULL },
+ 	{ str_notchanged, "HHUSTR_E1M5", "THE CITADEL", NULL },
+ 	{ str_notchanged, "HHUSTR_E1M6", "THE CATHEDRAL", NULL },
+ 	{ str_notchanged, "HHUSTR_E1M7", "THE CRYPTS", NULL },
+ 	{ str_notchanged, "HHUSTR_E1M8", "HELL'S MAW", NULL },
+ 	{ str_notchanged, "HHUSTR_E1M9", "THE GRAVEYARD", NULL },
+// EPISODE 2 - HELL'S MAW
+	{ str_notchanged, "HHUSTR_E2M1", "THE CRATER", NULL },
+ 	{ str_notchanged, "HHUSTR_E2M2", "THE LAVA PITS", NULL },
+ 	{ str_notchanged, "HHUSTR_E2M3", "THE RIVER OF FIRE", NULL },
+ 	{ str_notchanged, "HHUSTR_E2M4", "THE ICE GROTTO", NULL },
+ 	{ str_notchanged, "HHUSTR_E2M5", "THE CATACOMBS", NULL },
+ 	{ str_notchanged, "HHUSTR_E2M6", "THE LABYRINTH", NULL },
+ 	{ str_notchanged, "HHUSTR_E2M7", "THE GREAT HALL", NULL },
+ 	{ str_notchanged, "HHUSTR_E2M8", "THE PORTALS OF CHAOS", NULL },
+ 	{ str_notchanged, "HHUSTR_E2M9", "THE GLACIER", NULL },
+// EPISODE 3 - THE DOME OF D'SPARIL
+ 	{ str_notchanged, "HHUSTR_E3M1", "THE STOREHOUSE", NULL },
+ 	{ str_notchanged, "HHUSTR_E3M2", "THE CESSPOOL", NULL },
+ 	{ str_notchanged, "HHUSTR_E3M3", "THE CONFLUENCE", NULL },
+ 	{ str_notchanged, "HHUSTR_E3M4", "THE AZURE FORTRESS", NULL },
+ 	{ str_notchanged, "HHUSTR_E3M5", "THE OPHIDIAN LAIR", NULL },
+ 	{ str_notchanged, "HHUSTR_E3M6", "THE HALLS OF FEAR", NULL },
+ 	{ str_notchanged, "HHUSTR_E3M7", "THE CHASM", NULL },
+ 	{ str_notchanged, "HHUSTR_E3M8", "D'SPARIL'S KEEP", NULL },
+ 	{ str_notchanged, "HHUSTR_E3M9", "THE AQUIFER", NULL },
+// EPISODE 4: THE OSSUARY
+	{ str_notchanged, "HHUSTR_E4M1", "CATAFALQUE", NULL },
+	{ str_notchanged, "HHUSTR_E4M2", "BLOCKHOUSE", NULL },
+	{ str_notchanged, "HHUSTR_E4M3", "AMBULATORY", NULL },
+	{ str_notchanged, "HHUSTR_E4M4", "SEPULCHER", NULL },
+	{ str_notchanged, "HHUSTR_E4M5", "GREAT STAIR", NULL },
+	{ str_notchanged, "HHUSTR_E4M6", "HALLS OF THE APOSTATE", NULL },
+	{ str_notchanged, "HHUSTR_E4M7", "RAMPARTS OF PERDITION", NULL },
+	{ str_notchanged, "HHUSTR_E4M8", "SHATTERED BRIDGE", NULL },
+	{ str_notchanged, "HHUSTR_E4M9", "MAUSOLEUM", NULL },
+// EPISODE 5: THE STAGNANT DEMESNE
+	{ str_notchanged, "HHUSTR_E5M1", "OCHRE CLIFFS", NULL },
+	{ str_notchanged, "HHUSTR_E5M2", "RAPIDS", NULL },
+	{ str_notchanged, "HHUSTR_E5M3", "QUAY", NULL },
+	{ str_notchanged, "HHUSTR_E5M4", "COURTYARD", NULL },
+	{ str_notchanged, "HHUSTR_E5M5", "HYDRATYR", NULL },
+	{ str_notchanged, "HHUSTR_E5M6", "COLONNADE", NULL },
+	{ str_notchanged, "HHUSTR_E5M7", "FOETID MANSE", NULL },
+	{ str_notchanged, "HHUSTR_E5M8", "FIELD OF JUDGEMENT", NULL },
+	{ str_notchanged, "HHUSTR_E5M9", "SKEIN OF D'SPARIL", NULL }
+
 };
 
 void D_InitStrings (void)
 {
 	int i;
 
-	for (i = 0; i < NUMSTRINGS; i++) {
+	for (i = 0; i < NUMSTRINGS; i++)
+	{
 		if (Strings[i].type == str_notchanged)
 			ReplaceString (&Strings[i].string, Strings[i].builtin);
 	}
@@ -643,7 +821,7 @@ void D_InitStrings (void)
 	endmsg[0] = QUITMSG;
 }
 
-void ReplaceString (char **ptr, char *str)
+void ReplaceString (char **ptr, const char *str)
 {
 	if (*ptr)
 	{

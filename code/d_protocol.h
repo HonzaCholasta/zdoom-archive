@@ -28,116 +28,103 @@ struct zdemoheader_s {
 	byte	consoleplayer;
 };
 
-#define DEM_BAD				0
-// Bad command
-
-#define DEM_USERCMD			1
-// Player movement
-
-struct usercmd_s {
-	byte	msec;			// not sure how to use this yet...
+struct usercmd_s
+{
 	byte	buttons;
-	short	pitch;			// up/down. currently just a y-sheering amount
+	byte	pad;
+	short	pitch;			// up/down
 	short	yaw;			// left/right	// If you haven't guessed, I just
 	short	roll;			// tilt			// ripped these from Quake2's usercmd.
 	short	forwardmove;
 	short	sidemove;
 	short	upmove;
-	byte	impulse;
-	byte	use;
 };
 typedef struct usercmd_s usercmd_t;
 
 FArchive &operator<< (FArchive &arc, usercmd_t &cmd);
-FArchive &operator>> (FArchive &arc, usercmd_t &cmd);
 
 // When transmitted, the above message is preceded by a byte
 // indicating which fields are actually present in the message.
-// (buttons is always sent)
-#define UCMDF_BUTTONS		0x01
-#define UCMDF_PITCH			0x02
-#define UCMDF_YAW			0x04
-#define UCMDF_FORWARDMOVE	0x08
-#define UCMDF_SIDEMOVE		0x10
-#define UCMDF_UPMOVE		0x20
-#define UCMDF_IMPULSE		0x40
-#define UCMDF_MORE			0x80	// If set, the next byte contains more flags:
-// flags byte 2
-#define UCMDF_ROLL			0x01
-#define UCMDF_USE			0x02
+enum
+{
+	UCMDF_BUTTONS		= 0x01,
+	UCMDF_PITCH			= 0x02,
+	UCMDF_YAW			= 0x04,
+	UCMDF_FORWARDMOVE	= 0x08,
+	UCMDF_SIDEMOVE		= 0x10,
+	UCMDF_UPMOVE		= 0x20,
+	UCMDF_ROLL			= 0x40
+};
 
-#define DEM_USERCMDCLONE	2
-// Use previous DEM_USERCMD for the next (x+1) commands
+// When changing the following enum, be sure to update Net_SkipCommand()
+// and Net_DoCommand() in d_net.cpp.
+enum EDemoCommand
+{
+	DEM_BAD,			// Bad command
+	DEM_USERCMD,		// Player movement
+	DEM_UNDONE1,
+	DEM_UNDONE2,
+	DEM_MUSICCHANGE,	// Followed by name of new music
+	DEM_PRINT,			// Print string to console
+	DEM_CENTERPRINT,	// Print string to middle of screen
+	DEM_STOP,			// End of demo
+	DEM_UINFCHANGED,	// User info changed
+	DEM_SINFCHANGED,	// Server/Host info changed
+	DEM_GENERICCHEAT,	// Next byte is cheat to apply (see next enum)
+	DEM_GIVECHEAT,		// String passed to give command
+	DEM_SAY,			// Byte: who to talk to, String: message to display
+	DEM_DROPPLAYER,		// Not implemented, takes a byte
+	DEM_CHANGEMAP,		// Name of map to change to
+	DEM_SUICIDE,		// Player wants to die
+	DEM_ADDBOT,			// Byte: player#, String: userinfo for bot
+	DEM_KILLBOTS,		// Remove all bots from the world
+	DEM_INVSEL,			// Byte: inventory item to select, for status bar
+	DEM_INVUSE,			// Byte: inventory item to use
+	DEM_PAUSE,			// Pause game
+	DEM_SAVEGAME,		// Byte: Savegame slot to use
+	DEM_WEAPSEL,		// Byte: weapontype_t to change to
+	DEM_WEAPSLOT,		// Byte: Weapon slot to pick a weapon from
+	DEM_WEAPNEXT,		// Select next weapon
+	DEM_WEAPPREV,		// Select previous weapon
+	DEM_SUMMON,			// String: Thing to fabricate
+};
 
-//#define DEM_STUFFTEXT		3
-// This message is a string for the console to execute
-
-#define DEM_MUSICCHANGE		4
-// This message is a string containing the name of the new music
-
-#define DEM_PRINT			5
-// Prints a string at the top of the screen
-
-#define DEM_CENTERPRINT		6
-// Prints a string in the middle of the screen
-
-#define DEM_STOP			7
-// Stop demo playback
-
-#define DEM_UINFCHANGED		8
-// User info changed
-
-#define DEM_SINFCHANGED		9
-// Server info changed
-
-#define DEM_GENERICCHEAT	10
-// Byte 1: Cheat to apply
-
-#define CHT_GOD				0
-#define CHT_NOCLIP			1
-#define CHT_NOTARGET		2
-#define CHT_CHAINSAW		3
-#define CHT_IDKFA			4
-#define CHT_IDFA			5
-#define CHT_BEHOLDV			6
-#define CHT_BEHOLDS			7
-#define CHT_BEHOLDI			8
-#define CHT_BEHOLDR			9
-#define CHT_BEHOLDA			10
-#define CHT_BEHOLDL			11
-#define CHT_IDDQD			12	// Same as CHT_GOD but sets health
-#define CHT_MASSACRE		13
-#define CHT_CHASECAM		14
-#define CHT_FLY				15
-
-#define DEM_GIVECHEAT		11
-// String: arguments to give command
-
-#define DEM_SAY				12
-// Byte: who to talk to, String: message to display
-
-#define DEM_DROPPLAYER		13
-// Currently unused
-
-#define DEM_CHANGEMAP		14
-// String: map to change to
-
-#define DEM_SUICIDE			15
-// The player wants to die
-
-#define DEM_ADDBOT			16
-// Byte: playernumber, String: userinfo key/value pairs for the bot
-
-#define DEM_KILLBOTS		17
-
+// The following are implemented by cht_DoCheat in m_cheat.cpp
+enum ECheatCommand
+{
+	CHT_GOD,
+	CHT_NOCLIP,
+	CHT_NOTARGET,
+	CHT_CHAINSAW,
+	CHT_IDKFA,
+	CHT_IDFA,
+	CHT_BEHOLDV,
+	CHT_BEHOLDS,
+	CHT_BEHOLDI,
+	CHT_BEHOLDR,
+	CHT_BEHOLDA,
+	CHT_BEHOLDL,
+	CHT_IDDQD,			// Same as CHT_GOD, but sets health
+	CHT_MASSACRE,
+	CHT_CHASECAM,
+	CHT_FLY,
+	CHT_MORPH,
+	CHT_POWER,
+	CHT_HEALTH,
+	CHT_KEYS,
+	CHT_TAKEWEAPS,
+	CHT_NOWUDIE,
+	CHT_ALLARTI,
+	CHT_PUZZLE
+};
 
 void StartChunk (int id, byte **stream);
 void FinishChunk (byte **stream);
 void SkipChunk (byte **stream);
 
-int UnpackUserCmd (usercmd_t *ucmd, byte **stream);
-int PackUserCmd (usercmd_t *ucmd, byte **stream);
-int WriteUserCmdMessage (usercmd_t *ucmd, byte **stream);
+int UnpackUserCmd (usercmd_t *ucmd, const usercmd_t *basis, byte **stream);
+int PackUserCmd (const usercmd_t *ucmd, const usercmd_t *basis, byte **stream);
+int WriteUserCmdMessage (usercmd_t *ucmd, const usercmd_t *basis, byte **stream);
 
 struct ticcmd_t;
 

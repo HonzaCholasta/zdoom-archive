@@ -31,8 +31,6 @@
 #include "r_state.h"
 #include "tables.h"
 
-extern fixed_t FloatBobOffsets[64];
-
 //
 // FLOORS
 //
@@ -46,38 +44,19 @@ DFloor::DFloor ()
 void DFloor::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Type
-			<< m_Crush
-			<< m_Direction
-			<< m_NewSpecial
-			<< m_Texture
-			<< m_FloorDestHeight
-			<< m_Speed
-			<< m_ResetCount
-			<< m_OrgHeight
-			<< m_Delay
-			<< m_PauseTime
-			<< m_StepTime
-			<< m_PerStepTime;
-	}
-	else
-	{
-		arc >> m_Type
-			>> m_Crush
-			>> m_Direction
-			>> m_NewSpecial
-			>> m_Texture
-			>> m_FloorDestHeight
-			>> m_Speed
-			>> m_ResetCount
-			>> m_OrgHeight
-			>> m_Delay
-			>> m_PauseTime
-			>> m_StepTime
-			>> m_PerStepTime;
-	}
+	arc << m_Type
+		<< m_Crush
+		<< m_Direction
+		<< m_NewSpecial
+		<< m_Texture
+		<< m_FloorDestHeight
+		<< m_Speed
+		<< m_ResetCount
+		<< m_OrgHeight
+		<< m_Delay
+		<< m_PauseTime
+		<< m_StepTime
+		<< m_PerStepTime;
 }
 
 IMPLEMENT_SERIAL (DElevator, DMover)
@@ -89,22 +68,11 @@ DElevator::DElevator ()
 void DElevator::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Type
-			<< m_Direction
-			<< m_FloorDestHeight
-			<< m_CeilingDestHeight
-			<< m_Speed;
-	}
-	else
-	{
-		arc >> m_Type
-			>> m_Direction
-			>> m_FloorDestHeight
-			>> m_CeilingDestHeight
-			>> m_Speed;
-	}
+	arc << m_Type
+		<< m_Direction
+		<< m_FloorDestHeight
+		<< m_CeilingDestHeight
+		<< m_Speed;
 }
 
 IMPLEMENT_SERIAL (DFloorWaggle, DMovingFloor)
@@ -116,28 +84,14 @@ DFloorWaggle::DFloorWaggle ()
 void DFloorWaggle::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_OriginalHeight
-			<< m_Accumulator
-			<< m_AccDelta
-			<< m_TargetScale
-			<< m_Scale
-			<< m_ScaleDelta
-			<< m_Ticker
-			<< m_State;
-	}
-	else
-	{
-		arc >> m_OriginalHeight
-			>> m_Accumulator
-			>> m_AccDelta
-			>> m_TargetScale
-			>> m_Scale
-			>> m_ScaleDelta
-			>> m_Ticker
-			>> m_State;
-	}
+	arc << m_OriginalHeight
+		<< m_Accumulator
+		<< m_AccDelta
+		<< m_TargetScale
+		<< m_Scale
+		<< m_ScaleDelta
+		<< m_Ticker
+		<< m_State;
 }
 
 
@@ -223,7 +177,6 @@ void DFloor::RunThink ()
 			}
 
 			m_Sector->floordata = NULL; //jff 2/22/98
-			Destroy ();
 
 			//jff 2/26/98 implement stair retrigger lockout while still building
 			// note this only applies to the retriggerable generalized stairs
@@ -251,6 +204,8 @@ void DFloor::RunThink ()
 					}
 				}
 			}
+
+			Destroy ();
 		}
 	}
 }
@@ -514,27 +469,11 @@ manual_floor:
 					  P_FindModelCeilingSector (floor->m_FloorDestHeight, secnum) :
 					  P_FindModelFloorSector (floor->m_FloorDestHeight, secnum);
 
-				if (sec) {
+				if (sec)
+				{
 					floor->m_Texture = sec->floorpic;
-					switch (change & 3) {
-						case 1:
-							floor->m_NewSpecial = 0;
-							floor->m_Type = DFloor::genFloorChg0;
-							break;
-						case 2:
-							floor->m_NewSpecial = sec->special;
-							floor->m_Type = DFloor::genFloorChgT;
-							break;
-						case 3:
-							floor->m_Type = DFloor::genFloorChg;
-							break;
-					}
-				}
-			} else if (line) {
-				// Trigger model change
-				floor->m_Texture = line->frontsector->floorpic;
-
-				switch (change & 3) {
+					switch (change & 3)
+					{
 					case 1:
 						floor->m_NewSpecial = 0;
 						floor->m_Type = DFloor::genFloorChg0;
@@ -546,6 +485,27 @@ manual_floor:
 					case 3:
 						floor->m_Type = DFloor::genFloorChg;
 						break;
+					}
+				}
+			}
+			else if (line)
+			{
+				// Trigger model change
+				floor->m_Texture = line->frontsector->floorpic;
+
+				switch (change & 3)
+				{
+				case 1:
+					floor->m_NewSpecial = 0;
+					floor->m_Type = DFloor::genFloorChg0;
+					break;
+				case 2:
+					floor->m_NewSpecial = sec->special;
+					floor->m_Type = DFloor::genFloorChgT;
+					break;
+				case 3:
+					floor->m_Type = DFloor::genFloorChg;
+					break;
 				}
 			}
 		}
@@ -610,15 +570,16 @@ BOOL EV_DoChange (line_t *line, EChange changetype, int tag)
 		switch(changetype)
 		{
 		case trigChangeOnly:
-			if (line) { // [RH] if no line, no change
+			if (line)
+			{ // [RH] if no line, no change
 				sec->floorpic = line->frontsector->floorpic;
 				sec->special = line->frontsector->special;
 			}
 			break;
 		case numChangeOnly:
 			secm = P_FindModelFloorSector (sec->floorheight,secnum);
-			if (secm) // if no model, no change
-			{
+			if (secm)
+			{ // if no model, no change
 				sec->floorpic = secm->floorpic;
 				sec->special = secm->special;
 			}
@@ -750,13 +711,13 @@ manual_stair:
 						continue;
 
 					tsec = (sec->lines[i])->frontsector;
-					if (!tsec) continue;	//jff 5/7/98 if no backside, continue
 					newsecnum = tsec-sectors;
 
 					if (secnum != newsecnum)
 						continue;
 
 					tsec = (sec->lines[i])->backsector;
+					if (!tsec) continue;	//jff 5/7/98 if no backside, continue
 					newsecnum = tsec - sectors;
 
 					if (!igntxt && tsec->floorpic != texture)
@@ -815,7 +776,10 @@ manual_stair:
 				floor->m_ResetCount = reset;	// [RH] Tics until reset (0 if never)
 				floor->m_OrgHeight = sec->floorheight;	// [RH] Height to reset to
 			}
-		} while(ok);
+		} while (ok);
+		// [RH] make sure the first sector doesn't point to a previous one, otherwise
+		// it can infinite loop when the first sector stops moving.
+		sectors[osecnum].prevsec = -1;	
 		if (manual)
 			return rtn;
 		secnum = osecnum;	//jff 3/4/98 restore loop index
@@ -993,6 +957,8 @@ DFloorWaggle::DFloorWaggle (sector_t *sec)
 
 void DFloorWaggle::RunThink ()
 {
+	fixed_t dist;
+
 	switch (m_State)
 	{
 	case WGLSTATE_EXPAND:
@@ -1005,8 +971,9 @@ void DFloorWaggle::RunThink ()
 	case WGLSTATE_REDUCE:
 		if ((m_Scale -= m_ScaleDelta) <= 0)
 		{ // Remove
+			dist = m_OriginalHeight - m_Sector->floorheight;
 			m_Sector->floorheight = m_OriginalHeight;
-			P_ChangeSector (m_Sector, true);
+			P_ChangeSector (m_Sector, true, dist, 0);
 			m_Sector->floordata = NULL;
 			Destroy ();
 			return;
@@ -1023,10 +990,11 @@ void DFloorWaggle::RunThink ()
 		break;
 	}
 	m_Accumulator += m_AccDelta;
-	m_Sector->floorheight = m_OriginalHeight
-		+FixedMul(FloatBobOffsets[(m_Accumulator>>FRACBITS)&63],
-		m_Scale);
-	P_ChangeSector (m_Sector, true);
+	dist = m_Sector->floorheight;
+	m_Sector->floorheight = m_OriginalHeight +
+		FixedMul (FloatBobOffsets[(m_Accumulator>>FRACBITS)&63], m_Scale);
+	dist = m_Sector->floorheight - dist;
+	P_ChangeSector (m_Sector, true, dist, 0);
 }
 
 //==========================================================================

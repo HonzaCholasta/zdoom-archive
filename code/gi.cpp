@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include "info.h"
 #include "gi.h"
+#include "m_fixed.h"
 
 gameinfo_t gameinfo;
 
@@ -64,7 +65,10 @@ gameinfo_t HexenGameInfo =
 	NULL,
 	33,
 	"F_022",
-	&HereticBorder
+	&HereticBorder,
+	32*FRACUNIT,
+	GAME_Hexen,
+	150
 };
 
 gameinfo_t HereticGameInfo =
@@ -87,7 +91,10 @@ gameinfo_t HereticGameInfo =
 	NULL,
 	17,
 	"FLAT513",
-	&HereticBorder
+	&HereticBorder,
+	32*FRACUNIT,
+	GAME_Heretic,
+	150
 };
 
 gameinfo_t HereticSWGameInfo =
@@ -110,7 +117,10 @@ gameinfo_t HereticSWGameInfo =
 	NULL,
 	17,
 	"FLOOR04",
-	&HereticBorder
+	&HereticBorder,
+	32*FRACUNIT,
+	GAME_Heretic,
+	150,
 };
 
 gameinfo_t SharewareGameInfo =
@@ -133,7 +143,10 @@ gameinfo_t SharewareGameInfo =
 	quitsounds,
 	1,
 	{ 'F','L','O','O','R','7','_','2' },
-	&DoomBorder
+	&DoomBorder,
+	0,
+	GAME_Doom,
+	100
 };
 
 gameinfo_t RegisteredGameInfo =
@@ -156,7 +169,10 @@ gameinfo_t RegisteredGameInfo =
 	quitsounds,
 	2,
 	{ 'F','L','O','O','R','7','_','2' },
-	&DoomBorder
+	&DoomBorder,
+	0,
+	GAME_Doom,
+	100
 };
 
 gameinfo_t RetailGameInfo =
@@ -179,7 +195,10 @@ gameinfo_t RetailGameInfo =
 	quitsounds,
 	2,
 	{ 'F','L','O','O','R','7','_','2' },
-	&DoomBorder
+	&DoomBorder,
+	0,
+	GAME_Doom,
+	100
 };
 
 gameinfo_t CommercialGameInfo =
@@ -202,5 +221,8 @@ gameinfo_t CommercialGameInfo =
 	quitsounds2,
 	3,
 	"GRNROCK",
-	&DoomBorder
+	&DoomBorder,
+	0,
+	GAME_Doom,
+	100
 };

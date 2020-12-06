@@ -10,12 +10,14 @@
 #include "d_netinf.h"
 #include "d_net.h"
 #include "d_protocol.h"
+#include "c_dispatch.h"
 #include "v_palette.h"
 #include "v_video.h"
 #include "i_system.h"
 #include "r_draw.h"
 #include "r_state.h"
-#include "st_stuff.h"
+#include "sbar.h"
+#include "gi.h"
 
 extern BOOL st_firsttime;
 
@@ -144,7 +146,8 @@ void D_DoServerInfoChange (byte **stream)
 	if (*ptr++ != '\\')
 		return;
 
-	while ( (breakpt = strchr (ptr, '\\')) ) {
+	while ( (breakpt = strchr (ptr, '\\')) )
+	{
 		*breakpt = 0;
 		value = breakpt + 1;
 		if ( (breakpt = strchr (value, '\\')) )
@@ -237,9 +240,13 @@ void D_ReadUserInfoStrings (int i, byte **stream, bool update)
 
 	if (i < MAXPLAYERS)
 	{
-		while ( (breakpt = strchr (ptr, '\\')) )
+		for (;;)
 		{
-			*breakpt = 0;
+			breakpt = strchr (ptr, '\\');
+
+			if (breakpt != NULL)
+				*breakpt = 0;
+
 			if (compact)
 			{
 				value = ptr;
@@ -251,16 +258,17 @@ void D_ReadUserInfoStrings (int i, byte **stream, bool update)
 				if ( (breakpt = strchr (value, '\\')) )
 					*breakpt = 0;
 
-				int i = infotype + 1;
-				while (UserInfoStrings[i] && stricmp (UserInfoStrings[i], ptr))
-					i++;
-				if (infotype >= 0)
+				int j = 0;
+				while (UserInfoStrings[j] && stricmp (UserInfoStrings[j], ptr) != 0)
+					j++;
+				if (UserInfoStrings[j] == NULL)
 				{
-					i = 0;
-					while (UserInfoStrings[i] && stricmp (UserInfoStrings[i], ptr))
-						i++;
+					infotype = -1;
 				}
-				infotype = i;
+				else
+				{
+					infotype = j;
+				}
 			}
 
 			switch (infotype)
@@ -298,15 +306,20 @@ void D_ReadUserInfoStrings (int i, byte **stream, bool update)
 			case INFO_Color:
 				info->color = V_GetColorFromString (NULL, value);
 				R_BuildPlayerTranslation (i, info->color);
-				st_firsttime = true;
+				if (StatusBar != NULL && i == displayplayer)
+				{
+					StatusBar->AttachToPlayer (&players[i]);
+				}
 				break;
 
 			case INFO_Skin:
 				info->skin = R_FindSkin (value);
 				if (players[i].mo)
-					players[i].mo->sprite = (spritenum_t)skins[info->skin].sprite;
-				ST_loadGraphics ();
-				st_firsttime = true;
+					players[i].mo->sprite = skins[info->skin].sprite;
+				if (StatusBar != NULL && i == displayplayer)
+				{
+					StatusBar->SetFace (&skins[info->skin]);
+				}
 				break;
 
 			case INFO_Gender:
@@ -322,7 +335,9 @@ void D_ReadUserInfoStrings (int i, byte **stream, bool update)
 			}
 
 			if (!compact)
+			{
 				*(value - 1) = '\\';
+			}
 			if (breakpt)
 			{
 				*breakpt = '\\';
@@ -340,16 +355,44 @@ void D_ReadUserInfoStrings (int i, byte **stream, bool update)
 
 FArchive &operator<< (FArchive &arc, userinfo_t &info)
 {
-	arc.Write (&info.netname, sizeof(info.netname));
-	arc.Write (&info.team, sizeof(info.team));
+	if (arc.IsStoring ())
+	{
+		arc.Write (&info.netname, sizeof(info.netname));
+		arc.Write (&info.team, sizeof(info.team));
+	}
+	else
+	{
+		arc.Read (&info.netname, sizeof(info.netname));
+		arc.Read (&info.team, sizeof(info.team));
+	}
 	arc << info.aimdist << info.color << info.skin << info.gender << info.neverswitch;
 	return arc;
 }
 
-FArchive &operator>> (FArchive &arc, userinfo_t &info)
+BEGIN_COMMAND (playerinfo)
 {
-	arc.Read (&info.netname, sizeof(info.netname));
-	arc.Read (&info.team, sizeof(info.team));
-	arc >> info.aimdist >> info.color >> info.skin >> info.gender >> info.neverswitch;
-	return arc;
+	if (argc < 2)
+	{
+		int i;
+
+		for (i = 0; i < MAXPLAYERS; i++)
+		{
+			if (playeringame[i])
+			{
+				Printf (PRINT_HIGH, "%d. %s\n", i, players[i].userinfo.netname);
+			}
+		}
+	}
+	else
+	{
+		int i = atoi (argv[1]);
+		Printf (PRINT_HIGH, "Name:        %s\n", players[i].userinfo.netname);
+		Printf (PRINT_HIGH, "Team:        %s\n", players[i].userinfo.team);
+		Printf (PRINT_HIGH, "Aimdist:     %d\n", players[i].userinfo.aimdist);
+		Printf (PRINT_HIGH, "Color:       %06x\n", players[i].userinfo.color);
+		Printf (PRINT_HIGH, "Skin:        %d\n", players[i].userinfo.skin);
+		Printf (PRINT_HIGH, "Gender:      %d\n", players[i].userinfo.gender);
+		Printf (PRINT_HIGH, "NeverSwitch: %d\n", players[i].userinfo.neverswitch);
+	}
 }
+END_COMMAND (playerinfo)

@@ -118,53 +118,37 @@ public:
 virtual	void Write (const void *mem, unsigned int len);
 virtual void Read (void *mem, unsigned int len);
 
+		void WriteString (const char *str);
 		void WriteCount (DWORD count);
 		DWORD ReadCount ();
 
-		FArchive& operator<< (BYTE c);
-		FArchive& operator<< (WORD s);
-		FArchive& operator<< (DWORD i);
-		FArchive& operator<< (QWORD i);
-		FArchive& operator<< (float f);
-		FArchive& operator<< (double d);
-		FArchive& operator<< (const char *str);
-		FArchive& operator<< (DObject *obj);
+		void UserWriteClass (const TypeInfo *info);
+		void UserReadClass (const TypeInfo *&info);
 
-inline	FArchive& operator<< (char c) { return operator<< ((BYTE)c); }
-inline	FArchive& operator<< (SBYTE c) { return operator<< ((BYTE)c); }
-inline	FArchive& operator<< (SWORD s) { return operator<< ((WORD)s); }
-inline	FArchive& operator<< (SDWORD i) { return operator<< ((DWORD)i); }
-inline	FArchive& operator<< (SQWORD i) { return operator<< ((QWORD)i); }
-inline	FArchive& operator<< (const unsigned char *str) { return operator<< ((const char *)str); }
-inline	FArchive& operator<< (const signed char *str) { return operator<< ((const char *)str); }
-inline	FArchive& operator<< (bool b) { return operator<< ((BYTE)b); }
-#ifndef ALPHA
-inline	FArchive& operator<< (int i) { return operator<< ((SDWORD)i); }
-inline	FArchive& operator<< (unsigned int i) { return operator<< ((DWORD)i); }
-#endif
-
-		FArchive& operator>> (BYTE &c);
-		FArchive& operator>> (WORD &s);
-		FArchive& operator>> (DWORD &i);
-		FArchive& operator>> (QWORD &i);
-		FArchive& operator>> (float &f);
-		FArchive& operator>> (double &d);
-		FArchive& operator>> (char *&str);
+		FArchive& operator<< (BYTE &c);
+		FArchive& operator<< (WORD &s);
+		FArchive& operator<< (DWORD &i);
+		FArchive& operator<< (QWORD &i);
+		FArchive& operator<< (float &f);
+		FArchive& operator<< (double &d);
+		FArchive& operator<< (char *&str);
+		FArchive& SerializePointer (void *ptrbase, BYTE **ptr, DWORD elemSize);
+		FArchive& WriteObject (DObject *obj);
 		FArchive& ReadObject (DObject *&obj, TypeInfo *wanttype);
 
-inline	FArchive& operator>> (char &c) { return operator>> ((BYTE &)c); }
-inline	FArchive& operator>> (SBYTE &c) { return operator>> ((BYTE &)c); }
-inline	FArchive& operator>> (SWORD &s) { return operator>> ((WORD &)s); }
-inline	FArchive& operator>> (SDWORD &i) { return operator>> ((DWORD &)i); }
-inline	FArchive& operator>> (SQWORD &i) { return operator>> ((QWORD &)i); }
-inline	FArchive& operator>> (unsigned char *&str) { return operator>> ((char *&)str); }
-inline	FArchive& operator>> (signed char *&str) { return operator>> ((char *&)str); }
-inline	FArchive& operator>> (bool &b) { return operator>> ((BYTE &)b); }
+inline	FArchive& operator<< (char &c) { return operator<< ((BYTE &)c); }
+inline	FArchive& operator<< (SBYTE &c) { return operator<< ((BYTE &)c); }
+inline	FArchive& operator<< (SWORD &s) { return operator<< ((WORD &)s); }
+inline	FArchive& operator<< (SDWORD &i) { return operator<< ((DWORD &)i); }
+inline	FArchive& operator<< (SQWORD &i) { return operator<< ((QWORD &)i); }
+inline	FArchive& operator<< (unsigned char *&str) { return operator<< ((char *&)str); }
+inline	FArchive& operator<< (signed char *&str) { return operator<< ((char *&)str); }
+inline	FArchive& operator<< (bool &b) { return operator<< ((BYTE &)b); }
 #ifndef ALPHA
-inline	FArchive& operator>> (int &i) { return operator>> ((DWORD &)i); }
-inline	FArchive& operator>> (unsigned int &i) { return operator>> ((DWORD &)i); }
+inline	FArchive& operator<< (int &i) { return operator<< ((DWORD &)i); }
+inline	FArchive& operator<< (unsigned int &i) { return operator<< ((DWORD &)i); }
 #endif
-inline  FArchive& operator>> (DObject* &object) { return ReadObject (object, RUNTIME_CLASS(DObject)); }
+inline  FArchive& operator<< (DObject* &object) { return ReadObject (object, RUNTIME_CLASS(DObject)); }
 
 protected:
 		enum { EObjectHashSize = 137 };

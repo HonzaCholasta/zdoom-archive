@@ -36,4 +36,8 @@ void P_SerializeACSDefereds (FArchive &arc);
 void P_SerializePolyobjs (FArchive &arc);
 void P_SerializeSounds (FArchive &arc);
 
+void SV_UpdateRebornSlot ();
+void SV_ClearRebornSlot ();
+bool SV_RebornSlotAvailable ();
+
 #endif // __P_SAVEG_H__

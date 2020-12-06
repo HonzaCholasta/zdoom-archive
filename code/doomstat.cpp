@@ -27,6 +27,9 @@
 #include "c_cvars.h"
 
 
+// Game speed
+EGameSpeed		GameSpeed = SPEED_NoneYet;
+
 // Game Mode - identify IWAD as shareware, retail etc.
 GameMode_t		gamemode = undetermined;
 GameMission_t	gamemission = doom;
@@ -48,6 +51,7 @@ CVAR (var_pushers, "1", CVAR_SERVERINFO);
 int				dmflags;		// Copy of dmflagsvar.value, but as an integer.
 
 CVAR (alwaysapplydmflags, "0", CVAR_SERVERINFO);
+CVAR (friendlyfire, "0", CVAR_SERVERINFO);
 
 // [RH] Network arbitrator
 int Net_Arbitrator = 0;

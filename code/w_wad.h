@@ -84,8 +84,7 @@ typedef enum {
 	ns_global = 0,
 	ns_sprites,
 	ns_flats,
-	ns_colormaps,
-	ns_skinbase = 0x80000000	// Each skin's status bar face gets own namespace
+	ns_colormaps
 } namespace_t;
 
 extern	void**		lumpcache;
@@ -130,12 +129,4 @@ void W_GetLumpName (char *to, int lump);
 // [RH] Returns file handle for specified lump
 int W_GetLumpFile (int lump);
 
-// [RH] Put a lump in a certain namespace
-void W_SetLumpNamespace (int lump, int nmspace);
-
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log:$
-//
-//-----------------------------------------------------------------------------

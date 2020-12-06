@@ -55,28 +55,29 @@ DACSThinker::~DACSThinker ()
 
 void DACSThinker::Serialize (FArchive &arc)
 {
+	Super::Serialize (arc);
+	arc << Scripts << LastScript;
 	if (arc.IsStoring ())
 	{
-		arc << Scripts << LastScript;
-		for (int i = 0; i < 1000; i++)
+		WORD i;
+		for (i = 0; i < 1000; i++)
 		{
 			if (RunningScripts[i])
-				arc << RunningScripts[i] << (WORD)i;
+				arc << RunningScripts[i] << i;
 		}
-		arc << (DLevelScript *)NULL;
+		DLevelScript *nil = NULL;
+		arc << nil;
 	}
 	else
 	{
-		arc >> Scripts >> LastScript;
-
 		WORD scriptnum;
-		DLevelScript *script;
-		arc >> script;
+		DLevelScript *script = NULL;
+		arc << script;
 		while (script)
 		{
-			arc >> scriptnum;
+			arc << scriptnum;
 			RunningScripts[scriptnum] = script;
-			arc >> script;
+			arc << script;
 		}
 	}
 }
@@ -110,43 +111,29 @@ void DLevelScript::Serialize (FArchive &arc)
 	DWORD i;
 
 	Super::Serialize (arc);
+	arc << next << prev
+		<< script
+		<< sp
+		<< state
+		<< statedata
+		<< activator
+		<< activationline
+		<< lineSide
+		<< stringstart;
+	for (i = 0; i < STACK_SIZE; i++)
+		arc << stack[i];
+	for (i = 0; i < LOCAL_SIZE; i++)
+		arc << locals[i];
+
 	if (arc.IsStoring ())
 	{
-		arc << next << prev
-			<< script
-			<< sp
-			<< state
-			<< statedata
-			<< activator
-			<< activationline
-			<< lineSide
-			<< stringstart;
-
 		i = (DWORD)(pc - (int *)level.behavior);
 		arc << i;
-
-		for (i = 0; i < STACK_SIZE; i++)
-			arc << stack[i];
-		for (i = 0; i < LOCAL_SIZE; i++)
-			arc << locals[i];
 	}
 	else
 	{
-		arc >> next >> prev
-			>> script
-			>> sp
-			>> state
-			>> statedata
-			>> activator
-			>> activationline
-			>> lineSide
-			>> stringstart
-			>> i;
+		arc << i;
 		pc = (int *)level.behavior + i;
-		for (i = 0; i < STACK_SIZE; i++)
-			arc >> stack[i];
-		for (i = 0; i < LOCAL_SIZE; i++)
-			arc >> locals[i];
 	}
 }
 
@@ -261,42 +248,40 @@ int DLevelScript::Random (int min, int max)
 
 int DLevelScript::ThingCount (int type, int tid)
 {
-	AActor *mobj = NULL;
+	AActor *actor;
+	const TypeInfo *kind;
 	int count = 0;
 
-	if (type >= NumSpawnableThings)
+	if (type >= MAX_SPAWNABLES)
 	{
 		return 0;
 	}
 	else if (type > 0)
 	{
-		type = SpawnableThings[type];
-		if (type == 0)
+		kind = SpawnableThings[type];
+		if (kind == NULL)
 			return 0;
 	}
 	
 	if (tid)
 	{
-		mobj = AActor::FindByTID (NULL, tid);
-		while (mobj)
+		FActorIterator iterator (tid);
+		while ( (actor = iterator.Next ()) )
 		{
-			if ((type == 0) || (mobj->type == type && mobj->health > 0))
+			if (actor->health > 0 &&
+				(type == 0 || actor->IsA (kind)))
+			{
 				count++;
-			mobj = mobj->FindByTID (tid);
+			}
 		}
 	}
 	else
 	{
-		AActor *actor;
 		TThinkerIterator<AActor> iterator;
-
 		while ( (actor = iterator.Next ()) )
 		{
-			if (type == 0)
-			{
-				count++;
-			}
-			else if (actor->type == type && actor->health > 0)
+			if (actor->health > 0 &&
+				(type == 0 || actor->IsA (kind)))
 			{
 				count++;
 			}
@@ -367,6 +352,51 @@ void DLevelScript::SetLineTexture (int lineid, int side, int position, int name)
 		}
 
 	}
+}
+
+int DLevelScript::DoSpawn (int type, fixed_t x, fixed_t y, fixed_t z, int tid, int angle)
+{
+	const TypeInfo *info = TypeInfo::FindType
+		((char *)(level.behavior + level.strings[type+1]));
+	AActor *actor = NULL;
+
+	if (info != NULL)
+	{
+		actor = Spawn (info, x, y, z);
+		if (actor != NULL)
+		{
+			if (P_TestMobjLocation (actor))
+			{
+				actor->angle = angle << 24;
+				actor->tid = tid;
+				actor->AddToHash ();
+				actor->flags |= MF_DROPPED;  // Don't respawn
+				if (actor->flags2 & MF2_FLOATBOB)
+				{
+					actor->special1 = actor->z - actor->floorz;
+				}
+			}
+			else
+			{
+				actor->Destroy ();
+				actor = NULL;
+			}
+		}
+	}
+	return (int)actor;
+}
+
+int DLevelScript::DoSpawnSpot (int type, int spot, int tid, int angle)
+{
+	FActorIterator iterator (tid);
+	AActor *aspot;
+	int spawned = 0;
+
+	while ( (aspot = iterator.Next ()) )
+	{
+		spawned = DoSpawn (type, aspot->x, aspot->y, aspot->z, tid, angle);
+	}
+	return spawned;
 }
 
 void DLevelScript::RunScript ()
@@ -972,7 +1002,7 @@ void DLevelScript::RunScript ()
 							activationline->frontsector->soundorg,
 							CHAN_BODY,
 							(char *)(level.behavior + level.strings[STACK(2)+1]),
-							(STACK(1)) / 127,
+							(float)(STACK(1)) / 127.f,
 							ATTN_NORM);
 					}
 					else
@@ -980,7 +1010,7 @@ void DLevelScript::RunScript ()
 						S_Sound (
 							CHAN_BODY,
 							(char *)(level.behavior + level.strings[STACK(2)+1]),
-							(STACK(1)) / 127,
+							(float)(STACK(1)) / 127.f,
 							ATTN_NORM);
 					}
 				}
@@ -992,7 +1022,7 @@ void DLevelScript::RunScript ()
 				{
 					S_Sound (CHAN_BODY,
 							 (char *)(level.behavior + level.strings[STACK(2)+1]),
-							 (STACK(1)) / 127, ATTN_NONE);
+							 (float)(STACK(1)) / 127.f, ATTN_NONE);
 				}
 				sp -= 2;
 				break;
@@ -1003,7 +1033,7 @@ void DLevelScript::RunScript ()
 				{
 					S_Sound (CHAN_BODY,
 							 (char *)(level.behavior + level.strings[STACK(2)+1]),
-							 (STACK(1)) / 127, ATTN_NONE);
+							 (float)(STACK(1)) / 127.f, ATTN_NONE);
 				}
 				sp -= 2;
 				break;
@@ -1013,7 +1043,7 @@ void DLevelScript::RunScript ()
 				{
 					S_Sound (activator, CHAN_AUTO,
 							 (char *)(level.behavior + level.strings[STACK(2)+1]),
-							 (STACK(1)) / 127, ATTN_NORM);
+							 (float)(STACK(1)) / 127.f, ATTN_NORM);
 				}
 				sp -= 2;
 				break;
@@ -1103,19 +1133,68 @@ void DLevelScript::RunScript ()
 			case PCD_THINGSOUND:
 				if (STACK(2) < level.strings[0])
 				{
-					AActor *spot = AActor::FindByTID (NULL, STACK(3));
+					FActorIterator iterator (STACK(3));
+					AActor *spot;
 
-					while (spot)
+					while ( (spot = iterator.Next ()) )
 					{
 						S_Sound (spot, CHAN_BODY,
 								 (char *)(level.behavior + level.strings[STACK(2)+1]),
-								 (STACK(1))/127, ATTN_NORM);
-						spot = spot->FindByTID (STACK(3));
+								 (float)(STACK(1))/127.f, ATTN_NORM);
 					}
 				}
 				sp -= 3;
 				break;
 
+			case PCD_FIXEDMUL:
+				STACK(2) = FixedMul (STACK(2), STACK(1));
+				sp--;
+				break;
+
+			case PCD_FIXEDDIV:
+				STACK(2) = FixedDiv (STACK(2), STACK(1));
+				sp--;
+				break;
+
+			case PCD_SETGRAVITY:
+				level.gravity = (float)STACK(1) / 65536.f;
+				sp--;
+				break;
+
+			case PCD_SETGRAVITYDIRECT:
+				level.gravity = (float)pc[0] / 65536.f;
+				pc++;
+				break;
+
+			case PCD_SETAIRCONTROL:
+				level.aircontrol = STACK(1);
+				sp--;
+				break;
+
+			case PCD_SETAIRCONTROLDIRECT:
+				level.aircontrol = pc[0];
+				pc++;
+				break;
+
+			case PCD_SPAWN:
+				STACK(6) = DoSpawn (STACK(6), STACK(5), STACK(4), STACK(3), STACK(2), STACK(1));
+				sp -= 5;
+				break;
+
+			case PCD_SPAWNDIRECT:
+				PushToStack (DoSpawn (pc[0], pc[1], pc[2], pc[3], pc[4], pc[5]));
+				pc += 6;
+				break;
+
+			case PCD_SPAWNSPOT:
+				STACK(6) = DoSpawnSpot (STACK(4), STACK(3), STACK(2), STACK(1));
+				sp -= 3;
+				break;
+
+			case PCD_SPAWNSPOTDIRECT:
+				PushToStack (DoSpawnSpot (pc[0], pc[1], pc[2], pc[3]));
+				pc += 4;
+				break;
 		}
 	}
 
@@ -1314,7 +1393,7 @@ void strbin (char *str)
 		} else {
 			switch (*p) {
 				case 'c':
-					*str++ = '\x8a';
+					*str++ = '\x81';
 					break;
 				case 'n':
 					*str++ = '\n';
@@ -1374,35 +1453,42 @@ void strbin (char *str)
 	*str = 0;
 }
 
-FArchive &operator<< (FArchive &arc, acsdefered_s *defer)
+FArchive &operator<< (FArchive &arc, acsdefered_s *&defertop)
 {
-	while (defer)
-	{
-		arc << (BYTE)1;
-		arc << (BYTE)defer->type << defer->script
-			<< defer->arg0 << defer->arg1 << defer->arg2;
-		defer = defer->next;
-	}
-	arc << (BYTE)0;
-	return arc;
-}
+	BYTE more;
 
-FArchive &operator>> (FArchive &arc, acsdefered_s* &defertop)
-{
-	acsdefered_s **defer = &defertop;
-	BYTE inbyte;
-
-	arc >> inbyte;
-	while (inbyte)
+	if (arc.IsStoring ())
 	{
-		*defer = new acsdefered_s;
-		arc >> inbyte;
-		(*defer)->type = (acsdefered_s::EType)inbyte;
-		arc >> (*defer)->script
-			>> (*defer)->arg0 >> (*defer)->arg1 >> (*defer)->arg2;
-		defer = &((*defer)->next);
-		arc >> inbyte;
+		acsdefered_s *defer = defertop;
+		more = 1;
+		while (defer)
+		{
+			BYTE type;
+			arc << more;
+			type = (BYTE)defer->type;
+			arc << type << defer->script
+				<< defer->arg0 << defer->arg1 << defer->arg2;
+			defer = defer->next;
+		}
+		more = 0;
+		arc << more;
 	}
-	*defer = NULL;
+	else
+	{
+		acsdefered_s **defer = &defertop;
+
+		arc << more;
+		while (more)
+		{
+			*defer = new acsdefered_s;
+			arc << more;
+			(*defer)->type = (acsdefered_s::EType)more;
+			arc << (*defer)->script
+				<< (*defer)->arg0 << (*defer)->arg1 << (*defer)->arg2;
+			defer = &((*defer)->next);
+			arc << more;
+		}
+		*defer = NULL;
+	}
 	return arc;
 }

@@ -47,10 +47,4 @@ inline FArchive &operator<< (FArchive &arc, ticcmd_t &cmd)
 	return arc << cmd.consistancy << cmd.ucmd;
 }
 
-inline FArchive &operator>> (FArchive &arc, ticcmd_t &cmd)
-{
-	return arc >> cmd.consistancy >> cmd.ucmd;
-}
-
-
 #endif	// __D_TICCMD_H__

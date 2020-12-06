@@ -58,36 +58,18 @@ IDI_ICON1               ICON    DISCARDABLE     "icon1.ico"
 
 /////////////////////////////////////////////////////////////////////////////
 //
-// Dialog
-//
-
-IDD_MIDASINITERROR DIALOG DISCARDABLE  0, 0, 186, 129
-STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION
-CAPTION "MIDAS Initialization Error"
-FONT 8, "MS Sans Serif"
-BEGIN
-    DEFPUSHBUTTON   "Retry",IDOK,7,108,50,14
-    PUSHBUTTON      "No Sound",IDC_NOSOUND,68,108,50,14
-    PUSHBUTTON      "Quit",IDQUIT,129,108,50,14
-    EDITTEXT        IDC_ERRORMESSAGE,7,7,172,94,ES_MULTILINE | ES_READONLY | 
-                    NOT WS_TABSTOP
-END
-
-
-/////////////////////////////////////////////////////////////////////////////
-//
 // DESIGNINFO
 //
 
 #ifdef APSTUDIO_INVOKED
 GUIDELINES DESIGNINFO DISCARDABLE 
 BEGIN
-    IDD_MIDASINITERROR, DIALOG
+    IDD_FMODINITFAILED, DIALOG
     BEGIN
         LEFTMARGIN, 7
         RIGHTMARGIN, 179
         TOPMARGIN, 7
-        BOTTOMMARGIN, 122
+        BOTTOMMARGIN, 55
     END
 END
 #endif    // APSTUDIO_INVOKED
@@ -100,13 +82,13 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,22,0,0
- PRODUCTVERSION 1,19,0,0
+ FILEVERSION 1,23,0,0
+ PRODUCTVERSION 1,23,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
- FILEFLAGS 0x1L
+ FILEFLAGS 0x3L
 #else
- FILEFLAGS 0x0L
+ FILEFLAGS 0x2L
 #endif
  FILEOS 0x40004L
  FILETYPE 0x1L
@@ -119,14 +101,14 @@ BEGIN
             VALUE "Comments", "Thanks to id Software for creating DOOM and then releasing the source code. Thanks also to TeamTNT for creating BOOM, which ZDoom is partially based on. Includes code based on the Cajun Bot 0.97 by Martin Collberg.\0"
             VALUE "CompanyName", " \0"
             VALUE "FileDescription", "ZDoom\0"
-            VALUE "FileVersion", "1.22\0"
+            VALUE "FileVersion", "1.23 beta\0"
             VALUE "InternalName", "ZDoom\0"
             VALUE "LegalCopyright", "Copyright © 1999, id Software & Randy Heit\0"
             VALUE "LegalTrademarks", "Doom® is a Registered Trademark of id Software, Inc.\0"
             VALUE "OriginalFilename", "zdoom.exe\0"
             VALUE "PrivateBuild", "\0"
             VALUE "ProductName", "ZDoom\0"
-            VALUE "ProductVersion", "1.19\0"
+            VALUE "ProductVersion", "1.23\0"
             VALUE "SpecialBuild", "\0"
         END
     END
@@ -137,6 +119,24 @@ BEGIN
 END
 
 #endif    // !_MAC
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_FMODINITFAILED DIALOG DISCARDABLE  0, 0, 186, 62
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "ZDoom Sound Initialization Failure"
+FONT 8, "MS Sans Serif"
+BEGIN
+    DEFPUSHBUTTON   "Retry",IDOK,129,7,50,14,WS_GROUP
+    PUSHBUTTON      "No Sound",IDC_NOSOUND,129,24,50,14,WS_GROUP
+    PUSHBUTTON      "Quit",IDCANCEL,129,41,50,14,WS_GROUP
+    LTEXT           "Could not initialize sound. If the sound hardware is in use, stop the other program that is making sound and click Retry. Alternatively, click No Sound to play without sound.",
+                    IDC_STATIC,7,7,116,42
+END
 
 #endif    // English (U.S.) resources
 /////////////////////////////////////////////////////////////////////////////

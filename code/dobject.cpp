@@ -6,6 +6,9 @@
 #include "doomstat.h"		// Ideally, DObjects can be used independant of Doom.
 #include "d_player.h"		// See p_user.cpp to find out why this doesn't work.
 #include "z_zone.h"
+#include "c_dispatch.h"
+#include "i_system.h"
+#include "r_state.h"
 
 ClassInit::ClassInit (TypeInfo *type)
 {
@@ -15,9 +18,11 @@ ClassInit::ClassInit (TypeInfo *type)
 TypeInfo **TypeInfo::m_Types;
 unsigned short TypeInfo::m_NumTypes;
 unsigned short TypeInfo::m_MaxTypes;
+unsigned int TypeInfo::TypeHash[256];	// Why can't I use TypeInfo::HASH_SIZE?
 
 void TypeInfo::RegisterType ()
 {
+	// Add type to list
 	if (m_NumTypes == m_MaxTypes)
 	{
 		m_MaxTypes = m_MaxTypes ? m_MaxTypes*2 : 32;
@@ -26,18 +31,118 @@ void TypeInfo::RegisterType ()
 	m_Types[m_NumTypes] = this;
 	TypeIndex = m_NumTypes;
 	m_NumTypes++;
+
+	// Add type to hash table. Types are inserted into each bucket
+	// lexicographically, and the prefix character is ignored.
+	unsigned int bucket = MakeKey (Name+1) % HASH_SIZE;
+	unsigned int *hashpos = &TypeHash[bucket];
+	while (*hashpos != 0)
+	{
+		int lexx = strcmp (Name+1, m_Types[*hashpos-1]->Name+1);
+		// (The Lexx is the most powerful weapon of destruction
+		//  in the two universes.)
+
+		if (lexx > 0)
+		{ // This type should come later in the chain
+			hashpos = &m_Types[*hashpos-1]->HashNext;
+		}
+		else if (lexx == 0)
+		{ // This type has already been inserted
+			I_FatalError ("Class %s already registered", Name);
+		}
+		else
+		{ // Type comes right here
+			break;
+		}
+	}
+	HashNext = *hashpos;
+	*hashpos = TypeIndex + 1;
 }
 
+// Case-sensitive search (preferred)
 const TypeInfo *TypeInfo::FindType (const char *name)
 {
-	unsigned short i;
+	unsigned int index = TypeHash[MakeKey (name) % HASH_SIZE];
 
-	for (i = 0; i != m_NumTypes; i++)
-		if (!strcmp (name, m_Types[i]->Name))
-			return m_Types[i];
-
+	while (index != 0)
+	{
+		int lexx = strcmp (name, m_Types[index-1]->Name + 1);
+		if (lexx > 0)
+		{
+			index = m_Types[index-1]->HashNext;
+		}
+		else if (lexx == 0)
+		{
+			return m_Types[index-1];
+		}
+		else
+		{
+			break;
+		}
+	}
 	return NULL;
 }
+
+// Case-insensitive search
+const TypeInfo *TypeInfo::IFindType (const char *name)
+{
+	int i;
+
+	for (i = 0; i < TypeInfo::m_NumTypes; i++)
+	{
+		if (stricmp (TypeInfo::m_Types[i]->Name + 1, name) == 0)
+			return TypeInfo::m_Types[i];
+	}
+	return NULL;
+}
+
+BEGIN_COMMAND (dumpclasses)
+{
+	const TypeInfo *root;
+	int i;
+	int shown, omitted;
+	bool showall = true;
+
+	if (argc > 1)
+	{
+		root = TypeInfo::IFindType (argv[1]);
+		if (root == NULL)
+		{
+			Printf (PRINT_HIGH, "Class '%s' not found\n", argv[1]);
+			return;
+		}
+		if (stricmp (argv[1], "Actor") == 0)
+		{
+			if (argc < 3 || stricmp (argv[2], "all") != 0)
+			{
+				showall = false;
+			}
+		}
+	}
+	else
+	{
+		root = NULL;
+	}
+
+	shown = omitted = 0;
+	for (i = 0; i < TypeInfo::m_NumTypes; i++)
+	{
+		if (root == NULL ||
+			(TypeInfo::m_Types[i]->IsDescendantOf (root) &&
+			 (showall || TypeInfo::m_Types[i] == root ||
+			  TypeInfo::m_Types[i]->ActorInfo != root->ActorInfo)))
+		{
+			Printf (PRINT_HIGH, " %s\n", TypeInfo::m_Types[i]->Name + 1);
+			shown++;
+		}
+		else
+		{
+			omitted++;
+		}
+	}
+	Printf (PRINT_HIGH, "%d classes shown, %d omitted\n", shown, omitted);
+}
+END_COMMAND (dumpclasses)
 
 TypeInfo DObject::_StaticType(NULL, "DObject", NULL, sizeof(DObject));
 
@@ -159,13 +264,22 @@ void DObject::DestroyScan (DObject *obj)
 						if (*((DObject **)(((byte *)current) + *offsets)) == obj)
 						{
 							*((DObject **)(((byte *)current) + *offsets)) = NULL;
-							break;
 						}
 						offsets++;
 					}
 				}
 				info = info->ParentType;
 			}
+		}
+	}
+
+	if (obj->IsKindOf (RUNTIME_CLASS(APlayerPawn)))
+	{
+		AActor *actor = static_cast<AActor *>(obj);
+		for (i = 0; i < (size_t)numsectors; i++)
+		{
+			if (sectors[i].soundtarget == actor)
+				sectors[i].soundtarget = NULL;
 		}
 	}
 
@@ -181,10 +295,14 @@ void DObject::DestroyScan (DObject *obj)
 // destruction and NULL them.
 void DObject::DestroyScan ()
 {
-	size_t i, j, highest, destroycount;
-	destroycount = ToDestroy.Size ();
+	size_t i, highest;
+	int j, destroycount;
+	DObject **destroybase;
+	destroycount = (int)ToDestroy.Size ();
 	if (destroycount == 0)
 		return;
+	destroybase = &ToDestroy[0] + destroycount;
+	destroycount = -destroycount;
 	highest = Objects.Size ();
 
 	for (i = 0; i < highest; i++)
@@ -200,22 +318,44 @@ void DObject::DestroyScan ()
 				{
 					while (*offsets != ~0)
 					{
-						for (j = 0; j < destroycount; j++)
-							if (*((DObject **)(((byte *)current) + *offsets)) == ToDestroy[j])
+						j = destroycount;
+						do
+						{
+							if (*((DObject **)(((byte *)current) + *offsets)) == *(destroybase + j))
 								*((DObject **)(((byte *)current) + *offsets)) = NULL;
+						} while (++j);
 						offsets++;
 					}
 				}
 				info = info->ParentType;
 			}
 		}
-		// This is an ugly hack, but it's the best I can do for now.
-		for (j = 0; j < MAXPLAYERS; j++)
+	}
+
+	j = destroycount;
+	do
+	{
+		if ((*(destroybase + j))->IsKindOf (RUNTIME_CLASS(APlayerPawn)))
 		{
-			size_t k;
-			if (playeringame[j])
-				for (k = 0; k < destroycount; k++)
-					players[j].FixPointers (ToDestroy[k]);
+			AActor *actor = static_cast<AActor *>(*(destroybase + j));
+			for (i = 0; i < (size_t)numsectors; i++)
+			{
+				if (sectors[i].soundtarget == actor)
+					sectors[i].soundtarget = NULL;
+			}
+		}
+	} while (++j);
+
+	// This is an ugly hack, but it's the best I can do for now.
+	for (i = 0; i < MAXPLAYERS; i++)
+	{
+		if (playeringame[i])
+		{
+			j = destroycount;
+			do
+			{
+				players[i].FixPointers (*(destroybase + j));
+			} while (++j);
 		}
 	}
 }

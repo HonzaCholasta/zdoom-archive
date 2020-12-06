@@ -254,8 +254,12 @@ typedef enum {
 	dLight_StrobeSlowSync = 76,
 	dLight_StrobeFastSync = 77,
 	dSector_DoorRaiseIn5Mins = 78,
+	dFriction_Low = 79,
 	dDamage_SuperHellslime = 80,
 	dLight_FireFlicker = 81,
+	dDamage_LavaWimpy = 82,
+	dDamage_LavaHefty = 83,
+	dScroll_EastLavaDamage = 84,
 
 	Light_IndoorLightning2 = 198,
 	Light_IndoorLightning1 = 199,
@@ -286,6 +290,28 @@ typedef enum {
 	Scroll_SouthWest_Slow = 222,
 	Scroll_SouthWest_Medium = 223,
 	Scroll_SouthWest_Fast = 224,
+
+	Carry_East5 = 225,
+	Carry_East10,
+	Carry_East25,
+	Carry_East30,
+	Carry_East35,
+	Carry_North5,
+	Carry_North10,
+	Carry_North25,
+	Carry_North30,
+	Carry_North35,
+	Carry_South5,
+	Carry_South10,
+	Carry_South25,
+	Carry_South30,
+	Carry_South35,
+	Carry_West5,
+	Carry_West10,
+	Carry_West25,
+	Carry_West30,
+	Carry_West35
+
 } sectorspecial_t;
 
 // [RH] Equivalents for BOOM's generalized sector types

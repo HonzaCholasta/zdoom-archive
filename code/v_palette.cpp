@@ -11,6 +11,7 @@
 #include "c_dispatch.h"
 #include "g_level.h"
 #include "st_stuff.h"
+#include "gi.h"
 
 void BuildColoredLights (byte *maps, int lr, int lg, int lb, int fr, int fg, int fb);
 static void DoBlending (DWORD *from, DWORD *to, unsigned count, int tor, int tog, int tob, int toa);
@@ -283,8 +284,10 @@ void RefreshPalette (palette_t *pal)
 	DWORD l,c,r,g,b;
 	DWORD colors[256];
 
-	if (screen->is8bit) {
-		if (pal->flags & PALETTEF_SHADE) {
+	if (screen->is8bit)
+	{
+		if (pal->flags & PALETTEF_SHADE)
+		{
 			byte *shade;
 
 			r = RPART (level.fadeto);
@@ -296,11 +299,13 @@ void RefreshPalette (palette_t *pal)
 			pal->maps.colormaps = (byte *)(((ptrdiff_t)(pal->colormapsbase) + 255) & ~0xff);
 
 			// build normal light mappings
-			for (l = 0; l < NUMCOLORMAPS; l++) {
+			for (l = 0; l < NUMCOLORMAPS; l++)
+			{
 				DoBlending (pal->basecolors, colors, pal->numcolors, r, g, b, l * (256 / NUMCOLORMAPS));
 
 				shade = pal->maps.colormaps + (l << pal->shadeshift);
-				for (c = 0; c < pal->numcolors; c++) {
+				for (c = 0; c < pal->numcolors; c++)
+				{
 					*shade++ = BestColor (pal->basecolors,
 										  RPART(colors[c]),
 										  GPART(colors[c]),
@@ -311,31 +316,53 @@ void RefreshPalette (palette_t *pal)
 
 			// build special maps (e.g. invulnerability)
 			shade = pal->maps.colormaps + (NUMCOLORMAPS << pal->shadeshift);
+			if (gameinfo.gametype == GAME_Doom)
 			{
 				int grayint;
 
-				for (c = 0; c < pal->numcolors; c++) {
-					grayint = (int)(255.0f * (1.0f -
+				for (c = 0; c < pal->numcolors; c++)
+				{
+					grayint = (int)(255.f * (1.f -
 						(RPART(pal->basecolors[c]) * 0.00116796875f +
 						 GPART(pal->basecolors[c]) * 0.00229296875f +
 						 BPART(pal->basecolors[c]) * 0.0005625)));
 					*shade++ = BestColor (pal->basecolors, grayint, grayint, grayint, pal->numcolors);
 				}
 			}
+			else
+			{
+				float intensity;
+
+				for (c = 0; c < pal->numcolors; c++)
+				{
+					intensity = RPART(pal->basecolors[c]) * 0.00116796875f +
+								GPART(pal->basecolors[c]) * 0.00229296875f +
+								BPART(pal->basecolors[c]) * 0.0005625f;
+					*shade++ = BestColor (pal->basecolors,
+						MIN (255, (int)(intensity * 383.f)),
+						(int)(intensity * 255.f),
+						0, pal->numcolors);
+				}
+			}
 		}
-	} else {
-		if (pal->flags & PALETTEF_SHADE) {
+	}
+	else
+	{
+		if (pal->flags & PALETTEF_SHADE)
+		{
 			r = newgamma[RPART (level.fadeto)];
 			g = newgamma[GPART (level.fadeto)];
 			b = newgamma[BPART (level.fadeto)];
-			if (pal->colormapsbase) {
+			if (pal->colormapsbase)
+			{
 				free (pal->colormapsbase);
 				pal->colormapsbase = NULL;
 			}
 			pal->maps.shades = (DWORD *)Realloc (pal->colormapsbase, (NUMCOLORMAPS + 1)*256*sizeof(DWORD) + 255);
 
 			// build normal light mappings
-			for (l = 0; l < NUMCOLORMAPS; l++) {
+			for (l = 0; l < NUMCOLORMAPS; l++)
+			{
 				DoBlending (pal->colors,
 							pal->maps.shades + (l << pal->shadeshift),
 							pal->numcolors,
@@ -348,7 +375,8 @@ void RefreshPalette (palette_t *pal)
 				DWORD *shade = pal->maps.shades + (NUMCOLORMAPS << pal->shadeshift);
 				int grayint;
 
-				for (c = 0; c < pal->numcolors; c++) {
+				for (c = 0; c < pal->numcolors; c++)
+				{
 					grayint = (int)(255.0f * (1.0f -
 						(RPART(pal->colors[c]) * 0.00116796875f +
 						 GPART(pal->colors[c]) * 0.00229296875f +
@@ -454,7 +482,6 @@ BEGIN_COMMAND (testblend)
 			amt = 1.0f;
 		else if (amt < 0.0f)
 			amt = 0.0f;
-		//V_SetBlend (RPART(color), GPART(color), BPART(color), (int)(amt * 256.0f));
 		BaseBlendR = RPART(color);
 		BaseBlendG = GPART(color);
 		BaseBlendB = BPART(color);
@@ -571,11 +598,13 @@ void BuildColoredLights (byte *maps, int lr, int lg, int lb, int r, int g, int b
 		return;
 
 	// build normal (but colored) light mappings
-	for (l = 0; l < NUMCOLORMAPS; l++) {
+	for (l = 0; l < NUMCOLORMAPS; l++)
+	{
 		DoBlending (DefPal.basecolors, colors, DefPal.numcolors, r, g, b, l * (256 / NUMCOLORMAPS));
 
 		shade = maps + 256*l;
-		for (c = 0; c < 256; c++) {
+		for (c = 0; c < 256; c++)
+		{
 			*shade++ = BestColor (DefPal.basecolors,
 								  (RPART(colors[c])*lr)/255,
 								  (GPART(colors[c])*lg)/255,
@@ -592,7 +621,8 @@ dyncolormap_t *GetSpecialLights (int lr, int lg, int lb, int fr, int fg, int fb)
 	dyncolormap_t *colormap = &NormalLight;
 
 	// Bah! Simple linear search because I want to get this done.
-	while (colormap) {
+	while (colormap)
+	{
 		if (color == colormap->color && fade == colormap->fade)
 			return colormap;
 		else
@@ -621,10 +651,13 @@ BEGIN_COMMAND (testcolor)
 	if (argc < 2) {
 		Printf (PRINT_HIGH, "testcolor <color>\n");
 	} else {
-		if ( (colorstring = V_GetColorStringByName (argv[1])) ) {
+		if ( (colorstring = V_GetColorStringByName (argv[1])) )
+		{
 			color = V_GetColorFromString (NULL, colorstring);
 			delete[] colorstring;
-		} else {
+		}
+		else
+		{
 			color = V_GetColorFromString (NULL, argv[1]);
 		}
 		BuildColoredLights (NormalLight.maps, RPART(color), GPART(color), BPART(color),

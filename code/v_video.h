@@ -28,6 +28,7 @@
 #include "m_bbox.h"
 
 #include "v_palette.h"
+#include "v_font.h"
 
 #include "doomdef.h"
 
@@ -35,7 +36,6 @@
 #include "r_data.h"
 
 extern int CleanWidth, CleanHeight, CleanXfac, CleanYfac;
-
 extern int DisplayWidth, DisplayHeight, DisplayBits;
 
 //
@@ -63,7 +63,11 @@ public:
 		EWrapper_Translated = 2,	// Color translates the patch and draws it
 		EWrapper_TlatedLucent = 3,	// Translates the patch and mixes it with the background
 		EWrapper_Colored = 4,		// Fills the patch area with a solid color
-		EWrapper_ColoredLucent = 5	// Mixes a solid color in the patch area with the background
+		EWrapper_ColoredLucent = 5,	// Mixes a solid color in the patch area with the background
+
+		ETWrapper_Normal = 0,		// Normal text
+		ETWrapper_Translucent = 1,	// Translucent text
+		ETWrapper_Shadow = 2,		// Shadowed text
 	};
 
 	//DCanvas ();
@@ -80,6 +84,9 @@ public:
 	int m_LockCount;
 	palette_t *m_Palette;
 	void *m_Private;
+	FFont *Font;
+
+	void SetFont (FFont *font);
 
 	// Copy blocks from one canvas to another
 	void Blit (int srcx, int srcy, int srcwidth, int srcheight, DCanvas *dest, int destx, int desty, int destwidth, int destheight);
@@ -87,6 +94,17 @@ public:
 
 	// Draw a linear block of pixels into the view buffer.
 	void DrawBlock (int x, int y, int width, int height, const byte *src) const;
+	void DrawPageBlock (const byte *src) const;
+
+	// Draw a masked, translated block of pixels (e.g. chars stored in an FFont)
+	void DrawMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors) const;
+	void ScaleMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors) const;
+	void DrawTranslucentMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors, fixed_t fade) const;
+	void ScaleTranslucentMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors, fixed_t fade) const;
+	void DrawShadowedMaskedBlock (int x, int y, int width, int height, const byte *src, const byte *colors, fixed_t shade) const;
+	void ScaleShadowedMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, const byte *colors, fixed_t shade) const;
+	void DrawAlphaMaskedBlock (int x, int y, int width, int height, const byte *src, int color) const;
+	void ScaleAlphaMaskedBlock (int x, int y, int width, int height, int dwidth, int dheight, const byte *src, int color) const;
 
 	// Reads a linear block of pixels into the view buffer.
 	void GetBlock (int x, int y, int width, int height, byte *dest) const;
@@ -109,22 +127,29 @@ public:
 	void DetachPalette ();
 
 	// Text drawing functions
-	// Output a line of text using the console font
-	void PrintStr (int x, int y, const char *s, int count) const;
-	void PrintStr2 (int x, int y, const char *s, int count) const;
 
-	// Output some text with wad heads-up font
+	// Return width of string in pixels (unscaled)
+	int StringWidth (const char *str) const;
+	inline int StringWidth (const byte *str) const { return StringWidth ((const char *)str); }
+
+	// Output some text with the current font
 	inline void DrawText (int normalcolor, int x, int y, const byte *string) const;
-	inline void DrawTextLuc (int normalcolor, int x, int y, const byte *string) const;
+	inline void DrawTextLuc (int normalcolor, int x, int y, const byte *string, fixed_t trans=0x8000) const;
 	inline void DrawTextClean (int normalcolor, int x, int y, const byte *string) const;		// Does not adjust x and y
-	inline void DrawTextCleanLuc (int normalcolor, int x, int y, const byte *string) const;		// ditto
+	inline void DrawTextCleanLuc (int normalcolor, int x, int y, const byte *string, fixed_t trans=0x8000) const; // ditto
 	inline void DrawTextCleanMove (int normalcolor, int x, int y, const byte *string) const;	// This one does
+	inline void DrawTextShadow (int normalcolor, int x, int y, const byte *string) const;
+	inline void DrawTextCleanShadow (int normalcolor, int x, int y, const byte *string) const;
+	inline void DrawTextCleanShadowMove (int normalcolor, int x, int y, const byte *string) const;
 
 	inline void DrawText (int normalcolor, int x, int y, const char *string) const;
-	inline void DrawTextLuc (int normalcolor, int x, int y, const char *string) const;
+	inline void DrawTextLuc (int normalcolor, int x, int y, const char *string, fixed_t trans=0x8000) const;
 	inline void DrawTextClean (int normalcolor, int x, int y, const char *string) const;
-	inline void DrawTextCleanLuc (int normalcolor, int x, int y, const char *string) const;
+	inline void DrawTextCleanLuc (int normalcolor, int x, int y, const char *string, fixed_t trans=0x8000) const;
 	inline void DrawTextCleanMove (int normalcolor, int x, int y, const char *string) const;
+	inline void DrawTextShadow (int normalcolor, int x, int y, const char *string) const;
+	inline void DrawTextCleanShadow (int normalcolor, int x, int y, const char *string) const;
+	inline void DrawTextCleanShadowMove (int normalcolor, int x, int y, const char *string) const;
 
 	// Patch drawing functions
 	void DrawPatchFlipped (const patch_t *patch, int x, int y) const;
@@ -171,6 +196,13 @@ public:
 	inline void DrawColoredLucentPatchClean (const patch_t *patch, int x, int y) const;
 	inline void DrawColoredLucentPatchCleanNoMove (const patch_t *patch, int x, int y) const;
 
+	inline void DrawShadowedPatch (const patch_t *patch, int x, int y) const;
+	inline void DrawShadowedPatchStretched (const patch_t *patch, int x, int y, int dw, int dh) const;
+	inline void DrawShadowedPatchDirect (const patch_t *patch, int x, int y) const;
+	inline void DrawShadowedPatchIndirect (const patch_t *patch, int x, int y) const;
+	inline void DrawShadowedPatchClean (const patch_t *patch, int x, int y) const;
+	inline void DrawShadowedPatchCleanNoMove (const patch_t *patch, int x, int y) const;
+
 protected:
 	void TextWrapper (EWrapperCode drawer, int normalcolor, int x, int y, const byte *string) const;
 	void TextSWrapper (EWrapperCode drawer, int normalcolor, int x, int y, const byte *string) const;
@@ -192,6 +224,8 @@ protected:
 	static void DrawLucentPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc);
 	static void DrawTranslatedPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc);
 	static void DrawTlatedLucentPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc);
+	static void DrawColoredPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc);
+	static void DrawColorLucentPatchSP (const byte *source, byte *dest, int count, int pitch, int yinc);
 
 	static void DrawPatchD (const byte *source, byte *dest, int count, int pitch);
 	static void DrawLucentPatchD (const byte *source, byte *dest, int count, int pitch);
@@ -221,25 +255,53 @@ protected:
 	static vdrawsfunc *m_Drawsfuncs;
 };
 
+// The color to fill with for #4 and #5 above
+extern int V_ColorFill;
+
+// Fade amount used by the translucent patch drawers
+extern fixed_t V_Fade;
+
+// The color map for #1 and #2 above
+extern byte *V_ColorMap;
+
+extern fixed_t V_TextTrans;
+
 inline void DCanvas::DrawText (int normalcolor, int x, int y, const byte *string) const
 {
-	TextWrapper (EWrapper_Translated, normalcolor, x, y, string);
+	TextWrapper (ETWrapper_Normal, normalcolor, x, y, string);
 }
-inline void DCanvas::DrawTextLuc (int normalcolor, int x, int y, const byte *string) const
+inline void DCanvas::DrawTextLuc (int normalcolor, int x, int y, const byte *string, fixed_t trans) const
 {
-	TextWrapper (EWrapper_TlatedLucent, normalcolor, x, y, string);
+	V_TextTrans = trans;
+	TextWrapper (ETWrapper_Translucent, normalcolor, x, y, string);
 }
 inline void DCanvas::DrawTextClean (int normalcolor, int x, int y, const byte *string) const
 {
-	TextSWrapper (EWrapper_Translated, normalcolor, x, y, string);
+	TextSWrapper (ETWrapper_Normal, normalcolor, x, y, string);
 }
-inline void DCanvas::DrawTextCleanLuc (int normalcolor, int x, int y, const byte *string) const
+inline void DCanvas::DrawTextCleanLuc (int normalcolor, int x, int y, const byte *string, fixed_t trans) const
 {
-	TextSWrapper (EWrapper_TlatedLucent, normalcolor, x, y, string);
+	V_TextTrans = trans;
+	TextSWrapper (ETWrapper_Translucent, normalcolor, x, y, string);
 }
 inline void DCanvas::DrawTextCleanMove (int normalcolor, int x, int y, const byte *string) const
 {
-	TextSWrapper (EWrapper_Translated, normalcolor,
+	TextSWrapper (ETWrapper_Normal, normalcolor,
+		(x - 160) * CleanXfac + width / 2,
+		(y - 100) * CleanYfac + height / 2,
+		string);
+}
+inline void DCanvas::DrawTextShadow (int normalcolor, int x, int y, const byte *string) const
+{
+	TextWrapper (ETWrapper_Shadow, normalcolor, x, y, string);
+}
+inline void DCanvas::DrawTextCleanShadow (int normalcolor, int x, int y, const byte *string) const
+{
+	TextSWrapper (ETWrapper_Shadow, normalcolor, x, y, string);
+}
+inline void DCanvas::DrawTextCleanShadowMove (int normalcolor, int x, int y, const byte *string) const
+{
+	TextSWrapper (ETWrapper_Shadow, normalcolor,
 		(x - 160) * CleanXfac + width / 2,
 		(y - 100) * CleanYfac + height / 2,
 		string);
@@ -247,23 +309,40 @@ inline void DCanvas::DrawTextCleanMove (int normalcolor, int x, int y, const byt
 
 inline void DCanvas::DrawText (int normalcolor, int x, int y, const char *string) const
 {
-	TextWrapper (EWrapper_Translated, normalcolor, x, y, (const byte *)string);
+	TextWrapper (ETWrapper_Normal, normalcolor, x, y, (const byte *)string);
 }
-inline void DCanvas::DrawTextLuc (int normalcolor, int x, int y, const char *string) const
+inline void DCanvas::DrawTextLuc (int normalcolor, int x, int y, const char *string, fixed_t trans) const
 {
-	TextWrapper (EWrapper_TlatedLucent, normalcolor, x, y, (const byte *)string);
+	V_TextTrans = trans;
+	TextWrapper (ETWrapper_Translucent, normalcolor, x, y, (const byte *)string);
 }
 inline void DCanvas::DrawTextClean (int normalcolor, int x, int y, const char *string) const
 {
-	TextSWrapper (EWrapper_Translated, normalcolor, x, y, (const byte *)string);
+	TextSWrapper (ETWrapper_Normal, normalcolor, x, y, (const byte *)string);
 }
-inline void DCanvas::DrawTextCleanLuc (int normalcolor, int x, int y, const char *string) const
+inline void DCanvas::DrawTextCleanLuc (int normalcolor, int x, int y, const char *string, fixed_t trans) const
 {
-	TextSWrapper (EWrapper_TlatedLucent, normalcolor, x, y, (const byte *)string);
+	V_TextTrans = trans;
+	TextSWrapper (ETWrapper_Translucent, normalcolor, x, y, (const byte *)string);
 }
 inline void DCanvas::DrawTextCleanMove (int normalcolor, int x, int y, const char *string) const
 {
-	TextSWrapper (EWrapper_Translated, normalcolor,
+	TextSWrapper (ETWrapper_Normal, normalcolor,
+		(x - 160) * CleanXfac + width / 2,
+		(y - 100) * CleanYfac + height / 2,
+		(const byte *)string);
+}
+inline void DCanvas::DrawTextShadow (int normalcolor, int x, int y, const char *string) const
+{
+	TextWrapper (ETWrapper_Shadow, normalcolor, x, y, (const byte *)string);
+}
+inline void DCanvas::DrawTextCleanShadow (int normalcolor, int x, int y, const char *string) const
+{
+	TextSWrapper (ETWrapper_Shadow, normalcolor, x, y, (const byte *)string);
+}
+inline void DCanvas::DrawTextCleanShadowMove (int normalcolor, int x, int y, const char *string) const
+{
+	TextSWrapper (ETWrapper_Shadow, normalcolor,
 		(x - 160) * CleanXfac + width / 2,
 		(y - 100) * CleanYfac + height / 2,
 		(const byte *)string);
@@ -419,12 +498,47 @@ inline void DCanvas::DrawColoredLucentPatchCleanNoMove (const patch_t *patch, in
 	DrawCNMWrapper (EWrapper_ColoredLucent, patch, x, y);
 }
 
+inline void DCanvas::DrawShadowedPatch (const patch_t *patch, int x, int y) const
+{
+	V_ColorFill = 0;
+	DrawWrapper (EWrapper_ColoredLucent, patch, x+2, y+2);
+	DrawWrapper (EWrapper_Normal, patch, x, y);
+}
+inline void DCanvas::DrawShadowedPatchStretched (const patch_t *patch, int x, int y, int dw, int dh) const
+{
+	V_ColorFill = 0;
+	DrawSWrapper (EWrapper_ColoredLucent, patch, x+2, y+2, dw, dh);
+	DrawSWrapper (EWrapper_Normal, patch, x, y, dw, dh);
+}
+inline void DCanvas::DrawShadowedPatchDirect (const patch_t *patch, int x, int y) const
+{
+	V_ColorFill = 0;
+	DrawWrapper (EWrapper_ColoredLucent, patch, x+2, y+2);
+	DrawWrapper (EWrapper_Normal, patch, x, y);
+}
+inline void DCanvas::DrawShadowedPatchIndirect (const patch_t *patch, int x, int y) const
+{
+	V_ColorFill = 0;
+	DrawIWrapper (EWrapper_ColoredLucent, patch, x+2, y+2);
+	DrawIWrapper (EWrapper_Normal, patch, x, y);
+}
+inline void DCanvas::DrawShadowedPatchClean (const patch_t *patch, int x, int y) const
+{
+	V_ColorFill = 0;
+	DrawCWrapper (EWrapper_ColoredLucent, patch, x+2, y+2);
+	DrawCWrapper (EWrapper_Normal, patch, x, y);
+}
+inline void DCanvas::DrawShadowedPatchCleanNoMove (const patch_t *patch, int x, int y) const
+{
+	V_ColorFill = 0;
+	DrawCNMWrapper (EWrapper_ColoredLucent, patch, x+2, y+2);
+	DrawCNMWrapper (EWrapper_Normal, patch, x, y);
+}
+
 extern "C" palette_t *DefaultPalette;
 
 // This is the screen updated by I_FinishUpdate.
 extern	DCanvas *screen;
-
-extern	DBoundingBox 	dirtybox;
 
 extern	byte	newgamma[256];
 EXTERN_CVAR (Gamma)
@@ -435,12 +549,6 @@ extern byte RGB32k[32][32][32];
 
 // Allocates buffer screens, call before R_Init.
 void V_Init (void);
-
-// The color to fill with for #4 and #5 above
-extern int V_ColorFill;
-
-// The color map for #1 and #2 above
-extern byte *V_ColorMap;
 
 // The palette lookup table to be used with for direct modes
 extern unsigned int *V_Palette;

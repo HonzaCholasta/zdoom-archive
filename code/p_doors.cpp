@@ -42,24 +42,12 @@ DDoor::DDoor ()
 void DDoor::Serialize (FArchive &arc)
 {
 	Super::Serialize (arc);
-	if (arc.IsStoring ())
-	{
-		arc << m_Type
-			<< m_TopHeight
-			<< m_Speed
-			<< m_Direction
-			<< m_TopWait
-			<< m_TopCountdown;
-	}
-	else
-	{
-		arc >> m_Type
-			>> m_TopHeight
-			>> m_Speed
-			>> m_Direction
-			>> m_TopWait
-			>> m_TopCountdown;
-	}
+	arc << m_Type
+		<< m_TopHeight
+		<< m_Speed
+		<< m_Direction
+		<< m_TopWait
+		<< m_TopCountdown;
 }
 
 
@@ -244,7 +232,7 @@ DDoor::DDoor (sector_t *sec, EVlDoor type, fixed_t speed, int delay)
 }
 
 BOOL EV_DoDoor (DDoor::EVlDoor type, line_t *line, AActor *thing,
-				int tag, int speed, int delay, keytype_t lock)
+				int tag, int speed, int delay, keyspecialtype_t lock)
 {
 	BOOL		rtn = false;
 	int 		secnum;
@@ -261,7 +249,7 @@ BOOL EV_DoDoor (DDoor::EVlDoor type, line_t *line, AActor *thing,
 		// if the wrong side of door is pushed, give oof sound
 		if (line->sidenum[1]==-1)				// killough
 		{
-			S_Sound (thing, CHAN_VOICE, "*grunt1", 1, ATTN_NORM);
+			S_Sound (thing, CHAN_VOICE, "*usefail", 1, ATTN_NORM);
 			return false;
 		}
 

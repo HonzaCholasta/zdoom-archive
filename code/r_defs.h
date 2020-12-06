@@ -391,6 +391,7 @@ struct vissprite_s
 	byte			*translation;	// [RH] for translation;
 	sector_t		*heightsec;		// killough 3/27/98: height sector for underwater/fake ceiling
 	fixed_t			translucency;
+	fixed_t			floorclip;
 };
 typedef struct vissprite_s vissprite_t;
 
@@ -426,7 +427,8 @@ typedef struct spriteframe_s spriteframe_t;
 //
 struct spritedef_s
 {
-	int 			numframes;
+	char			name[5];
+	short 			numframes;
 	spriteframe_t	*spriteframes;
 };
 typedef struct spritedef_s spritedef_t;
@@ -438,9 +440,11 @@ struct playerskin_s
 {
 	char		name[17];	// 16 chars + NULL
 	char		face[3];
-	spritenum_t	sprite;
+	byte		gender;		// This skin's gender (not used)
+	byte		range0start;
+	byte		range0end;
+	int			sprite;
 	int			namespc;	// namespace for this skin
-	int			gender;		// This skin's gender (not used)
 };
 typedef struct playerskin_s playerskin_t;
 

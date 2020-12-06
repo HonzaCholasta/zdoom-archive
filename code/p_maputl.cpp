@@ -231,6 +231,7 @@ fixed_t opentop;
 fixed_t openbottom;
 fixed_t openrange;
 fixed_t lowfloor;
+extern int tmfloorpic;
 
 void P_LineOpening (const line_t *linedef)
 {
@@ -254,11 +255,13 @@ void P_LineOpening (const line_t *linedef)
 	{
 		openbottom = front->floorheight;
 		lowfloor = back->floorheight;
+		tmfloorpic = front->floorpic;
 	}
 	else
 	{
 		openbottom = back->floorheight;
 		lowfloor = front->floorheight;
+		tmfloorpic = back->floorpic;
 	}
 
 	openrange = opentop - openbottom;
@@ -268,7 +271,6 @@ void P_LineOpening (const line_t *linedef)
 //
 // THING POSITION SETTING
 //
-
 
 //
 // P_UnsetThingPosition
@@ -291,6 +293,8 @@ void AActor::UnlinkFromWorld ()
 		AActor  *next = snext;
 		if ((*prev = next))  // unlink from sector list
 			next->sprev = prev;
+		snext = NULL;
+		sprev = NULL;
 
 		// phares 3/14/98
 		//
@@ -309,7 +313,7 @@ void AActor::UnlinkFromWorld ()
 		touching_sectorlist = NULL; //to be restored by P_SetThingPosition
 	}
 		
-	if ( !(flags & MF_NOBLOCKMAP) )
+	if (!(flags & MF_NOBLOCKMAP))
 	{
 		// killough 8/11/98: simpler scheme using pointers-to-pointers for prev
 		// pointers, allows head node pointers to be treated like everything else
@@ -320,8 +324,12 @@ void AActor::UnlinkFromWorld ()
 		// linking.
 
 		AActor *_bnext, **_bprev = bprev;
-		if (_bprev && (*_bprev = _bnext = bnext))	// unlink from block map
+		if (_bprev && (*_bprev = _bnext = bnext))
+		{ // unlink from block map
 			_bnext->bprev = _bprev;
+		}
+		bnext = NULL;
+		bprev = NULL;
 	}
 }
 
@@ -336,7 +344,7 @@ void AActor::LinkToWorld ()
 	// link into subsector
 	subsector_t *ss = R_PointInSubsector (x, y);
 	subsector = ss;
-	
+
 	if ( !(flags & MF_NOSECTOR) )
 	{
 		// invisible things don't go into the sector links
@@ -389,8 +397,10 @@ void AActor::LinkToWorld ()
 			bprev = link;
 			*link = this;
 		}
-		else		// thing is off the map
+		else
+		{ // thing is off the map
 			bnext = NULL, bprev = NULL;
+		}
 	}
 }
 
@@ -401,6 +411,8 @@ void AActor::SetOrigin (fixed_t ix, fixed_t iy, fixed_t iz)
 	y = iy;
 	z = iz;
 	LinkToWorld ();
+	floorz = subsector->sector->floorheight;
+	ceilingz = subsector->sector->ceilingheight;
 }
 
 
@@ -426,7 +438,9 @@ extern polyblock_t **PolyBlockMap;
 BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*))
 {
 	if (x<0 || y<0 || x>=bmapwidth || y>=bmapheight)
+	{
 		return true;
+	}
 	else
 	{
 		int	offset;
@@ -436,16 +450,21 @@ BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*))
 		polyblock_t *polyLink;
 
 		offset = y*bmapwidth + x;
-		if (PolyBlockMap) {
+		if (PolyBlockMap)
+		{
 			polyLink = PolyBlockMap[offset];
-			while (polyLink) {
-				if (polyLink->polyobj && polyLink->polyobj->validcount != validcount) {
+			while (polyLink)
+			{
+				if (polyLink->polyobj && polyLink->polyobj->validcount != validcount)
+				{
 					int i;
 					seg_t **tempSeg = polyLink->polyobj->segs;
 					polyLink->polyobj->validcount = validcount;
 
-					for (i = polyLink->polyobj->numsegs; i; i--, tempSeg++) {
-						if ((*tempSeg)->linedef->validcount != validcount) {
+					for (i = polyLink->polyobj->numsegs; i; i--, tempSeg++)
+					{
+						if ((*tempSeg)->linedef->validcount != validcount)
+						{
 							(*tempSeg)->linedef->validcount = validcount;
 							if (!func ((*tempSeg)->linedef))
 								return false;
@@ -467,7 +486,8 @@ BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*))
 		{
 			line_t *ld = &lines[*list];
 
-			if (ld->validcount != validcount) {
+			if (ld->validcount != validcount)
+			{
 				ld->validcount = validcount;
 					
 				if ( !func(ld) )
@@ -482,20 +502,23 @@ BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*))
 //
 // P_BlockThingsIterator
 //
-BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(AActor*))
+BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(AActor*), AActor *actor)
 {
 	if (x<0 || y<0 || x>=bmapwidth || y>=bmapheight)
+	{
 		return true;
+	}
 	else
 	{
-		AActor *mobj;
-			
-		for (mobj = blocklinks[y*bmapwidth+x] ;
-			 mobj ;
-			 mobj = mobj->bnext)
+		if (actor == NULL)
 		{
-			if (!func (mobj))
+			actor = blocklinks[y*bmapwidth+x];
+		}
+		while (actor != NULL)
+		{
+			if (!func (actor))
 				return false;
+			actor = actor->bnext;
 		}
 	}
 	return true;
@@ -506,8 +529,7 @@ BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(AActor*))
 //
 // INTERCEPT ROUTINES
 //
-intercept_t 	intercepts[MAXINTERCEPTS];
-intercept_t*	intercept_p;
+TArray<intercept_t> intercepts (128);
 
 divline_t		trace;
 BOOL 			earlyout;
@@ -563,11 +585,13 @@ BOOL PIT_AddLineIntercepts (line_t *ld)
 		return false;	// stop checking
 	}
 	
-		
-	intercept_p->frac = frac;
-	intercept_p->isaline = true;
-	intercept_p->d.line = ld;
-	intercept_p++;
+
+	intercept_t newintercept;
+
+	newintercept.frac = frac;
+	newintercept.isaline = true;
+	newintercept.d.line = ld;
+	intercepts.Push (newintercept);
 
 	return true;		// continue
 }
@@ -629,10 +653,11 @@ BOOL PIT_AddThingIntercepts (AActor* thing)
 	if (frac < 0)
 		return true;			// behind source
 
-	intercept_p->frac = frac;
-	intercept_p->isaline = false;
-	intercept_p->d.thing = thing;
-	intercept_p++;
+	intercept_t newintercept;
+	newintercept.frac = frac;
+	newintercept.isaline = false;
+	newintercept.d.thing = thing;
+	intercepts.Push (newintercept);
 
 	return true;				// keep going
 }
@@ -645,18 +670,20 @@ BOOL PIT_AddThingIntercepts (AActor* thing)
 // 
 BOOL P_TraverseIntercepts (traverser_t func, fixed_t maxfrac)
 {
-	int 				count;
-	fixed_t 			dist;
-	intercept_t*		scan;
-	intercept_t*		in = 0;
+	int 		 count;
+	fixed_t 	 dist;
+	size_t		 scanpos;
+	intercept_t *scan;
+	intercept_t *in = 0;
 
-	count = intercept_p - intercepts;
+	count = intercepts.Size ();
 
 	while (count--)
 	{
 		dist = MAXINT;
-		for (scan = intercepts ; scan<intercept_p ; scan++)
+		for (scanpos = 0; scanpos < intercepts.Size (); scanpos++)
 		{
+			scan = &intercepts[scanpos];
 			if (scan->frac < dist)
 			{
 				dist = scan->frac;
@@ -667,20 +694,7 @@ BOOL P_TraverseIntercepts (traverser_t func, fixed_t maxfrac)
 		if (dist > maxfrac)
 			return true;		// checked everything in range			
 
-#if 0  // UNUSED
-	{
-
-		// don't check these yet, there may be others inserted
-		in = scan = intercepts;
-		for ( scan = intercepts ; scan<intercept_p ; scan++)
-			if (scan->frac > maxfrac)
-				*in++ = *scan;
-		intercept_p = in;
-		return false;
-	}
-#endif
-
-		if ( !func (in) )
+		if (!func (in))
 			return false;		// don't bother going farther
 
 		in->frac = MAXINT;
@@ -725,7 +739,7 @@ BOOL P_PathTraverse (fixed_t x1, fixed_t y1, fixed_t x2, fixed_t y2, int flags, 
 	earlyout = flags & PT_EARLYOUT;
 				
 	validcount++;
-	intercept_p = intercepts;
+	intercepts.Clear ();
 		
 	if ( ((x1-bmaporgx)&(MAPBLOCKSIZE-1)) == 0)
 		x1 += FRACUNIT; // don't side exactly on a line

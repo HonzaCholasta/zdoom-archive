@@ -22,6 +22,7 @@
 #include "i_system.h"
 #include "s_sound.h"
 #include "vectors.h"
+#include "a_doomglobal.h"
 
 //Used with Reachable().
 static AActor *looker;
@@ -58,7 +59,8 @@ static int PTR_Reachable (intercept_t *in)
 			else s = line->backsector;
 
 			if (s->floorheight <= (last_z+MAXMOVEHEIGHT)
-				&& ((s->ceilingheight==s->floorheight && line->special) || (s->ceilingheight-s->floorheight)>=looker->info->height) //Does it fit?
+				&& ((s->ceilingheight == s->floorheight && line->special)
+					|| (s->ceilingheight - s->floorheight) >= looker->height) //Does it fit?
 				&& (!bglobal.IsDangerous(s))) //Any Nukage/lava?
 			{
 				last_z = s->floorheight;
@@ -99,7 +101,7 @@ bool DCajunMaster::Reachable (AActor *actor, AActor *target)
 		return false;
 
 	if ((target->subsector->sector->ceilingheight - target->subsector->sector->floorheight)
-		< actor->info->height) //Where target is, looker can't be.
+		< actor->height) //Where target is, looker can't be.
 		return false;
 
 	if (target->subsector->sector == actor->subsector->sector)
@@ -133,15 +135,6 @@ bool DCajunMaster::Check_LOS (AActor *from, AActor *to, angle_t vangle)
 		return false; //Looker seems to be blind.
 
 	return abs (R_PointToAngle2 (from->x, from->y, to->x, to->y) - from->angle) <= (int)vangle/2;
-}
-
-//Returns warrior's current weapon.
-//if the bool is set to true, the warrior
-//is a bot else it's a player.
-//"Id" is the number of bot/player.
-mobjtype_t DCajunMaster::Warrior_weapon_drop (AActor *actor)
-{
-	return weaponinfo[actor->player->readyweapon].droptype;
 }
 
 //-------------------------------------
@@ -206,7 +199,7 @@ void DCajunMaster::Dofire (AActor *actor, ticcmd_t *cmd)
 	case wp_plasma: //Plasma (prediction aiming)
 		//Here goes the prediction.
 		dist = P_AproxDistance (actor->x - enemy->x, actor->y - enemy->y);
-		m = (dist/FRACUNIT) / mobjinfo[MT_PLASMA].speed;
+		m = (dist/FRACUNIT) / TypeInfo::FindType ("PlasmaBall")->ActorInfo->speed;
 		SetBodyAt (enemy->x + FixedMul (enemy->momx, (m*2*FRACUNIT)),
 				   enemy->y + FixedMul (enemy->momy, (m*2*FRACUNIT)), ONFLOORZ, 1);
 		actor->player->angle = R_PointToAngle2 (actor->x, actor->y, body1->x, body1->y);
@@ -426,6 +419,22 @@ AActor *DCajunMaster::Find_enemy (AActor *bot)
 	return target;
 }
 
+
+class ACajunBodyNode : public AActor
+{
+	DECLARE_STATELESS_ACTOR (ACajunBodyNode, AActor);
+};
+
+IMPLEMENT_DEF_SERIAL (ACajunBodyNode, AActor);
+REGISTER_ACTOR (ACajunBodyNode, Any);
+
+void ACajunBodyNode::SetDefaults (FActorInfo *info)
+{
+	ACTOR_DEFS_STATELESS;
+	info->flags = MF_NOSECTOR | MF_NOGRAVITY;
+	info->flags2 = MF2_DONTDRAW;
+}
+
 //Creates a temporary mobj (invisible) at the given location.
 void DCajunMaster::SetBodyAt (fixed_t x, fixed_t y, fixed_t z, int hostnum)
 {
@@ -434,14 +443,14 @@ void DCajunMaster::SetBodyAt (fixed_t x, fixed_t y, fixed_t z, int hostnum)
 		if (body1)
 			body1->SetOrigin (x, y, z);
 		else
-			body1 = new AActor (x, y, z, MT_NODE);
+			body1 = Spawn<ACajunBodyNode> (x, y, z);
 	}
 	else if (hostnum == 2)
 	{
 		if (body2)
 			body2->SetOrigin (x, y, z);
 		else
-			body2 = new AActor (x, y, z, MT_NODE);
+			body2 = Spawn<ACajunBodyNode> (x, y, z);
 	}
 }
 
@@ -453,17 +462,32 @@ void DCajunMaster::SetBodyAt (fixed_t x, fixed_t y, fixed_t z, int hostnum)
 //This function assumes actor->player->angle
 //has been set an is the main aiming angle.
 
-//Emulates missile travel. Returns position of explosion.
-pos_t DCajunMaster::FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd)
+class ACajunTrace : public AActor
 {
-	pos_t pos;
+	DECLARE_STATELESS_ACTOR (ACajunTrace, AActor);
+};
 
-	AActor *th = new AActor (source->x, source->y, source->z + 4*8*FRACUNIT, MT_BOTTRACE);
+IMPLEMENT_DEF_SERIAL (ACajunTrace, AActor);
+REGISTER_ACTOR (ACajunTrace, Any);
+
+void ACajunTrace::SetDefaults (FActorInfo *info)
+{
+	ACTOR_DEFS_STATELESS;
+	info->speed = 12 * FRACUNIT;
+	info->radius = 6 * FRACUNIT;
+	info->height = 8 * FRACUNIT;
+	info->flags = MF_NOBLOCKMAP|MF_DROPOFF|MF_MISSILE|MF_NOGRAVITY;
+}
+
+//Emulates missile travel. Returns distance travelled.
+fixed_t DCajunMaster::FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd)
+{
+	AActor *th = Spawn<ACajunTrace> (source->x, source->y, source->z + 4*8*FRACUNIT);
 	
 	th->target = source;		// where it came from
 
 	vec3_t velocity;
-	float speed = FIXED2FLOAT (th->info->speed);
+	float speed = (float)GetInfo (th)->speed;
 
 	velocity[0] = FIXED2FLOAT(dest->x - source->x);
 	velocity[1] = FIXED2FLOAT(dest->y - source->y);
@@ -473,39 +497,37 @@ pos_t DCajunMaster::FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd)
 	th->momy = FLOAT2FIXED(velocity[1] * speed);
 	th->momz = FLOAT2FIXED(velocity[2] * speed);
 
-	while (1)
-	{
-		th->x += th->momx;
-		th->y += th->momy;
-		th->z += th->momz;
+	fixed_t dist = 0;
 
+	while (dist < SAFE_SELF_MISDIST)
+	{
+		dist += GetInfo (th)->speed;
+		th->SetOrigin (th->x + th->momx, th->y + th->momy, th->z + th->momz);
 		if (!CleanAhead (th, th->x, th->y, cmd))
-		{
-			pos.x = th->x;
-			pos.y = th->y;
-			pos.z = th->z;
-			th->Destroy ();
-			return pos;
-		}
+			break;
 	}
+	th->Destroy ();
+	return dist;
 }
 
 angle_t DCajunMaster::FireRox (AActor *bot, AActor *enemy, ticcmd_t *cmd)
 {
 	fixed_t dist;
 	angle_t ang;
-	pos_t pos;
 	AActor *actor;
 	int m;
 
-	SetBodyAt(bot->x + FixedMul(bot->momx, 5*FRACUNIT), bot->y + FixedMul(bot->momy, 5*FRACUNIT), bot->z+(bot->info->height/2), 2);
-		actor = bglobal.body2;
+	SetBodyAt (bot->x + FixedMul(bot->momx, 5*FRACUNIT),
+			   bot->y + FixedMul(bot->momy, 5*FRACUNIT),
+			   bot->z + (bot->height / 2), 2);
+
+	actor = bglobal.body2;
 
 	dist = P_AproxDistance (actor->x-enemy->x, actor->y-enemy->y);
 	if (dist < SAFE_SELF_MISDIST)
 		return 0;
 	//Predict.
-	m = (((dist+1)/FRACUNIT)/mobjinfo[MT_ROCKET].speed);
+	m = (((dist+1)/FRACUNIT) / RUNTIME_CLASS(ARocket)->ActorInfo->speed);
 
 	SetBodyAt (enemy->x + FixedMul (enemy->momx, (m+2*FRACUNIT)),
 			   enemy->y + FixedMul(enemy->momy, (m+2*FRACUNIT)), ONFLOORZ, 1);
@@ -515,8 +537,7 @@ angle_t DCajunMaster::FireRox (AActor *bot, AActor *enemy, ticcmd_t *cmd)
 	{
 		if (SafeCheckPosition (bot, actor->x, actor->y))
 		{
-			pos = FakeFire (actor, bglobal.body1, cmd);
-			if (P_AproxDistance (actor->x-pos.x, actor->y-pos.y) > SAFE_SELF_MISDIST)
+			if (FakeFire (actor, bglobal.body1, cmd) >= SAFE_SELF_MISDIST)
 			{
 				ang = R_PointToAngle2 (actor->x, actor->y, bglobal.body1->x, bglobal.body1->y);
 				return ang;
@@ -526,8 +547,7 @@ angle_t DCajunMaster::FireRox (AActor *bot, AActor *enemy, ticcmd_t *cmd)
 	//Try fire straight.
 	if (P_CheckSight (actor, enemy, false))
 	{
-		pos = FakeFire (bot, enemy, cmd);
-		if (P_AproxDistance(bot->x-pos.x, bot->y-pos.y)>SAFE_SELF_MISDIST)
+		if (FakeFire (bot, enemy, cmd) >= SAFE_SELF_MISDIST)
 		{
 			ang = R_PointToAngle2(bot->x, bot->y, enemy->x, enemy->y);
 			return ang;

@@ -43,7 +43,7 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /YX /FD /c
-# ADD CPP /nologo /Gr /MD /W3 /GX /O2 /I "../openptc/source" /I "win32" /I "." /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "USEASM" /FAs /YX /FD /c
+# ADD CPP /nologo /Gr /MD /W3 /GX /O2 /I "f:/fmod/api" /I "../openptc/source" /I "win32" /I "." /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /D "USEASM" /FAs /YX /FD /c
 # SUBTRACT CPP /Fr
 # ADD BASE MTL /nologo /D "NDEBUG" /mktyplib203 /o "NUL" /win32
 # ADD MTL /nologo /D "NDEBUG" /mktyplib203 /o "NUL" /win32
@@ -54,7 +54,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /machine:I386
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib ..\midas\lib\win32\vcretail\midas.lib wsock32.lib ../openptc/library/visual/ptc.lib winmm.lib /nologo /subsystem:windows /pdb:none /map /machine:I386 /nodefaultlib:"libc" /nodefaultlib:"libcmt" /out:"../zdoom.exe"
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib f:/fmod/api/fmodvc.lib wsock32.lib ../openptc/library/visual/ptc.lib winmm.lib /nologo /subsystem:windows /pdb:none /map /machine:I386 /nodefaultlib:"libc" /nodefaultlib:"libcmt" /out:"../zdoom.exe"
 # SUBTRACT LINK32 /verbose /profile /debug
 
 !ELSEIF  "$(CFG)" == "zdoom - Win32 Debug"
@@ -71,7 +71,8 @@ LINK32=link.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /Gm /GX /Zi /Od /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /YX /FD /c
-# ADD CPP /nologo /G5 /Gr /MTd /W3 /Gm /GX /ZI /Od /I "../openptc/source" /I "win32" /I "." /D "_DEBUG" /D "WIN32" /D "_WINDOWS" /D "NOASM" /YX /FD /c
+# ADD CPP /nologo /MTd /W3 /Gm /GX /Zi /Od /I "f:/fmod/api" /I "../openptc/source" /I "win32" /I "." /I "g_shared" /I "g_doom" /I "g_raven" /I "g_heretic" /I "g_hexen" /D "WIN32" /D "_DEBUG" /D "_WINDOWS" /FD /c
+# SUBTRACT CPP /YX /Yc /Yu
 # ADD BASE MTL /nologo /D "_DEBUG" /mktyplib203 /o "NUL" /win32
 # ADD MTL /nologo /D "_DEBUG" /mktyplib203 /o "NUL" /win32
 # ADD BASE RSC /l 0x409 /d "_DEBUG"
@@ -81,7 +82,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib ddraw.lib winmm.lib ..\midas\lib\win32\vcretail\midas.lib wsock32.lib ../openptc/library/visual/ptcdebug.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcmt" /out:"../doomdbg.exe"
+# ADD LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib ddraw.lib winmm.lib wsock32.lib f:/fmod/api/fmodvc.lib ../openptc/library/visual/ptcdebug.lib /nologo /subsystem:windows /debug /machine:I386 /nodefaultlib:"libcmt" /out:"../doomdbg.exe"
 # SUBTRACT LINK32 /profile
 
 !ENDIF 
@@ -136,6 +137,10 @@ SOURCE=.\c_cvars.cpp
 # Begin Source File
 
 SOURCE=.\c_dispatch.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\c_varinit.cpp
 # End Source File
 # Begin Source File
 
@@ -323,10 +328,6 @@ SOURCE=.\p_pspr.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\p_quake.cpp
-# End Source File
-# Begin Source File
-
 SOURCE=.\p_saveg.cpp
 # End Source File
 # Begin Source File
@@ -339,6 +340,10 @@ SOURCE=.\p_sight.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\p_spark.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\p_spec.cpp
 # End Source File
 # Begin Source File
@@ -348,6 +353,10 @@ SOURCE=.\p_switch.cpp
 # Begin Source File
 
 SOURCE=.\p_teleport.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\p_terrain.cpp
 # End Source File
 # Begin Source File
 
@@ -407,6 +416,10 @@ SOURCE=.\r_things.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\s_advsound.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\s_sndseq.cpp
 # End Source File
 # Begin Source File
@@ -416,14 +429,6 @@ SOURCE=.\s_sound.cpp
 # Begin Source File
 
 SOURCE=.\sc_man.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=.\st_lib.cpp
-# End Source File
-# Begin Source File
-
-SOURCE=.\st_new.cpp
 # End Source File
 # Begin Source File
 
@@ -439,7 +444,15 @@ SOURCE=.\tables.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\v_collection.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\v_draw.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\v_font.cpp
 # End Source File
 # Begin Source File
 
@@ -508,10 +521,6 @@ SOURCE=.\cmdlib.h
 # Begin Source File
 
 SOURCE=.\d_dehacked.h
-# End Source File
-# Begin Source File
-
-SOURCE=.\d_englsh.h
 # End Source File
 # Begin Source File
 
@@ -615,6 +624,10 @@ SOURCE=.\gi.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\hstrings.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\hu_stuff.h
 # End Source File
 # Begin Source File
@@ -675,6 +688,10 @@ SOURCE=.\p_effect.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\p_enemy.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\p_inter.h
 # End Source File
 # Begin Source File
@@ -700,6 +717,10 @@ SOURCE=.\p_setup.h
 # Begin Source File
 
 SOURCE=.\p_spec.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\p_terrain.h
 # End Source File
 # Begin Source File
 
@@ -763,10 +784,6 @@ SOURCE=.\sc_man.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\st_lib.h
-# End Source File
-# Begin Source File
-
 SOURCE=.\st_stuff.h
 # End Source File
 # Begin Source File
@@ -780,6 +797,14 @@ SOURCE=.\Tables.h
 # Begin Source File
 
 SOURCE=.\tarray.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\v_collection.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\v_font.h
 # End Source File
 # Begin Source File
 
@@ -915,18 +940,6 @@ InputName=tmap
 
 # End Source File
 # End Group
-# Begin Group "Text Files"
-
-# PROP Default_Filter "txt"
-# Begin Source File
-
-SOURCE=..\commands.txt
-# End Source File
-# Begin Source File
-
-SOURCE=".\docs\Rh-log.txt"
-# End Source File
-# End Group
 # Begin Group "Win32 Files"
 
 # PROP Default_Filter ""
@@ -1025,6 +1038,366 @@ SOURCE=.\win32\win32video.cpp
 # Begin Source File
 
 SOURCE=.\win32\zdoom.rc
+# End Source File
+# End Group
+# Begin Group "Text Files"
+
+# PROP Default_Filter "txt"
+# Begin Source File
+
+SOURCE=..\commands.txt
+# End Source File
+# Begin Source File
+
+SOURCE=.\docs\notes.txt
+# End Source File
+# Begin Source File
+
+SOURCE=".\docs\Rh-log.txt"
+# End Source File
+# End Group
+# Begin Group "Shared Game"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\g_shared\a_action.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_action.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_artifacts.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_artifacts.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_bridge.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_camera.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_fountain.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_movingcamera.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_pickups.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_pickups.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_quake.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_secrettrigger.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_sharedglobal.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_sharedmisc.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_splashes.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_waterzone.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\a_weapons.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\hudmessages.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\sbar.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_shared\shared_sbar.cpp
+# End Source File
+# End Group
+# Begin Group "Doom Game"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\g_doom\a_arachnotron.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_archvile.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_bossbrain.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_bruiser.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_cacodemon.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_cyberdemon.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_demon.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomarmor.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomartifacts.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomdecorations.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomglobal.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomhealth.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomimp.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomkeys.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doommisc.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomplayer.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_doomweaps.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_fatso.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_keen.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_lostsoul.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_painelemental.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_possessed.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_revenant.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_spidermaster.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\doom_sbar.cpp
+# End Source File
+# End Group
+# Begin Group "Raven Shared"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\g_raven\a_artiegg.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_raven\a_artitele.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_raven\a_minotaur.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_raven\a_ravenambient.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_raven\a_ravenartifacts.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_raven\a_ravenhealth.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_raven\ravenshared.h
+# End Source File
+# End Group
+# Begin Group "Heretic Game"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\g_heretic\a_beast.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_chicken.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_clink.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_dsparil.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticambience.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticarmor.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticartifacts.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticdecorations.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticglobal.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticimp.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_heretickeys.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticmisc.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticplayer.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_hereticweaps.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_ironlich.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_knight.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_mummy.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_snake.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\a_wizard.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\heretic_sbar.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_heretic\hstrings.h
+# End Source File
+# End Group
+# Begin Group "Hexen Game"
+
+# PROP Default_Filter ""
+# Begin Source File
+
+SOURCE=.\g_hexen\__hexentemp.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_bishop.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_debris_and_spike.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_ettin.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_hexendecorations.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_hexenfighter.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_hexenglobal.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_hexen\a_hexenspecialdecs.cpp
 # End Source File
 # End Group
 # End Target

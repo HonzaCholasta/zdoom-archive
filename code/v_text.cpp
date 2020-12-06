@@ -11,294 +11,44 @@
 
 #include "doomstat.h"
 
+fixed_t V_TextTrans;
 
-extern patch_t *hu_font[HU_FONTSIZE];
-
-
-static byte *ConChars;
-
-byte *Ranges;
-
-// Convert the CONCHARS patch into the internal format used by
-// the console font drawer.
-void V_InitConChars (byte transcolor)
+//
+// SetFont
+//
+// Set the canvas's font
+//
+void DCanvas::SetFont (FFont *font)
 {
-	byte *d, *s, v, *src;
-	patch_t *chars;
-	int x, y, z, a;
-	DCanvas temp (128, 128, 8);
-
-	chars = (patch_t *)W_CacheLumpName ("CONCHARS", PU_CACHE);
-	temp.Lock ();
-
-	{
-		DWORD *scrn, fill;
-
-		fill = (transcolor << 24) | (transcolor << 16) | (transcolor << 8) | transcolor;
-		for (y = 0; y < 128; y++)
-		{
-			scrn = (DWORD *)(temp.buffer + temp.pitch * y);
-			for (x = 0; x < 128/4; x++)
-			{
-				*scrn++ = fill;
-			}
-		}
-		temp.DrawPatch (chars, 0, 0);
-	}
-
-	src = temp.buffer;
-
-	if ( (ConChars = new byte[256*8*8*2]) )
-	{
-		d = ConChars;
-		for (y = 0; y < 16; y++)
-		{
-			for (x = 0; x < 16; x++)
-			{
-				s = src + x * 8 + (y * 8 * temp.pitch);
-				for (z = 0; z < 8; z++)
-				{
-					for (a = 0; a < 8; a++)
-					{
-						v = s[a];
-						if (v == transcolor)
-						{
-							d[a] = 0x00;
-							d[a+8] = 0xff;
-						}
-						else
-						{
-							d[a] = v;
-							d[a+8] = 0x00;
-						}
-					}
-					d += 16;
-					s += temp.pitch;
-				}
-			}
-		}
-	}
-
-	temp.Unlock ();
-}
-
-
-//
-// V_PrintStr
-// Print a line of text using the console font
-//
-
-extern "C" void STACK_ARGS PrintChar1P (DWORD *charimg, byte *dest, int screenpitch);
-extern "C" void STACK_ARGS PrintChar2P_MMX (DWORD *charimg, byte *dest, int screenpitch);
-
-void DCanvas::PrintStr (int x, int y, const char *s, int count) const
-{
-	const byte *str = (const byte *)s;
-	byte *temp;
-	DWORD *charimg;
-	
-	if (!buffer)
-		return;
-
-	if (y > (height - 8) || y<0)
-		return;
-
-	if (x < 0)
-	{
-		int skip;
-
-		skip = -(x - 7) / 8;
-		x += skip * 8;
-		if (count <= skip)
-		{
-			return;
-		}
-		else
-		{
-			count -= skip;
-			str += skip;
-		}
-	}
-
-	x &= ~3;
-	temp = buffer + y * pitch;
-
-	while (count && x <= (width - 8))
-	{
-		charimg = (DWORD *)&ConChars[(*str) * 128];
-		if (is8bit)
-		{
-#ifdef USEASM
-			PrintChar1P (charimg, temp + x, pitch);
-#else
-			int z;
-			DWORD *writepos;
-
-			writepos = (DWORD *)(temp + x);
-			for (z = 0; z < 8; z++)
-			{
-				*writepos = (*writepos & charimg[2]) ^ charimg[0];
-				writepos++;
-				*writepos = (*writepos & charimg[3]) ^ charimg[1];
-				writepos += (pitch >> 2) - 1;
-				charimg += 4;
-			}
-#endif
-		}
-		else
-		{
-			int z;
-			int *writepos;
-
-			writepos = (int *)(temp + (x << 2));
-			for (z = 0; z < 8; z++)
-			{
-#define BYTEIMG ((byte *)charimg)
-#define SPOT(a) \
-	writepos[a] = (writepos[a] & \
-				 ((BYTEIMG[a+8]<<16)|(BYTEIMG[a+8]<<8)|(BYTEIMG[a+8]))) \
-				 ^ V_Palette[BYTEIMG[a]]
-
-				SPOT(0);
-				SPOT(1);
-				SPOT(2);
-				SPOT(3);
-				SPOT(4);
-				SPOT(5);
-				SPOT(6);
-				SPOT(7);
-#undef SPOT
-#undef BYTEIMG
-				writepos += pitch >> 2;
-				charimg += 4;
-			}
-		}
-		str++;
-		count--;
-		x += 8;
-	}
-}
-
-//
-// V_PrintStr2
-// Same as V_PrintStr but doubles the size of every character.
-//
-void DCanvas::PrintStr2 (int x, int y, const char *s, int count) const
-{
-	const byte *str = (const byte *)s;
-	byte *temp;
-	DWORD *charimg;
-	
-	if (y > (height - 16))
-		return;
-
-	if (x < 0)
-	{
-		int skip;
-
-		skip = -(x - 15) / 16;
-		x += skip * 16;
-		if (count <= skip)
-		{
-			return;
-		}
-		else
-		{
-			count -= skip;
-			str += skip;
-		}
-	}
-
-	x &= ~3;
-	temp = buffer + y * pitch;
-
-	while (count && x <= (width - 16))
-	{
-		charimg = (DWORD *)&ConChars[(*str) * 128];
-#ifdef USEASM
-		if (UseMMX)
-		{
-			PrintChar2P_MMX (charimg, temp + x, pitch);
-		}
-		else
-#endif
-		{
-			int z;
-			byte *buildmask, *buildbits, *image;
-			unsigned int m1, s1;
-			unsigned int *writepos;
-
-			writepos = (unsigned int *)(temp + x);
-			buildbits = (byte *)&s1;
-			buildmask = (byte *)&m1;
-			image = (byte *)charimg;
-
-			for (z = 0; z < 8; z++)
-			{
-				buildmask[0] = buildmask[1] = image[8];
-				buildmask[2] = buildmask[3] = image[9];
-				buildbits[0] = buildbits[1] = image[0];
-				buildbits[2] = buildbits[3] = image[1];
-				writepos[0] = (writepos[0] & m1) ^ s1;
-				writepos[pitch/4] = (writepos[pitch/4] & m1) ^ s1;
-
-				buildmask[0] = buildmask[1] = image[10];
-				buildmask[2] = buildmask[3] = image[11];
-				buildbits[0] = buildbits[1] = image[2];
-				buildbits[2] = buildbits[3] = image[3];
-				writepos[1] = (writepos[1] & m1) ^ s1;
-				writepos[1+pitch/4] = (writepos[1+pitch/4] & m1) ^ s1;
-
-				buildmask[0] = buildmask[1] = image[12];
-				buildmask[2] = buildmask[3] = image[13];
-				buildbits[0] = buildbits[1] = image[4];
-				buildbits[2] = buildbits[3] = image[5];
-				writepos[2] = (writepos[2] & m1) ^ s1;
-				writepos[2+pitch/4] = (writepos[2+pitch/4] & m1) ^ s1;
-
-				buildmask[0] = buildmask[1] = image[14];
-				buildmask[2] = buildmask[3] = image[15];
-				buildbits[0] = buildbits[1] = image[6];
-				buildbits[2] = buildbits[3] = image[7];
-				writepos[3] = (writepos[3] & m1) ^ s1;
-				writepos[3+pitch/4] = (writepos[3+pitch/4] & m1) ^ s1;
-
-				writepos += pitch >> 1;
-				image += 16;
-			}
-
-		}
-		str++;
-		count--;
-		x += 16;
-	}
-#ifdef USEASM
-	ENDMMX;
-#endif
+	Font = font;
 }
 
 //
 // V_DrawText
 //
-// Write a string using the hu_font
+// Write a string using the current font
 //
-extern patch_t *hu_font[HU_FONTSIZE];
-extern byte *Ranges;
-
 void DCanvas::TextWrapper (EWrapperCode drawer, int normalcolor, int x, int y, const byte *string) const
 {
-	int 		w;
+	int 		w, h, xo, yo;
 	const byte *ch;
 	int 		c;
 	int 		cx;
 	int 		cy;
 	int			boldcolor;
+	const byte *range;
+	int			height;
+	const byte *data;
 
-	if (normalcolor > NUM_TEXT_COLORS)
-		normalcolor = CR_RED;
+	if (Font == NULL)
+		return;
+
+	if (normalcolor >= NUM_TEXT_COLORS)
+		normalcolor = CR_UNTRANSLATED;
 	boldcolor = normalcolor ? normalcolor - 1 : NUM_TEXT_COLORS - 1;
 
-	V_ColorMap = Ranges + normalcolor * 256;
+	range = Font->GetColorTranslation ((EColorRange)normalcolor);
+	height = Font->GetHeight () + 1;
 
 	ch = string;
 	cx = x;
@@ -310,7 +60,7 @@ void DCanvas::TextWrapper (EWrapperCode drawer, int normalcolor, int x, int y, c
 		if (!c)
 			break;
 
-		if (c == 0x8a)
+		if (c == 0x81)
 		{
 			int newcolor = toupper(*ch++);
 
@@ -334,47 +84,62 @@ void DCanvas::TextWrapper (EWrapperCode drawer, int normalcolor, int x, int y, c
 			{
 				continue;
 			}
-			V_ColorMap = Ranges + newcolor * 256;
+			range = Font->GetColorTranslation ((EColorRange)newcolor);
 			continue;
 		}
 		
 		if (c == '\n')
 		{
 			cx = x;
-			cy += 9;
+			cy += height;
 			continue;
 		}
 
-		c = toupper(c) - HU_FONTSTART;
-		if (c < 0 || c>= HU_FONTSIZE)
+		if ((data = Font->GetChar (c, &w, &h, &xo, &yo)))
 		{
-			cx += 4;
-			continue;
-		}
-				
-		w = SHORT (hu_font[c]->width);
-		if (cx+w > width)
-			break;
+			if (cx + w > width)
+				break;
 
-		DrawWrapper (drawer, hu_font[c], cx, cy);
-		cx+=w;
+			switch (drawer)
+			{
+			default:
+			case ETWrapper_Normal:
+				DrawMaskedBlock (cx - xo, cy - yo, w, h, data, range);
+				break;
+			case ETWrapper_Translucent:
+				DrawTranslucentMaskedBlock (cx - xo, cy - yo, w, h, data, range, V_TextTrans);
+				break;
+			case ETWrapper_Shadow:
+				DrawShadowedMaskedBlock (cx - xo, cy - yo, w, h, data, range, TRANSLUC50);
+				break;
+			}
+		}
+		
+		cx += w;
 	}
 }
 
 void DCanvas::TextSWrapper (EWrapperCode drawer, int normalcolor, int x, int y, const byte *string) const
 {
-	int 		w;
+	int 		w, h, xo, yo;
 	const byte *ch;
 	int 		c;
 	int 		cx;
 	int 		cy;
 	int			boldcolor;
+	const byte *range;
+	int			height;
+	const byte *data;
+
+	if (Font == NULL)
+		return;
 
 	if (normalcolor > NUM_TEXT_COLORS)
-		normalcolor = CR_RED;
+		normalcolor = CR_UNTRANSLATED;
 	boldcolor = normalcolor ? normalcolor - 1 : NUM_TEXT_COLORS - 1;
 
-	V_ColorMap = Ranges + normalcolor * 256;
+	range = Font->GetColorTranslation ((EColorRange)normalcolor);
+	height = (Font->GetHeight () + 1) * CleanYfac;
 
 	ch = string;
 	cx = x;
@@ -386,7 +151,7 @@ void DCanvas::TextSWrapper (EWrapperCode drawer, int normalcolor, int x, int y, 
 		if (!c)
 			break;
 
-		if (c == 0x8a)
+		if (c == 0x81)
 		{
 			int newcolor = toupper(*ch++);
 
@@ -410,43 +175,59 @@ void DCanvas::TextSWrapper (EWrapperCode drawer, int normalcolor, int x, int y, 
 			{
 				continue;
 			}
-			V_ColorMap = Ranges + newcolor * 256;
+			range = Font->GetColorTranslation ((EColorRange)newcolor);
 			continue;
 		}
 		
 		if (c == '\n')
 		{
 			cx = x;
-			cy += 9 * CleanYfac;
+			cy += height;
 			continue;
 		}
 
-		c = toupper(c) - HU_FONTSTART;
-		if (c < 0 || c>= HU_FONTSIZE)
+		if ((data = Font->GetChar (c, &w, &h, &xo, &yo)))
 		{
-			cx += 4 * CleanXfac;
-			continue;
-		}
-				
-		w = SHORT (hu_font[c]->width) * CleanXfac;
-		if (cx+w > width)
-			break;
+			int sw = w * CleanXfac;
 
-		DrawCNMWrapper (drawer, hu_font[c], cx, cy);
-		cx+=w;
+			if (cx + sw > width)
+				break;
+
+			switch (drawer)
+			{
+			default:
+			case ETWrapper_Normal:
+				ScaleMaskedBlock (cx - xo * CleanXfac, cy - yo * CleanYfac, w, h,
+					sw, h * CleanYfac, data, range);
+				break;
+			case ETWrapper_Translucent:
+				ScaleTranslucentMaskedBlock (cx - xo * CleanXfac, cy - yo * CleanYfac, w, h,
+					sw, h * CleanYfac, data, range, V_TextTrans);
+				break;
+			case ETWrapper_Shadow:
+				ScaleShadowedMaskedBlock (cx - xo * CleanXfac, cy - yo * CleanYfac, w, h,
+					sw, h * CleanYfac, data, range, TRANSLUC50);
+				break;
+			}
+			cx += sw;
+		}
+		else
+		{
+			cx += w * CleanXfac;
+		}
 	}
 }
 
 //
-// Find string width from hu_font chars
+// Find string width using current font
 //
-int V_StringWidth (const byte *string)
+int DCanvas::StringWidth (const char *string) const
 {
-	int w = 0, c;
+	int w = 0;
 		
 	while (*string)
 	{
-		if (*string == 0x8a)
+		if (*string == '\x81')
 		{
 			if (*(++string))
 				string++;
@@ -454,15 +235,7 @@ int V_StringWidth (const byte *string)
 		}
 		else
 		{
-			c = toupper((*string++) & 0x7f) - HU_FONTSTART;
-			if (c < 0 || c >= HU_FONTSIZE)
-			{
-				w += 4;
-			}
-			else
-			{
-				w += SHORT (hu_font[c]->width);
-			}
+			w += Font->GetCharWidth (*string++);
 		}
 	}
 				
@@ -472,19 +245,22 @@ int V_StringWidth (const byte *string)
 //
 // Break long lines of text into multiple lines no longer than maxwidth pixels
 //
-static void breakit (brokenlines_t *line, const byte *start, const byte *string)
+static void breakit (brokenlines_t *line, const byte *start, const byte *string, bool keepspace)
 {
 	// Leave out trailing white space
-	while (string > start && isspace (*(string - 1)))
-		string--;
+	if (!keepspace)
+	{
+		while (string > start && isspace (*(string - 1)))
+			string--;
+	}
 
 	line->string = new char[string - start + 1];
 	strncpy (line->string, (char *)start, string - start);
 	line->string[string - start] = 0;
-	line->width = V_StringWidth (line->string);
+	line->width = screen->StringWidth (line->string);
 }
 
-brokenlines_t *V_BreakLines (int maxwidth, const byte *string)
+brokenlines_t *V_BreakLines (int maxwidth, const byte *string, bool keepspace)
 {
 	brokenlines_t lines[128];	// Support up to 128 lines (should be plenty)
 
@@ -494,33 +270,37 @@ brokenlines_t *V_BreakLines (int maxwidth, const byte *string)
 
 	i = w = 0;
 
-	while ( (c = *string++) ) {
-		if (c == 0x8a) {
+	while ( (c = *string++) )
+	{
+		if (c == 0x81)
+		{
 			if (*string)
 				string++;
 			continue;
 		}
 
-		if (isspace(c)) {
-			if (!lastWasSpace) {
+		if (isspace(c)) 
+		{
+			if (!lastWasSpace)
+			{
 				space = string - 1;
 				lastWasSpace = true;
 			}
-		} else
-			lastWasSpace = false;
-
-		c = toupper (c & 0x7f) - HU_FONTSTART;
-
-		if (c < 0 || c >= HU_FONTSIZE)
-			nw = 4;
+		}
 		else
-			nw = SHORT (hu_font[c]->width);
+		{
+			lastWasSpace = false;
+		}
 
-		if (w + nw > maxwidth || c == '\n' - HU_FONTSTART) {	// Time to break the line
+		nw = screen->Font->GetCharWidth (c);
+
+		if (w + nw > maxwidth || c == '\n')
+		{ // Time to break the line
 			if (!space)
 				space = string - 1;
 
-			breakit (&lines[i], start, space);
+			lines[i].nlterminated = (c == '\n');
+			breakit (&lines[i], start, space, keepspace);
 
 			i++;
 			w = 0;
@@ -536,18 +316,27 @@ brokenlines_t *V_BreakLines (int maxwidth, const byte *string)
 				while (*start && isspace (*start))
 					start++;
 			string = start;
-		} else
+		}
+		else
+		{
 			w += nw;
+		}
 	}
 
-	if (string - start > 1) {
+	if (string - start > 1)
+	{
 		const byte *s = start;
 
-		while (s < string) {
-			if (!isspace (*s++)) {
-				breakit (&lines[i++], start, string);
+		while (s < string)
+		{
+			if (keepspace || !isspace (*s))
+			{
+				lines[i].nlterminated = (*s == '\n');
+				s++;
+				breakit (&lines[i++], start, string, keepspace);
 				break;
 			}
+			s++;
 		}
 	}
 
