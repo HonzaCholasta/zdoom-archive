@@ -162,7 +162,14 @@ srctar: $(ALLSOURCES) Makefile $(SRCDOC) docs/* other/*
 			$(basename)/Makefile \
 			$(basename)/docs/* \
 			$(basename)/other/* \
+			$(basename)/util/* \
 			$(basename)/$(src_dir)/* \
+			$(basename)/$(src_dir)/fmodsound/* \
+			$(basename)/$(src_dir)/g_doom/* \
+			$(basename)/$(src_dir)/g_heretic/* \
+			$(basename)/$(src_dir)/g_hexen/* \
+			$(basename)/$(src_dir)/g_raven/* \
+			$(basename)/$(src_dir)/g_shared/* \
 			$(basename)/$(src_dir)/linux/* \
 			$(basename)/$(src_dir)/win32/* \
 			$(SRCDOC:%=$(basename)/%) \

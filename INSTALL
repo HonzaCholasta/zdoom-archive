@@ -5,7 +5,9 @@ INSTALLING ZDOOM
 You need SDL installed. Go get it from http://www.libsdl.org/ if you don't
 have it already.
 
-You also need FMOD. Get it from http://www.fmod.org/
+You also need FMOD. Get the Programmers API from http://www.fmod.org/
+If you don't want to change the Makefile much, unzip it so that everything
+gets extracted to zdoom-1.23/fmod.
 
 INSTALLING FROM SOURCE
 ----------------------

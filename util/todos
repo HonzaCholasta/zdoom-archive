@@ -1,0 +1,29 @@
+#!/bin/sh
+
+mkdir $1
+mkdir $1/docs
+mkdir $1/src
+mkdir $1/src/g_doom
+mkdir $1/src/g_heretic
+mkdir $1/src/g_hexen
+mkdir $1/src/g_raven
+mkdir $1/src/g_shared
+mkdir $1/src/linux
+mkdir $1/src/win32
+mkdir $1/src/fmodsound
+
+util/addremcr a README $1/docs/zdoom.txt
+for i in INSTALL Makefile; do util/addremcr a $i $1/$i; done
+util/addremcr a docs/Classes $1/docs/classes.txt
+util/addremcr a docs/DoomLicense $1/docs/doomlic.txt
+util/addremcr a docs/colors $1/docs/colors.txt
+util/addremcr a docs/commands $1/docs/commands.txt
+util/addremcr a docs/history $1/docs/history.txt
+util/addremcr a docs/rh-log $1/docs/rh-log.txt
+util/addremcr a docs/notes $1/docs/notes.txt
+for i in docs/README.*; do util/addremcr a $i $1/$i; done
+
+for i in src/*.cpp src/*.h src/*.ds? src/*.nas src/g_doom/* src/g_heretic/* src/g_hexen/* src/g_raven/* src/g_shared/* src/fmodsound/* src/linux/*; do util/addremcr a $i $1/$i; done
+cp src/win32/* $1/src/win32
+rm $1/src/linux/debug
+rm $1/src/linux/release

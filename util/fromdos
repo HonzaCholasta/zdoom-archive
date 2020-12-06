@@ -1,0 +1,19 @@
+#!/bin/sh
+
+util/addremcr - $1/docs/zdoom.txt README
+for i in INSTALL Makefile; do util/addremcr - $1/$i $i; done
+util/addremcr - $1/docs/classes.txt docs/Classes
+util/addremcr - $1/docs/doomlic.txt docs/DoomLicense
+util/addremcr - $1/docs/colors.txt docs/colors.txt
+util/addremcr - $1/docs/commands.txt docs/commands.txt
+util/addremcr - $1/docs/history.txt docs/history.txt
+util/addremcr - $1/docs/rh-log.txt docs/rh-log.txt
+util/addremcr - $1/docs/notes.txt docs/notes.txt
+for i in docs/README.*; do util/addremcr a $1/$i; done
+
+pushd $1
+mydir=`dirs -l +1`
+for i in src/*.cpp src/*.h src/*.ds? src/*.nas src/g_doom/* src/g_heretic/* src/g_hexen/* src/g_raven/* src/g_shared/* src/fmodsound/* src/linux/*; do $mydir/util/addremcr a $i $mydir/$i; done
+cp src/win32/* $mydir/src/win32
+popd
+chmod 644 src/win32/*
