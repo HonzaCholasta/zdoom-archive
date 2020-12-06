@@ -1,3 +1,37 @@
+/*
+** hardware.cpp
+** Somewhat OS-independant interface to the screen, mouse, keyboard, and stick
+**
+**---------------------------------------------------------------------------
+** Copyright 1998-2001 Randy Heit
+** All rights reserved.
+**
+** Redistribution and use in source and binary forms, with or without
+** modification, are permitted provided that the following conditions
+** are met:
+**
+** 1. Redistributions of source code must retain the above copyright
+**    notice, this list of conditions and the following disclaimer.
+** 2. Redistributions in binary form must reproduce the above copyright
+**    notice, this list of conditions and the following disclaimer in the
+**    documentation and/or other materials provided with the distribution.
+** 3. The name of the author may not be used to endorse or promote products
+**    derived from this software without specific prior written permission.
+**
+** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+**---------------------------------------------------------------------------
+**
+*/
+
 #include <SDL/SDL.h>
 
 #include "hardware.h"
@@ -8,8 +42,6 @@
 #include "c_dispatch.h"
 #include "sdlvideo.h"
 
-extern constate_e ConsoleState;
-
 EXTERN_CVAR (Bool, ticker)
 EXTERN_CVAR (Bool, fullscreen)
 EXTERN_CVAR (Float, vid_winscale)
@@ -18,6 +50,8 @@ IVideo *Video;
 
 void STACK_ARGS I_ShutdownHardware ()
 {
+	if (screen)
+		delete screen, screen = NULL;
 	if (Video)
 		delete Video, Video = NULL;
 }
@@ -32,6 +66,7 @@ void I_InitHardware ()
 	Video = new SDLVideo (0);
 	if (Video == NULL)
 		I_FatalError ("Failed to initialize display");
+
 	atterm (I_ShutdownHardware);
 
 	Video->SetWindowedScale (vid_winscale);
@@ -66,12 +101,7 @@ DFrameBuffer *I_SetMode (int &width, int &height, DFrameBuffer *old)
 	/* Right now, CreateFrameBuffer cannot return NULL
 	if (res == NULL)
 	{
-		I_ClosestResolution (&width, &height, 8);
-		res = Video->CreateFrameBuffer (width, height, fs, old);
-		if (res == NULL)
-		{
-			I_FatalError ("Mode %dx%d is unavailable\n", width, height);
-		}
+		I_FatalError ("Mode %dx%d is unavailable\n", width, height);
 	}
 	*/
 	return res;
@@ -181,10 +211,11 @@ CCMD (vid_listmodes)
 	{
 		Video->StartModeIterator (bits);
 		while (Video->NextMode (&width, &height))
-			if (width == DisplayWidth && height == DisplayHeight && bits == DisplayBits)
-				Printf_Bold ("%4d x%5d x%3d\n", width, height, bits);
-			else
-				Printf ("%4d x%5d x%3d\n", width, height, bits);
+		{
+			Printf ((width == DisplayWidth && height == DisplayHeight && bits == DisplayBits)
+				? PRINT_BOLD : PRINT_HIGH,
+				"%4d x%5d x%3d\n", width, height, bits);
+		}
 	}
 }
 
