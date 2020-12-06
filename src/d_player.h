@@ -83,7 +83,7 @@ public:
 	void Die (AActor *source, AActor *inflictor);
 };
 
-class APlayerChunk : APlayerPawn
+class APlayerChunk : public APlayerPawn
 {
 	DECLARE_STATELESS_ACTOR (APlayerChunk, APlayerPawn)
 };
@@ -178,6 +178,7 @@ public:
 	bool		centering;
 	byte		turnticks;
 	short		oldbuttons;
+	bool		attackdown;
 	int			health;					// only used between levels, mo->health
 										// is used during levels
 
