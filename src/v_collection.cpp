@@ -230,3 +230,12 @@ int FImageCollection::GetImageHeight (int code) const
 		return 0;
 	}
 }
+
+void FImageCollection::SetImageOrigin (int index, int xoffs, int yoffs)
+{
+	if ((unsigned)index < (unsigned)NumImages)
+	{
+		Images[index].XOffs = xoffs;
+		Images[index].YOffs = yoffs;
+	}
+}

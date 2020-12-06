@@ -224,6 +224,8 @@ static FSaveGameNode	*TopSaveGame;
 static FSaveGameNode	*SelSaveGame;
 static FSaveGameNode	NewSaveNode;
 
+static int 	epi;				// Selected episode
+
 // PRIVATE MENU DEFINITIONS ------------------------------------------------
 
 //
@@ -289,44 +291,29 @@ static oldmenu_t ClassMenu =
 };
 
 //
-// DOOM EPISODE SELECT
+// EPISODE SELECT
 //
-static oldmenuitem_t EpisodeMenu[]=
+oldmenuitem_t EpisodeMenu[MAX_EPISODES] =
 {
-	{1,0,'k',"M_EPI1", M_Episode},
-	{1,0,'t',"M_EPI2", M_Episode},
-	{1,0,'i',"M_EPI3", M_Episode},
-	{1,0,'t',"M_EPI4", M_Episode}
+	{1,0,0, NULL, M_Episode},
+	{1,0,0, NULL, M_Episode},
+	{1,0,0, NULL, M_Episode},
+	{1,0,0, NULL, M_Episode},
+	{1,0,0, NULL, M_Episode},
+	{1,0,0, NULL, M_Episode},
+	{1,0,0, NULL, M_Episode},
+	{1,0,0, NULL, M_Episode},
 };
 
-static oldmenu_t EpiDef =
+char EpisodeMaps[MAX_EPISODES][8];
+
+oldmenu_t EpiDef =
 {
-	3,
+	0,
 	EpisodeMenu,		// oldmenuitem_t ->
 	M_DrawEpisode,		// drawing routine ->
 	48,63,				// x,y
 	0	 				// lastOn
-};
-
-//
-// HERETIC EPISODE SELECT
-//
-static oldmenuitem_t HereticEpisodeMenu[] =
-{
-	{1,1,'c',"CITY OF THE DAMNED",M_Episode},
-	{1,1,'h',"HELL'S MAW",M_Episode},
-	{1,1,'d',"THE DOME OF D'SPARIL",M_Episode},
-	{1,1,'o',"THE OSSUARY",M_Episode},
-	{1,1,'s',"THE STAGNANT DEMESNE",M_Episode}
-};
-
-static oldmenu_t HereticEpiDef =
-{
-	3,
-	HereticEpisodeMenu,
-	M_DrawEpisode,
-	80,50,
-	0
 };
 
 //
@@ -765,6 +752,9 @@ void M_InsertSaveNode (FSaveGameNode *node)
 void M_NotifyNewSave (const char *file, const char *title, bool okForQuicksave)
 {
 	FSaveGameNode *node;
+
+	if (file == NULL)
+		return;
 
 	M_ReadSaveStrings ();
 
@@ -1390,6 +1380,23 @@ void M_NewGame(int choice)
 		return;
 	}
 
+	// Set up episode menu positioning
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		EpiDef.x = 48;
+		EpiDef.y = 63;
+	}
+	else
+	{
+		EpiDef.x = 80;
+		EpiDef.y = 50;
+	}
+	if (EpiDef.numitems > 4)
+	{
+		EpiDef.y -= LINEHEIGHT;
+	}
+	epi = 0;
+
 	if (gameinfo.gametype == GAME_Hexen)
 	{ // [RH] Make the default entry the last class the player used.
 		ClassMenu.lastOn = players[consoleplayer].userinfo.PlayerClass;
@@ -1399,17 +1406,23 @@ void M_NewGame(int choice)
 		}
 		M_SetupNextMenu (&ClassMenu);
 	}
-	else if (gameinfo.flags & GI_MAPxx)
-	{
-		M_SetupNextMenu (&NewDef);
-	}
-	else if (gameinfo.gametype == GAME_Doom)
-	{
-		M_SetupNextMenu (&EpiDef);
-	}
 	else
 	{
-		M_SetupNextMenu (&HereticEpiDef);
+		if (EpiDef.numitems <= 1)
+		{
+			if (gameinfo.gametype == GAME_Doom)
+			{
+				M_SetupNextMenu (&NewDef);
+			}
+			else
+			{
+				M_SetupNextMenu (&HereticSkillMenu);
+			}
+		}
+		else
+		{
+			M_SetupNextMenu (&EpiDef);
+		}
 	}
 }
 
@@ -1468,8 +1481,6 @@ static void DrawHexenSkillMenu()
 //
 //		M_Episode
 //
-int 	epi;
-
 void M_DrawEpisode ()
 {
 	if (gameinfo.gametype == GAME_Doom)
@@ -1504,14 +1515,8 @@ void M_ChooseSkill (int choice)
 	if (gameinfo.gametype == GAME_Hexen)
 	{
 		playerclass = PlayerClassNames[MenuPClass+1];
-		// "&wt@01" is a magic name that will become whatever map has
-		// warptrans 1.
-		G_DeferedInitNew ("&wt@01");
 	}
-	else
-	{
-		G_DeferedInitNew (CalcMapName (epi+1, 1));
-	}
+	G_DeferedInitNew (EpisodeMaps[epi]);
 	gamestate = gamestate == GS_FULLCONSOLE ? GS_HIDECONSOLE : gamestate;
 	M_ClearMenus ();
 }
@@ -1521,13 +1526,15 @@ void M_Episode (int choice)
 	if ((gameinfo.flags & GI_SHAREWARE) && choice)
 	{
 		M_StartMessage(GStrings(SWSTRING),NULL,false);
-		M_SetupNextMenu(&ReadDef);
+		//M_SetupNextMenu(&ReadDef);
 		return;
 	}
 
 	epi = choice;
 	if (gameinfo.gametype == GAME_Doom)
 		M_SetupNextMenu (&NewDef);
+	else if (gameinfo.gametype == GAME_Hexen)
+		M_SetupNextMenu (&HexenSkillMenu);
 	else
 		M_SetupNextMenu (&HereticSkillMenu);
 }
@@ -1583,7 +1590,14 @@ static void SCClass (int option)
 		HexenSkillItems[4].name = HereticSkillItems[4].name;
 		break;
 	}
-	M_SetupNextMenu (&HexenSkillMenu);
+	if (EpiDef.numitems > 1)
+	{
+		M_SetupNextMenu (&EpiDef);
+	}
+	else
+	{
+		M_SetupNextMenu (&HexenSkillMenu);
+	}
 }
 
 
@@ -2803,7 +2817,12 @@ void M_Drawer ()
 				{
 					if (currentMenu->menuitems[i].fulltext)
 					{
-						screen->DrawTextCleanMove (CR_UNTRANSLATED, x, y,
+						int color = CR_UNTRANSLATED;
+						if (currentMenu == &EpiDef && gameinfo.gametype == GAME_Doom)
+						{
+							color = CR_RED;
+						}
+						screen->DrawTextCleanMove (color, x, y,
 							currentMenu->menuitems[i].name);
 					}
 					else
@@ -3002,12 +3021,6 @@ void M_Init (void)
 		LINEHEIGHT = 20;
 	}
 
-	if (gameinfo.flags & GI_SHAREWARE)
-	{
-		EpiDef.numitems = 1;
-		HereticEpiDef.numitems = 1;
-	}
-
 	switch (gameinfo.flags & GI_MENUHACK)
 	{
 	case GI_MENUHACK_COMMERCIAL:
@@ -3018,14 +3031,6 @@ void M_Init (void)
 		ReadDef.x = 330;
 		ReadDef.y = 165;
 		ReadMenu[0].routine = M_FinishReadThis;
-		break;
-	case GI_MENUHACK_RETAIL:
-		// add the fourth episode.
-		EpiDef.numitems++;
-		break;
-	case GI_MENUHACK_EXTENDED:
-		HereticEpiDef.numitems = 5;
-		HereticEpiDef.y -= LINEHEIGHT;
 		break;
 	default:
 		break;

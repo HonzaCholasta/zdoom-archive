@@ -1,3 +1,41 @@
+April 26, 2003
+- Added support for custom episode definitions (for all games, not just
+  those that are already divided into episodes).
+- Fixed: Doom Shareware does not have an ENDPIC graphic, so don't try to
+  show it.
+- Added a visible inventory bar for Doom.
+
+April 25, 2003
+- Added APROP_Ambush for Set/GetActorProperty.
+- Added myasctime() function, which is equivalent to
+  asctime(localtime(&time(NULL))), except it doesn't crash when the current
+  time is before Jan 1, 1970 (which makes localtime return NULL).
+
+April 20, 2003
+- Added a NULL file check to M_NotifyNewSave(). I was sent a crash report
+  where this appears to have been the cause.
+- Fixed: Using teleporters with actor hits ceiling/floor triggers was
+  problematic because the actor would still be clipped to its new ceiling
+  or floor even if the teleport made it unnecessary
+- Finished Thing_ProjectileIntercept so that it works in three dimensions.
+  Big thanks to all those on the notgod phorum who helped me with the math.
+
+April 16, 2003
+- Extended my speedup trick for 1024x768 so that it also gets used for
+  2048x1536 and 512x384. I can now play the beginning of MAP01 in 2048x1536
+  at ~28 fps instead of 14 fps. 512x384 is so small that it doesn't really
+  matter, but I think it is a few tenths of a millisecond faster now. What
+  I think is going on: If the screen's pitch is a power of 2, then drawing
+  columns (which Doom does a lot of in its renderer unless you're looking at
+  the floor) will flush the cache lines a bunch and bring performance
+  plummetting, as it has to transfer much more data to and from main memory.
+  By making the pitch slightly larger so that it isn't a power of 2, the
+  cache gets utilized better, so performance goes up.
+- Started adding Thing_ProjectileIntercept special (175). It is identical to
+  Thing_ProjectileAimed, except it leads the target.
+- Fixed: Activating SoundEnvironment actors did not work, because I forgot
+  to include the AActor * parameter in the prototypes.
+
 April 14, 2003
 - Uploaded 2.0.46.
 - Added support for adding new projectiles to DECORATE.

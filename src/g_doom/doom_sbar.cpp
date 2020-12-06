@@ -10,6 +10,7 @@
 #include "st_stuff.h"
 #include "r_local.h"
 #include "m_swap.h"
+#include "templates.h"
 
 #define ST_EVILGRINCOUNT		(2*TICRATE)
 #define ST_STRAIGHTFACECOUNT	(TICRATE/2)
@@ -34,7 +35,6 @@ public:
 			"STYSNUM2",	"STYSNUM3",	"STYSNUM4",	"STYSNUM5",	"STYSNUM6",
 			"STYSNUM7",	"STYSNUM8",	"STYSNUM9"
 		};
-
 		int dummy;
 
 		FBaseStatusBar::Images.Init (sharedLumpNames, NUM_BASESB_IMAGES);
@@ -179,6 +179,11 @@ public:
 				FaceHealth = -9999;
 			}
 			DrawMainBar ();
+			if (CPlayer->inventorytics > 0)
+			{
+				DrawInventoryBar ();
+				SB_state = screen->GetPageCount ();
+			}
 		}
 	}
 
@@ -190,10 +195,20 @@ private:
 			"STKEYS0",	"STKEYS1",	"STKEYS2",	"STKEYS3",	"STKEYS4",
 			"STKEYS5",	"STKEYS6",	"STKEYS7",	"STKEYS8",	"STBAR",
 			"STGNUM2",	"STGNUM3",	"STGNUM4",	"STGNUM5",	"STGNUM6",
-			"STGNUM7",	"MEDIA0",
+			"STGNUM7",	"MEDIA0",	"ARTIBOX",	"SELECTBO",	"INVGEML1",
+			"INVGEML2",	"INVGEMR1",	"INVGEMR2",
 		};
 
 		Images.Init (doomLumpNames, NUM_DOOMSB_IMAGES);
+
+		// In case somebody wants to use the Heretic status bar graphics...
+		{
+			int w, h, xo, yo;
+			if (Images.GetImage (imgARTIBOX, &w, &h, &xo, &yo) != NULL)
+			{
+				Images.SetImageOrigin (imgSELECTBOX, xo, yo);
+			}
+		}
 
 		if (!deathmatch)
 		{
@@ -381,17 +396,34 @@ private:
 
 	void DrawFace ()
 	{
+		// If a player has an inventory item selected, it takes the place of the
+		// face, for lack of a better place to put it.
 		if (OldFaceIndex != FaceIndex)
 		{
 			FaceRefresh = screen->GetPageCount ();
 			OldFaceIndex = FaceIndex;
 		}
-		if (FaceRefresh)
+		if (FaceRefresh || CPlayer->inventory[CPlayer->readyArtifact] != 0)
 		{
-			FaceRefresh--;
+			if (FaceRefresh)
+			{
+				FaceRefresh--;
+			}
 			DrawPartialImage (Images, imgSBAR, 142, 0, 142, 0, 37, 32);
-			DrawImageNoUpdate (Faces, FaceIndex, 143, 0);
-			UpdateRect (142, 0, 37, 32);
+			if (CPlayer->inventory[CPlayer->readyArtifact] == 0)
+			{
+				DrawImageNoUpdate (Faces, FaceIndex, 143, 0);
+				UpdateRect (142, 0, 37, 32);
+			}
+			else
+			{
+				DrawImageNoUpdate (ArtiImages, CPlayer->readyArtifact, 144, 0);
+				UpdateRect (142, 0, 37, 32);
+				if (CPlayer->inventory[CPlayer->readyArtifact] != 1)
+				{
+					DrSmallNumber (CPlayer->inventory[CPlayer->readyArtifact], 165, 24);
+				}
+			}
 		}
 	}
 
@@ -439,6 +471,67 @@ private:
 		}
 	}
 
+//---------------------------------------------------------------------------
+//
+// PROC DrawInventoryBar
+//
+//---------------------------------------------------------------------------
+
+	void DrawInventoryBar ()
+	{
+		int i;
+		int x;
+		bool left, right;
+
+		// If the player has no artifacts, don't draw the bar
+		for (i = 0; i < NUMINVENTORYSLOTS; ++i)
+		{
+			if (CPlayer->inventory[i] != 0)
+			{
+				break;
+			}
+		}
+		if (i == NUMINVENTORYSLOTS)
+		{
+			return;
+		}
+
+		FindInventoryPos (x, left, right);
+		if (x > 0)
+		{
+			for (i = 0; i < 7; ++i)
+			{
+				DrawImage (Images, imgARTIBOX, 50+i*31, 2);
+			}
+			for (i = 0; i < 7 && x < NUMINVENTORYSLOTS; x++)
+			{
+				if (CPlayer->inventory[x])
+				{
+					DrawImage (ArtiImages, x, 50+i*31, 2);
+					if (CPlayer->inventory[x] != 1)
+					{
+						DrSmallNumber (CPlayer->inventory[x], 66+i*31, 24);
+					}
+					if (x == CPlayer->readyArtifact)
+					{
+						DrawImage (Images, imgSELECTBOX, 50+i*31, 2);
+					}
+					i++;
+				}
+			}
+			if (left)
+			{
+				DrawImage (Images, !(level.time & 4) ?
+					imgINVLFGEM1 : imgINVLFGEM2, 38, 2);
+			}
+			if (right)
+			{
+				DrawImage (Images, !(level.time & 4) ?
+					imgINVRTGEM1 : imgINVRTGEM2, 269, 2);
+			}
+		}
+	}
+
 	void DrawNumber (int val, int x, int y, int size=3) const
 	{
 		DrawPartialImage (Images, imgSBAR, x-1, y, x-1, y,
@@ -448,7 +541,7 @@ private:
 
 	void DrawFullScreenStuff ()
 	{
-		int i;
+		int i, x;
 
 		// Draw health
 		OverrideImageOrigin (true);
@@ -468,12 +561,22 @@ private:
 
 		// Draw ammo
 		i = wpnlev1info[CPlayer->readyweapon]->ammo;
-		if (i < NUMAMMO)
+		if (i < NUMAMMO || i == MANA_BOTH)
 		{
+			int amt;
+
 			OverrideImageOrigin (true);
 			DrawOuterImage (AmmoImages, i, -14, -4);
 			OverrideImageOrigin (false);
-			DrBNumberOuter (CPlayer->ammo[i], -67, -BigHeight-4);
+			if (i < NUMAMMO)
+			{
+				amt = CPlayer->ammo[i];
+			}
+			else
+			{
+				amt = MIN (CPlayer->ammo[MANA_1], CPlayer->ammo[MANA_2]);
+			}
+			DrBNumberOuter (amt, -67, -BigHeight-4);
 		}
 
 		if (deathmatch)
@@ -506,6 +609,62 @@ private:
 					DrawOuterImage (Images, imgKEYS0+i, x, -29+i*10);
 				}
 			}
+		}
+
+		// Draw inventory
+		if (CPlayer->inventorytics == 0)
+		{
+			if (CPlayer->inventory[CPlayer->readyArtifact] > 0)
+			{
+				OverrideImageOrigin (true);
+				DrawOuterImage (ArtiImages, CPlayer->readyArtifact, -14, -24);
+				OverrideImageOrigin (false);
+				DrBNumberOuter (CPlayer->inventory[CPlayer->readyArtifact], -67, -41);
+			}
+		}
+		else
+		{
+			SetHorizCentering (true);
+			bool left, right;
+
+			FindInventoryPos (x, left, right);
+			for (i = 0; i < 7 && x < NUMINVENTORYSLOTS; x++)
+			{
+				if (CPlayer->inventory[x])
+				{
+					DrawOuterFadedImage (Images, imgARTIBOX, -106+i*31, -32, TRANSLUC50);
+					DrawOuterImage (ArtiImages, x, -105+i*31, -32);
+					if (CPlayer->inventory[x] != 1)
+					{
+						DrSmallNumberOuter (CPlayer->inventory[x], -90+i*31, -10);
+					}
+					if (x == CPlayer->readyArtifact)
+					{
+						OverrideImageOrigin (true);
+						DrawOuterImage (Images, imgSELECTBOX, -91+i*31, -3);
+						OverrideImageOrigin (false);
+					}
+					i++;
+				}
+			}
+			if (i < 7)
+			{
+				for (; i < 7; i++)
+				{
+					DrawOuterFadedImage (Images, imgARTIBOX, -106+i*31, -32, TRANSLUC50);
+				}
+			}
+			if (left)
+			{
+				DrawOuterImage (Images, !(level.time & 4) ?
+					imgINVLFGEM1 : imgINVLFGEM2, -118, -33);
+			}
+			if (right)
+			{
+				DrawOuterImage (Images, !(level.time & 4) ?
+					imgINVRTGEM1 : imgINVRTGEM2, 113, -33);
+			}
+			SetHorizCentering (false);
 		}
 	}
 
@@ -802,6 +961,12 @@ private:
 		imgGNUM6,
 		imgGNUM7,
 		imgMEDI,
+		imgARTIBOX,
+		imgSELECTBOX,
+		imgINVLFGEM1,
+		imgINVLFGEM2,
+		imgINVRTGEM1,
+		imgINVRTGEM2,
 
 		NUM_DOOMSB_IMAGES
 	};

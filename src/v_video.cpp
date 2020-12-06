@@ -526,7 +526,15 @@ void DCanvas::CalcGamma (float gamma, BYTE gammalookup[256])
 DSimpleCanvas::DSimpleCanvas (int width, int height)
 	: DCanvas (width, height)
 {
-	Pitch = width==1024?1032:width;
+	// Making the pitch a power of 2 is very bad for performance
+	if (width == 512 || width == 1024 || width == 2048)
+	{
+		Pitch = width + 8;
+	}
+	else
+	{
+		Pitch = width;
+	}
 	MemBuffer = new BYTE[Pitch * height];
 }
 

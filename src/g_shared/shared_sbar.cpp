@@ -143,7 +143,7 @@ FBaseStatusBar::FBaseStatusBar (int reltop)
 	Displacement = 0;
 
 	SetScaled (st_scale);
-	AmmoImages.Init (AmmoPics, NUMAMMO);
+	AmmoImages.Init (AmmoPics, MANA_BOTH+1);
 	ArtiImages.Init (ArtiPics, NUMARTIFACTS);
 	ArmorImages.Init (ArmorPics, NUMARMOR);
 }
@@ -1610,3 +1610,70 @@ void FBaseStatusBar::ScreenSizeChanged ()
 		message = message->Next;
 	}
 }
+
+//---------------------------------------------------------------------------
+//
+// PROC FindInventoryPos
+//
+//---------------------------------------------------------------------------
+
+void FBaseStatusBar::FindInventoryPos (int &pos, bool &moreleft, bool &moreright) const
+{
+	int i, x;
+	int countleft, countright;
+	int lowest;
+
+	countleft = 0;
+	countright = 0;
+	lowest = 1;
+
+	x = CPlayer->readyArtifact - 1;
+	for (i = 0; i < 3 && x > 0; x--)
+	{
+		if (CPlayer->inventory[x])
+		{
+			lowest = x;
+			i++;
+		}
+	}
+	pos = lowest;
+	countleft = i;
+	if (x > 0)
+	{
+		for (i = x; i > 0; i--)
+		{
+			if (CPlayer->inventory[i])
+			{
+				countleft++;
+				lowest = i;
+			}
+		}
+	}
+	for (x = CPlayer->readyArtifact + 1; x < NUMINVENTORYSLOTS; x++)
+	{
+		if (CPlayer->inventory[x])
+			countright++;
+	}
+	if (countleft + countright <= 6)
+	{
+		pos = lowest;
+		moreleft = false;
+		moreright = false;
+		return;
+	}
+	if (countright < 3 && countleft > 3)
+	{
+		for (i = pos - 1; i > 0 && countright < 3; i--)
+		{
+			if (CPlayer->inventory[x])
+			{
+				pos = i;
+				countleft--;
+				countright++;
+			}
+		}
+	}
+	moreleft = (countleft > 3);
+	moreright = (countright > 3);
+}
+

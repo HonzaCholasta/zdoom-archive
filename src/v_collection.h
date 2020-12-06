@@ -62,6 +62,7 @@ public:
 	byte *GetImage (int index, int *const width, int *const height, int *const xoffs, int *const yoffs) const;
 	int GetImageWidth (int index) const;
 	int GetImageHeight (int index) const;
+	void SetImageOrigin (int index, int xoffs, int yoffs);
 
 protected:
 	static const patch_t *CachePatch (const char *name, int namespc);

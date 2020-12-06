@@ -1285,90 +1285,95 @@ void P_ZMovement (AActor *mo)
 		{ // [RH] Let the sector do something to the actor
 			mo->Sector->SecActTarget->TriggerAction (mo, SECSPAC_HitFloor);
 		}
-		if ((mo->flags & MF_MISSILE) &&
-			(gameinfo.gametype != GAME_Doom || !(mo->flags & MF_NOCLIP)))
+		// [RH] Need to recheck this because the sector action might have
+		// teleported the actor so it is no longer below the floor.
+		if (mo->z <= mo->floorz)
 		{
-			mo->z = mo->floorz;
-			if (mo->flags2 & MF2_BOUNCETYPE)
+			if ((mo->flags & MF_MISSILE) &&
+				(gameinfo.gametype != GAME_Doom || !(mo->flags & MF_NOCLIP)))
 			{
-				mo->FloorBounceMissile (mo->floorsector->floorplane);
-				return;
-			}
-			else if (mo->flags3 & MF3_NOEXPLODEFLOOR)
-			{
-				mo->momz = 0;
-				P_HitFloor (mo);
-				return;
-			}
-			else if (mo->flags3 & MF3_FLOORHUGGER)
-			{ // Floor huggers can go up steps
-				return;
-			}
-			else
-			{
-				if (mo->Sector->floorpic == skyflatnum &&
-					!(mo->flags3 & MF3_SKYEXPLODE))
+				mo->z = mo->floorz;
+				if (mo->flags2 & MF2_BOUNCETYPE)
 				{
-					// [RH] Just remove the missile without exploding it
-					//		if this is a sky floor.
-					mo->Destroy ();
+					mo->FloorBounceMissile (mo->floorsector->floorplane);
 					return;
 				}
-				P_HitFloor (mo);
-				P_ExplodeMissile (mo, NULL);
-				return;
-			}
-		}
-		if (mo->flags3 & MF3_ISMONSTER)		// Blasted mobj falling
-		{
-			if (mo->momz < -(23*FRACUNIT))
-			{
-				P_MonsterFallingDamage (mo);
-			}
-		}
-		mo->z = mo->floorz;
-		if (mo->momz < 0)
-		{
-			// [RH] avoid integer roundoff by doing comparisons with floats
-			float minmom = level.gravity * mo->Sector->gravity * -655.36f;
-			float mom = (float)mo->momz;
-
-			// Spawn splashes, etc.
-			P_HitFloor (mo);
-			if (mo->flags2 & MF2_ICEDAMAGE && mom < minmom)
-			{
-				mo->tics = 1;
-				mo->momx = 0;
-				mo->momy = 0;
-				mo->momz = 0;
-				return;
-			}
-			// Let the actor do something special for hitting the floor
-			mo->HitFloor ();
-			if (mo->player)
-			{
-				mo->player->jumpTics = 7;	// delay any jumping for a short while
-				if (mom < minmom && !(mo->flags2 & MF2_FLY))
+				else if (mo->flags3 & MF3_NOEXPLODEFLOOR)
 				{
-					// Squat down.
-					// Decrease viewheight for a moment after hitting the ground (hard),
-					// and utter appropriate sound.
-					PlayerLandedOnThing (mo, NULL);
+					mo->momz = 0;
+					P_HitFloor (mo);
+					return;
+				}
+				else if (mo->flags3 & MF3_FLOORHUGGER)
+				{ // Floor huggers can go up steps
+					return;
+				}
+				else
+				{
+					if (mo->Sector->floorpic == skyflatnum &&
+						!(mo->flags3 & MF3_SKYEXPLODE))
+					{
+						// [RH] Just remove the missile without exploding it
+						//		if this is a sky floor.
+						mo->Destroy ();
+						return;
+					}
+					P_HitFloor (mo);
+					P_ExplodeMissile (mo, NULL);
+					return;
 				}
 			}
-			mo->momz = 0;
-		}
-		if (mo->flags & MF_SKULLFLY)
-		{ // The skull slammed into something
-			mo->momz = -mo->momz;
-		}
-		if (mo->CrashState &&
-			(mo->flags & MF_CORPSE) &&
-			!(mo->flags3 & MF3_CRASHED) &&
-			!(mo->flags2 & MF2_ICEDAMAGE))
-		{
-			mo->flags3 |= MF3_CRASHED;
-			mo->SetState (mo->CrashState);
+			if (mo->flags3 & MF3_ISMONSTER)		// Blasted mobj falling
+			{
+				if (mo->momz < -(23*FRACUNIT))
+				{
+					P_MonsterFallingDamage (mo);
+				}
+			}
+			mo->z = mo->floorz;
+			if (mo->momz < 0)
+			{
+				// [RH] avoid integer roundoff by doing comparisons with floats
+				float minmom = level.gravity * mo->Sector->gravity * -655.36f;
+				float mom = (float)mo->momz;
+
+				// Spawn splashes, etc.
+				P_HitFloor (mo);
+				if (mo->flags2 & MF2_ICEDAMAGE && mom < minmom)
+				{
+					mo->tics = 1;
+					mo->momx = 0;
+					mo->momy = 0;
+					mo->momz = 0;
+					return;
+				}
+				// Let the actor do something special for hitting the floor
+				mo->HitFloor ();
+				if (mo->player)
+				{
+					mo->player->jumpTics = 7;	// delay any jumping for a short while
+					if (mom < minmom && !(mo->flags2 & MF2_FLY))
+					{
+						// Squat down.
+						// Decrease viewheight for a moment after hitting the ground (hard),
+						// and utter appropriate sound.
+						PlayerLandedOnThing (mo, NULL);
+					}
+				}
+				mo->momz = 0;
+			}
+			if (mo->flags & MF_SKULLFLY)
+			{ // The skull slammed into something
+				mo->momz = -mo->momz;
+			}
+			if (mo->CrashState &&
+				(mo->flags & MF_CORPSE) &&
+				!(mo->flags3 & MF3_CRASHED) &&
+				!(mo->flags2 & MF2_ICEDAMAGE))
+			{
+				mo->flags3 |= MF3_CRASHED;
+				mo->SetState (mo->CrashState);
+			}
 		}
 	}
 
@@ -1384,33 +1389,38 @@ void P_ZMovement (AActor *mo)
 		{ // [RH] Let the sector do something to the actor
 			mo->Sector->SecActTarget->TriggerAction (mo, SECSPAC_HitCeiling);
 		}
-		mo->z = mo->ceilingz - mo->height;
-		if (mo->flags2 & MF2_BOUNCETYPE)
-		{	// ceiling bounce
-			mo->FloorBounceMissile (mo->Sector->ceilingplane);
-			return;
-		}
-		if (mo->momz > 0)
-			mo->momz = 0;
-		if (mo->flags & MF_SKULLFLY)
-		{	// the skull slammed into something
-			mo->momz = -mo->momz;
-		}
-		if (mo->flags & MF_MISSILE &&
-			(gameinfo.gametype != GAME_Doom || !(mo->flags & MF_NOCLIP)))
+		// [RH] Need to recheck this because the sector action might have
+		// teleported the actor so it is no longer above the ceiling.
+		if (mo->z + mo->height > mo->ceilingz)
 		{
-			if (mo->flags3 & MF3_CEILINGHUGGER)
-			{
+			mo->z = mo->ceilingz - mo->height;
+			if (mo->flags2 & MF2_BOUNCETYPE)
+			{	// ceiling bounce
+				mo->FloorBounceMissile (mo->Sector->ceilingplane);
 				return;
 			}
-			if (!(mo->flags3 & MF3_SKYEXPLODE) &&
-				mo->Sector->ceilingpic == skyflatnum)
+			if (mo->momz > 0)
+				mo->momz = 0;
+			if (mo->flags & MF_SKULLFLY)
+			{	// the skull slammed into something
+				mo->momz = -mo->momz;
+			}
+			if (mo->flags & MF_MISSILE &&
+				(gameinfo.gametype != GAME_Doom || !(mo->flags & MF_NOCLIP)))
 			{
-				mo->Destroy ();
+				if (mo->flags3 & MF3_CEILINGHUGGER)
+				{
+					return;
+				}
+				if (!(mo->flags3 & MF3_SKYEXPLODE) &&
+					mo->Sector->ceilingpic == skyflatnum)
+				{
+					mo->Destroy ();
+					return;
+				}
+				P_ExplodeMissile (mo, NULL);
 				return;
 			}
-			P_ExplodeMissile (mo, NULL);
-			return;
 		}
 	}
 	P_CheckFakeFloorTriggers (mo, oldz);

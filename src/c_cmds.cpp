@@ -375,11 +375,7 @@ CCMD (exec)
 
 CCMD (logfile)
 {
-	time_t clock;
-	char *timestr;
-
-	time (&clock);
-	timestr = asctime (localtime (&clock));
+	char *timestr = myasctime ();
 
 	if (Logfile)
 	{

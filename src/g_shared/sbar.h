@@ -185,6 +185,8 @@ protected:
 	void CopyToScreen (int x, int y, int w, int h) const;
 	void RefreshBackground () const;
 
+	void FindInventoryPos (int &pos, bool &moreleft, bool &moreright) const;
+
 	static void AddBlend (float r, float g, float b, float a, float v_blend[4]);
 
 

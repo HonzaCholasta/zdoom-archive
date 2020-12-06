@@ -1635,8 +1635,6 @@ void G_DoAutoSave ()
 	// Keep up to four autosaves at a time
 	UCVarValue num;
 	char name[PATH_MAX];
-	time_t utcTime;
-	struct tm *now;
 	char *readableTime;
 	
 	num.Int = (autosavenum + 1) & 3;
@@ -1645,9 +1643,7 @@ void G_DoAutoSave ()
 	G_BuildSaveName (name, "auto", num.Int);
 	savegamefile = copystring (name);
 
-	time (&utcTime);
-	now = localtime (&utcTime);
-	readableTime = asctime (now);
+	readableTime = myasctime ();
 	strcpy (savedescription, "Autosave ");
 	strncpy (savedescription+9, readableTime+4, 12);
 	savedescription[9+12] = 0;
@@ -1675,16 +1671,12 @@ static void PutSaveWads (FILE *file)
 static void PutSaveComment (FILE *file)
 {
 	char comment[256];
-	time_t utcTime;
-	struct tm *now;
 	char *readableTime;
 	WORD len;
 	int levelTime;
 
 	// Get the current date and time
-	time (&utcTime);
-	now = localtime (&utcTime);
-	readableTime = asctime (now);
+	readableTime = myasctime ();
 
 	strncpy (comment, readableTime, 10);
 	strncpy (comment+10, readableTime+19, 5);

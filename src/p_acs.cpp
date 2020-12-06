@@ -2060,6 +2060,7 @@ void DLevelScript::DoSetFont (int fontnum)
 #define APROP_Damage		2
 #define APROP_Alpha			3
 #define APROP_RenderStyle	4
+#define APROP_Ambush		10
 #define APROP_SeeSound		5	// Sounds can only be set, not gotten
 #define APROP_AttackSound	6
 #define APROP_PainSound		7
@@ -2103,6 +2104,7 @@ void DLevelScript::DoSetActorProperty (AActor *actor, int property, int value)
 	case APROP_Damage:		actor->damage = value;		break;
 	case APROP_Alpha:		actor->alpha = value;		break;
 	case APROP_RenderStyle:	actor->RenderStyle = value;	break;
+	case APROP_Ambush:		if (value) actor->flags |= MF_AMBUSH; else actor->flags &= ~MF_AMBUSH;		break;
 	case APROP_SeeSound:	actor->SeeSound = S_FindSound (FBehavior::StaticLookupString (value));		break;
 	case APROP_AttackSound:	actor->AttackSound = S_FindSound (FBehavior::StaticLookupString (value));	break;
 	case APROP_PainSound:	actor->PainSound = S_FindSound (FBehavior::StaticLookupString (value));		break;
@@ -2137,6 +2139,7 @@ int DLevelScript::GetActorProperty (int tid, int property)
 	case APROP_Damage:		return actor->damage;
 	case APROP_Alpha:		return actor->alpha;
 	case APROP_RenderStyle:	return actor->RenderStyle;
+	case APROP_Ambush:		return !!(actor->flags & MF_AMBUSH);
 	default:				return 0;
 	}
 }
@@ -4011,7 +4014,7 @@ void DLevelScript::RunScript ()
 			// projectile a TID.
 			// Thing_Projectile2 (tid, type, angle, speed, vspeed, gravity, newtid);
 			P_Thing_Projectile (STACK(7), STACK(6), ((angle_t)(STACK(5)<<24)),
-				STACK(4)<<(FRACBITS-3), STACK(3)<<(FRACBITS-3), 0, NULL, STACK(2), STACK(1));
+				STACK(4)<<(FRACBITS-3), STACK(3)<<(FRACBITS-3), 0, NULL, STACK(2), STACK(1), false);
 			break;
 		}
 	}

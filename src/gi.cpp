@@ -203,7 +203,7 @@ gameinfo_t SharewareGameInfo =
 	{ 'F','L','O','O','R','4','_','8' },
 	"HELP2",
 	{ 'V','I','C','T','O','R','Y','2' },
-	"ENDPIC",
+	"HELP2",
 	{ { "HELP1", "HELP2" } },
 	quitsounds,
 	1,
