@@ -4605,6 +4605,7 @@ DEP_CPP_P_MAP=\
 	".\sounds.h"\
 	".\Tables.h"\
 	".\vectors.h"\
+	".\z_zone.h"\
 	
 CPP_SWITCHES=/nologo /G5 /MT /W3 /GX /O2 /I "e:\ptc\source" /D "WIN32" /D\
  "NDEBUG" /D "_WINDOWS" /FAs /Fa"$(INTDIR)\\" /Fp"$(INTDIR)\doom.pch" /YX\
@@ -4657,6 +4658,7 @@ DEP_CPP_P_MAP=\
 	".\sounds.h"\
 	".\Tables.h"\
 	".\vectors.h"\
+	".\z_zone.h"\
 	
 CPP_SWITCHES=/nologo /G5 /MTd /W3 /Gm /GX /Zi /Od /I "e:\ptc\source" /D "WIN32"\
  /D "_DEBUG" /D "_WINDOWS" /FAs /Fa"$(INTDIR)\\" /Fp"$(INTDIR)\doom.pch" /YX\
@@ -5546,6 +5548,8 @@ DEP_CPP_P_SWI=\
 	".\s_sound.h"\
 	".\sounds.h"\
 	".\Tables.h"\
+	".\w_wad.h"\
+	".\z_zone.h"\
 	
 CPP_SWITCHES=/nologo /G5 /MT /W3 /GX /O2 /I "e:\ptc\source" /D "WIN32" /D\
  "NDEBUG" /D "_WINDOWS" /FAs /Fa"$(INTDIR)\\" /Fp"$(INTDIR)\doom.pch" /YX\
@@ -5595,6 +5599,8 @@ DEP_CPP_P_SWI=\
 	".\s_sound.h"\
 	".\sounds.h"\
 	".\Tables.h"\
+	".\w_wad.h"\
+	".\z_zone.h"\
 	
 CPP_SWITCHES=/nologo /G5 /MTd /W3 /Gm /GX /Zi /Od /I "e:\ptc\source" /D "WIN32"\
  /D "_DEBUG" /D "_WINDOWS" /FAs /Fa"$(INTDIR)\\" /Fp"$(INTDIR)\doom.pch" /YX\
@@ -6027,6 +6033,7 @@ DEP_CPP_R_DAT=\
 	".\g_level.h"\
 	".\i_system.h"\
 	".\Info.h"\
+	".\m_alloc.h"\
 	".\m_fixed.h"\
 	".\m_swap.h"\
 	".\p_local.h"\
@@ -6079,6 +6086,7 @@ DEP_CPP_R_DAT=\
 	".\g_level.h"\
 	".\i_system.h"\
 	".\Info.h"\
+	".\m_alloc.h"\
 	".\m_fixed.h"\
 	".\m_swap.h"\
 	".\p_local.h"\
@@ -6457,6 +6465,8 @@ DEP_CPP_R_SEG=\
 	".\r_state.h"\
 	".\r_things.h"\
 	".\Tables.h"\
+	".\v_palett.h"\
+	".\v_video.h"\
 	
 CPP_SWITCHES=/nologo /G5 /MT /W3 /GX /O2 /I "e:\ptc\source" /D "WIN32" /D\
  "NDEBUG" /D "_WINDOWS" /FAs /Fa"$(INTDIR)\\" /Fp"$(INTDIR)\doom.pch" /YX\
@@ -6503,6 +6513,8 @@ DEP_CPP_R_SEG=\
 	".\r_state.h"\
 	".\r_things.h"\
 	".\Tables.h"\
+	".\v_palett.h"\
+	".\v_video.h"\
 	
 CPP_SWITCHES=/nologo /G5 /MTd /W3 /Gm /GX /Zi /Od /I "e:\ptc\source" /D "WIN32"\
  /D "_DEBUG" /D "_WINDOWS" /FAs /Fa"$(INTDIR)\\" /Fp"$(INTDIR)\doom.pch" /YX\
