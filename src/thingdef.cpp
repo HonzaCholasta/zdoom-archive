@@ -1128,19 +1128,29 @@ static FState * CheckState(int statenum,FActorInfo * parent)
 
 			{
 				FState * basestate;
-				char * p=strtok(sc_String,"+");
-				char * q=strtok(NULL,"+");
-				int v=0;
-				if (q) v=strtol(q,NULL,0);
-
-				FState ** stp=FindState((AActor*)parent->Defaults,p);
+				FState ** stp=FindState((AActor*)parent->Defaults, sc_String);
+				int v = 0;
 
 				if (stp) basestate =*stp;
 				else 
 				{
-					SC_ScriptError("Unknown state label %s",(const char **)&p);
+					SC_ScriptError("Unknown state label %s",(const char **)&sc_String);
 					return NULL;
 				}
+
+				if (SC_GetString ())
+				{
+					if (SC_Compare ("+"))
+					{
+						SC_MustGetNumber ();
+						v = sc_Number;
+					}
+					else
+					{
+						SC_UnGet ();
+					}
+				}
+
 				if (!basestate && !v) return NULL;
 				basestate+=v;
 
