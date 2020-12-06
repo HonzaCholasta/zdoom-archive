@@ -20,8 +20,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: hu_lib.c,v 1.3 1997/01/26 07:44:58 b1 Exp $";
 
 #include <ctype.h>
 
@@ -34,12 +32,12 @@ rcsid[] = "$Id: hu_lib.c,v 1.3 1997/01/26 07:44:58 b1 Exp $";
 #include "r_local.h"
 #include "r_draw.h"
 
-#include "c_console.h"
+#include "c_consol.h"
 
-// boolean : whether the screen is always erased
+// BOOL : whether the screen is always erased
 #define noterased viewwindowx
 
-extern boolean	automapactive;	// in AM_map.c
+extern BOOL	automapactive;	// in AM_map.c
 
 void HUlib_init(void)
 {
@@ -67,7 +65,7 @@ HUlib_initTextLine
 	HUlib_clearTextLine(t);
 }
 
-boolean
+BOOL
 HUlib_addCharToTextLine
 ( hu_textline_t*		t,
   char					ch )
@@ -85,7 +83,7 @@ HUlib_addCharToTextLine
 
 }
 
-boolean HUlib_delCharFromTextLine(hu_textline_t* t)
+BOOL HUlib_delCharFromTextLine(hu_textline_t* t)
 {
 
 	if (!t->len) return false;
@@ -101,7 +99,7 @@ boolean HUlib_delCharFromTextLine(hu_textline_t* t)
 void
 HUlib_drawTextLine
 ( hu_textline_t*		l,
-  boolean				drawcursor )
+  BOOL				drawcursor )
 {
 
 	int 				i;
@@ -119,24 +117,24 @@ HUlib_drawTextLine
 			&& c <= '_')
 		{
 			w = SHORT(l->f[c - l->sc]->width) * CleanXfac;
-			if (x+w > SCREENWIDTH)
+			if (x+w > FG.width)
 				break;
-			V_DrawPatchCleanNoMove(x, l->y, FG, l->f[c - l->sc]);
+			V_DrawPatchCleanNoMove(x, l->y, &FG, l->f[c - l->sc]);
 			x += w;
 		}
 		else
 		{
 			x += 4 * CleanXfac;
-			if (x >= SCREENWIDTH)
+			if (x >= FG.width)
 				break;
 		}
 	}
 
 	// draw the cursor if requested
 	if (drawcursor
-		&& x + SHORT(l->f['_' - l->sc]->width) * CleanXfac <= SCREENWIDTH)
+		&& x + SHORT(l->f['_' - l->sc]->width) * CleanXfac <= FG.width)
 	{
-		V_DrawPatchCleanNoMove(x, l->y, FG, l->f['_' - l->sc]);
+		V_DrawPatchCleanNoMove(x, l->y, &FG, l->f['_' - l->sc]);
 	}
 }
 
@@ -144,7 +142,7 @@ HUlib_drawTextLine
 // sorta called by HU_Erase and just better darn get things straight
 void HUlib_eraseTextLine(hu_textline_t* l)
 {
-	static boolean		lastautomapactive = true;
+	static BOOL		lastautomapactive = true;
 
 	// Only erases when NOT in automap and the screen is reduced,
 	// and the text must either need updating or refreshing
@@ -168,7 +166,7 @@ HUlib_initSText
   int			h,
   patch_t** 	font,
   int			startchar,
-  boolean*		on )
+  BOOL*		on )
 {
 
 	int i;
@@ -260,7 +258,7 @@ HUlib_initIText
   int			y,
   patch_t** 	font,
   int			startchar,
-  boolean*		on )
+  BOOL*		on )
 {
 	it->lm = 0; // default left margin is start of text
 	it->on = on;
@@ -283,16 +281,13 @@ void HUlib_eraseLineFromIText(hu_itext_t* it)
 }
 
 // Resets left margin as well
-void HUlib_resetIText(hu_itext_t* it)
+void HUlib_resetIText (hu_itext_t* it)
 {
 	it->lm = 0;
 	HUlib_clearTextLine(&it->l);
 }
 
-void
-HUlib_addPrefixToIText
-( hu_itext_t*	it,
-  char* 		str )
+void HUlib_addPrefixToIText (hu_itext_t *it, char *str)
 {
 	while (*str)
 		HUlib_addCharToTextLine(&it->l, *(str++));
@@ -301,34 +296,28 @@ HUlib_addPrefixToIText
 
 // wrapper function for handling general keyed input.
 // returns true if it ate the key
-boolean
-HUlib_keyInIText
-( hu_itext_t*	it,
-  unsigned char ch )
+BOOL HUlib_keyInIText (hu_itext_t *it, unsigned char ch)
 {
-
-	if (ch >= ' ' && ch <= '_') 
+	if (ch >= ' ' && ch <= '_') {
 		HUlib_addCharToTextLine(&it->l, (char) ch);
-	else 
-		if (ch == KEY_BACKSPACE) 
+	} else {
+		if (ch == '\b')
 			HUlib_delCharFromIText(it);
-		else 
-			if (ch != KEY_ENTER) 
-				return false; // did not eat key
+		else if (ch != '\r')
+			return false; // did not eat key
+	}
 
 	return true; // ate the key
-
 }
 
 void HUlib_drawIText(hu_itext_t* it)
 {
-
 	hu_textline_t *l = &it->l;
 
 	if (!*it->on)
 		return;
-	HUlib_drawTextLine(l, true); // draw the line w/ cursor
 
+	HUlib_drawTextLine(l, true); // draw the line w/ cursor
 }
 
 void HUlib_eraseIText(hu_itext_t* it)

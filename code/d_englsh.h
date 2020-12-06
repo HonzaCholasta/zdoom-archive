@@ -336,22 +336,22 @@
 //		ST_stuff.C
 //
 
-#define STSTR_MUS				"Music Change\n"
-#define STSTR_NOMUS 			"IMPOSSIBLE SELECTION\n"
-#define STSTR_DQDON 			"Degreelessness Mode ON\n"
-#define STSTR_DQDOFF			"Degreelessness Mode OFF\n"
+#define STSTR_MUS				"Music Change"
+#define STSTR_NOMUS 			"IMPOSSIBLE SELECTION"
+#define STSTR_DQDON 			"Degreelessness Mode ON"
+#define STSTR_DQDOFF			"Degreelessness Mode OFF"
 
 #define STSTR_KFAADDED			"Very Happy Ammo Added"
 #define STSTR_FAADDED			"Ammo (no keys) Added"
 
-#define STSTR_NCON				"No Clipping Mode ON\n"
-#define STSTR_NCOFF 			"No Clipping Mode OFF\n"
+#define STSTR_NCON				"No Clipping Mode ON"
+#define STSTR_NCOFF 			"No Clipping Mode OFF"
 
 #define STSTR_BEHOLD			"inVuln, Str, Inviso, Rad, Allmap, or Lite-amp"
 #define STSTR_BEHOLDX			"Power-up Toggled"
 
 #define STSTR_CHOPPERS			"... doesn't suck - GM"
-#define STSTR_CLEV				"Changing Level...\n"
+#define STSTR_CLEV				"Changing Level..."
 
 //
 //		F_Finale.C

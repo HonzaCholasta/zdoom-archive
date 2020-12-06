@@ -30,8 +30,12 @@
 //
 // Background and foreground screen numbers
 //
-#define BG 4
-#define FG 0
+// [RH] Status bar is another screen allocated
+// by status bar code instead of video code.
+extern screen_t stbarscreen;
+extern screen_t stnumscreen;
+#define BG (stbarscreen)
+#define FG (screens[0])
 
 
 
@@ -57,9 +61,9 @@ struct st_number_s
 	// pointer to current value
 	int*		num;
 
-	// pointer to boolean stating
+	// pointer to BOOL stating
 	//	whether to update number
-	boolean*	on;
+	BOOL*	on;
 
 	// list of patches for 0-9
 	patch_t**	p;
@@ -99,9 +103,9 @@ struct st_multicon_s
 	// pointer to current icon
 	int*				inum;
 
-	// pointer to boolean stating
+	// pointer to BOOL stating
 	//	whether to update icon
-	boolean*			on;
+	BOOL*			on;
 
 	// list of icons
 	patch_t**			p;
@@ -126,11 +130,11 @@ struct st_binicon_s
 	int 				oldval;
 
 	// pointer to current icon status
-	boolean*			val;
+	BOOL*			val;
 
-	// pointer to boolean
+	// pointer to BOOL
 	//	stating whether to update icon
-	boolean*			on;  
+	BOOL*			on;  
 
 
 	patch_t*			p;		// icon
@@ -160,13 +164,13 @@ STlib_initNum
   int					y,
   patch_t** 			pl,
   int*					num,
-  boolean*				on,
+  BOOL*				on,
   int					width );
 
 void
 STlib_updateNum
 ( st_number_t*			n,
-  boolean				refresh );
+  BOOL				refresh );
 
 
 // Percent widget routines
@@ -177,7 +181,7 @@ STlib_initPercent
   int					y,
   patch_t** 			pl,
   int*					num,
-  boolean*				on,
+  BOOL*				on,
   patch_t*				percent );
 
 
@@ -195,13 +199,13 @@ STlib_initMultIcon
   int					y,
   patch_t** 			il,
   int*					inum,
-  boolean*				on );
+  BOOL*				on );
 
 
 void
 STlib_updateMultIcon
 ( st_multicon_t*		mi,
-  boolean				refresh );
+  BOOL				refresh );
 
 // Binary Icon widget routines
 
@@ -211,13 +215,13 @@ STlib_initBinIcon
   int					x,
   int					y,
   patch_t*				i,
-  boolean*				val,
-  boolean*				on );
+  BOOL*				val,
+  BOOL*				on );
 
 void
 STlib_updateBinIcon
 ( st_binicon_t* 		bi,
-  boolean				refresh );
+  BOOL				refresh );
 
 #endif
 //-----------------------------------------------------------------------------

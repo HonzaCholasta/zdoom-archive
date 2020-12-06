@@ -33,21 +33,23 @@ void ST_initNew (void)
 {
 	int i;
 	int widest = 0;
-	char name[8];
+//	char name[8];
+	int lump;
 
 	for (i = 0; i < 10; i++) {
 		if (SHORT(tallnum[i]->width) > widest)
 			widest = SHORT(tallnum[i]->width);
 	}
-
+/*
 	strcpy (name, "ARM1A0");
 	for (i = 0; i < 3; i++) {
 		name[3] = i + '1';
 		armors[i] = W_CacheLumpName (name, PU_STATIC);
 	}
-
+*/
 	for (i = 0; i < 4; i++) {
-		ammos[i] = W_CacheLumpName (ammopatches[i], PU_STATIC);
+		if ((lump = W_CheckNumForName (ammopatches[i])) != -1)
+			ammos[i] = W_CacheLumpNum (lump, PU_STATIC);
 	}
 
 	widestnum = widest;
@@ -55,7 +57,7 @@ void ST_initNew (void)
 	//hudback = W_CacheLumpName ("HUDBACK", PU_STATIC);
 }
 
-void ST_DrawNum (int x, int y, int scrn, int num)
+void ST_DrawNum (int x, int y, screen_t *scrn, int num)
 {
 	char digits[8], *d;
 
@@ -65,13 +67,13 @@ void ST_DrawNum (int x, int y, int scrn, int num)
 	while (*d) {
 		if (*d >= '0' && *d <= '9') {
 			V_DrawPatchCleanNoMove (x, y, scrn, tallnum[*d - '0']);
-			x += CleanYfac * SHORT(tallnum[*d - '0']->width);
+			x += CleanXfac * SHORT(tallnum[*d - '0']->width);
 		}
 		d++;
 	}
 }
 
-void ST_DrawNumRight (int x, int y, int scrn, int num)
+void ST_DrawNumRight (int x, int y, screen_t *scrn, int num)
 {
 	int d;
 
@@ -88,14 +90,16 @@ void ST_newDraw (void)
 	int y;
 	ammotype_t ammo = weaponinfo[plyr->readyweapon].ammo;
 
-	y = SCREENHEIGHT - (SHORT(tallnum[0]->height) + 4) * CleanYfac;
+	y = screens[0].height - (SHORT(tallnum[0]->height) + 4) * CleanYfac;
 
-	ST_DrawNum (4 * CleanXfac, y, 0, plyr->health);
+	ST_DrawNum (4 * CleanXfac, y, &screens[0], plyr->health);
 
 	if (ammo < NUMAMMO) {
 		patch_t *ammopatch = ammos[weaponinfo[plyr->readyweapon].ammo];
 
-		V_DrawPatchCleanNoMove (SCREENWIDTH - 14 * CleanXfac, SCREENHEIGHT - 4 * CleanYfac, 0, ammopatch);
-		ST_DrawNumRight (SCREENWIDTH - 25 * CleanXfac, y, 0, plyr->ammo[ammo]);
+		V_DrawPatchCleanNoMove (screens[0].width - 14 * CleanXfac,
+								screens[0].height - 4 * CleanYfac,
+								&screens[0], ammopatch);
+		ST_DrawNumRight (screens[0].width - 25 * CleanXfac, y, &screens[0], plyr->ammo[ammo]);
 	}
 }

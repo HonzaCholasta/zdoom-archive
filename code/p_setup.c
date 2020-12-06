@@ -22,8 +22,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: p_setup.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 
 #include <math.h>
 
@@ -47,7 +45,7 @@ rcsid[] = "$Id: p_setup.c,v 1.5 1997/02/03 22:45:12 b1 Exp $";
 #include "doomstat.h"
 
 
-void	P_SpawnMapThing (mapthing_t*	mthing);
+void	P_SpawnMapThing (mapthing2_t *mthing);
 
 
 //
@@ -75,6 +73,8 @@ line_t* 		lines;
 int 			numsides;
 side_t* 		sides;
 
+// [RH] Set true if the map contains a BEHAVIOR lump
+static	BOOL	HasBehavior;
 
 // BLOCKMAP
 // Created from axis aligned bounding box
@@ -86,14 +86,15 @@ side_t* 		sides;
 // Blockmap size.
 int 			bmapwidth;
 int 			bmapheight; 	// size in mapblocks
-short*			blockmap;		// int for larger maps
-// offsets in blockmap are from here
-short*			blockmaplump;			
-// origin of block map
-fixed_t 		bmaporgx;
+
+int				*blockmap;		// int for larger maps ([RH] Made int because BOOM does)
+int				*blockmaplump;	// offsets in blockmap are from here	
+
+fixed_t 		bmaporgx;		// origin of block map
 fixed_t 		bmaporgy;
-// for thing chains
-mobj_t**		blocklinks; 			
+
+mobj_t**		blocklinks;		// for thing chains
+			
 
 
 // REJECT
@@ -108,9 +109,9 @@ byte*			rejectmatrix;
 
 // Maintain single and multi player starting spots.
 int				MaxDeathmatchStarts;
-mapthing_t		*deathmatchstarts;
-mapthing_t* 	deathmatch_p;
-mapthing_t		playerstarts[MAXPLAYERS];
+mapthing2_t		*deathmatchstarts;
+mapthing2_t		*deathmatch_p;
+mapthing2_t		playerstarts[MAXPLAYERS];
 
 
 
@@ -246,8 +247,8 @@ void P_LoadSectors (int lump)
 	{
 		ss->floorheight = SHORT(ms->floorheight)<<FRACBITS;
 		ss->ceilingheight = SHORT(ms->ceilingheight)<<FRACBITS;
-		ss->floorpic = R_FlatNumForName(ms->floorpic);
-		ss->ceilingpic = R_FlatNumForName(ms->ceilingpic);
+		ss->floorpic = (short)R_FlatNumForName(ms->floorpic);
+		ss->ceilingpic = (short)R_FlatNumForName(ms->ceilingpic);
 		ss->lightlevel = SHORT(ms->lightlevel);
 		ss->special = SHORT(ms->special);
 		ss->tag = SHORT(ms->tag);
@@ -300,52 +301,75 @@ void P_LoadNodes (int lump)
 //
 void P_LoadThings (int lump)
 {
-	byte*				data;
-	int 				i;
-	mapthing_t* 		mt;
-	int 				numthings;
-	boolean 			spawn;
-		
-	data = W_CacheLumpNum (lump,PU_STATIC);
-	numthings = W_LumpLength (lump) / sizeof(mapthing_t);
-		
-	mt = (mapthing_t *)data;
-	for (i=0 ; i<numthings ; i++, mt++)
+	mapthing2_t mt2;		// [RH] for translation
+	byte *data = W_CacheLumpNum (lump,PU_STATIC);
+	mapthing_t *mt = (mapthing_t *)data;
+	mapthing_t *lastmt = (mapthing_t *)(data + W_LumpLength (lump));
+
+	// [RH] I'm (considering) moving toward Hexen-style maps
+	//		as the native format for ZDoom. This is the only
+	//		place where Doom-style Things are ever referenced,
+	//		and we translate them into a Hexen-style thing.
+	//		Thanks to recent talks with Ty Halderman, I may
+	//		not actually complete this, although the process
+	//		has been started.
+	memset (&mt2, 0, sizeof(mt2));
+
+	for ( ; mt < lastmt; mt++)
 	{
-		spawn = true;
+		// [RH] At this point, monsters unique to Doom II were weeded out
+		//		if the IWAD wasn't for Doom II. R_SpawnMapThing() can now
+		//		handle these and more cases better, so we just pass it
+		//		everything and let it decide what to do with them.
 
-		// Do not spawn cool, new monsters if !commercial
-		if ( gamemode != commercial)
-		{
-			switch(mt->type)
-			{
-			  case 68:	// Arachnotron
-			  case 64:	// Archvile
-			  case 88:	// Boss Brain
-			  case 89:	// Boss Shooter
-			  case 69:	// Hell Knight
-			  case 67:	// Mancubus
-			  case 71:	// Pain Elemental
-			  case 65:	// Former Human Commando
-			  case 66:	// Revenant
-			  case 84:	// Wolf SS
-				spawn = false;
-				break;
-			}
-		}
-		if (spawn == false)
-			break;
+		// [RH] Need to translate the spawn flags to Hexen format.
+		short flags = SHORT(mt->options);
+		mt2.flags = (short)((flags & 0xf) | 0x700);
+		if (flags & BTF_NOTSINGLE)			mt2.flags &= ~MTF_SINGLE;
+		if (flags & BTF_NOTDEATHMATCH)		mt2.flags &= ~MTF_DEATHMATCH;
+		if (flags & BTF_NOTCOOPERATIVE)		mt2.flags &= ~MTF_COOPERATIVE;
 
-		// Do spawn all other stuff. 
-		mt->x = SHORT(mt->x);
-		mt->y = SHORT(mt->y);
-		mt->angle = SHORT(mt->angle);
-		mt->type = SHORT(mt->type);
-		mt->options = SHORT(mt->options);
+		mt2.x = SHORT(mt->x);
+		mt2.y = SHORT(mt->y);
+		mt2.angle = SHORT(mt->angle);
+		mt2.type = SHORT(mt->type);
 		
-		P_SpawnMapThing (mt);
+		P_SpawnMapThing (&mt2);
 	}
 		
+	Z_Free (data);
+}
+
+// [RH]
+// P_LoadThings2
+//
+// Same as P_LoadThings() except it assumes Things are
+// saved Hexen-style.
+//
+void P_LoadThings2 (int lump)
+{
+	byte *data = W_CacheLumpNum (lump, PU_STATIC);
+	mapthing2_t *mt = (mapthing2_t *)data;
+	mapthing2_t *lastmt = (mapthing2_t *)(data + W_LumpLength (lump));
+
+	for ( ; mt < lastmt; mt++)
+	{
+		// [RH] At this point, monsters unique to Doom II were weeded out
+		//		if the IWAD wasn't for Doom II. R_SpawnMapThing() can now
+		//		handle these and more cases better, so we just pass it
+		//		everything and let it decide what to do with them.
+
+		mt->thingid = SHORT(mt->thingid);
+		mt->x = SHORT(mt->x);
+		mt->y = SHORT(mt->y);
+		mt->z = SHORT(mt->z);
+		mt->angle = SHORT(mt->angle);
+		mt->type = SHORT(mt->type);
+		mt->flags = SHORT(mt->flags);
+
+		P_SpawnMapThing (mt);
+	}
+
 	Z_Free (data);
 }
 
@@ -373,6 +397,9 @@ void P_LoadLineDefs (int lump)
 	for (i=0 ; i<numlines ; i++, mld++, ld++)
 	{
 		ld->flags = SHORT(mld->flags);
+		// [RH] Remap ML_PASSUSE flag from BOOM.
+		if (!HasBehavior && (ld->flags & ML_PASSUSEORG))
+			ld->flags = (ld->flags & ~ML_PASSUSEORG) | ML_PASSUSE;
 		ld->special = SHORT(mld->special);
 		ld->tag = SHORT(mld->tag);
 		v1 = ld->v1 = &vertexes[SHORT(mld->v1)];
@@ -453,9 +480,9 @@ void P_LoadSideDefs (int lump)
 	{
 		sd->textureoffset = SHORT(msd->textureoffset)<<FRACBITS;
 		sd->rowoffset = SHORT(msd->rowoffset)<<FRACBITS;
-		sd->toptexture = R_TextureNumForName(msd->toptexture);
-		sd->bottomtexture = R_TextureNumForName(msd->bottomtexture);
-		sd->midtexture = R_TextureNumForName(msd->midtexture);
+		sd->toptexture = (short)R_TextureNumForName(msd->toptexture);
+		sd->bottomtexture = (short)R_TextureNumForName(msd->bottomtexture);
+		sd->midtexture = (short)R_TextureNumForName(msd->midtexture);
 		sd->sector = &sectors[SHORT(msd->sector)];
 	}
 		
@@ -466,27 +493,45 @@ void P_LoadSideDefs (int lump)
 //
 // P_LoadBlockMap
 //
+// [RH] Took a look at BOOM's version and made some changes.
+//
 void P_LoadBlockMap (int lump)
 {
-	int 		i;
-	int 		count;
-		
-	blockmaplump = W_CacheLumpNum (lump,PU_LEVEL);
-	blockmap = blockmaplump+4;
-	count = W_LumpLength (lump)/2;
+	int i, count;
+	short *wadblockmaplump;
+	
+	count = W_LumpLength (lump) >> 1;
+	wadblockmaplump = W_CacheLumpNum (lump, PU_LEVEL);
+	blockmaplump = Z_Malloc(sizeof(*blockmaplump) * count, PU_LEVEL, 0);
 
-	for (i=0 ; i<count ; i++)
-		blockmaplump[i] = SHORT(blockmaplump[i]);
-				
+	// killough 3/1/98: Expand wad blockmap into larger internal one,
+	// by treating all offsets except -1 as unsigned and zero-extending
+	// them. This potentially doubles the size of blockmaps allowed,
+	// because Doom originally considered the offsets as always signed.
+
+	blockmaplump[0] = SHORT(wadblockmaplump[0]);
+	blockmaplump[1] = SHORT(wadblockmaplump[1]);
+	blockmaplump[2] = (long)(SHORT(wadblockmaplump[2])) & 0xffff;
+	blockmaplump[3] = (long)(SHORT(wadblockmaplump[3])) & 0xffff;
+
+	for (i=4 ; i<count ; i++)
+	{
+		short t = SHORT(wadblockmaplump[i]);          // killough 3/1/98
+		blockmaplump[i] = t == -1 ? -1l : (long) t & 0xffff;
+	}
+
+	Z_Free(wadblockmaplump);
+
 	bmaporgx = blockmaplump[0]<<FRACBITS;
 	bmaporgy = blockmaplump[1]<<FRACBITS;
 	bmapwidth = blockmaplump[2];
 	bmapheight = blockmaplump[3];
-		
+
 	// clear out mobj chains
-	count = sizeof(*blocklinks)* bmapwidth*bmapheight;
+	count = sizeof(*blocklinks) * bmapwidth*bmapheight;
 	blocklinks = Z_Malloc (count,PU_LEVEL, 0);
 	memset (blocklinks, 0, count);
+	blockmap = blockmaplump+4;
 }
 
 
@@ -580,10 +625,10 @@ void P_GroupLines (void)
 //
 // P_SetupLevel
 //
-void P_SetupLevel (char *lumpname, int playermask, skill_t skill)
+void P_SetupLevel (char *lumpname)
 {
-	int 		i;
-	int 		lumpnum;
+	int		i;
+	int 	lumpnum;
 		
 	level.total_monsters = level.total_items = level.total_secrets =
 		level.killed_monsters = level.found_items = level.found_secrets =
@@ -595,8 +640,7 @@ void P_SetupLevel (char *lumpname, int playermask, skill_t skill)
 			= players[i].itemcount = 0;
 	}
 
-	// Initial height of PointOfView
-	// will be set by player think.
+	// Initial height of PointOfView will be set by player think.
 	players[consoleplayer].viewz = 1; 
 
 	// Make sure all sounds are stopped before Z_FreeTags.
@@ -616,13 +660,16 @@ void P_SetupLevel (char *lumpname, int playermask, skill_t skill)
 	P_InitThinkers ();
 
 	// if working with a devlopment map, reload it
-	W_Reload ();						
+	// [RH] Not present
+	// W_Reload ();
 		   
 	// find map num
 	lumpnum = W_GetNumForName (lumpname);
-		
-	level.time = 0;
-		
+
+	// [RH] Check if this map is Hexen-style.
+	//		LINEDEFS and THINGS need to be handled accordingly.
+	HasBehavior = W_CheckLumpName (lumpnum+ML_BEHAVIOR, "BEHAVIOR");
+
 	// note: most of this ordering is important 
 	P_LoadBlockMap (lumpnum+ML_BLOCKMAP);
 
@@ -641,13 +688,17 @@ void P_SetupLevel (char *lumpname, int playermask, skill_t skill)
 	bodyqueslot = 0;
 	if (!deathmatchstarts) {
 		MaxDeathmatchStarts = 10;	// [RH] Default. Increased as needed.
-		deathmatchstarts = Malloc (MaxDeathmatchStarts * sizeof(mapthing_t));
+		deathmatchstarts = Malloc (MaxDeathmatchStarts * sizeof(mapthing2_t));
 	}
 	deathmatch_p = deathmatchstarts;
-	P_LoadThings (lumpnum+ML_THINGS);
+
+	if (HasBehavior)
+		P_LoadThings2 (lumpnum+ML_THINGS);	// [RH] Load Hexen-style Things
+	else
+		P_LoadThings (lumpnum+ML_THINGS);
 	
 	// if deathmatch, randomly spawn the active players
-	if (deathmatch)
+	if (deathmatch->value)
 	{
 		for (i=0 ; i<MAXPLAYERS ; i++)
 			if (playeringame[i])
@@ -672,7 +723,8 @@ void P_SetupLevel (char *lumpname, int playermask, skill_t skill)
 		R_PrecacheLevel ();
 
 	//Printf ("free memory: 0x%x\n", Z_FreeMemory());
-
+		
+	level.time = 0;
 }
 
 

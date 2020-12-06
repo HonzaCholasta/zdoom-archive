@@ -39,10 +39,6 @@
 
 
 
-#ifdef __GNUG__
-#pragma interface
-#endif
-
 
 
 // Silhouette, needed for clipping Segs (mainly)
@@ -375,10 +371,6 @@ typedef struct patch_s patch_t;
 // I.e. a sprite object that is partly visible.
 struct vissprite_s
 {
-	// Doubly linked list.
-	struct vissprite_s* prev;
-	struct vissprite_s* next;
-	
 	int 				x1;
 	int 				x2;
 
@@ -406,7 +398,11 @@ struct vissprite_s
 	lighttable_t*		colormap;
    
 	int 				mobjflags;
-	
+
+	// [RH] Sprite's palette (NULL for default)
+	//		Currently this is just a translation table and not a palette.
+	struct palette_s	*palette;
+
 };
 typedef struct vissprite_s vissprite_t;
 
@@ -430,7 +426,7 @@ struct spriteframe_s
 	// If false use 0 for any position.
 	// Note: as eight entries are available,
 	//	we might as well insert the same name eight times.
-	boolean 	rotate;
+	BOOL	 	rotate;
 
 	// Lump to use for view angles 0-7.
 	short		lump[8];

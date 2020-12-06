@@ -21,8 +21,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: p_floor.c,v 1.4 1997/02/03 16:47:54 b1 Exp $";
 
 
 #include "z_zone.h"
@@ -50,11 +48,11 @@ T_MovePlane
 ( sector_t* 	sector,
   fixed_t		speed,
   fixed_t		dest,
-  boolean		crush,
+  BOOL			crush,
   int			floorOrCeiling,
   int			direction )
 {
-	boolean 	flag;
+	BOOL	 	flag;
 	fixed_t 	lastpos;
 		
 	switch(floorOrCeiling)
@@ -228,7 +226,7 @@ void T_MoveFloor(floormove_t* floor)
 			switch(floor->type)
 			{
 			  case donutRaise:
-				floor->sector->special = floor->newspecial;
+				floor->sector->special = (short)floor->newspecial;
 				floor->sector->floorpic = floor->texture;
 			  default:
 				break;
@@ -239,7 +237,7 @@ void T_MoveFloor(floormove_t* floor)
 			switch(floor->type)
 			{
 			  case lowerAndChange:
-				floor->sector->special = floor->newspecial;
+				floor->sector->special = (short)floor->newspecial;
 				floor->sector->floorpic = floor->texture;
 			  default:
 				break;
@@ -383,20 +381,15 @@ EV_DoFloor
 				  {
 					  side = getSide(secnum,i,0);
 					  if (side->bottomtexture >= 0)
-						  if (textureheight[side->bottomtexture] < 
-							  minsize)
-							  minsize = 
-								  textureheight[side->bottomtexture];
+						  if (textureheight[side->bottomtexture] < minsize)
+							  minsize = textureheight[side->bottomtexture];
 					  side = getSide(secnum,i,1);
 					  if (side->bottomtexture >= 0)
-						  if (textureheight[side->bottomtexture] < 
-							  minsize)
-							  minsize = 
-								  textureheight[side->bottomtexture];
+						  if (textureheight[side->bottomtexture] < minsize)
+							  minsize = textureheight[side->bottomtexture];
 				  }
 			  }
-			  floor->floordestheight =
-				  floor->sector->floorheight + minsize;
+			  floor->floordestheight = floor->sector->floorheight + minsize;
 		  }
 		  break;
 		  

@@ -5,45 +5,41 @@
 
 #include "doomtype.h"
 #include "cmdlib.h"
-#include "c_console.h"
-#include "c_commands.h"
-#include "c_dispatch.h"
+#include "c_consol.h"
+#include "c_cmds.h"
+#include "c_dispch.h"
 #include "m_argv.h"
 #include "doomstat.h"
 #include "m_alloc.h"
 
 cvar_t *lookspring;			// Generate centerview when -mlook encountered?
 
-struct CmdData *FindNameInHashTable (struct CmdData **table, char *name);
-struct CmdData *ScanChainForName (struct CmdData *start, char *name, struct CmdData **prev);
+static struct CmdData *FindNameInHashTable (struct CmdData **table, char *name);
+static struct CmdData *ScanChainForName (struct CmdData *start, char *name, struct CmdData **prev);
 
 struct CmdData *Commands[HASH_SIZE];
 struct CmdData *Aliases[HASH_SIZE];
 
-struct {
-	unsigned int	key;
-	int				bit;
-	char			name[12];
-} actionbits[NUM_ACTIONS] = {
-	0x116716a2, ACTION_SPEED,		"speed",
-	0x1e60dad4, ACTION_RIGHT,		"right",
-	0x206c10aa, ACTION_KLOOK,		"klook",
-	0x226a20ae, ACTION_MLOOK,		"mlook",
-	0x4d63cc88, ACTION_USE,			"use",
-	0x620a3c5e, ACTION_MOVELEFT,	"moveleft",
-	0x6d157234, ACTION_LOOKDOWN,	"lookdown",
-	0x6f03745a, ACTION_MOVEDOWN,	"movedown",
-	0x78086cf0, ACTION_ATTACK,		"attack",
-	0x8517869e, ACTION_STRAFE,		"strafe",
-	0x910b0cac, ACTION_BACK,		"back",
-	0x9a02b460, ACTION_LOOKUP,		"lookup",
-	0x9c14ae86, ACTION_MOVEUP,		"moveup",
-	0xab1b201e, ACTION_LEFT,		"left",
-	0xbc02544e,	ACTION_JUMP,		"jump",
-	0xd571f880, ACTION_MOVERIGHT,	"moveright",
-	0xf57be8e2, ACTION_FORWARD,		"forward",
+struct ActionBits actionbits[NUM_ACTIONS] = {
+	{ 0x116716a2, ACTION_SPEED,		 "speed" },
+	{ 0x1e60dad4, ACTION_RIGHT,		 "right" },
+	{ 0x206c10aa, ACTION_KLOOK,		 "klook" },
+	{ 0x226a20ae, ACTION_MLOOK,		 "mlook" },
+	{ 0x4d63cc88, ACTION_USE,		 "use" },
+	{ 0x50183a64, ACTION_SHOWSCORES, "showscores" },
+	{ 0x620a3c5e, ACTION_MOVELEFT,	 "moveleft" },
+	{ 0x6d157234, ACTION_LOOKDOWN,	 "lookdown" },
+	{ 0x6f03745a, ACTION_MOVEDOWN,	 "movedown" },
+	{ 0x78086cf0, ACTION_ATTACK,	 "attack" },
+	{ 0x8517869e, ACTION_STRAFE,	 "strafe" },
+	{ 0x910b0cac, ACTION_BACK,		 "back" },
+	{ 0x9a02b460, ACTION_LOOKUP,	 "lookup" },
+	{ 0x9c14ae86, ACTION_MOVEUP,	 "moveup" },
+	{ 0xab1b201e, ACTION_LEFT,		 "left" },
+	{ 0xbc02544e, ACTION_JUMP,		 "jump" },
+	{ 0xd571f880, ACTION_MOVERIGHT,	 "moveright" },
+	{ 0xf57be8e2, ACTION_FORWARD,	 "forward" }
 };
-
 int Actions;
 
 static int ListActionCommands (void)
@@ -144,7 +140,7 @@ void C_DoCommand (char *cmd)
 		argc = 1;
 		argsize = strlen (com_token) + 1;
 
-		while (data = ParseString (data)) {
+		while ( (data = ParseString (data)) ) {
 			argc++;
 			argsize += strlen (com_token) + 1;
 		}
@@ -155,7 +151,7 @@ void C_DoCommand (char *cmd)
 		arg = args;
 		data = cmd;
 		argsize = 0;
-		while (data = ParseString (data)) {
+		while ( (data = ParseString (data)) ) {
 			strcpy (arg, com_token);
 			argv[argsize] = arg;
 			arg += strlen (arg);
@@ -168,19 +164,21 @@ void C_DoCommand (char *cmd)
 		//	2. Check the Aliases[] hash table
 		//	3. Check the CVars list
 
-		if (com = FindNameInHashTable (Commands, argv[0])) {
-			com->func (&players[consoleplayer], argc, argv);
-		} else if (com = FindNameInHashTable (Aliases, argv[0])) {
-			AddCommandString (com->command);
+		if ( (com = FindNameInHashTable (Commands, argv[0])) ) {
+			com->call.func (&players[consoleplayer], argc, argv);
+		} else if ( (com = FindNameInHashTable (Aliases, argv[0])) ) {
+			AddCommandString (com->call.command);
 		} else {
 			// Check for any CVars that match the command
 			cvar_t *var, *dummy;
 
-			if (var = FindCVar (argv[0], &dummy)) {
+			if ( (var = FindCVar (argv[0], &dummy)) ) {
 				if (argc >= 2) {
-					cvar_set (var->name, argv[1]);
+					// Hack
+					Cmd_Set (&players[consoleplayer], argc + 1, argv - 1);
+				} else {
+					Printf ("\"%s\" is \"%s\"\n", var->name, var->string);
 				}
-				Printf ("\"%s\" is \"%s\"\n", var->name, var->string);
 			} else {
 				// We don't know how to handle this command
 				Printf ("Unknown command \"%s\"\n", argv[0]);
@@ -277,9 +275,9 @@ char *ParseString (char *data)
 {
 	cvar_t *var, *dummy;
 
-	if (data = ParseString2 (data)) {
+	if ( (data = ParseString2 (data)) ) {
 		if (com_token[0] == '$') {
-			if (var = FindCVar (&com_token[1], &dummy)) {
+			if ( (var = FindCVar (&com_token[1], &dummy)) ) {
 				strcpy (com_token, var->string);
 			}
 		}
@@ -298,6 +296,7 @@ static struct CmdData *ScanChainForName (struct CmdData *start, char *name, stru
 			return NULL;
 		else if (comp == 0)
 			return start;
+
 		*prev = start;
 		start = start->next;
 	}
@@ -311,10 +310,13 @@ static struct CmdData *FindNameInHashTable (struct CmdData **table, char *name)
 	return ScanChainForName (table[MakeKey (name) % HASH_SIZE], name, &dummy);
 }
 
-static boolean AddToHash (struct CmdData **table, char *name, void *data)
+static BOOL AddToHash (struct CmdData **table, char *name, void *data)
 {
 	unsigned int key;
 	struct CmdData *insert;
+
+	if (!stricmp (name, "toggle"))
+		key = 1;
 
 	key = MakeKey (name);
 
@@ -324,12 +326,12 @@ static boolean AddToHash (struct CmdData **table, char *name, void *data)
 		struct CmdData *newcmd = Malloc (sizeof(struct CmdData));
 	
 		newcmd->name = name;
-		newcmd->generic = data;
+		newcmd->call.generic = data;
 		if (insert) {
 			newcmd->next = insert->next;
 			insert->next = newcmd;
 		} else {
-			newcmd->next = NULL;
+			newcmd->next = table[key % HASH_SIZE];
 			table[key % HASH_SIZE] = newcmd;
 		}
 	}
@@ -338,8 +340,29 @@ static boolean AddToHash (struct CmdData **table, char *name, void *data)
 
 void C_RegisterCommand (char *name, void (*func)())
 {
+	static BOOL firstTime = true;
+
+	if (firstTime) {
+		char name[16];
+		int i;
+
+		firstTime = false;
+
+		// Add all the action commands for tab completion
+		for (i = 0; i < NUM_ACTIONS; i++) {
+			strcpy (&name[1], actionbits[i].name);
+			name[0] = '+';
+			C_AddTabCommand (name);
+			name[0] = '-';
+			C_AddTabCommand (name);
+		}
+	}
+
+
 	if (!AddToHash (Commands, name, func))
 		Printf ("C_RegisterCommand: %s exists\n", name);
+	else
+		C_AddTabCommand (name);
 }
 
 void C_RegisterCommands (struct CmdDispatcher *cmd)
@@ -374,7 +397,7 @@ char *BuildString (int argc, char **argv)
 	}
 }
 
-static int DumpHash (struct CmdData **table, boolean showcommand)
+static int DumpHash (struct CmdData **table, BOOL showcommand)
 {
 	int bucket, count;
 	struct CmdData *cmd;
@@ -384,13 +407,27 @@ static int DumpHash (struct CmdData **table, boolean showcommand)
 		while (cmd) {
 			count++;
 			if (showcommand)
-				Printf ("%s : %s\n", cmd->name, cmd->command);
+				Printf ("%s : %s\n", cmd->name, cmd->call.command);
 			else
 				Printf ("%s\n", cmd->name);
 			cmd = cmd->next;
 		}
 	}
 	return count;
+}
+
+void C_ArchiveAliases (FILE *f)
+{
+	int bucket;
+	struct CmdData *alias;
+
+	for (bucket = 0; bucket < HASH_SIZE; bucket++) {
+		alias = Aliases[bucket];
+		while (alias) {
+			fprintf (f, "alias \"%s\" \"%s\"\n", alias->name, alias->call.command);
+			alias = alias->next;
+		}
+	}
 }
 
 void Cmd_Alias (player_t *player, int argc, char **argv)
@@ -406,14 +443,15 @@ void Cmd_Alias (player_t *player, int argc, char **argv)
 		if (argc == 2) {
 			// Remove the alias
 
-			if (alias = ScanChainForName (*chain, argv[1], &prev)) {
+			if ( (alias = ScanChainForName (*chain, argv[1], &prev)) ) {
 				if (prev) {
 					prev->next = alias->next;
 				} else {
 					*chain = alias->next;
 				}
+				C_RemoveTabCommand (alias->name);
 				free (alias->name);
-				free (alias->command);
+				free (alias->call.command);
 				free (alias);
 			}
 		} else {
@@ -422,21 +460,23 @@ void Cmd_Alias (player_t *player, int argc, char **argv)
 			alias = ScanChainForName (*chain, argv[1], &prev);
 			if (alias) {
 				free (alias->name);
-				free (alias->command);
+				free (alias->call.command);
 			} else {
 				alias = Malloc (sizeof(struct CmdData));
 				if (prev) {
 					alias->next = prev->next;
 					prev->next = alias;
 				} else {
+					alias->next = NULL;
 					*chain = alias;
 				}
 			}
 			alias->name = copystring (argv[1]);
 			if (argc > 3)
-				alias->command = BuildString (argc - 2, &argv[2]);
+				alias->call.command = BuildString (argc - 2, &argv[2]);
 			else
-				alias->command = copystring (argv[2]);
+				alias->call.command = copystring (argv[2]);
+			C_AddTabCommand (alias->name);
 		}
 	}
 }
@@ -489,7 +529,7 @@ void C_ExecCmdLineParams (int onlyset)
 				cmdlen++;
 			}
 
-			if (cmdString = BuildString (cmdlen, &myargv[argstart])) {
+			if ( (cmdString = BuildString (cmdlen, &myargv[argstart])) ) {
 				C_DoCommand (cmdString + 1);
 				free (cmdString);
 			}

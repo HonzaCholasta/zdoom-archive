@@ -26,10 +26,8 @@
 #include "doomdef.h"
 #include "doomtype.h"
 
-#ifdef __GNUG__
-#pragma interface
-#endif
-
+struct mobj_s;
+struct player_s;
 
 // Weapon info: sprite frames, ammunition use.
 struct weaponinfo_s
@@ -53,13 +51,13 @@ extern	weaponinfo_t	weaponinfo[NUMWEAPONS];
 #define IT_AMMO 				2
 #define IT_ARMOR				4
 #define IT_KEY					8
-#define IT_ARTIFACT 			16				// Eventually get Heretic/Hexen support in here
-#define IT_POWER				32
+#define IT_ARTIFACT 			16				// Don't auto-activate item (unused)
+#define IT_POWER				32				// Auto-activate item
 
 struct gitem_s
 {
 		char			*classname;
-		boolean 		(*pickup)(struct player_s *ent, struct mobj_s *other);
+		BOOL	 		(*pickup)(struct player_s *ent, struct mobj_s *other);
 		void			(*use)(struct player_s *ent, struct gitem_s *item);
 		byte			flags;
 		byte			offset; 				// For Weapon, Ammo, Armor, Key: Offset in appropriate table

@@ -24,11 +24,11 @@
 #define __P_INTER__
 
 
-boolean P_GiveAmmo(player_t*, ammotype_t, int);
-boolean P_GiveWeapon(player_t*, weapontype_t, boolean);
-boolean P_GiveArmor(player_t*, int);
-void	P_GiveCard(player_t*, card_t);
-boolean P_GivePower(player_t*, int);
+BOOL P_GiveAmmo(player_t*, ammotype_t, int);
+BOOL P_GiveWeapon(player_t*, weapontype_t, BOOL);
+BOOL P_GiveArmor(player_t*, int);
+void P_GiveCard(player_t*, card_t);
+BOOL P_GivePower(player_t*, int);
 
 
 #endif

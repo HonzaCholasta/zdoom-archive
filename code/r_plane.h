@@ -26,10 +26,6 @@
 
 #include "r_data.h"
 
-#ifdef __GNUG__
-#pragma interface
-#endif
-
 
 // Visplane related.
 extern	short*			lastopening;
@@ -79,8 +75,8 @@ R_CheckPlane
   int			stop );
 
 
-// Added for multires support
-boolean R_PlaneInitData (void);
+// [RH] Added for multires support
+BOOL R_PlaneInitData (void);
 
 
 #endif

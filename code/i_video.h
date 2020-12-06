@@ -25,16 +25,11 @@
 
 
 #include "doomtype.h"
+#include "v_video.h"
 
-#ifdef __GNUG__
-#pragma interface
-#endif
 
-typedef struct modelist_s {
-	struct modelist_s *next;
-	int width;
-	int height;
-} modelist_t;
+// [RH] True if the display is not in a window
+extern BOOL Fullscreen;
 
 
 // Called by D_DoomMain,
@@ -44,29 +39,35 @@ void I_StartGraphics (void);
 // Sets up the video mode
 void I_InitGraphics (void);
 
+// [RH] Set the display mode
+void I_SetMode (int width, int height, int Bpp);
 
 void I_ShutdownGraphics(void);
 
 // Takes full 8 bit values.
-void I_SetPalette (byte* palette);
+void I_SetPalette (unsigned int *palette);
 
+void I_BeginUpdate (void);		// [RH] Locks screen[0]
 void I_UpdateNoBlit (void);
 void I_FinishUpdate (void);
 
 // Wait for vertical retrace or pause a bit.
 void I_WaitVBL(int count);
 
-void I_ReadScreen (byte* scr);
+void I_ReadScreen (byte *scr);
 
 void I_BeginRead (void);
 void I_EndRead (void);
 
-boolean I_CheckResolution (int width, int height);
+BOOL I_CheckResolution (int width, int height, int bpp);
+BOOL I_SetResolution (int width, int height, int bpp);
 
-// Convert a string description of a GUID to struct form
-void *StrToGUID (char *str);
-// Vice versa
-char *GUIDToStr (void *GUID);
+BOOL I_AllocateScreen (screen_t *scrn, int width, int height, int Bpp);
+void I_FreeScreen (screen_t *scrn);
+void I_LockScreen (screen_t *scrn);
+void I_UnlockScreen (screen_t *scrn);
+void I_Blit (screen_t *src, int srcx, int srcy, int srcwidth, int srcheight,
+			 screen_t *dest, int destx, int desty, int destwidth, int destheight);
 
 #endif
 //-----------------------------------------------------------------------------

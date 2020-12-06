@@ -24,10 +24,8 @@
 #define __R_DRAW__
 
 
-#ifdef __GNUG__
-#pragma interface
-#endif
 
+extern int				dc_pitch;		// [RH] Distance between rows
 
 extern lighttable_t*	dc_colormap;
 extern int				dc_x;
@@ -39,47 +37,70 @@ extern fixed_t			dc_texturemid;
 // first pixel in a column
 extern byte*			dc_source;				
 
+// [RH] Tutti-Frutti fix
+unsigned int			dc_mask;
 
-#ifndef USEASM
+
+// [RH] Pointers to the different column and span drawers...
+
 // The span blitting interface.
 // Hook in assembler or system specific BLT
 //	here.
-void	R_DrawColumn_C (void);
+void (*R_DrawColumn)(void);
 
 // The Spectre/Invisibility effect.
-void	R_DrawFuzzColumn_C (void);
+void (*R_DrawFuzzColumn)(void);
 
-// Draw translucent column;
-void	R_DrawTranslucentColumn_C (void);
+// [RH] Draw translucent column;
+void (*R_DrawTranslucentColumn)(void);
 
 // Draw with color translation tables,
 //	for player sprite rendering,
 //	Green/Red/Blue/Indigo shirts.
-void	R_DrawTranslatedColumn_C (void);
+void (*R_DrawTranslatedColumn)(void);
 
-#define R_DrawColumn			R_DrawColumn_C
-#define R_DrawFuzzColumn		R_DrawFuzzColumn_C
-#define R_DrawTranslucentColumn	R_DrawTranslucentColumn_C
-#define R_DrawTranslatedColumn	R_DrawTranslatedColumn_C
+// Span blitting for rows, floor/ceiling.
+// No Sepctre effect needed.
+void (*R_DrawSpan)(void);
+
+
+// [RH] Initialize the above five pointers
+void R_InitColumnDrawers (BOOL is8bit);
+
+
+#ifndef USEASM
+void	R_DrawColumnP_C (void);
+void	R_DrawFuzzColumnP_C (void);
+void	R_DrawTranslucentColumnP_C (void);
+void	R_DrawTranslatedColumnP_C (void);
+void	R_DrawSpanP (void);
+
+void	R_DrawColumnD_C (void);
+void	R_DrawFuzzColumnD_C (void);
+void	R_DrawTranslucentColumnD_C (void);
+void	R_DrawTranslatedColumnD_C (void);
+void	R_DrawSpanD (void);
 
 #else	/* USEASM */
 
-void	R_DrawColumn_ASM (void);
-void	R_DrawFuzzColumn_ASM (void);
-void	R_DrawTranslucentColumn_ASM (void);
-void	R_DrawTranslatedColumn_C (void);
+void	R_DrawColumnP_ASM (void);
+void	R_DrawFuzzColumnP_ASM (void);
+void	R_DrawTranslucentColumnP_ASM (void);
+void	R_DrawTranslatedColumnP_C (void);
+void	R_DrawSpanP (void);
 
-#define R_DrawColumn			R_DrawColumn_ASM
-#define R_DrawFuzzColumn		R_DrawFuzzColumn_ASM
-#define R_DrawTranslucentColumn	R_DrawTranslucentColumn_ASM
-#define R_DrawTranslatedColumn	R_DrawTranslatedColumn_C
+void	R_DrawColumnD_C (void);
+void	R_DrawFuzzColumnD_C (void);
+void	R_DrawTranslucentColumnD_C (void);
+void	R_DrawTranslatedColumnD_C (void);
+void	R_DrawSpanD (void);
 
 #endif
 
-void
-R_VideoErase
-( unsigned		ofs,
-  int			count );
+void R_VideoErase (int x1, int y1, int x2, int y2);
+
+extern int				ds_colsize;		// [RH] Distance between columns
+extern int				ds_colshift;
 
 extern int				ds_y;
 extern int				ds_x1;
@@ -93,7 +114,7 @@ extern fixed_t			ds_xstep;
 extern fixed_t			ds_ystep;
 
 // start of a 64*64 tile image
-extern byte*			ds_source;				
+extern byte*			ds_source;
 
 extern byte*			translationtables;
 extern byte*			dc_translation;
@@ -101,29 +122,27 @@ extern byte*			dc_translation;
 extern byte*			dc_transmap;
 
 
-// Span blitting for rows, floor/ceiling.
-// No Sepctre effect needed.
-void	R_DrawSpan (void);
-
 /* [Petteri] R_DrawSpan8() optimized inner loop (does two pixels
    per cycle) */
-void __cdecl DrawSpan8Loop (fixed_t xfrac, fixed_t yfrac, int count,
-							byte *dest);
-
-// Low resolution mode, 160x200?
-void	R_DrawSpanLow (void);
+void STACK_ARGS DrawSpan8Loop (fixed_t xfrac, fixed_t yfrac, int count, byte *dest);
 
 
-void
-R_InitBuffer
-( int			width,
-  int			height );
+// [RH] Double view pixels by detail mode
+void R_DetailDouble (void);
+
+
+void R_InitBuffer (int width, int height);
 
 
 // Initialize color translation tables,
 //	for player rendering etc.
-void	R_InitTranslationTables (void);
+void R_InitTranslationTables (void);
 
+// [RH] Actually create a player's translation table.
+void R_BuildPlayerTranslation (int player, int color);
+
+// [RH] Build the same translation tables as org. Doom.
+void R_BuildCompatiblePlayerTranslations (void);
 
 
 // Rendering function.
@@ -133,8 +152,9 @@ void R_FillBackScreen (void);
 void R_DrawViewBorder (void);
 
 
-// Added for muliresolution support
+// [RH] Added for muliresolution support
 void R_InitFuzzTable (void);
+
 
 #endif
 //-----------------------------------------------------------------------------

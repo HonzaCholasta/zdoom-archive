@@ -50,13 +50,16 @@
 void HU_Init(void);
 void HU_Start(void);
 
-boolean HU_Responder(event_t* ev);
+BOOL HU_Responder(event_t* ev);
 
 void HU_Ticker(void);
 void HU_Drawer(void);
 char HU_dequeueChatChar(void);
 void HU_Erase(void);
 
+// [RH] Draw deathmatch scores
+
+void HU_DrawScores (int me);
 
 #endif
 //-----------------------------------------------------------------------------

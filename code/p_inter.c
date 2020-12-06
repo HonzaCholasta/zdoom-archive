@@ -22,8 +22,6 @@
 //-----------------------------------------------------------------------------
 
 
-static const char
-rcsid[] = "$Id: p_inter.c,v 1.4 1997/02/03 22:45:11 b1 Exp $";
 
 
 // Data.
@@ -38,15 +36,12 @@ rcsid[] = "$Id: p_inter.c,v 1.4 1997/02/03 22:45:11 b1 Exp $";
 
 #include "am_map.h"
 
-#include "c_console.h"
+#include "c_consol.h"
 
 #include "p_local.h"
 
 #include "s_sound.h"
 
-#ifdef __GNUG__
-#pragma implementation "p_inter.h"
-#endif
 #include "p_inter.h"
 
 
@@ -72,7 +67,7 @@ int 	clipammo[NUMAMMO] = {10, 4, 20, 1};
 // Returns false if the ammo can't be picked up at all
 //
 
-boolean P_GiveAmmo (player_t *player, ammotype_t ammo, int num)
+BOOL P_GiveAmmo (player_t *player, ammotype_t ammo, int num)
 {
 	int 		oldammo;
 		
@@ -162,14 +157,12 @@ boolean P_GiveAmmo (player_t *player, ammotype_t ammo, int num)
 // P_GiveWeapon
 // The weapon name may have a MF_DROPPED flag ored in.
 //
-boolean P_GiveWeapon (player_t *player, weapontype_t weapon, boolean dropped)
+BOOL P_GiveWeapon (player_t *player, weapontype_t weapon, BOOL dropped)
 {
-	boolean 	gaveammo;
-	boolean 	gaveweapon;
+	BOOL 	gaveammo;
+	BOOL 	gaveweapon;
 		
-	if (netgame
-		&& (deathmatch!=2)
-		 && !dropped )
+	if (netgame && (!deathmatch->value || dmflags & DF_WEAPONS_STAY) && !dropped)
 	{
 		// leave placed weapons forever on net games
 		if (player->weaponowned[weapon])
@@ -178,13 +171,13 @@ boolean P_GiveWeapon (player_t *player, weapontype_t weapon, boolean dropped)
 		player->bonuscount += BONUSADD;
 		player->weaponowned[weapon] = true;
 
-		if (deathmatch)
+		if (deathmatch->value)
 			P_GiveAmmo (player, weaponinfo[weapon].ammo, 5);
 		else
 			P_GiveAmmo (player, weaponinfo[weapon].ammo, 2);
 		player->pendingweapon = weapon;
 
-		if (player == &players[consoleplayer])
+		if (player == &players[displayplayer])		// [RH] Not consoleplayer
 			S_StartSound (ORIGIN_AMBIENT, sfx_wpnup);
 		return false;
 	}
@@ -219,7 +212,7 @@ boolean P_GiveWeapon (player_t *player, weapontype_t weapon, boolean dropped)
 // P_GiveBody
 // Returns false if the body isn't needed at all
 //
-boolean P_GiveBody (player_t *player, int num)
+BOOL P_GiveBody (player_t *player, int num)
 {
 	if (player->health >= MAXHEALTH)
 		return false;
@@ -239,7 +232,7 @@ boolean P_GiveBody (player_t *player, int num)
 // Returns false if the armor is worse
 // than the current armor.
 //
-boolean P_GiveArmor (player_t *player, int armortype)
+BOOL P_GiveArmor (player_t *player, int armortype)
 {
 	int 		hits;
 		
@@ -271,7 +264,7 @@ void P_GiveCard (player_t *player, card_t card)
 //
 // P_GivePower
 //
-boolean P_GivePower (player_t *player, int /*powertype_t*/ power)
+BOOL P_GivePower (player_t *player, int /*powertype_t*/ power)
 {
 	if (power == pw_invulnerability)
 	{
@@ -361,8 +354,8 @@ void P_TouchSpecialThing (mobj_t *special, mobj_t *toucher)
 		// bonus items
 	  case SPR_BON1:
 		player->health++;				// can go over 100%
-		if (player->health > deh_MaxHealth)
-			player->health = deh_MaxHealth;
+		if (player->health > deh_MaxSoulsphere)
+			player->health = deh_MaxSoulsphere;
 		player->mo->health = player->health;
 		player->message = GOTHTHBONUS;
 		break;
@@ -637,7 +630,7 @@ void P_TouchSpecialThing (mobj_t *special, mobj_t *toucher)
 	}
 	P_RemoveMobj (special);
 	player->bonuscount += BONUSADD;
-	if (player == &players[consoleplayer]) {
+	if (player == &players[displayplayer]) {	// [RH] Not consoleplayer
 		if (sound == sfx_getpow)
 			S_StartSound (ORIGIN_SURROUND3, sound);
 		else
@@ -646,10 +639,259 @@ void P_TouchSpecialThing (mobj_t *special, mobj_t *toucher)
 }
 
 
+// [RH]
+// ClientObituary: Show a message when a player dies
+//
+void ClientObituary (mobj_t *self, mobj_t *inflictor, mobj_t *attacker)
+{
+	int		mod;
+	char	*message;
+	char	*message2;
+	BOOL	friendly;
+
+	if (1) {
+		friendly = MeansOfDeath & MOD_FRIENDLY_FIRE;
+		mod = MeansOfDeath & ~MOD_FRIENDLY_FIRE;
+		message = NULL;
+		message2 = "";
+
+		switch (mod) {
+			case MOD_SUICIDE:
+				message = "suicides";
+				break;
+			case MOD_FALLING:
+				message = "fell too far";
+				break;
+			case MOD_CRUSH:
+				message = "was squished";
+				break;
+			case MOD_EXIT:
+				message = "tried to leave";
+				break;
+			case MOD_WATER:
+				message = "has no gills";
+				break;
+			case MOD_SLIME:
+				message = "mutated";
+				break;
+			case MOD_LAVA:
+				message = "melted";
+				break;
+			case MOD_BARREL:
+				message = "went boom";
+				break;
+			case MOD_SPLASH:
+				message = "stood in the wrong spot";
+				break;
+		}
+
+		if (attacker && !message) {
+			if (attacker == self) {
+				switch (mod) {
+					case MOD_R_SPLASH:
+					case MOD_ROCKET:
+						message = "should have stood back";
+						break;
+					default:
+						message = "killed himself";
+						break;
+				}
+			} else if (!attacker->player) {
+				switch (attacker->type) {
+					case MT_STEALTHBABY:
+						message = "thought he saw an arachnotron";
+						break;
+					case MT_STEALTHVILE:
+						message = "thought he saw an archvile";
+						break;
+					case MT_STEALTHBRUISER:
+						message = "thought he saw a Baron of Hell";
+						break;
+					case MT_STEALTHHEAD:
+						message = "thought he saw a mancubus";
+						break;
+					case MT_STEALTHCHAINGUY:
+						message = "thought he saw a chaingunner";
+						break;
+					case MT_STEALTHSERGEANT:
+						message = "thought he saw a demon";
+						break;
+					case MT_STEALTHKNIGHT:
+						message = "thought he saw a Hell Knight";
+						break;
+					case MT_STEALTHIMP:
+						message = "thought he saw an imp";
+						break;
+					case MT_STEALTHFATSO:
+						message = "thought he saw a mancubus";
+						break;
+					case MT_STEALTHUNDEAD:
+						message = "thought he saw a revenant";
+						break;
+					case MT_STEALTHSHOTGUY:
+						message = "thought he saw a sargeant";
+						break;
+					case MT_STEALTHZOMBIE:
+						message = "thought he saw a zombieman";
+						break;
+					default:
+						if (mod == MOD_HIT) {
+							switch (attacker->type) {
+								case MT_UNDEAD:
+									message = "was punched by a revenant";
+									break;
+								case MT_TROOP:
+									message = "was slashed by an imp";
+									break;
+								case MT_HEAD:
+									message = "got too close to a mancubus";
+									break;
+								case MT_SERGEANT:
+									message = "was bit by a demon";
+									break;
+								case MT_SHADOWS:
+									message = "was eaten by a spectre";
+									break;
+								case MT_BRUISER:
+									message = "was ripped open by a Baron of Hell";
+									break;
+								case MT_KNIGHT:
+									message = "was gutted by a Hell Knight";
+									break;
+								default:
+									break;
+							}
+						} else {
+							switch (attacker->type) {
+								case MT_POSSESSED:
+									message = "was killed by a zombieman";
+									break;
+								case MT_SHOTGUY:
+									message = "was shot by a sargeant";
+									break;
+								case MT_VILE:
+									message = "was incinerated by an archvile";
+									break;
+								case MT_UNDEAD:
+									message = "couldn't evade a revenant's fireball";
+									break;
+								case MT_FATSO:
+									message = "was squashed by a mancubus";
+									break;
+								case MT_CHAINGUY:
+									message = "was perforated by a chaingunner";
+									break;
+								case MT_SKULL:
+									message = "was spooked by a lost soul";
+									break;
+								case MT_TROOP:
+									message = "was burned by an imp";
+									break;
+								case MT_HEAD:
+									message = "was mesmerized by a cacodemon";
+									break;
+								case MT_BRUISER:
+									message = "was bruised by a Baron of Hell";
+									break;
+								case MT_KNIGHT:
+									message = "was splayed by a Hell Knight";
+									break;
+								case MT_SPIDER:
+									message = "stood in awe of the spider mastermind";
+									break;
+								case MT_BABY:
+									message = "let an arachnotron get him";
+									break;
+								case MT_CYBORG:
+									message = "was splattered by a cyberdemon";
+									break;
+								case MT_WOLFSS:
+									message = "becomes Hitler's personal slave";
+									break;
+								default:
+									break;
+							}
+						}
+						break;
+				}
+			}
+		}
+
+		if (message) {
+			Printf ("%s %s.\n", self->player->userinfo->netname, message);
+			return;
+		}
+
+		if (attacker && attacker->player) {
+			switch (mod) {
+				case MOD_FIST:
+					message = "chewed on";
+					message2 = "'s fist";
+					break;
+				case MOD_CHAINSAW:
+					message = "was mowed over by";
+					message2 = "'s chainsaw";
+					break;
+				case MOD_PISTOL:
+					message = "was tickled by";
+					break;
+				case MOD_SHOTGUN:
+					message = "chewed on";
+					message2 = "'s boomstick";
+					break;
+				case MOD_SSHOTGUN:
+					message = "was splattered by";
+					message2 = "'s super shotgun";
+					break;
+				case MOD_CHAINGUN:
+					message = "was mowed down by";
+					break;
+				case MOD_ROCKET:
+					message = "rode";
+					message2 = "'s rocket";
+					break;
+				case MOD_R_SPLASH:
+					message = "almost dodged";
+					message2 = "'s rocket";
+					break;
+				case MOD_PLASMARIFLE:
+					message = "was melted by";
+					break;
+				case MOD_BFG_BOOM:
+					message = "was splintered by";
+					message2 = "'s BFG";
+					break;
+				case MOD_BFG_SPLASH:
+					message = "couldn't hide from";
+					message2 = "'s BFG";
+					break;
+				case MOD_TELEFRAG:
+					message = "was stepped on by";
+					break;
+				case MOD_FALLXFER:
+					message = "was";
+					message2 = "'s cushion";
+					break;
+			}
+		}
+
+		if (message) {
+			Printf ("%s %s %s%s\n", self->player->userinfo->netname, message,
+					attacker->player->userinfo->netname, message2);
+			return;
+		}
+	}
+
+	Printf ("%s died.\n", self->player->userinfo->netname);
+}
+
+
 //
 // KillMobj
 //
-void P_KillMobj (mobj_t *source, mobj_t *target)
+extern cvar_t *fraglimit;
+
+void P_KillMobj (mobj_t *source, mobj_t *target, mobj_t *inflictor)
 {
 	mobjtype_t	item;
 	mobj_t* 	mo;
@@ -670,8 +912,20 @@ void P_KillMobj (mobj_t *source, mobj_t *target)
 			level.killed_monsters++;
 		}
 
-		if (target->player)
+		if (target->player) {
 			source->player->frags[target->player-players]++;
+			if (target->player == source->player)	// [RH] Cumulative frag count
+				source->player->fragcount--;
+			else
+				source->player->fragcount++;
+
+			// [RH] Implement fraglimit
+			if (deathmatch->value && fraglimit->value &&
+				(int)fraglimit->value == source->player->fragcount) {
+				Printf ("%s got %d frags.\n", source->player->userinfo->netname, source->player->fragcount);
+				G_ExitLevel ();
+			}
+		}
 	}
 	else if (!netgame && (target->flags & MF_COUNTKILL) )
 	{
@@ -683,22 +937,28 @@ void P_KillMobj (mobj_t *source, mobj_t *target)
 	
 	if (target->player)
 	{
+		// [RH] Force a delay between death and respawn
+		if (!olddemo)
+			target->player->respawn_time = level.time + TICRATE;
+		else
+			target->player->respawn_time = level.time;
+
 		// count environment kills against you
-		if (!source)	
+		if (!source) {
 			target->player->frags[target->player-players]++;
+			target->player->fragcount--;	// [RH] Cumulative frag count
+		}
 						
 		target->flags &= ~MF_SOLID;
 		target->player->playerstate = PST_DEAD;
 		P_DropWeapon (target->player);
 
-		if (target->player == &players[consoleplayer]
-			&& automapactive)
+		if (target->player == &players[consoleplayer] && automapactive)
 		{
 			// don't die in auto map,
 			// switch view prior to dying
 			AM_Stop ();
 		}
-		
 	}
 
 	if (target->health < -target->info->spawnhealth 
@@ -708,13 +968,16 @@ void P_KillMobj (mobj_t *source, mobj_t *target)
 	}
 	else
 		P_SetMobjState (target, target->info->deathstate);
-	target->tics -= P_Random()&3;
+	target->tics -= P_Random (pr_killmobj) & 3;
 
 	if (target->tics < 1)
 		target->tics = 1;
 				
 	//	I_StartSound (&actor->r, actor->info->deathsound);
 
+	// [RH] Death messages
+	if (target->player)
+		ClientObituary (target, inflictor, source);
 
 	// Drop stuff.
 	// This determines the kind of object spawned
@@ -738,8 +1001,9 @@ void P_KillMobj (mobj_t *source, mobj_t *target)
 		return;
 	}
 
-	mo = P_SpawnMobj (target->x,target->y,ONFLOORZ, item);
+	mo = P_SpawnMobj (target->x,target->y,0, item, ONFLOORZ);
 	mo->flags |= MF_DROPPED;	// special versions of items
+
 }
 
 
@@ -756,7 +1020,9 @@ void P_KillMobj (mobj_t *source, mobj_t *target)
 // Source can be NULL for slime, barrel explosions
 // and other environmental stuff.
 //
-void P_DamageMobj (mobj_t *target, mobj_t *inflictor, mobj_t *source, int damage)
+int MeansOfDeath;
+
+void P_DamageMobj (mobj_t *target, mobj_t *inflictor, mobj_t *source, int damage, int mod)
 {
 	unsigned	ang;
 	int 		saved;
@@ -769,6 +1035,8 @@ void P_DamageMobj (mobj_t *target, mobj_t *inflictor, mobj_t *source, int damage
 				
 	if (target->health <= 0)
 		return;
+
+	MeansOfDeath = mod;
 
 	// [RH] Andy Baker's Stealth monsters
 	if (target->flags & MF_STEALTH)
@@ -806,7 +1074,7 @@ void P_DamageMobj (mobj_t *target, mobj_t *inflictor, mobj_t *source, int damage
 		if ( damage < 40
 			 && damage > target->health
 			 && target->z - inflictor->z > 64*FRACUNIT
-			 && (P_Random ()&1) )
+			 && (P_Random (pr_damagemobj)&1) )
 		{
 			ang += ANG180;
 			thrust *= 4;
@@ -873,11 +1141,11 @@ void P_DamageMobj (mobj_t *target, mobj_t *inflictor, mobj_t *source, int damage
 	target->health -= damage;	
 	if (target->health <= 0)
 	{
-		P_KillMobj (source, target);
+		P_KillMobj (source, target, inflictor);
 		return;
 	}
 
-	if ( (P_Random () < target->info->painchance)
+	if ( (P_Random (pr_damagemobj) < target->info->painchance)
 		 && !(target->flags&MF_SKULLFLY) )
 	{
 		target->flags |= MF_JUSTHIT;	// fight back!
@@ -902,32 +1170,20 @@ void P_DamageMobj (mobj_t *target, mobj_t *inflictor, mobj_t *source, int damage
 						
 }
 
+BOOL CheckCheatmode (void);
+
 void Cmd_Kill (player_t *plyr, int argc, char **argv)
 {
 	if (argc > 1 && !stricmp (argv[1], "monsters")) {
 		// Kill all the monsters
+		if (CheckCheatmode ())
+			return;
 
-		int killcount=0;
-		thinker_t* currentthinker;
-
-		currentthinker = thinkercap.next;
-		while (currentthinker != &thinkercap) {
-			if ( (currentthinker->function.acp1 == (actionf_p1)P_MobjThinker)
-				 && ((((((mobj_t *)currentthinker)->flags)&MF_COUNTKILL)==MF_COUNTKILL)||(((mobj_t *)currentthinker)->type==MT_SKULL))
-				 && ((((mobj_t *)currentthinker)->health)>0))
-				{
-					P_DamageMobj ((mobj_t *)currentthinker, NULL, NULL, 10000);
-					killcount++;
-				}
-			currentthinker = currentthinker->next;
-		}
-		Printf ("%d Monsters Killed\n", killcount);
+		Net_WriteByte (DEM_GENERICCHEAT);
+		Net_WriteByte (CHT_MASSACRE);
 	} else {
 		// Kill the player
-
-		while (plyr->health > 0) {
-			P_DamageMobj (plyr->mo, NULL, NULL, 10000);
-		}
+		Net_WriteByte (DEM_SUICIDE);
 	}
 	C_HideConsole ();
 }

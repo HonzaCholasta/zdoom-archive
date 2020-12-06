@@ -5,12 +5,15 @@
 #include <stdlib.h>
 
 #include "dstrings.h"
-#include "c_console.h"
+#include "c_consol.h"
 #include "c_cvars.h"
-#include "c_dispatch.h"
+#include "c_dispch.h"
 #include "hu_stuff.h"
+#include "i_input.h"
 #include "i_system.h"
+#include "m_swap.h"
 #include "v_video.h"
+#include "v_text.h"
 #include "w_wad.h"
 #include "z_zone.h"
 #include "r_main.h"
@@ -19,8 +22,15 @@
 
 #include "doomstat.h"
 
+static void C_TabComplete (void);
+static BOOL TabbedLast;		// Last key pressed was tab
+
+
+static screen_t conback;		// As of 1.13, Console backdrop is just another screen
+
+
 extern int		gametic;
-extern boolean	automapactive;	// in AM_map.c
+extern BOOL		automapactive;	// in AM_map.c
 
 typedef enum cstate_t {
 	up=0, down, falling, rising
@@ -29,20 +39,26 @@ typedef enum cstate_t {
 
 int			ConRows, ConCols, PhysRows;
 char		*Lines, *Last = NULL;
-boolean		vidactive = false, gotconback = false;
-boolean		cursoron = false;
+BOOL		vidactive = false, gotconback = false;
+BOOL		cursoron = false;
 int			ShowRows, SkipRows, ConsoleTicker, ConBottom, ConScroll, RowAdjust;
 int			CursorTicker, ScrollState = 0;
-byte		conback[320*200];
 constate	ConsoleState = up;
 char		VersionString[8];
+
+event_t		RepeatEvent;		// always type ev_keydown
+int			RepeatCountdown;
+BOOL		KeysShifted;
+
 
 #define SCROLLUP 1
 #define SCROLLDN 2
 #define SCROLLNO 0
 
 extern cvar_t *showMessages;
-extern boolean message_dontfuckwithme;		// Who came up with this name?
+extern BOOL message_dontfuckwithme;		// Who came up with this name?
+
+extern BOOL chat_on;
 
 struct History {
 	struct History *Older;
@@ -52,7 +68,7 @@ struct History {
 
 // CmdLine[0]  = # of chars on command line
 // CmdLine[1]  = cursor position
-// CmdLine[2+] = command line (max 256 chars + NULL)
+// CmdLine[2+] = command line (max 255 chars + NULL)
 // CmdLine[259]= offset from beginning of cmdline to display
 static byte CmdLine[260];
 
@@ -65,8 +81,6 @@ static int HistSize;
 cvar_t *NotifyTime;
 static byte NotifyStrings[4][256];
 
-static int lasttic;
-
 static char ShiftLOT[] = {
 	'\"', '(', ')', '*', '+', '<', '_', '>', '?',							//  9 39->
 	')', '!', '@', '#', '$', '%', '^', '&', '*', '(', ':', ':', '<', '+',	// 14 ->61
@@ -78,8 +92,11 @@ static char ShiftLOT[] = {
 
 FILE *Logfile = NULL;
 
-extern M_StringWidth (byte *);	// from m_menu.c
+
 extern patch_t *hu_font[HU_FONTSIZE];	// from hu_stuff.c
+
+void C_HandleKey (event_t *ev, byte *buffer, int len);
+
 
 static int C_hu_CharWidth (int c)
 {
@@ -90,16 +107,16 @@ static int C_hu_CharWidth (int c)
 	return hu_font[c]->width;
 }
 
-void C_InitConsole (int width, int height, boolean ingame)
+void C_InitConsole (int width, int height, BOOL ingame)
 {
 	int row;
 	char *zap;
 	char *old;
 	int cols, rows;
 
-	if (vidactive = ingame) {
+	if ( (vidactive = ingame) ) {
 		if (!gotconback) {
-			boolean stylize = false;
+			BOOL stylize = false;
 			patch_t *patch;
 			int num;
 
@@ -111,26 +128,29 @@ void C_InitConsole (int width, int height, boolean ingame)
 
 			patch = W_CacheLumpNum (num, PU_CACHE);
 
-			V_DrawPatch (0, 0, 0, patch);
+			V_AllocScreen (&conback, SHORT(patch->width), SHORT(patch->height), 8);
+			V_LockScreen (&conback);
+
+			V_DrawPatch (0, 0, &conback, patch);
 
 			if (stylize) {
 				byte *fadetable = W_CacheLumpName ("COLORMAP", PU_CACHE), f, *v, *i;
 				int x, y;
 
-				for (y = 0; y < 200; y++) {
-					i = screens[0] + SCREENPITCH * y;
+				for (y = 0; y < conback.height; y++) {
+					i = conback.buffer + conback.pitch * y;
 					if (y < 8 || y > 191) {
 						if (y < 8)
 							f = y;
 						else
 							f = 199 - y;
 						v = fadetable + (30 - f) * 256;
-						for (x = 0; x < 320; x++) {
+						for (x = 0; x < conback.width; x++) {
 							*i = v[*i];
 							i++;
 						}
 					} else {
-						for (x = 0; x < 320; x++) {
+						for (x = 0; x < conback.width; x++) {
 							if (x <= 8)
 								v = fadetable + (30 - x) * 256;
 							else if (x > 312)
@@ -143,7 +163,7 @@ void C_InitConsole (int width, int height, boolean ingame)
 			}
 			sprintf (VersionString, "v%d.%d", VERSION / 100, VERSION % 100);
 
-			V_GetBlock (0, 0, 0, 320, 200, conback);
+			V_UnlockScreen (&conback);
 
 			gotconback = true;
 		}
@@ -181,8 +201,7 @@ void C_InitConsole (int width, int height, boolean ingame)
 			} else {
 				string[zap[1]] = 0;
 			}
-
-			Printf (string);
+			Printf ("%s", string);
 		}
 		free (old);
 		ShowRows = 0;
@@ -191,41 +210,22 @@ void C_InitConsole (int width, int height, boolean ingame)
 	}
 }
 
-void C_AddNotifyString (char *s)
+void C_AddNotifyString (const char *source)
 {
-	int splitpos, width;
-	char *nl;
+	brokenlines_t *lines;
+	int i;
 
-	if (!(nl = strchr (s, '\n')))
-		// Only add strings with newlines
+	if (!(lines = V_BreakLines (320, source)))
 		return;
 
-	// Split the string up into sub-strings, none of which are
-	// wider than the screen when printed with the hu_font,
-	// then store them in the NotifyStrings[] array.
-
-	while (*s) {
-		if (s == nl) {
-			nl = strchr (s, '\n');
-		}
-		*nl = 0;
-		splitpos = strlen (s) - 1;
-		if ((width = M_StringWidth (s)) > CleanWidth) {
-			while ((width -= C_hu_CharWidth (s[splitpos])) > CleanWidth) {
-				splitpos--;
-			}
-		}
-		splitpos++;
+	for (i = 0; lines[i].width != -1; i++) {
 		memmove (NotifyStrings[0], NotifyStrings[1], 256 * 3);
-		strncpy (NotifyStrings[3], s, splitpos);
-		NotifyStrings[3][splitpos] = 0;
-		s += splitpos;
-		ShowRows++;
-		if (s == nl) {
-			*nl = '\n';
-			s++;
-		}
+		strcpy (NotifyStrings[3], lines[i].string);
 	}
+
+	V_FreeBrokenLines (lines);
+
+	ShowRows += i;
 
 	if (ShowRows > 4)
 		ShowRows = 4;
@@ -239,32 +239,21 @@ void C_AddNotifyString (char *s)
 /* Provide our own Printf() that is sensitive of the
  * console status (in or out of game)
  */
-int VPrintf (const char *outline) {
+int PrintString (const char *outline) {
 	const char *cp, *newcp;
-	static xp = 0;
+	static int xp = 0;
 	int newxp;
-	boolean scroll;
+	BOOL scroll;
 
 	if (Logfile) {
 		fputs (outline, Logfile);
-#ifdef _DEBUG
+//#ifdef _DEBUG
 		fflush (Logfile);
-#endif
+//#endif
 	}
 
-#ifdef _MSC_VER
-// C_AddNotifyString() is essentially const, since it
-// leaves outline in the same state it was in when we
-// passed it to the function
-#pragma warning(disable: 4090)
-#pragma warning(disable: 4024)
-#endif
 	if (vidactive)
 		C_AddNotifyString (outline);
-#ifdef _MSC_VER
-#pragma warning(default: 4090)
-#pragma warning(default: 4024)
-#endif
 
 	cp = outline;
 	while (*cp) {
@@ -283,7 +272,7 @@ int VPrintf (const char *outline) {
 			int x;
 
 			for (x = xp, poop = cp; poop < newcp; poop++, x++) {
-				Last[x + 2] = (*poop) ^ printxormask;
+				Last[x+2] = ((*poop) < 32) ? (*poop) : ((*poop) ^ printxormask);
 			}
 
 			if (Last[1] < xp + (newcp - cp))
@@ -326,34 +315,65 @@ int VPrintf (const char *outline) {
 	return strlen (outline);
 }
 
+int VPrintf (const char *format, va_list parms)
+{
+	char outline[8192];
+
+	vsprintf (outline, format, parms);
+	return PrintString (outline);
+}
+
 int Printf (const char *format, ...)
 {
 	va_list argptr;
-	char outline[512];
+	int count;
 
 	va_start (argptr, format);
-	vsprintf (outline, format, argptr);
+	count = VPrintf (format, argptr);
 	va_end (argptr);
 
-	return VPrintf (outline);
+	return count;
 }
 
 int Printf_Bold (const char *format, ...)
 {
 	va_list argptr;
-	char outline[512];
-
-	va_start (argptr, format);
-	vsprintf (outline, format, argptr);
-	va_end (argptr);
+	int count;
 
 	printxormask = 0x80;
-	return VPrintf (outline);
+	va_start (argptr, format);
+	count = VPrintf (format, argptr);
+	va_end (argptr);
+
+	return count;
+}
+
+int DPrintf (const char *format, ...)
+{
+	va_list argptr;
+	int count;
+
+	if (developer->value) {
+		va_start (argptr, format);
+		count = VPrintf (format, argptr);
+		va_end (argptr);
+		return count;
+	} else {
+		return 0;
+	}
 }
 
 void C_FlushDisplay (void)
 {
 	ShowRows = 0;
+}
+
+void C_NewModeAdjust (void)
+{
+	C_InitConsole (screens[0].width, screens[0].height, true);
+	ShowRows = 0;
+	if (ConBottom > screens[0].height / 16 || ConsoleState == down)
+		ConBottom = screens[0].height / 16;
 }
 
 void C_Ticker (void)
@@ -369,20 +389,30 @@ void C_Ticker (void)
 			case SCROLLUP:
 				RowAdjust++;
 				break;
+
 			case SCROLLDN:
 				if (RowAdjust)
 					RowAdjust--;
 				break;
+
+			default:
+				if (RepeatCountdown) {
+					if (--RepeatCountdown == 0) {
+						RepeatCountdown = KeyRepeatRate;
+						C_HandleKey (&RepeatEvent, CmdLine, 255);
+					}
+				}
+				break;
 		}
 
 		if (ConsoleState == falling) {
-			ConBottom += (gametic - lasttic) * (SCREENHEIGHT / 100);
-			if (ConBottom >= SCREENHEIGHT / 16) {
-				ConBottom = SCREENHEIGHT / 16;
+			ConBottom += (gametic - lasttic) * (screens[0].height / 100);
+			if (ConBottom >= screens[0].height / 16) {
+				ConBottom = screens[0].height / 16;
 				ConsoleState = down;
 			}
 		} else if (ConsoleState == rising) {
-			ConBottom -= (gametic - lasttic) * (SCREENHEIGHT / 100);
+			ConBottom -= (gametic - lasttic) * (screens[0].height / 100);
 			if (ConBottom <= 0) {
 				ConsoleState = up;
 				ConBottom = 0;
@@ -406,12 +436,14 @@ void C_Ticker (void)
 
 	lasttic = gametic;
 }
+extern byte *WhiteMap;
+extern byte *Ranges;
 
-static void C_DrawNotifyText (char *zap)
+static void C_DrawNotifyText (void)
 {
 	int lines, fact;
 	
-	if (ShowRows == 0 || gamestate != GS_LEVEL)
+	if (ShowRows == 0 || gamestate != GS_LEVEL || chat_on || menuactive)
 		return;
 
 	fact = 8 * CleanYfac;
@@ -420,8 +452,17 @@ static void C_DrawNotifyText (char *zap)
 		C_EraseLines (0, (ShowRows + (ShowRows < 4)) * fact);
 	}
 
-	for (lines = 0; lines < ShowRows; lines++) {
-		V_DrawTextClean (0, (ShowRows - lines - 1) * fact, NotifyStrings[3 - lines]);
+	{
+		byte *holdmap = WhiteMap;
+
+		// Use normal red map. Quick hack until this is truly customizable.
+		WhiteMap = Ranges + 6 * 256;
+
+		for (lines = 0; lines < ShowRows; lines++) {
+			V_DrawTextClean (0, (ShowRows - lines - 1) * fact, NotifyStrings[3 - lines]);
+		}
+
+		WhiteMap = holdmap;
 	}
 }
 
@@ -435,41 +476,29 @@ void C_DrawConsole (void)
 	lines = ConBottom - 2;
 	zap = Last - (SkipRows + RowAdjust) * (ConCols + 2);
 
-	if ((ConBottom < oldbottom) && (gamestate == GS_LEVEL) && (viewwindowx || viewwindowy)) {
+	if ((ConBottom < oldbottom) && (gamestate == GS_LEVEL) && (viewwindowx || viewwindowy)
+		&& !automapactive) {
 		C_EraseLines (ConBottom * 8, oldbottom * 8);
 	}
 
 	oldbottom = ConBottom;
 
 	if (ConsoleState == up) {
-		C_DrawNotifyText (zap);
+		C_DrawNotifyText ();
 		return;
-	} else {
-		unsigned xinc, yinc, x, y, ybot, xmax;
-		byte *drawspot, *fromspot;
+	} else if (ConBottom) {
+		int visheight, realheight;
 
-		xinc = (320 * 0x10000) / SCREENWIDTH;
-		yinc = (200 * 0x10000) / SCREENHEIGHT;
-		ybot = ConBottom * yinc * 8;
-		drawspot = screens[0];
-		xmax = SCREENWIDTH * xinc;
+		visheight = ConBottom * 8;
+		realheight = (visheight * conback.height) / screens[0].height;
 
-		if (xinc == 0x10000) {
-			for (y = 0; y < ybot; y += yinc) {
-				memcpy (drawspot, &conback[320 * (199 - ((ybot - y) >> 16))], 320);
-				drawspot += SCREENPITCH;
-			}
-		} else {
-			drawspot = screens[0];
-			for (y = 0; y < ybot; y += yinc) {
-				fromspot = &conback[320 * (199 - ((ybot - y) >> 16))];
-				for (x = 0; x < xmax; x += xinc) {
-					*drawspot++ = fromspot[x >> 16];
-				}
-			}
-		}
+		V_Blit (&conback, 0, conback.height - realheight, conback.width, realheight,
+				&screens[0], 0, 0, screens[0].width, visheight);
+
 		if (ConBottom >= 2)
-			V_PrintStr (SCREENWIDTH - 8 - strlen(VersionString) * 8, ConBottom * 8 - 16, VersionString, strlen(VersionString), 0x80);
+			V_PrintStr (screens[0].width - 8 - strlen(VersionString) * 8,
+						ConBottom * 8 - 16,
+						VersionString, strlen(VersionString), 0x80);
 	}
 
 	if (lines > 0) {
@@ -480,10 +509,13 @@ void C_DrawConsole (void)
 		if (ConBottom > 1) {
 			V_PrintStr (left, (ConBottom - 2) * 8, "]", 1, 0x80);
 #define MIN(a,b) (((a)<(b))?(a):(b))
-			V_PrintStr (left + 8, (ConBottom - 2) * 8, &CmdLine[2+CmdLine[259]], MIN(CmdLine[0] - CmdLine[259], ConCols - 1), 0);
+			V_PrintStr (left + 8, (ConBottom - 2) * 8,
+						&CmdLine[2+CmdLine[259]],
+						MIN(CmdLine[0] - CmdLine[259], ConCols - 1), 0);
 #undef MIN
 			if (cursoron) {
-				V_PrintStr (left + 8 + (CmdLine[1] - CmdLine[259])* 8, (ConBottom - 2) * 8, "\xb", 1, 0);
+				V_PrintStr (left + 8 + (CmdLine[1] - CmdLine[259])* 8,
+							(ConBottom - 2) * 8, "\xb", 1, 0);
 			}
 			if (RowAdjust && ConBottom > 2) {
 				char c;
@@ -502,9 +534,11 @@ void C_DrawConsole (void)
 
 void C_ToggleConsole (void)
 {
-	if (ConsoleState == up || ConsoleState == rising) {
+	// Only let the console go up if chat mode is on
+	if (!chat_on && (ConsoleState == up || ConsoleState == rising)) {
 		ConsoleState = falling;
 		HistPos = NULL;
+		TabbedLast = false;
 	} else {
 		ConsoleState = rising;
 	}
@@ -546,35 +580,15 @@ static void makestartposgood (void)
 	CmdLine[259] = n;
 }
 
-boolean C_Responder (event_t *ev)
+void C_HandleKey (event_t *ev, byte *buffer, int len)
 {
-	static boolean shift = false;
-
-	if (ConsoleState == up || ConsoleState == rising) {
-		return false;
-	}
-
-	if (ev->type == ev_keyup) {
-		switch (ev->data1) {
-			case KEY_PGUP:
-			case KEY_PGDN:
-				ScrollState = SCROLLNO;
-				break;
-			case KEY_RSHIFT:
-				shift = false;
-				break;
-			default:
-				return false;
-		}
-		return true;
-	}
-
-	if (ev->type != ev_keydown)
-		return false;
-
 	switch (ev->data1) {
+		case KEY_TAB:
+			// Try to do tab-completion
+			C_TabComplete ();
+			break;
 		case KEY_PGUP:
-			if (shift)
+			if (KeysShifted)
 				// Move to top of console buffer
 				RowAdjust = ConRows - SkipRows - ConBottom;
 			else
@@ -582,7 +596,7 @@ boolean C_Responder (event_t *ev)
 				ScrollState = SCROLLUP;
 			break;
 		case KEY_PGDN:
-			if (shift)
+			if (KeysShifted)
 				// Move to bottom of console buffer
 				RowAdjust = 0;
 			else
@@ -592,64 +606,68 @@ boolean C_Responder (event_t *ev)
 		case KEY_HOME:
 			// Move cursor to start of line
 
-			CmdLine[1] = CmdLine[259] = 0;
+			buffer[1] = buffer[len+4] = 0;
 			break;
 		case KEY_END:
 			// Move cursor to end of line
 
-			CmdLine[1] = CmdLine[0];
+			buffer[1] = buffer[0];
 			makestartposgood ();
 			break;
 		case KEY_LEFTARROW:
 			// Move cursor left one character
 
-			if (CmdLine[1]) {
-				CmdLine[1]--;
+			if (buffer[1]) {
+				buffer[1]--;
 				makestartposgood ();
 			}
 			break;
 		case KEY_RIGHTARROW:
 			// Move cursor right one character
 
-			if (CmdLine[1] < CmdLine[0]) {
-				CmdLine[1]++;
+			if (buffer[1] < buffer[0]) {
+				buffer[1]++;
 				makestartposgood ();
 			}
 			break;
 		case KEY_BACKSPACE:
 			// Erase character to left of cursor
 
-			if (CmdLine[0] && CmdLine[1]) {
+			if (buffer[0] && buffer[1]) {
 				char *c, *e;
 
-				e = &CmdLine[CmdLine[0] + 2];
-				c = &CmdLine[CmdLine[1] + 2];
+				e = &buffer[buffer[0] + 2];
+				c = &buffer[buffer[1] + 2];
 
 				for (; c < e; c++)
 					*(c - 1) = *c;
 				
-				CmdLine[0]--;
-				CmdLine[1]--;
-				if (CmdLine[259])
-					CmdLine[259]--;
+				buffer[0]--;
+				buffer[1]--;
+				if (buffer[len+4])
+					buffer[len+4]--;
 				makestartposgood ();
 			}
+
+			TabbedLast = false;
 			break;
 		case KEY_DEL:
 			// Erase charater under cursor
 
-			if (CmdLine[1] < CmdLine[0]) {
+			if (buffer[1] < buffer[0]) {
 				char *c, *e;
 
-				e = &CmdLine[CmdLine[0] + 2];
-				c = &CmdLine[CmdLine[1] + 3];
+				e = &buffer[buffer[0] + 2];
+				c = &buffer[buffer[1] + 3];
 
 				for (; c < e; c++)
 					*(c - 1) = *c;
 
-				CmdLine[0]--;
+				buffer[0]--;
 				makestartposgood ();
 			}
+
+			TabbedLast = false;
 			break;
 		case KEY_RALT:
 		case KEY_RCTRL:
@@ -657,7 +675,7 @@ boolean C_Responder (event_t *ev)
 			break;
 		case KEY_RSHIFT:
 			// SHIFT was pressed
-			shift = true;
+			KeysShifted = true;
 			break;
 		case KEY_UPARROW:
 			// Move to previous entry in the command history
@@ -669,11 +687,13 @@ boolean C_Responder (event_t *ev)
 			}
 
 			if (HistPos) {
-				strcpy (&CmdLine[2], HistPos->String);
-				CmdLine[0] = CmdLine[1] = strlen (&CmdLine[2]);
-				CmdLine[259] = 0;
+				strcpy (&buffer[2], HistPos->String);
+				buffer[0] = buffer[1] = strlen (&buffer[2]);
+				buffer[len+4] = 0;
 				makestartposgood();
 			}
+
+			TabbedLast = false;
 			break;
 		case KEY_DOWNARROW:
 			// Move to next entry in the command history
@@ -681,22 +701,23 @@ boolean C_Responder (event_t *ev)
 			if (HistPos && HistPos->Newer) {
 				HistPos = HistPos->Newer;
 			
-				strcpy (&CmdLine[2], HistPos->String);
-				CmdLine[0] = CmdLine[1] = strlen (&CmdLine[2]);
+				strcpy (&buffer[2], HistPos->String);
+				buffer[0] = buffer[1] = strlen (&buffer[2]);
 			} else {
 				HistPos = NULL;
-				CmdLine[0] = CmdLine[1] = 0;
+				buffer[0] = buffer[1] = 0;
 			}
-			CmdLine[259] = 0;
+			buffer[len+4] = 0;
 			makestartposgood();
+			TabbedLast = false;
 			break;
 		default:
-			if (ev->data2 == 13) {
+			if (ev->data2 == '\r') {
 				// Execute command line (ENTER)
 
-				CmdLine[2 + CmdLine[0]] = 0;
+				buffer[2 + buffer[0]] = 0;
 
-				if (HistHead && stricmp (HistHead->String, &CmdLine[2]) == 0) {
+				if (HistHead && stricmp (HistHead->String, &buffer[2]) == 0) {
 					// Command line was the same as the previous one,
 					// so leave the history list alone
 				} else {
@@ -704,9 +725,9 @@ boolean C_Responder (event_t *ev)
 					// or there is nothing in the history list,
 					// so add it to the history list.
 
-					struct History *temp = Malloc (sizeof(struct History) + CmdLine[0]);
+					struct History *temp = Malloc (sizeof(struct History) + buffer[0]);
 
-					strcpy (temp->String, &CmdLine[2]);
+					strcpy (temp->String, &buffer[2]);
 					temp->Older = HistHead;
 					if (HistHead) {
 						HistHead->Newer = temp;
@@ -727,51 +748,95 @@ boolean C_Responder (event_t *ev)
 					}
 				}
 				HistPos = NULL;
-				Printf ("]%s\n", &CmdLine[2]);
-				CmdLine[0] = CmdLine[1] = CmdLine[259] = 0;
-				AddCommandString (&CmdLine[2]);
-			} else if (ev->data2 == '`' || ev->data1 == KEY_ESCAPE) {
+				Printf ("]%s\n", &buffer[2]);
+				buffer[0] = buffer[1] = buffer[len+4] = 0;
+				AddCommandString (&buffer[2]);
+				TabbedLast = false;
+			} else if (ev->data3 == '`' || ev->data1 == KEY_ESCAPE) {
 				// Close console, both ` and ESC clear command line
 
-				CmdLine[0] = CmdLine[1] = CmdLine[259] = 0;
+				buffer[0] = buffer[1] = buffer[len+4] = 0;
 				HistPos = NULL;
 				C_ToggleConsole ();
-			} else if (ev->data2 < 32 || ev->data2 > 126) {
+			} else if (ev->data3 < 32 || ev->data3 > 126) {
 				// Do nothing
 			} else {
 				// Add keypress to command line
 
-				if (CmdLine[0] < 255) {
-					char data = ev->data2;
+				if (buffer[0] < len) {
+					char data = ev->data3;
 
-					if (shift) {
+					if (KeysShifted) {
 						if (data >= 39 && data <= 61)
 							data = ShiftLOT[data-39];
 						else if (data >= 91 && data <= 122)
 							data = ShiftLOT[data-68];
 					}
 
-					if (CmdLine[1] == CmdLine[0]) {
-						CmdLine[CmdLine[0] + 2] = data;
+					if (buffer[1] == buffer[0]) {
+						buffer[buffer[0] + 2] = data;
 					} else {
 						char *c, *e;
 
-						e = &CmdLine[CmdLine[0] + 1];
-						c = &CmdLine[CmdLine[1] + 2];
+						e = &buffer[buffer[0] + 1];
+						c = &buffer[buffer[1] + 2];
 
 						for (; e >= c; e--)
 							*(e + 1) = *e;
 
 						*c = data;
 					}
-					CmdLine[0]++;
-					CmdLine[1]++;
+					buffer[0]++;
+					buffer[1]++;
 					makestartposgood ();
 					HistPos = NULL;
 				}
+				TabbedLast = false;
 			}
 			break;
 	}
+}
+
+BOOL C_Responder (event_t *ev)
+{
+	if (ConsoleState == up || ConsoleState == rising) {
+		return false;
+	}
+
+	if (ev->type == ev_keyup) {
+		if (ev->data1 == RepeatEvent.data1)
+			RepeatCountdown = 0;
+
+		switch (ev->data1) {
+			case KEY_PGUP:
+			case KEY_PGDN:
+				ScrollState = SCROLLNO;
+				break;
+			case KEY_RSHIFT:
+				KeysShifted = false;
+				break;
+			default:
+				return false;
+		}
+	} else if (ev->type == ev_keydown) {
+		// Some keys don't repeat
+		if (ev->data1 == KEY_PGUP ||
+			ev->data1 == KEY_PGDN ||
+			ev->data1 == KEY_RSHIFT ||
+			ev->data1 == KEY_TAB ||
+			ev->data1 == KEY_ENTER ||
+			ev->data1 == KEY_ESCAPE ||
+			ev->data2 == '`')
+			RepeatCountdown = 0;
+		else
+		// Others do.
+			RepeatCountdown = KeyRepeatDelay;
+		RepeatEvent = *ev;
+		C_HandleKey (ev, CmdLine, 255);
+
+	} else
+		return false;
+
 	return true;
 }
 
@@ -803,81 +868,181 @@ void Cmd_Echo (player_t *plyr, int argc, char **argv)
 
 /* Printing in the middle of the screen */
 
-static char *MidMsg = NULL;
+static brokenlines_t *MidMsg = NULL;
 static int MidTicker = 0, MidLines;
 
 void C_MidPrint (char *msg)
 {
-	char *looker;
+	int i;
 
 	if (MidMsg)
-		free (MidMsg);
+		V_FreeBrokenLines (MidMsg);
 
-	if (msg && (MidMsg = malloc (strlen (msg) + 1))) {
-		strcpy (MidMsg, msg);
+	if ( (MidMsg = V_BreakLines (320, msg)) ) {
 		MidTicker = (int)(NotifyTime->value * TICRATE) + gametic;
 
-		MidLines = 1;
-		looker = MidMsg;
+		for (i = 0; MidMsg[i].width != -1; i++)
+			;
 
-		while (*looker) {
-			if (*looker == '\n')
-				MidLines++;
-			looker++;
-		}
+		MidLines = i;
 	}
 }
 
+extern byte *WhiteMap, *Ranges;
+
 void C_DrawMid (void)
 {
-	int line, len;
-	char *looker, *start;
-
 	if (MidMsg) {
-		if (MidLines == 1) {
-			len = strlen (MidMsg);
-			if (SCREENWIDTH < 640)
-				V_PrintStr ((SCREENWIDTH / 2) - (len * 4), (ST_Y/2) - 4, MidMsg, len, 0);
-			else
-				V_PrintStr2 ((SCREENWIDTH / 2) - (len * 8), (ST_Y/2) - 8, MidMsg, len, 0);
-		} else {
-			start = MidMsg;
-			for (line = 0; line < MidLines; line++) {
-				looker = start;
-				while (*looker != 0 && *looker != '\n') {
-					looker++;
-				}
-				len = looker - start;
-				if (SCREENWIDTH < 640)
-					V_PrintStr ((SCREENWIDTH / 2) - len * 4, (ST_Y/2) - MidLines * 4 + line * 8,
-								start, len, 0);
-				else
-					V_PrintStr2 ((SCREENWIDTH / 2) - len * 8, (ST_Y/2) - MidLines * 8 + line * 16,
-								start, len, 0);
-				start = looker + 1;
-			}
+		int i, line, x, y;
+		byte *holdwhite = WhiteMap;
+
+		// Hack! Hack! I need to get mult-colored text output written...
+		WhiteMap = Ranges + 5 * 256;
+		y = 8 * CleanYfac;
+		x = screens[0].width >> 1;
+		for (i = 0, line = (ST_Y >> 1) - MidLines * 4 * CleanYfac; i < MidLines; i++, line += y) {
+			V_DrawTextClean (x - (MidMsg[i].width >> 1) * CleanXfac, line, MidMsg[i].string);
 		}
 
 		if (gametic >= MidTicker) {
-			free (MidMsg);
+			V_FreeBrokenLines (MidMsg);
 			MidMsg = NULL;
 		}
+
+		WhiteMap = holdwhite;
 	}
 }
 
 void C_EraseLines (int top, int bottom)
 {
-	int ofs, y;
+	if (top < viewwindowy) {
+		// Erase top border
+		R_VideoErase (0, top, screens[0].width,
+					  (bottom <= viewwindowy) ? bottom : viewwindowy);
+	}
+	if (bottom > viewwindowy) {
+		if (top < viewwindowy)
+			top = viewwindowy;
+		R_VideoErase (0, top, viewwindowx, bottom);				// Erase left border
+		R_VideoErase (viewwindowx+realviewwidth, top, screens[0].width, bottom);	// Erase right border
+	}
+}
 
-	bottom *= SCREENPITCH;
-	ofs = top * SCREENPITCH;
 
-	for (y = top; ofs < bottom; ofs += SCREENPITCH, y++) {
-		if (y < viewwindowy || y >= viewwindowy + viewheight) {
-			R_VideoErase (ofs, SCREENWIDTH); // erase entire line
-		} else {
-			R_VideoErase (ofs, viewwindowx); // erase left border
-			R_VideoErase (ofs + viewwindowx + viewwidth, viewwindowx); // erase right border
+/****** Tab completion code ******/
+
+static struct TabData {
+	int UseCount;
+	char *Name;
+} *TabCommands = NULL;
+static int NumTabCommands = 0;
+static int TabPos;				// Last TabCommand tabbed to
+static int TabStart;			// First char in CmdLine to use for tab completion
+static int TabSize;				// Size of tab string
+
+static BOOL FindTabCommand (char *name, int *stoppos, int len)
+{
+	int i, cval = 1;
+
+	for (i = 0; i < NumTabCommands; i++) {
+		cval = strnicmp (TabCommands[i].Name, name, len);
+		if (cval >= 0)
+			break;
+	}
+
+	*stoppos = i;
+
+	return (cval == 0);
+}
+
+void C_AddTabCommand (char *name)
+{
+	int pos;
+
+	if (FindTabCommand (name, &pos, MAXINT)) {
+		TabCommands[pos].UseCount++;
+	} else {
+		NumTabCommands++;
+		TabCommands = Realloc (TabCommands, sizeof(struct TabData) * NumTabCommands);
+		if (pos < NumTabCommands - 1)
+			memmove (TabCommands + pos + 1, TabCommands + pos,
+					 (NumTabCommands - pos - 1) * sizeof(struct TabData));
+		TabCommands[pos].Name = copystring (name);
+		TabCommands[pos].UseCount = 1;
+	}
+}
+
+void C_RemoveTabCommand (char *name)
+{
+	int pos;
+
+	if (FindTabCommand (name, &pos, MAXINT)) {
+		if (--TabCommands[pos].UseCount == 0) {
+			NumTabCommands--;
+			free (TabCommands[pos].Name);
+			if (pos < NumTabCommands)
+				memmove (TabCommands + pos, TabCommands + pos + 1,
+						 (NumTabCommands - pos) * sizeof(struct TabData));
 		}
 	}
+}
+
+static int FindDiffPoint (const char *str1, const char *str2)
+{
+	int i;
+
+	for (i = 0; tolower(str1[i]) == tolower(str2[i]); i++)
+		if (str1[i] == 0 || str2[i] == 0)
+			break;
+
+	return i;
+}
+
+static void C_TabComplete (void)
+{
+	int i;
+	int diffpoint;
+
+	if (!TabbedLast) {
+		// Skip any spaces at beginning of command line
+		if (CmdLine[2] == ' ') {
+			for (i = 0; i < CmdLine[0]; i++)
+				if (CmdLine[2+i] != ' ')
+					break;
+
+			TabStart = i + 2;
+		} else {
+			TabStart = 2;
+		}
+
+		if (TabStart == CmdLine[0] + 2)
+			return;		// Line was nothing but spaces
+
+		TabSize = CmdLine[0] - TabStart + 2;
+
+		if (!FindTabCommand (CmdLine + TabStart, &TabPos, TabSize))
+			return;		// No initial matches
+
+		TabPos--;
+		TabbedLast = true;
+	}
+
+	if (++TabPos == NumTabCommands) {
+		TabbedLast = false;
+		CmdLine[0] = CmdLine[1] = TabSize;
+	} else {
+		diffpoint = FindDiffPoint (TabCommands[TabPos].Name, CmdLine + TabStart);
+
+		if (diffpoint < TabSize) {
+			// No more matches
+			TabbedLast = false;
+			CmdLine[0] = CmdLine[1] = TabSize + TabStart - 2;
+		} else {		
+			strcpy (CmdLine + TabStart, TabCommands[TabPos].Name);
+			CmdLine[0] = CmdLine[1] = strlen (CmdLine + 2) + 1;
+			CmdLine[CmdLine[0] + 1] = ' ';
+		}
+	}
+
+	makestartposgood ();
 }

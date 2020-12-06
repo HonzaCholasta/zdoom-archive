@@ -1,15 +1,14 @@
 #include "doomtype.h"
 #include "doomdef.h"
 #include "cmdlib.h"
-#include "c_dispatch.h"
-#include "c_bindings.h"
+#include "c_dispch.h"
+#include "c_bind.h"
 
 #include <math.h>
 #include <stdlib.h>
 
-/* These bindings are equivalent to the
- * original DOOM's keymappings plus
- * some new keys.
+/* Most of these bindings are equivalent
+ * to the original DOOM's keymappings.
  */
 char DefBindings[] =
 	"bind ` toggleconsole; "			// <- This is new
@@ -45,13 +44,18 @@ char DefBindings[] =
 	"bind f2 menu_save; "
 	"bind f3 menu_load; "
 	"bind f4 menu_options; "			// <- Since we don't have a separate sound menu anymore
-	"bind f5 menu_video; "				// <- Since we no longer have a detail level setting
+	"bind f5 menu_display; "			// <- More useful than just changing the detail level
 	"bind f6 quicksave; "
 	"bind f7 menu_endgame; "
 	"bind f8 togglemessages; "
 	"bind f9 quickload; "
 	"bind f10 menu_quit; "
-	"bind tab togglemap";
+	"bind tab togglemap; "
+	"bind pause pause; "
+	"bind sysrq screenshot; "			// <- Also known as the Print Screen key
+	"bind t messagemode; "
+	"bind \\ +showscores; "				// <- Another new command
+	"bind f12 spynext";
 
 static const char *KeyNames[256+8+32] = {
 	// This array is dependant on the particular keyboard input
@@ -106,7 +110,7 @@ static const char *KeyNames[256+8+32] = {
 	"joy29",	"joy30",	"joy31",	"joy32"
 };
 
-char *Bindings[256+8+32];
+static char *Bindings[256+8+32];
 
 static int GetKeyFromName (const char *name)
 {
@@ -153,7 +157,7 @@ void Cmd_Unbind (void *plyr, int argc, char **argv)
 	int i;
 
 	if (argc > 1) {
-		if (i = GetKeyFromName (argv[1])) {
+		if ( (i = GetKeyFromName (argv[1])) ) {
 			if (Bindings[i]) {
 				free (Bindings[i]);
 				Bindings[i] = NULL;
@@ -199,14 +203,15 @@ void Cmd_BindDefaults (void *plyr, int argc, char **argv)
 	AddCommandString (DefBindings);
 }
 
-boolean C_DoKey (int key, boolean up)
+BOOL C_DoKey (int key, BOOL up)
 {
-	if (Bindings[key]) {
+	extern BOOL chat_on;
+
+	if (Bindings[key] && (!chat_on || key < 256)) {
 		if (!up) {
 			AddCommandString (Bindings[key]);
 		} else {
 			char *achar;
-			const char *name = KeyName (key);
 		
 			achar = strchr (Bindings[key], '+');
 			if (!achar)
@@ -292,4 +297,9 @@ void C_ChangeBinding (char *str, int newone)
 		free (Bindings[newone]);
 
 	Bindings[newone] = copystring (str);
+}
+
+char *C_GetBinding (int key)
+{
+	return Bindings[key];
 }

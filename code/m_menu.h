@@ -35,7 +35,7 @@
 // Even when the menu is not displayed,
 // this can resize the view and change game parameters.
 // Does all the real work of the menu interaction.
-boolean M_Responder (event_t *ev);
+BOOL M_Responder (event_t *ev);
 
 
 // Called by main loop,
@@ -55,13 +55,16 @@ void M_Init (void);
 void M_StartControlPanel (void);
 
 // [RH] Setup options menu
-boolean M_StartOptionsMenu (void);
+BOOL M_StartOptionsMenu (void);
 
 // [RH] Handle keys for options menu
-boolean M_OptResponder (int ch);
+BOOL M_OptResponder (event_t *ev);
 
 // [RH] Draw options menu
 void M_OptDrawer (void);
+
+// [RH] Initialize options menu
+void M_OptInit (void);
 
 
 

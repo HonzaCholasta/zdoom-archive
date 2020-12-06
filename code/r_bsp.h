@@ -23,10 +23,6 @@
 #ifndef __R_BSP__
 #define __R_BSP__
 
-#ifdef __GNUG__
-#pragma interface
-#endif
-
 
 extern seg_t*			curline;
 extern side_t*			sidedef;
@@ -37,13 +33,13 @@ extern sector_t*		backsector;
 extern int				rw_x;
 extern int				rw_stopx;
 
-extern boolean			segtextured;
+extern BOOL			segtextured;
 
 // false if the back side is the same plane
-extern boolean			markfloor;				
-extern boolean			markceiling;
+extern BOOL			markfloor;				
+extern BOOL			markceiling;
 
-extern boolean			skymap;
+extern BOOL			skymap;
 
 extern drawseg_t		*drawsegs;
 extern drawseg_t*		ds_p;

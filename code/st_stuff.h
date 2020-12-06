@@ -27,11 +27,13 @@
 #include "doomtype.h"
 #include "d_event.h"
 
+// [RH] Turned these into variables
 // Size of statusbar.
-// Now sensitive for scaling.
-#define ST_HEIGHT		32*SCREEN_MUL
-#define ST_WIDTH		320
-#define ST_Y			(SCREENHEIGHT - ST_HEIGHT)
+// Now ([RH] truly) sensitive for scaling.
+extern	int				ST_HEIGHT;
+extern	int				ST_WIDTH;
+extern	int				ST_X;
+extern	int				ST_Y;
 
 
 //
@@ -39,13 +41,13 @@
 //
 
 // Called by main loop.
-boolean ST_Responder (event_t* ev);
+BOOL ST_Responder (event_t* ev);
 
 // Called by main loop.
 void ST_Ticker (void);
 
 // Called by main loop.
-void ST_Drawer (boolean fullscreen, boolean refresh);
+void ST_Drawer (BOOL fullscreen, BOOL refresh);
 
 // Called when the console player is spawned on each level.
 void ST_Start (void);
@@ -76,7 +78,7 @@ typedef enum
 } st_chatstateenum_t;
 
 
-boolean ST_Responder(event_t* ev);
+BOOL ST_Responder(event_t* ev);
 
 
 

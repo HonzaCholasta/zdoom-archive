@@ -25,8 +25,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 
 
 // Needed for FRACUNIT.
@@ -35,28 +33,67 @@ rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 // Needed for Flat retrieval.
 #include "r_data.h"
 
+#include "c_cvars.h"
 
-#ifdef __GNUG__
-#pragma implementation "r_sky.h"
-#endif
+
 #include "r_sky.h"
+
+extern int dmflags;
 
 //
 // sky mapping
 //
 int 					skyflatnum;
-int 					skytexture;
-int 					skytexturemid;
+int 					sky1texture,	sky2texture;
+int 					sky1texturemid,	sky2texturemid;
+int						sky1stretch,	sky2stretch;
+fixed_t					sky1scale,		sky2scale;
+fixed_t					sky1height,		sky2height;
 
+fixed_t					sky1pos=0,		sky1speed=0;
+fixed_t					sky2pos=0,		sky2speed=0;
+
+// [RH] Stretch sky texture if not taller than 128 pixels?
+cvar_t					*r_stretchsky;
 
 
 //
 // R_InitSkyMap
 // Called whenever the view size changes.
 //
-void R_InitSkyMap (void)
+extern int detailxshift, detailyshift;
+extern fixed_t freelookviewheight;
+
+void R_InitSkyMap (cvar_t *var)
 {
-  // skyflatnum = R_FlatNumForName ( SKYFLATNAME );
-	skytexturemid = 200/2*FRACUNIT;
+	// [RH] We are also the callback for r_stretchsky.
+	r_stretchsky->u.callback = R_InitSkyMap;
+
+	if (textureheight[sky1texture] <= (128 << FRACBITS)) {
+		sky1texturemid = 200/2*FRACUNIT;
+		sky1stretch = (var->value && !(dmflags & DF_NO_FREELOOK)) ? 1 : 0;
+	} else {
+		sky1texturemid = 240/2*FRACUNIT;
+		sky1stretch = 0;
+	}
+	sky1height = textureheight[sky1texture] << sky1stretch;
+
+	if (textureheight[sky1texture] <= (128 << FRACBITS)) {
+		sky2texturemid = 200/2*FRACUNIT;
+		sky2stretch = (var->value && !(dmflags & DF_NO_FREELOOK)) ? 1 : 0;
+	} else {
+		sky2texturemid = 240/2*FRACUNIT;
+		sky2stretch = 0;
+	}
+	sky2height = textureheight[sky2texture] << sky2stretch;
+	if (viewwidth && viewheight) {
+		sky1iscale = (sky1texturemid << 1) / (((freelookviewheight<<detailxshift) * viewwidth) / (viewwidth<<detailxshift));
+		sky1scale = ((((freelookviewheight<<detailxshift) * viewwidth) / (viewwidth<<detailxshift)) << FRACBITS) /
+					(sky1texturemid>>(FRACBITS-1));
+
+		sky2iscale = (sky2texturemid << FRACBITS) / (((viewheight<<detailxshift) * viewwidth) / (viewwidth<<detailxshift));
+		sky2scale = ((((viewheight<<detailxshift) * viewwidth) / (viewwidth<<detailxshift)) << FRACBITS) /
+					(sky2texturemid>>(FRACBITS-1));
+	}
 }
 

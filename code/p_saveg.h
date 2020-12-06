@@ -24,10 +24,6 @@
 #define __P_SAVEG__
 
 
-#ifdef __GNUG__
-#pragma interface
-#endif
-
 
 // Persistent storage/archiving.
 // These are the load / save game routines.
@@ -39,8 +35,12 @@ void P_ArchiveThinkers (void);
 void P_UnArchiveThinkers (void);
 void P_ArchiveSpecials (void);
 void P_UnArchiveSpecials (void);
+void P_ArchiveRNGState (void);		// [RH]
+void P_UnArchiveRNGState (void);	// [RH]
+void P_ArchiveLevelLocals (void);	// [RH]
+void P_UnArchiveLevelLocals (void);	// [RH]
 
-extern byte*			save_p; 
+extern byte *save_p; 
 
 
 #endif

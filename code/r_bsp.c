@@ -22,8 +22,6 @@
 //-----------------------------------------------------------------------------
 
 
-static const char
-rcsid[] = "$Id: r_bsp.c,v 1.4 1997/02/03 22:45:12 b1 Exp $";
 
 #include "m_alloc.h"
 
@@ -136,7 +134,7 @@ R_ClipSolidWallSegment
 				newend = &solidsegs[MaxSegs - 8];
 				start = &solidsegs[i];
 				lastsolidseg = &solidsegs[MaxSegs];
-				DEVONLY (Printf, "MaxSegs increased to %d\n", MaxSegs, 0);
+				DPrintf ("MaxSegs increased to %d\n", MaxSegs);
 			}
 			next = newend;
 			newend++;
@@ -400,7 +398,7 @@ int 	checkcoord[12][4] =
 };
 
 
-boolean R_CheckBBox (fixed_t*	bspcoord)
+BOOL R_CheckBBox (fixed_t*	bspcoord)
 {
 	int 				boxx;
 	int 				boxy;

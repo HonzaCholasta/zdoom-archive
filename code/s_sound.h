@@ -24,10 +24,6 @@
 #define __S_SOUND__
 
 
-#ifdef __GNUG__
-#pragma interface
-#endif
-
 
 
 //
@@ -62,15 +58,18 @@ void S_StartSound (void *origin, int sound_id);
 // Will start a sound at a given volume.
 void S_StartSoundAtVolume (void *origin, int sound_id, int volume);
 
+#define ORIGIN_SURROUNDBIT (128)
 #define ORIGIN_AMBIENT	(NULL)					// Sound is not attenuated
 #define ORIGIN_AMBIENT2 ((void *)1)				// [RH] Same as ORIGIN_AMBIENT, just diff. channel
 #define ORIGIN_AMBIENT3 ((void *)2)
 #define ORIGIN_AMBIENT4 ((void *)3)
-#define ORIGIN_SURROUND ((void *)4) 			// [RH] Sound is not attenuated and played surround
-#define	ORIGIN_SURROUND2 ((void *)5)
-#define ORIGIN_SURROUND3 ((void *)6)
-#define ORIGIN_SURROUND4 ((void *)7)
-#define ORIGIN_STARTOFNORMAL	((void *)8)		// [RH] Used internally
+#define ORIGIN_SURROUND ((void *)(0|128))		// [RH] Sound is not attenuated and played surround
+#define	ORIGIN_SURROUND2 ((void *)(1|128))
+#define ORIGIN_SURROUND3 ((void *)(2|128))
+#define ORIGIN_SURROUND4 ((void *)(3|128))
+#define ORIGIN_WORLDAMBIENTS ((void *)8)		// Used by ambient sounds
+
+#define ORIGIN_STARTOFNORMAL	((void *)256)	// [RH] Used internally
 
 
 // Stop sound for thing at <origin>
@@ -100,6 +99,16 @@ void S_UpdateSounds (void *listener);
 void S_SetMusicVolume (int volume);
 void S_SetSfxVolume (int volume);
 
+
+// [RH] Parses all SNDINFO lumps. Should be called from I_InitSound()
+void S_ParseSndInfo (void);
+
+// [RH] Activates an ambient sound. Called when the thing is added to the map.
+//		(0-biased)
+void S_ActivateAmbient (void *mobj, int ambient);
+
+// [RH] Deactivates all ambient sounds.
+void S_ClearAmbients (void);
 
 #endif
 //-----------------------------------------------------------------------------

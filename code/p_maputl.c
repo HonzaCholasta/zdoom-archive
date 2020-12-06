@@ -24,8 +24,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: p_maputl.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 
 
 #include <stdlib.h>
@@ -34,6 +32,7 @@ rcsid[] = "$Id: p_maputl.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 #include "m_bbox.h"
 
 #include "doomdef.h"
+#include "doomstat.h"
 #include "p_local.h"
 
 
@@ -45,10 +44,7 @@ rcsid[] = "$Id: p_maputl.c,v 1.5 1997/02/03 22:45:11 b1 Exp $";
 // Gives an estimation of distance (not exact)
 //
 
-fixed_t
-P_AproxDistance
-( fixed_t		dx,
-  fixed_t		dy )
+fixed_t P_AproxDistance (fixed_t dx, fixed_t dy)
 {
 	dx = abs(dx);
 	dy = abs(dy);
@@ -62,17 +58,8 @@ P_AproxDistance
 // P_PointOnLineSide
 // Returns 0 or 1
 //
-int
-P_PointOnLineSide
-( fixed_t		x,
-  fixed_t		y,
-  line_t*		line )
+int P_PointOnLineSide (fixed_t x, fixed_t y, const line_t *line)
 {
-	fixed_t 	dx;
-	fixed_t 	dy;
-	fixed_t 	left;
-	fixed_t 	right;
-		
 	if (!line->dx)
 	{
 		if (x <= line->v1->x)
@@ -87,16 +74,15 @@ P_PointOnLineSide
 		
 		return line->dx > 0;
 	}
-		
-	dx = (x - line->v1->x);
-	dy = (y - line->v1->y);
-		
-	left = FixedMul ( line->dy>>FRACBITS , dx );
-	right = FixedMul ( dy , line->dx>>FRACBITS );
-		
-	if (right < left)
-		return 0;				// front side
-	return 1;					// back side
+	
+	{
+		fixed_t left = FixedMul ( line->dy>>FRACBITS , (x - line->v1->x) );
+		fixed_t right = FixedMul ( (y - line->v1->y) , line->dx>>FRACBITS );
+
+		if (right < left)
+			return 0;				// front side
+		return 1;					// back side
+	}
 }
 
 
@@ -106,13 +92,10 @@ P_PointOnLineSide
 // Considers the line to be infinite
 // Returns side 0 or 1, -1 if box crosses the line.
 //
-int
-P_BoxOnLineSide
-( fixed_t*		tmbox,
-  line_t*		ld )
+int P_BoxOnLineSide (const fixed_t *tmbox, const line_t *ld)
 {
-	int 		p1;
-	int 		p2;
+	int p1;
+	int p2;
 		
 	switch (ld->slopetype)
 	{
@@ -157,16 +140,12 @@ P_BoxOnLineSide
 // P_PointOnDivlineSide
 // Returns 0 or 1.
 //
-int
-P_PointOnDivlineSide
-( fixed_t		x,
-  fixed_t		y,
-  divline_t*	line )
+int P_PointOnDivlineSide (fixed_t x, fixed_t y, const divline_t *line)
 {
-	fixed_t 	dx;
-	fixed_t 	dy;
-	fixed_t 	left;
-	fixed_t 	right;
+	fixed_t dx;
+	fixed_t dy;
+	fixed_t left;
+	fixed_t right;
 		
 	if (!line->dx)
 	{
@@ -207,10 +186,7 @@ P_PointOnDivlineSide
 //
 // P_MakeDivline
 //
-void
-P_MakeDivline
-( line_t*		li,
-  divline_t*	dl )
+void P_MakeDivline (const line_t *li, divline_t *dl)
 {
 	dl->x = li->v1->x;
 	dl->y = li->v1->y;
@@ -227,10 +203,7 @@ P_MakeDivline
 // This is only called by the addthings
 // and addlines traversers.
 //
-fixed_t
-P_InterceptVector
-( divline_t*	v2,
-  divline_t*	v1 )
+fixed_t P_InterceptVector (const divline_t *v2, const divline_t *v1)
 {
 #if 1
 	fixed_t 	frac;
@@ -297,10 +270,9 @@ fixed_t openrange;
 fixed_t lowfloor;
 
 
-void P_LineOpening (line_t* linedef)
+void P_LineOpening (const line_t *linedef)
 {
-	sector_t*	front;
-	sector_t*	back;
+	sector_t *front, *back;
 		
 	if (linedef->sidenum[1] == -1)
 	{
@@ -344,7 +316,7 @@ void P_LineOpening (line_t* linedef)
 // lookups maintaining lists ot things inside
 // these structures need to be updated.
 //
-void P_UnsetThingPosition (mobj_t* thing)
+void P_UnsetThingPosition (mobj_t *thing)
 {
 	int 		blockx;
 	int 		blocky;
@@ -392,8 +364,7 @@ void P_UnsetThingPosition (mobj_t* thing)
 // based on it's x y.
 // Sets thing->subsector properly
 //
-void
-P_SetThingPosition (mobj_t* thing)
+void P_SetThingPosition (mobj_t *thing)
 {
 	subsector_t*		ss;
 	sector_t*			sec;
@@ -468,39 +439,32 @@ P_SetThingPosition (mobj_t* thing)
 // to P_BlockLinesIterator, then make one or more calls
 // to it.
 //
-boolean
-P_BlockLinesIterator
-( int					x,
-  int					y,
-  boolean(*func)(line_t*) )
+BOOL P_BlockLinesIterator (int x, int y, BOOL(*func)(line_t*))
 {
-	int 				offset;
-	short*				list;
-	line_t* 			ld;
-		
-	if (x<0
-		|| y<0
-		|| x>=bmapwidth
-		|| y>=bmapheight)
-	{
+	if (x<0 || y<0 || x>=bmapwidth || y>=bmapheight)
 		return true;
-	}
-	
-	offset = y*bmapwidth+x;
-		
-	offset = *(blockmap+offset);
 
-	for ( list = blockmaplump+offset ; *list != -1 ; list++)
 	{
-		ld = &lines[*list];
+		int	offset = *(blockmap+(y*bmapwidth+x));
+		int *list = blockmaplump + offset;
 
-		if (ld->validcount == validcount)
-			continue;	// line has already been checked
 
-		ld->validcount = validcount;
-				
-		if ( !func(ld) )
-			return false;
+		// [RH] Get past starting 0 (from BOOM)
+		if (!olddemo)
+			list++;
+
+		for (; *list != -1; list++)
+		{
+			line_t *ld = &lines[*list];
+
+			if (ld->validcount == validcount)
+				continue;	// line has already been checked
+
+			ld->validcount = validcount;
+					
+			if ( !func(ld) )
+				return false;
+		}
 	}
 	return true;		// everything was checked
 }
@@ -509,29 +473,21 @@ P_BlockLinesIterator
 //
 // P_BlockThingsIterator
 //
-boolean
-P_BlockThingsIterator
-( int					x,
-  int					y,
-  boolean(*func)(mobj_t*) )
+BOOL P_BlockThingsIterator (int x, int y, BOOL(*func)(mobj_t*))
 {
-	mobj_t* 			mobj;
-		
-	if ( x<0
-		 || y<0
-		 || x>=bmapwidth
-		 || y>=bmapheight)
-	{
+	if (x<0 || y<0 || x>=bmapwidth || y>=bmapheight)
 		return true;
-	}
-	
 
-	for (mobj = blocklinks[y*bmapwidth+x] ;
-		 mobj ;
-		 mobj = mobj->bnext)
 	{
-		if (!func( mobj ) )
-			return false;
+		mobj_t *mobj;
+			
+		for (mobj = blocklinks[y*bmapwidth+x] ;
+			 mobj ;
+			 mobj = mobj->bnext)
+		{
+			if (!func( mobj ))
+				return false;
+		}
 	}
 	return true;
 }
@@ -545,7 +501,7 @@ intercept_t 	intercepts[MAXINTERCEPTS];
 intercept_t*	intercept_p;
 
 divline_t		trace;
-boolean 		earlyout;
+BOOL 			earlyout;
 int 			ptflags;
 
 //
@@ -558,8 +514,7 @@ int 			ptflags;
 // are on opposite sides of the trace.
 // Returns true if earlyout and a solid line hit.
 //
-boolean
-PIT_AddLineIntercepts (line_t* ld)
+BOOL PIT_AddLineIntercepts (line_t *ld)
 {
 	int 				s1;
 	int 				s2;
@@ -613,7 +568,7 @@ PIT_AddLineIntercepts (line_t* ld)
 //
 // PIT_AddThingIntercepts
 //
-boolean PIT_AddThingIntercepts (mobj_t* thing)
+BOOL PIT_AddThingIntercepts (mobj_t* thing)
 {
 	fixed_t 			x1;
 	fixed_t 			y1;
@@ -623,7 +578,7 @@ boolean PIT_AddThingIntercepts (mobj_t* thing)
 	int 				s1;
 	int 				s2;
 	
-	boolean 			tracepositive;
+	BOOL 			tracepositive;
 
 	divline_t			dl;
 	
@@ -679,20 +634,15 @@ boolean PIT_AddThingIntercepts (mobj_t* thing)
 // Returns true if the traverser function returns true
 // for all lines.
 // 
-boolean
-P_TraverseIntercepts
-( traverser_t	func,
-  fixed_t		maxfrac )
+BOOL P_TraverseIntercepts (traverser_t func, fixed_t maxfrac)
 {
 	int 				count;
 	fixed_t 			dist;
 	intercept_t*		scan;
-	intercept_t*		in;
-		
+	intercept_t*		in = 0;
+
 	count = intercept_p - intercepts;
-	
-	in = 0; 					// shut up compiler warning
-		
+
 	while (count--)
 	{
 		dist = MAXINT;
@@ -710,6 +660,7 @@ P_TraverseIntercepts
 
 #if 0  // UNUSED
 	{
+
 		// don't check these yet, there may be others inserted
 		in = scan = intercepts;
 		for ( scan = intercepts ; scan<intercept_p ; scan++)
@@ -739,14 +690,7 @@ P_TraverseIntercepts
 // Returns true if the traverser function returns true
 // for all lines.
 //
-boolean
-P_PathTraverse
-( fixed_t				x1,
-  fixed_t				y1,
-  fixed_t				x2,
-  fixed_t				y2,
-  int					flags,
-  boolean (*trav) (intercept_t *))
+BOOL P_PathTraverse (fixed_t x1, fixed_t y1, fixed_t x2, fixed_t y2, int flags, BOOL (*trav) (intercept_t *))
 {
 	fixed_t 	xt1;
 	fixed_t 	yt1;
@@ -878,6 +822,3 @@ P_PathTraverse
 	// go through the sorted list
 	return P_TraverseIntercepts ( trav, FRACUNIT );
 }
-
-
-

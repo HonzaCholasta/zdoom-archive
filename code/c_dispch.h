@@ -10,7 +10,7 @@ struct CmdData {
 		void	  (*func)();		// For an actual command
 		char	   *command;		// For an alias
 		void	   *generic;
-	};
+	} call;
 };
 
 // For passing to C_RegisterCommand(s)
@@ -33,6 +33,9 @@ void AddCommandString (char *text);
 // parse a command string
 char *ParseString (char *data);
 
+// Write out alias commands to a file for all current aliases.
+void C_ArchiveAliases (FILE *f);
+
 // build a single string out of multiple strings
 char *BuildString (int argc, char **argv);
 
@@ -54,8 +57,15 @@ char *BuildString (int argc, char **argv);
 #define ACTION_MOVEDOWN		0x04000
 #define ACTION_MOVEUP		0x08000
 #define ACTION_JUMP			0x10000
-#define NUM_ACTIONS			17
+#define ACTION_SHOWSCORES	0x20000
+#define NUM_ACTIONS			18
 
 extern int Actions;
+
+struct ActionBits {
+	unsigned int	key;
+	int				bit;
+	char			name[12];
+};
 
 #endif //__C_DISPATCH_H__

@@ -26,9 +26,19 @@
 #include "d_ticcmd.h"
 #include "d_event.h"
 
-#ifdef __GNUG__
-#pragma interface
-#endif
+extern BOOL fastdemo;
+
+// [RH] Detects the OS the game is running under.
+void I_DetectOS (void);
+
+typedef enum {
+	os_unknown,
+	os_Win95,
+	os_WinNT,
+	os_Win32s
+} os_t;
+
+extern os_t OSPlatform;
 
 
 // Called by DoomMain.
@@ -37,12 +47,15 @@ void I_Init (void);
 // Called by startup code
 // to get the ammount of memory to malloc
 // for the zone management.
-byte*	I_ZoneBase (int *size);
+byte *I_ZoneBase (int *size);
 
 
 // Called by D_DoomLoop,
 // returns current time in tics.
-int I_GetTime (void);
+int (*I_GetTime) (void);
+
+int I_GetTimeReally (void);
+int I_GetTimeFake (void);
 
 
 //
@@ -95,7 +108,17 @@ void I_FatalError (char *error, ...);
 void I_PaintConsole (void);
 
 // Print a console string
-void I_PrintStr (int x, const char *str, int count, boolean scroll);
+void I_PrintStr (int x, const char *str, int count, BOOL scroll);
+
+// Set the title string of the startup window
+void I_SetTitleString (const char *title);
+
+
+// In i_input.c. Used to release control of the
+// mouse to the user when the game is paused in
+// windowed modes.
+void I_PauseMouse (void);
+void I_ResumeMouse (void);
 
 #endif
 //-----------------------------------------------------------------------------

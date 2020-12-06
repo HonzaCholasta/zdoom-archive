@@ -25,8 +25,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: p_spec.c,v 1.6 1997/02/03 22:45:12 b1 Exp $";
 
 #include "m_alloc.h"
 
@@ -54,7 +52,10 @@ rcsid[] = "$Id: p_spec.c,v 1.6 1997/02/03 22:45:12 b1 Exp $";
 // Data.
 #include "sounds.h"
 
-#include "c_console.h"
+#include "c_consol.h"
+
+// [RH] Needed for sky scrolling
+#include "r_sky.h"
 
 //
 // Animating textures and planes
@@ -62,7 +63,7 @@ rcsid[] = "$Id: p_spec.c,v 1.6 1997/02/03 22:45:12 b1 Exp $";
 //
 typedef struct
 {
-	boolean 	istexture;
+	BOOL 	istexture;
 	int 		picnum;
 	int 		basepic;
 	int 		numpics;
@@ -75,7 +76,7 @@ typedef struct
 //
 typedef struct
 {
-	boolean 	istexture;		// if false, it is a flat
+	BOOL 		istexture;		// if false, it is a flat
 	char		endname[9];
 	char		startname[9];
 	int 		speed;
@@ -150,7 +151,7 @@ extern	line_t* linespeciallist[MAXLINEANIMS];
 
 void P_InitPicAnims (void)
 {
-	int 		i;
+	int i;
 
 	
 	//	Init animation
@@ -190,6 +191,18 @@ void P_InitPicAnims (void)
 }
 
 
+// [RH] Check dmflags for noexit and respond accordingly
+BOOL CheckIfExitIsGood (mobj_t *self)
+{
+	if (deathmatch->value && dmflags & DF_NO_EXIT && self) {
+		while (self->health > 0)
+			P_DamageMobj (self, self, self, 10000, MOD_EXIT);
+		return false;
+	}
+	Printf ("%s exited the level.\n", self->player->userinfo->netname);
+	return true;
+}
+
 
 //
 // UTILITIES
@@ -203,11 +216,7 @@ void P_InitPicAnims (void)
 //	given the number of the current sector,
 //	the line number, and the side (0/1) that you want.
 //
-side_t*
-getSide
-( int			currentSector,
-  int			line,
-  int			side )
+side_t *getSide (int currentSector, int line, int side)
 {
 	return &sides[ (sectors[currentSector].lines[line])->sidenum[side] ];
 }
@@ -219,11 +228,7 @@ getSide
 //	given the number of the current sector,
 //	the line number and the side (0/1) that you want.
 //
-sector_t*
-getSector
-( int			currentSector,
-  int			line,
-  int			side )
+sector_t *getSector (int currentSector, int line, int side)
 {
 	return sides[ (sectors[currentSector].lines[line])->sidenum[side] ].sector;
 }
@@ -234,10 +239,7 @@ getSector
 // Given the sector number and the line number,
 //	it will tell you whether the line is two-sided or not.
 //
-int
-twoSided
-( int	sector,
-  int	line )
+int twoSided (int sector, int line)
 {
 	return (sectors[sector].lines[line])->flags & ML_TWOSIDED;
 }
@@ -250,10 +252,7 @@ twoSided
 // Return sector_t * of sector next to current.
 // NULL if not two-sided line
 //
-sector_t*
-getNextSector
-( line_t*		line,
-  sector_t* 	sec )
+sector_t *getNextSector (line_t *line, sector_t *sec)
 {
 	if (!(line->flags & ML_TWOSIDED))
 		return NULL;
@@ -302,7 +301,7 @@ fixed_t P_FindHighestFloorSurrounding(sector_t *sec)
 	int 				i;
 	line_t* 			check;
 	sector_t*			other;
-	fixed_t 			floor = -500*FRACUNIT;
+	fixed_t 			floor = MININT;
 		
 	for (i=0 ;i < sec->linecount ; i++)
 	{
@@ -350,7 +349,7 @@ P_FindNextHighestFloor
 	if (min == MAXINT)
 		return currentheight;
 	else
-	return min;
+		return min;
 }
 
 
@@ -388,7 +387,7 @@ fixed_t P_FindHighestCeilingSurrounding(sector_t* sec)
 	int 		i;
 	line_t* 	check;
 	sector_t*	other;
-	fixed_t 	height = 0;
+	fixed_t 	height = MININT;
 		
 	for (i=0 ;i < sec->linecount ; i++)
 	{
@@ -655,7 +654,8 @@ P_CrossSpecialLine
 		
 	  case 52:
 		// EXIT!
-		G_ExitLevel ();
+		if (CheckIfExitIsGood (thing))
+			G_ExitLevel ();
 		break;
 		
 	  case 53:
@@ -738,7 +738,8 @@ P_CrossSpecialLine
 		
 	  case 124:
 		// Secret EXIT
-		G_SecretExitLevel ();
+		if (CheckIfExitIsGood (thing))
+			G_SecretExitLevel ();
 		break;
 				
 	  case 125:
@@ -1002,14 +1003,14 @@ void P_PlayerInSpecialSector (player_t* player)
 		// HELLSLIME DAMAGE
 		if (!player->powers[pw_ironfeet])
 			if (!(level.time&0x1f))
-				P_DamageMobj (player->mo, NULL, NULL, 10);
+				P_DamageMobj (player->mo, NULL, NULL, 10, MOD_SLIME);
 		break;
 		
 	  case 7:
 		// NUKAGE DAMAGE
 		if (!player->powers[pw_ironfeet])
 			if (!(level.time&0x1f))
-				P_DamageMobj (player->mo, NULL, NULL, 5);
+				P_DamageMobj (player->mo, NULL, NULL, 5, MOD_LAVA);
 		break;
 		
 	  case 16:
@@ -1017,10 +1018,10 @@ void P_PlayerInSpecialSector (player_t* player)
 	  case 4:
 		// STROBE HURT
 		if (!player->powers[pw_ironfeet]
-			|| (P_Random()<5) )
+			|| (P_Random (pr_playerinspecialsector)<5) )
 		{
 			if (!(level.time&0x1f))
-				P_DamageMobj (player->mo, NULL, NULL, 20);
+				P_DamageMobj (player->mo, NULL, NULL, 20, MOD_SLIME);
 		}
 		break;
 						
@@ -1039,17 +1040,15 @@ void P_PlayerInSpecialSector (player_t* player)
 		// EXIT SUPER DAMAGE! (for E1M8 finale)
 		player->cheats &= ~CF_GODMODE;
 
-		if (!(level.time&0x1f))
-			P_DamageMobj (player->mo, NULL, NULL, 20);
+		if (!(level.time & 0x1f))
+			P_DamageMobj (player->mo, NULL, NULL, 20, MOD_UNKNOWN);
 
-		if (player->health <= 10)
+		if (player->health <= 10 && (!deathmatch->value || !(dmflags & DF_NO_EXIT)))
 			G_ExitLevel();
 		break;
 						
 	  default:
-		I_Error ("P_PlayerInSpecialSector: "
-				 "unknown special %i",
-				 sector->special);
+		DPrintf ("P_PlayerInSpecialSector: %i unknown\n", sector->special);
 		break;
 	};
 }
@@ -1061,8 +1060,7 @@ void P_PlayerInSpecialSector (player_t* player)
 // P_UpdateSpecials
 // Animate planes, scroll walls, etc.
 //
-boolean 		levelTimer;
-int 			levelTimeCount;
+extern cvar_t  *timelimit;
 
 void P_UpdateSpecials (void)
 {
@@ -1073,11 +1071,12 @@ void P_UpdateSpecials (void)
 
 	
 	//	LEVEL TIMER
-	if (levelTimer == true)
+	if (timelimit->value)
 	{
-		levelTimeCount--;
-		if (!levelTimeCount)
+		if (level.time >= (int)(timelimit->value * TICRATE * 60)) {
+			Printf ("Timelimit exceeded\n");
 			G_ExitLevel();
+		}
 	}
 	
 	//	ANIMATE FLATS AND TEXTURES GLOBALLY
@@ -1093,6 +1092,9 @@ void P_UpdateSpecials (void)
 		}
 	}
 
+	//	[RH] Scroll the sky
+	sky1pos = (sky1pos + level.skyspeed1) & 0xffffff;
+	sky2pos = (sky2pos + level.skyspeed2) & 0xffffff;
 	
 	//	ANIMATE LINE SPECIALS
 	for (i = 0; i < numlinespecials; i++)
@@ -1230,25 +1232,6 @@ void P_SpawnSpecials (void)
 	if (W_CheckNumForName("texture2") >= 0)
 		episode = 2;
 
-	
-	// See if -TIMER needs to be used.
-	levelTimer = false;
-		
-	i = M_CheckParm("-avg");
-	if (i && deathmatch)
-	{
-		levelTimer = true;
-		levelTimeCount = 20 * 60 * TICRATE;
-	}
-		
-	i = M_CheckParm("-timer");
-	if (i && deathmatch)
-	{
-		int 	time;
-		time = atoi(myargv[i+1]) * 60 * TICRATE;
-		levelTimer = true;
-		levelTimeCount = time;
-	}
 	
 	//	Init special SECTORs.
 	sector = sectors;

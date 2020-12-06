@@ -18,12 +18,12 @@
 //
 // DESCRIPTION:
 //		The status bar widget code.
+//		[RH] Widget coordinates are now relative to status bar
+//			 instead of the game screen.
 //
 //-----------------------------------------------------------------------------
 
 
-static const char
-rcsid[] = "$Id: st_lib.c,v 1.4 1997/02/03 16:47:56 b1 Exp $";
 
 #include <ctype.h>
 
@@ -42,12 +42,12 @@ rcsid[] = "$Id: st_lib.c,v 1.4 1997/02/03 16:47:56 b1 Exp $";
 #include "st_lib.h"
 #include "r_local.h"
 
+#include "c_cvars.h"
+#include "m_swap.h"
+
 
 // in AM_map.c
-extern boolean			automapactive; 
-
-
-
+extern BOOL			automapactive; 
 
 //
 // Hack display negative frags.
@@ -61,6 +61,25 @@ void STlib_init(void)
 }
 
 
+// [RH] Routines to stretch status bar graphics depending on st_scale cvar.
+extern cvar_t *st_scale;
+
+void STlib_scaleRect (int x, int y, int w, int h)
+{
+	if (st_scale->value && ST_WIDTH != 320)
+		V_CopyRect (x, y, &stbarscreen, w, h, x, y, &stnumscreen);
+	else
+		V_CopyRect (x, y, &stbarscreen, w, h, x + ST_X, y + ST_Y, &FG);
+}
+
+void STlib_scalePatch (int x, int y, patch_t *p)
+{
+	if (st_scale->value && ST_WIDTH != 320)
+		V_DrawPatch (x, y, &stnumscreen, p);
+	else
+		V_DrawPatch (x + ST_X, y + ST_Y, &FG, p);
+}
+
 // ?
 void
 STlib_initNum
@@ -69,7 +88,7 @@ STlib_initNum
   int					y,
   patch_t** 			pl,
   int*					num,
-  boolean*				on,
+  BOOL*				on,
   int					width )
 {
 	n->x		= x;
@@ -87,10 +106,7 @@ STlib_initNum
 //	based on differences from the old number.
 // Note: worth the trouble?
 //
-void
-STlib_drawNum
-( st_number_t*	n,
-  boolean		refresh )
+void STlib_drawNum (st_number_t *n, BOOL refresh)
 {
 
 	int 		numdigits = n->width;
@@ -119,12 +135,7 @@ STlib_drawNum
 	// clear the area
 	x = n->x - numdigits*w;
 
-	if (n->y - ST_Y < 0) {
-		Printf ("drawNum: n->y - ST_Y < 0\n");
-		return;
-	}
-
-	V_CopyRect(x, n->y - ST_Y, BG, w*numdigits, h, x, n->y, FG);
+	STlib_scaleRect (x, n->y, w*numdigits, h);
 
 	// if non-number, do not draw it
 	if (num == 1994)
@@ -134,19 +145,19 @@ STlib_drawNum
 
 	// in the special case of 0, you draw 0
 	if (!num)
-		V_DrawPatch(x - w, n->y, FG, n->p[ 0 ]);
+		STlib_scalePatch (x - w, n->y, n->p[ 0 ]);
 
 	// draw the new number
 	while (num && numdigits--)
 	{
 		x -= w;
-		V_DrawPatch(x, n->y, FG, n->p[ num % 10 ]);
+		STlib_scalePatch (x, n->y, n->p[ num % 10 ]);
 		num /= 10;
 	}
 
 	// draw a minus sign if necessary
 	if (neg)
-		V_DrawPatch(x - 8, n->y, FG, sttminus);
+		STlib_scalePatch (x - 8, n->y, sttminus);
 }
 
 
@@ -154,7 +165,7 @@ STlib_drawNum
 void
 STlib_updateNum
 ( st_number_t*			n,
-  boolean				refresh )
+  BOOL				refresh )
 {
 	if (*n->on) STlib_drawNum(n, refresh);
 }
@@ -168,7 +179,7 @@ STlib_initPercent
   int					y,
   patch_t** 			pl,
   int*					num,
-  boolean*				on,
+  BOOL*				on,
   patch_t*				percent )
 {
 	STlib_initNum(&p->n, x, y, pl, num, on, 3);
@@ -183,8 +194,9 @@ STlib_updatePercent
 ( st_percent_t* 		per,
   int					refresh )
 {
-	if (refresh && *per->n.on)
-		V_DrawPatch(per->n.x, per->n.y, FG, per->p);
+	if (refresh && *per->n.on) {
+		STlib_scalePatch (per->n.x, per->n.y, per->p);
+	}
 	
 	STlib_updateNum(&per->n, refresh);
 }
@@ -198,7 +210,7 @@ STlib_initMultIcon
   int					y,
   patch_t** 			il,
   int*					inum,
-  boolean*				on )
+  BOOL*				on )
 {
 	i->x		= x;
 	i->y		= y;
@@ -213,7 +225,7 @@ STlib_initMultIcon
 void
 STlib_updateMultIcon
 ( st_multicon_t*		mi,
-  boolean				refresh )
+  BOOL				refresh )
 {
 	int 				w;
 	int 				h;
@@ -231,14 +243,13 @@ STlib_updateMultIcon
 			w = SHORT(mi->p[mi->oldinum]->width);
 			h = SHORT(mi->p[mi->oldinum]->height);
 
-			if (y - ST_Y < 0) {
-				Printf("updateMultIcon: y - ST_Y < 0\n");
-				return;
-			}
-
-			V_CopyRect(x, y-ST_Y, BG, w, h, x, y, FG);
+			STlib_scaleRect (x, y, w, h);
+		} else {
+			w = h = 0;
+			x = 0;
+			y = 0;
 		}
-		V_DrawPatch(mi->x, mi->y, FG, mi->p[*mi->inum]);
+		STlib_scalePatch (mi->x, mi->y, mi->p[*mi->inum]);
 		mi->oldinum = *mi->inum;
 	}
 }
@@ -251,8 +262,8 @@ STlib_initBinIcon
   int					x,
   int					y,
   patch_t*				i,
-  boolean*				val,
-  boolean*				on )
+  BOOL*				val,
+  BOOL*				on )
 {
 	b->x		= x;
 	b->y		= y;
@@ -267,7 +278,7 @@ STlib_initBinIcon
 void
 STlib_updateBinIcon
 ( st_binicon_t* 		bi,
-  boolean				refresh )
+  BOOL				refresh )
 {
 	int 				x;
 	int 				y;
@@ -282,15 +293,10 @@ STlib_updateBinIcon
 		w = SHORT(bi->p->width);
 		h = SHORT(bi->p->height);
 
-		if (y - ST_Y < 0) {
-			Printf ("updateBinIcon: y - ST_Y < 0\n");
-			return;
-		}
-
 		if (*bi->val)
-			V_DrawPatch(bi->x, bi->y, FG, bi->p);
+			STlib_scalePatch (bi->x, bi->y, bi->p);
 		else
-			V_CopyRect(x, y-ST_Y, BG, w, h, x, y, FG);
+			STlib_scaleRect (x, y, w, h);
 
 		bi->oldval = *bi->val;
 	}

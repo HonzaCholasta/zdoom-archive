@@ -18,6 +18,7 @@ CMD(Cmd_Menu_Endgame)
 CMD(Cmd_Menu_Quit)
 CMD(Cmd_Menu_Game)
 CMD(Cmd_Menu_Options)
+CMD(Cmd_Menu_Player)
 CMD(Cmd_Bumpgamma)
 CMD(Cmd_ToggleMessages)
 
@@ -25,26 +26,33 @@ CMD(Cmd_ToggleMessages)
 CMD(Cmd_Sizedown)
 CMD(Cmd_Sizeup)
 CMD(Cmd_Menu_Video)
+CMD(Cmd_Menu_Display)
 CMD(Cmd_Menu_Keys)
+CMD(Cmd_Menu_Gameplay)
 
 // g_game.c
 CMD(Cmd_Impulse)
 CMD(Cmd_CenterView)
 CMD(Cmd_Pause)
 CMD(Cmd_Stop)
+CMD(Cmd_SpyNext)
+CMD(Cmd_SpyPrev)
 
-// c_dispatch.c
+// g_level.c
+CMD(Cmd_Map)
+
+// c_dispch.c
 CMD(Cmd_Alias)
 CMD(Cmd_Cmdlist)
 CMD(Cmd_Key)
 
-// c_bindings.c
+// c_bindng.c
 CMD(Cmd_Bind)
 CMD(Cmd_BindDefaults)
 CMD(Cmd_Unbind)
 CMD(Cmd_Unbindall)
 
-// c_console.c
+// c_consol.c
 void C_ToggleConsole (void);
 CMD(Cmd_History)
 CMD(Cmd_Clear)
@@ -54,30 +62,35 @@ CMD(Cmd_Echo)
 CMD(Cmd_Set)
 CMD(Cmd_Get)
 CMD(Cmd_Toggle)
+CMD(Cmd_CvarList)
 
-// c_commands.c
+// c_cmds.c
 CMD(Cmd_Give)
 CMD(Cmd_God)
 CMD(Cmd_Notarget)
 CMD(Cmd_Noclip)
 CMD(Cmd_ChangeMus)
+CMD(Cmd_idmus)
 CMD(Cmd_idclev)
 CMD(Cmd_Gameversion)
 CMD(Cmd_Exec)
 CMD(Cmd_DumpHeap)
 CMD(Cmd_Logfile)
-
-// i_video.c
-CMD(Cmd_Vid_DescribeDrivers)
-CMD(Cmd_Vid_DescribeCurrentDriver)
-CMD(Cmd_Vid_DescribeModes)
-CMD(Cmd_Vid_DescribeCurrentMode)
+CMD(Cmd_Limits)
+CMD(Cmd_ChangeMap)
 
 // p_inter.c
 CMD(Cmd_Kill)
 
 // v_video.c
-CMD(Cmd_Gamma)
 CMD(Cmd_SetColor)
+CMD(Cmd_Vid_SetMode)
+
+// m_misc.c
+CMD(Cmd_Screenshot)
+
+// hu_stuff.c
+CMD(Cmd_MessageMode)
+CMD(Cmd_Say)
 
 #undef CMD

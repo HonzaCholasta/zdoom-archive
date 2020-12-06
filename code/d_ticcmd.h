@@ -24,11 +24,7 @@
 #define __D_TICCMD__
 
 #include "doomtype.h"
-#include "d_protocol.h"
-
-#ifdef __GNUG__
-#pragma interface
-#endif
+#include "d_proto.h"
 
 // The data sampled per tick (single player)
 // and transmitted to other peers (multiplayer).
@@ -43,7 +39,6 @@ struct ticcmd_s
 	short		angleturn;		// <<16 for angle delta
 */
 	short		consistancy;	// checks for net game
-	byte		chatchar;
 };
 typedef struct ticcmd_s ticcmd_t;
 

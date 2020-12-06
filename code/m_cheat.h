@@ -38,17 +38,15 @@ typedef struct
 	
 } cheatseq_t;
 
-int
-cht_CheckCheat
-( cheatseq_t*			cht,
-  char					key );
+int cht_CheckCheat (cheatseq_t *cht, char key);
 
+void cht_GetParam (cheatseq_t *cht, char *buffer);
 
-void
-cht_GetParam
-( cheatseq_t*			cht,
-  char* 				buffer );
-
+// [RH] Functions that actually perform the cheating
+struct player_s;
+void cht_DoCheat (struct player_s *player, int cheat);
+void cht_Give (struct player_s *player, char *item);
+void cht_Suicide (struct player_s *player);
 
 #endif
 //-----------------------------------------------------------------------------

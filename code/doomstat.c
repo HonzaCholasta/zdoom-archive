@@ -21,26 +21,28 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: m_bbox.c,v 1.1 1997/02/03 22:45:10 b1 Exp $";
 
 
-#ifdef __GNUG__
-#pragma implementation "doomstat.h"
-#endif
 #include "doomstat.h"
 #include "c_cvars.h"
 
 
 // Game Mode - identify IWAD as shareware, retail etc.
-GameMode_t gamemode = indetermined;
-GameMission_t   gamemission = doom;
+GameMode_t		gamemode = indetermined;
+GameMission_t	gamemission = doom;
 
 // Language.
-Language_t   language = english;
+Language_t		language = english;
 
 // Set if homebrew PWAD stuff has been added.
-boolean modifiedgame;
+BOOL			modifiedgame;
 
 // Show developer messages if true.
-cvar_t		*developer;
+cvar_t			*developer;
+
+// True if an old demo is being played back.
+BOOL			olddemo;
+
+// [RH] Deathmatch flags
+cvar_t			*dmflagsvar;
+int				dmflags;		// Copy of dmflagsvar->value, but as an integer.

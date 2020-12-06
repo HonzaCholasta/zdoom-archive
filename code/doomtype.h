@@ -27,18 +27,26 @@
 
 #ifndef __BYTEBOOL__
 #define __BYTEBOOL__
-// Fixed to use builtin bool type with C++.
-#ifdef __cplusplus
-typedef bool boolean;
-#else
-typedef enum {false, true} boolean;
+// [RH] Some windows includes already defines this
+#if !defined(_WINDEF_) && !defined(__wtypes_h__)
+typedef int BOOL;
+#endif
+#ifndef __cplusplus
+#define false (0)
+#define true (1)
 #endif
 typedef unsigned char byte;
 #endif
 
 
+#if defined(_MSC_VER) || defined(__WATCOMC__)
+#define STACK_ARGS __cdecl
+#else
+#define STACK_ARGS
+#endif
+
 // Predefined with some OS.
-#ifdef LINUX
+#ifdef __GNUC__
 #include <values.h>
 #else
 /* [Petteri] Don't redefine if we already have these */
@@ -65,22 +73,10 @@ typedef unsigned char byte;
 
 
 
-// This gets used all over; define it here:
+// [RH] This gets used all over; define it here:
 int Printf (const char *, ...);
+// [RH] Same here:
+int DPrintf (const char *, ...);
 
 
 #endif
-//-----------------------------------------------------------------------------
-//
-// $Log: doomtype.h,v $
-// Revision 1.2  1997/12/29 19:50:48  pekangas
-// Ported to WinNT/95 environment using Watcom C 10.6.
-// Everything expect joystick support is implemented, but networking is
-// untested. Crashes way too often with problems in FixedDiv().
-// Compiles with no warnings at warning level 3, uses MIDAS 1.1.1.
-//
-// Revision 1.1.1.1  1997/12/28 12:59:02  pekangas
-// Initial DOOM source release from id Software
-//
-//
-//-----------------------------------------------------------------------------

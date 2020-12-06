@@ -51,14 +51,14 @@ void G_BeginRecording (void);
 
 void G_PlayDemo (char* name);
 void G_TimeDemo (char* name);
-boolean G_CheckDemoStatus (void);
+BOOL G_CheckDemoStatus (void);
 
 void G_WorldDone (void);
 
 void G_Ticker (void);
-boolean G_Responder (event_t*	ev);
+BOOL G_Responder (event_t*	ev);
 
-void G_ScreenShot (void);
+void G_ScreenShot (char *filename);
 
 void G_PlayerFinishLevel (int player);
 

@@ -1,6 +1,9 @@
 #ifndef __C_CONSOLE__
 #define __C_CONSOLE__
 
+#include <stdio.h>
+#include <stdarg.h>
+
 #include "doomtype.h"
 #include "doomdef.h"
 #include "d_event.h"
@@ -9,14 +12,18 @@
 #define C_BLINKRATE			(TICRATE/2)
 
 // Initialize the console
-void C_InitConsole (int width, int height, boolean ingame);
+void C_InitConsole (int width, int height, BOOL ingame);
+
+// Adjust the console for a new screen mode
+void C_NewModeAdjust (void);
 
 void C_Ticker (void);
 
-int VPrintf (const char *string);
+int PrintString (const char *string);
+int VPrintf (const char *format, va_list parms);
 int Printf_Bold (const char *format, ...);
 
-void C_AddNotifyString (char *s);
+void C_AddNotifyString (const char *s);
 void C_DrawConsole (void);
 void C_ToggleConsole (void);
 void C_HideConsole (void);
@@ -27,6 +34,9 @@ void C_DrawMid (void);
 
 void C_EraseLines (int top, int bottom);
 
-boolean C_Responder (event_t *ev);
+BOOL C_Responder (event_t *ev);
+
+void C_AddTabCommand (char *name);
+void C_RemoveTabCommand (char *name);
 
 #endif

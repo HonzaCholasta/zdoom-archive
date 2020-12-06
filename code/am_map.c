@@ -21,8 +21,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char rcsid[] = "$Id: am_map.c,v 1.4 1997/02/03 21:24:33 b1 Exp $";
-
 #include <stdio.h>
 
 
@@ -39,6 +37,10 @@ static const char rcsid[] = "$Id: am_map.c,v 1.4 1997/02/03 21:24:33 b1 Exp $";
 // Needs access to LFB.
 #include "v_video.h"
 
+#include "v_text.h"
+
+extern patch_t *hu_font[];
+
 // State.
 #include "doomstat.h"
 #include "r_state.h"
@@ -48,7 +50,6 @@ static const char rcsid[] = "$Id: am_map.c,v 1.4 1997/02/03 21:24:33 b1 Exp $";
 
 #include "am_map.h"
 
-#pragma warning (disable: 4244)
 
 static int Background, YourColor, WallColor, TSWallColor,
 		   FDWallColor, CDWallColor, ThingColor,
@@ -84,7 +85,7 @@ cvar_t	*am_overlay;
 cvar_t	*am_showsecrets, *am_showmonsters, *am_showtime;
 
 // drawing stuff
-#define	FB		0
+#define	FB		(screens[0])
 
 #define AM_PANDOWNKEY	KEY_DOWNARROW
 #define AM_PANUPKEY		KEY_UPARROW
@@ -106,7 +107,7 @@ cvar_t	*am_showsecrets, *am_showmonsters, *am_showtime;
 #define INITSCALEMTOF (.2*FRACUNIT)
 // how much the automap moves window per tic in frame-buffer coordinates
 // moves 140 pixels in 1 second
-#define F_PANINC	4
+#define F_PANINC	(140/TICRATE)
 // how much zoom-in per tic
 // goes to 2x in 1 second
 #define M_ZOOMIN        ((int) (1.02*FRACUNIT))
@@ -187,20 +188,21 @@ mline_t cheat_player_arrow[] = {
 #define NUMCHEATPLYRLINES (sizeof(cheat_player_arrow)/sizeof(mline_t))
 
 #define R (FRACUNIT)
+// [RH] Avoid lots of warnings without compiler-specific #pragmas
+#define L(a,b,c,d) { {(fixed_t)((a)*R),(fixed_t)((b)*R)}, {(fixed_t)((c)*R),(fixed_t)((d)*R)} }
 mline_t triangle_guy[] = {
-	{ { -.867*R, -.5*R }, { .867*R, -.5*R } },
-	{ { .867*R, -.5*R } , { 0, R } },
-	{ { 0, R }, { -.867*R, -.5*R } }
+	L (-.867,-.5, .867,-.5),
+	L (.867,-.5, 0,1),
+	L (0,1, -.867,-.5)
 };
-#undef R
 #define NUMTRIANGLEGUYLINES (sizeof(triangle_guy)/sizeof(mline_t))
 
-#define R (FRACUNIT)
 mline_t thintriangle_guy[] = {
-	{ { -.5*R, -.7*R }, { R, 0 } },
-	{ { R, 0 }, { -.5*R, .7*R } },
-	{ { -.5*R, .7*R }, { -.5*R, -.7*R } }
+	L (-.5,-.7, 1,0),
+	L (1,0, -.5,.7),
+	L (-.5,.7, -.5,-.7)
 };
+#undef L
 #undef R
 #define NUMTHINTRIANGLEGUYLINES (sizeof(thintriangle_guy)/sizeof(mline_t))
 
@@ -212,7 +214,12 @@ static int 	grid = 0;
 
 static int 	leveljuststarted = 1; 	// kluge until AM_LevelInit() is called
 
-boolean		automapactive = false;
+// [RH] Avoid drawing outside of screens[0] lock.
+//		Also provides a way for the status bar to redraw
+//		itself when its scale changes.
+BOOL		am_needtodrawstatusbar = false;
+
+BOOL		automapactive = false;
 
 // location of window on screen
 static int	f_x;
@@ -264,7 +271,7 @@ static fixed_t old_m_x, old_m_y;
 static mpoint_t f_oldloc;
 
 // used by MTOF to scale from map-to-frame-buffer coords
-static fixed_t scale_mtof = INITSCALEMTOF;
+static fixed_t scale_mtof = (fixed_t)INITSCALEMTOF;
 // used by FTOM to scale from frame-buffer-to-map coords (=1/scale_mtof)
 static fixed_t scale_ftom;
 
@@ -280,9 +287,9 @@ static int followplayer = 1; // specifies whether to follow the player around
 unsigned char cheat_amap_seq[] = { 0xb2, 0x26, 0x26, 0x2e, 0xff };
 static cheatseq_t cheat_amap = { cheat_amap_seq, 0 };
 
-static boolean stopped = true;
+static BOOL stopped = true;
 
-extern boolean viewactive;
+extern BOOL viewactive;
 //extern byte screens[][SCREENWIDTH*SCREENHEIGHT];
 
 void AM_rotatePoint (fixed_t *x, fixed_t *y);
@@ -399,11 +406,11 @@ void AM_findMinMaxBoundaries(void)
 	min_w = 2*PLAYERRADIUS; // const? never changed?
 	min_h = 2*PLAYERRADIUS;
 
-	a = FixedDiv(SCREENWIDTH<<FRACBITS, max_w);
-	b = FixedDiv(SCREENHEIGHT<<FRACBITS, max_h);
+	a = FixedDiv((screens[0].width)<<FRACBITS, max_w);
+	b = FixedDiv((screens[0].height)<<FRACBITS, max_h);
 
 	min_scale_mtof = a < b ? a : b;
-	max_scale_mtof = FixedDiv(SCREENHEIGHT<<FRACBITS, 2*PLAYERRADIUS);
+	max_scale_mtof = FixedDiv((screens[0].height)<<FRACBITS, 2*PLAYERRADIUS);
 }
 
 
@@ -444,7 +451,6 @@ void AM_initVariables(void)
 	static event_t st_notify = { ev_keyup, AM_MSGENTERED };
 
 	automapactive = true;
-	fb = screens[0];
 
 	f_oldloc.x = MAXINT;
 	amclock = 0;
@@ -453,8 +459,8 @@ void AM_initVariables(void)
 	ftom_zoommul = FRACUNIT;
 	mtof_zoommul = FRACUNIT;
 
-	m_w = FTOM(SCREENWIDTH);
-	m_h = FTOM(SCREENHEIGHT);
+	m_w = FTOM(screens[0].width);
+	m_h = FTOM(screens[0].height);
 
 	// find player to center on initially
 	if (!playeringame[pnum = consoleplayer])
@@ -477,9 +483,14 @@ void AM_initVariables(void)
 	ST_Responder(&st_notify);
 }
 
-void AM_initColors (boolean overlayed)
+void AM_initColors (BOOL overlayed)
 {
-	byte *palette = W_CacheLumpName ("PLAYPAL", PU_CACHE);
+	unsigned int *palette;
+	
+	if (screens[0].is8bit)
+		palette = DefaultPalette->colors;
+	else
+		palette = NULL;
 
 	if (overlayed) {
 		YourColor = V_GetColorFromString (palette, am_ovyourcolor->string);
@@ -596,14 +607,13 @@ void AM_Stop (void)
 //
 void AM_Start (void)
 {
-	static int lastlevel = 0, lastcluster = 0;
+	static char lastmap[8] = "";
 
 	if (!stopped) AM_Stop();
 	stopped = false;
-	if (lastlevel != level.levelnum || lastcluster != level.cluster) {
+	if (strncmp (lastmap, level.mapname, 8)) {
 		AM_LevelInit();
-		lastlevel = level.levelnum;
-		lastcluster = level.cluster;
+		strncpy (lastmap, level.mapname, 8);
 	}
 	AM_initVariables();
 	AM_loadPics();
@@ -639,7 +649,7 @@ void Cmd_Togglemap (void *plyr, int argc, char **argv)
 	} else {
 		if (am_overlay->value && viewactive) {
 			viewactive = false;
-			ST_Drawer (false, true);
+			am_needtodrawstatusbar = true;
 		} else {
 			viewactive = true;
 			AM_Stop ();
@@ -653,7 +663,7 @@ void Cmd_Togglemap (void *plyr, int argc, char **argv)
 //
 // Handle events (user inputs) in automap mode
 //
-boolean AM_Responder( event_t*	ev )
+BOOL AM_Responder( event_t*	ev )
 {
 	int rc;
 	static int cheatstate=0;
@@ -725,7 +735,7 @@ boolean AM_Responder( event_t*	ev )
 						rc = false;
 				}
 		}
-		if (!deathmatch && cht_CheckCheat(&cheat_amap, (char)ev->data2)) {
+		if (!deathmatch->value && cht_CheckCheat(&cheat_amap, (char)ev->data2)) {
 			rc = false;
 			cheating = (cheating+1) % 3;
 		}
@@ -824,7 +834,26 @@ void AM_Ticker (void)
 //
 void AM_clearFB (int color)
 {
-	memset (fb, color, f_w*f_h);
+	int y;
+
+	if (screens[0].is8bit) {
+		if (f_w == f_p)
+			memset (fb, color, f_w*f_h);
+		else
+			for (y = 0; y < f_h; y++)
+				memset (fb + y * f_p, color, f_w);
+	} else {
+		int x;
+		int *line;
+
+		line = (int *)(fb);
+		for (y = 0; y < f_h; y++) {
+			for (x = 0; x < f_w; x++) {
+				line[x] = color;
+			}
+			line += f_p >> 2;
+		}
+	}
 }
 
 
@@ -835,7 +864,7 @@ void AM_clearFB (int color)
 // faster reject and precalculated slopes.  If the speed is needed,
 // use a hash algorithm to handle  the common cases.
 //
-boolean AM_clipMline (mline_t *ml, fline_t *fl)
+BOOL AM_clipMline (mline_t *ml, fline_t *fl)
 {
 	enum {
 		LEFT	=1,
@@ -844,9 +873,10 @@ boolean AM_clipMline (mline_t *ml, fline_t *fl)
 		TOP	=8
 	};
     
-	register	outcode1 = 0;
-	register	outcode2 = 0;
-	register	outside;
+	register	int outcode1 = 0;
+	register	int outcode2 = 0;
+	register	int 
+		outside;
 
 	fpoint_t	tmp;
 	int			dx;
@@ -979,7 +1009,8 @@ AM_drawFline
     }
 #endif
 
-#define PUTDOT(xx,yy,cc) fb[(yy)*f_p+(xx)]=(cc)
+#define PUTDOTP(xx,yy,cc) fb[(yy)*f_p+(xx)]=(cc)
+#define PUTDOTD(xx,yy,cc) *((int *)(fb+(yy)*f_p+((xx)<<2)))=(cc)
 
 	fl->a.x += f_x;
 	fl->b.x += f_x;
@@ -999,29 +1030,57 @@ AM_drawFline
 
 	if (ax > ay) {
 		d = ay - ax/2;
-		while (1) {
-			PUTDOT(x,y,color);
-			if (x == fl->b.x)
-				return;
-			if (d>=0) {
-				y += sy;
-				d -= ax;
+		if (screens[0].is8bit) {
+			while (1) {
+				PUTDOTP(x,y,(byte)color);
+				if (x == fl->b.x)
+					return;
+				if (d>=0) {
+					y += sy;
+					d -= ax;
+				}
+				x += sx;
+				d += ay;
 			}
-			x += sx;
-			d += ay;
+		} else {
+			while (1) {
+				PUTDOTD(x,y,color);
+				if (x == fl->b.x)
+					return;
+				if (d>=0) {
+					y += sy;
+					d -= ax;
+				}
+				x += sx;
+				d += ay;
+			}
 		}
 	} else {
 		d = ax - ay/2;
-		while (1) {
-			PUTDOT(x, y, color);
-			if (y == fl->b.y)
-				return;
-			if (d >= 0) {
-				x += sx;
-				d -= ay;
+		if (screens[0].is8bit) {
+			while (1) {
+				PUTDOTP(x, y, (byte)color);
+				if (y == fl->b.y)
+					return;
+				if (d >= 0) {
+					x += sx;
+					d -= ay;
+				}
+				y += sy;
+				d += ax;
 			}
-			y += sy;
-			d += ax;
+		} else {
+			while (1) {
+				PUTDOTD(x, y, color);
+				if (y == fl->b.y)
+					return;
+				if (d >= 0) {
+					x += sx;
+					d -= ay;
+				}
+				y += sy;
+				d += ax;
+			}
 		}
 	}
 }
@@ -1237,11 +1296,6 @@ void AM_drawPlayers(void)
 {
 	int		i;
 	player_t*	p;
-	static char *their_colors[] = //{ GREENS, GRAYS, BROWNS, REDS };
-									{ "7474 fcfc 6c6c",
-									  "8080 8080 8080",
-									  "bcbc 7878 4848",
-									  "fcfc fcfc fcfc" };
 	int		 their_color = -1;
 	int		 color;
 	angle_t  angle;
@@ -1268,7 +1322,7 @@ void AM_drawPlayers(void)
 		their_color++;
 		p = &players[i];
 
-		if ( (deathmatch && !singledemo) && p != plr)
+		if ( (deathmatch->value && !singledemo) && p != plr)
 			continue;
 
 		if (!playeringame[i])
@@ -1276,10 +1330,15 @@ void AM_drawPlayers(void)
 
 		if (p->powers[pw_invisibility])
 			color = 246; // *close* to black
+		else if (screens[0].is8bit)
+			color = BestColor (DefaultPalette->basecolors,
+							   RPART(p->userinfo->color),
+							   GPART(p->userinfo->color),
+							   BPART(p->userinfo->color),
+							   DefaultPalette->numcolors);
 		else
-			color = V_GetColorFromString (W_CacheLumpName ("PLAYPAL", PU_CACHE),
-					their_colors[their_color]);
-		
+			color = p->userinfo->color;
+				
 		pt.x = p->mo->x;
 		pt.y = p->mo->y;
 		angle = p->mo->angle;
@@ -1349,14 +1408,14 @@ void AM_drawMarks(void)
 			fy = CYMTOF(pt.y) - 3;
 
 			if (fx >= f_x && fx <= f_w - w && fy >= f_y && fy <= f_h - h)
-				V_DrawPatchCleanNoMove(fx, fy, FB, marknums[i]);
+				V_DrawPatchCleanNoMove(fx, fy, &FB, marknums[i]);
 		}
 	}
 }
 
 void AM_drawCrosshair(int color)
 {
-	fb[f_p*((f_h+1)/2)+(f_w/2)] = color; // single point for now
+	fb[f_p*((f_h+1)/2)+(f_w/2)] = (byte)color; // single point for now
 }
 
 void AM_Drawer (void)
@@ -1364,21 +1423,29 @@ void AM_Drawer (void)
 	if (!automapactive)
 		return;
 
+	// [RH] Moved here to make sure it happens inside D_Display().
+	if (am_needtodrawstatusbar) {
+		ST_Drawer (false, true);
+		am_needtodrawstatusbar = false;
+	}
+
+	fb = screens[0].buffer;
+
 	if (!viewactive) {
 		// [RH] Set f_? here now to handle automap overlaying
 		// and view size adjustments.
 		f_x = f_y = 0;
-		f_w = SCREENWIDTH;
+		f_w = screens[0].width;
 		f_h = ST_Y;
-		f_p = SCREENPITCH;
+		f_p = screens[0].pitch;
 
 		AM_clearFB(Background);
 	} else {
 		f_x = viewwindowx;
 		f_y = viewwindowy;
-		f_w = viewwidth;
-		f_h = viewheight;
-		f_p = SCREENPITCH;
+		f_w = realviewwidth;
+		f_h = realviewheight;
+		f_p = screens[0].pitch;
 	}
 	AM_activateNewScale();
 
@@ -1396,20 +1463,17 @@ void AM_Drawer (void)
 	AM_drawMarks();
 
 	if (!viewactive) {
-		extern int M_StringWidth (char *);				// From m_menu.c
-		extern patch_t *hu_font[];						// From hu_stuff.c
 
 		char line[64+10];
 		int y, i, time = level.time / TICRATE, height;
 
 		height = (hu_font[0]->height + 1) * CleanYfac;
 
-		if (deathmatch)
+		if (deathmatch->value)
 			y = ST_Y - height + 1;
-		else
+		else {
 			y = ST_Y - height * 2 + 1;
 
-		if (!deathmatch) {
 			if (am_showmonsters->value) {
 				sprintf (line, "\xcd\xcf\xce\xd3\xd4\xc5\xd2\xd3\xba"	// MONSTERS:
 							   " %d / %d", level.killed_monsters, level.total_monsters);
@@ -1419,7 +1483,7 @@ void AM_Drawer (void)
 			if (am_showsecrets->value) {
 				sprintf (line, "\xd3\xc5\xc3\xd2\xc5\xd4\xd3\xba"	// SECRETS:
 							   " %d / %d", level.found_secrets, level.total_secrets);
-				V_DrawTextClean (SCREENWIDTH - M_StringWidth (line) * CleanXfac, y, line);
+				V_DrawTextClean (screens[0].width - V_StringWidth (line) * CleanXfac, y, line);
 			}
 
 			y += height;
@@ -1427,9 +1491,9 @@ void AM_Drawer (void)
 
 		i = 0;
 		while (i < 8 && level.mapname[i]) {
-			line[i++] = level.mapname[i] ^ 0x80;
+			line[i++] = (byte)(level.mapname[i] ^ (byte)0x80);
 		}
-		line[i++] = (char)(':' | 0x80);
+		line[i++] = (byte)(':' | (byte)0x80);
 		line[i++] = ' ';
 		strcpy (&line[i], level.level_name);
 		V_DrawTextClean (0, y, line);
@@ -1438,7 +1502,7 @@ void AM_Drawer (void)
 			sprintf (line, " %02d:%02d:%02d", time/3600, (time%3600)/60, time%60);	// Time
 			for (i = 0; line[i]; i++)
 				line[i] ^= 0x80;
-			V_DrawTextClean (SCREENWIDTH - M_StringWidth (line) * CleanXfac, y, line);
+			V_DrawTextClean (screens[0].width - V_StringWidth (line) * CleanXfac, y, line);
 		}
 
 	}

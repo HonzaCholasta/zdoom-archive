@@ -21,8 +21,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: i_main.c,v 1.4 1997/02/03 22:45:10 b1 Exp $";
 
 
 
@@ -36,7 +34,7 @@ rcsid[] = "$Id: i_main.c,v 1.4 1997/02/03 22:45:10 b1 Exp $";
 #include "m_argv.h"
 #include "d_main.h"
 #include "i_system.h"
-#include "c_console.h"
+#include "c_consol.h"
 
 LRESULT CALLBACK WndProc (HWND, UINT, WPARAM, LPARAM);
 
@@ -72,8 +70,8 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 		DWORD OldRights;
 		BYTE *pBaseOfImage = GetModuleHandle(0);
 		IMAGE_OPTIONAL_HEADER *pHeader = (IMAGE_OPTIONAL_HEADER *)
-		(pBaseOfImage + ((IMAGE_DOS_HEADER*)pBaseOfImage)->e_lfanew +
-		sizeof(IMAGE_NT_SIGNATURE) + sizeof(IMAGE_FILE_HEADER));
+			(pBaseOfImage + ((IMAGE_DOS_HEADER*)pBaseOfImage)->e_lfanew +
+			sizeof(IMAGE_NT_SIGNATURE) + sizeof(IMAGE_FILE_HEADER));
 		if (!VirtualProtect(pBaseOfImage+pHeader->BaseOfCode,pHeader->SizeOfCode,PAGE_READWRITE,&OldRights))
 			I_FatalError ("Could not make code writable\n");
 	}
@@ -101,8 +99,7 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 	/* create window */
 	Window = CreateWindow((LPCTSTR)WinClassName,
 			(LPCTSTR) "ZDOOM (" __DATE__ ")",
-			WS_CAPTION | WS_OVERLAPPED | WS_POPUP |
-			WS_SYSMENU | WS_MINIMIZEBOX,
+			WS_CAPTION | WS_OVERLAPPED | WS_MINIMIZEBOX | WS_SYSMENU,
 			CW_USEDEFAULT, CW_USEDEFAULT, width, height,
 			(HWND)   NULL,
 			(HMENU)  NULL,
@@ -118,8 +115,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE nothing, LPSTR cmdline, int n
 
 	OemFont = GetStockObject (OEM_FIXED_FONT);	// This should not fail
 	SelectObject (WinDC, OemFont);
-	SetTextColor (WinDC, RGB(0,255,255));
-	SetBkMode (WinDC, TRANSPARENT);
 
 	GetTextMetrics (WinDC, &metrics);
 	OemWidth = metrics.tmAveCharWidth;

@@ -13,8 +13,6 @@ EXTERN	_I_FatalError
   SECTION .data
 %endif
 
-FracUnit	DD	0,0x40f00000		; 65536
-
 
 %ifdef M_TARGET_WATCOM
   SEGMENT CODE PUBLIC ALIGN=16 CLASS=CODE USE32
@@ -34,6 +32,8 @@ FracUnit	DD	0,0x40f00000		; 65536
 
 GLOBAL	_FixedMul_ASM
 
+	align	16
+
 _FixedMul_ASM:
 	mov	eax,[esp+4]
 	imul	dword [esp+8]
@@ -52,53 +52,50 @@ _FixedMul_ASM:
 
 GLOBAL	_FixedDiv_ASM
 
+	align	16
+
 _FixedDiv_ASM:
+	push	ebp
 	push	ebx
 
 ; 89   : 	if ((abs (a) >> 14) >= abs(b))
 
-	mov	eax,[esp+8]		; get a
-	mov	ebx,[esp+12]		; get b
-	mov	ecx,eax
-	mov	edx,ebx
+	mov	edx,[esp+12]		; get a
+	 mov	eax,[esp+16]		; get b
+	mov	ecx,edx
+	 mov	ebx,eax
 	sar	ecx,31
-	sar	edx,31
-	xor	eax,ecx
-	xor	ebx,edx
-	sub	eax,ecx			; eax is now abs(a)
-	sub	ebx,edx			; ebx is now abs(b)
+	 mov	ebp,edx
+	sar	ebx,31
+	 xor	ebp,ecx
+	xor	eax,ebx
+	 sub	ebp,ecx			; ebp is now abs(a)
+	sub	eax,ebx			; eax is now abs(b)
 
-	sar	eax,14
-	cmp	eax,ebx
-	jl	.L206
+	sar	ebp,14
+	 pop	ebx
+	cmp	ebp,eax
+	 jl	.L206
 
 ; 90   : 		return (a^b)<0 ? MININT : MAXINT;
 
-	mov	edx,[esp+8]
 	xor	edx,[esp+12]
-	xor	eax,eax
-	test	edx,edx
+	 xor	eax,eax
+	pop	ebp
+	 test	edx,edx
 	setl	al
 	add	eax,0x7fffffff
-
-	pop	ebx
 	ret
+
+	align	16
+
 .L206:
-	mov	edx,[esp+8]		; v  (edx = aaaaAAAA)
-	mov	eax,[esp+8]		; u  (eax = aaaaAAAA)
-	sar	edx,16			; v  (edx = ----aaaa)
-	shl	eax,16			; u  (eax = AAAA0000)
-	idiv	dword [esp+12]		; np
+	sar	edx,16			; (edx = ----aaaa)
+	 mov	eax,[esp+8]		; (eax = aaaaAAAA)
+	shl	eax,16			; (eax = AAAA0000)
+	 pop	ebp
+	idiv	dword [esp+8]
 
-;	fild	dword [esp+8]
-;	fild	dword [esp+12]
-;	push	eax
-;	fdivp	ST1,ST0
-;	fmul	qword [FracUnit]
-;	fistp	dword [esp]
-;	pop	eax
-
-	pop	ebx
 	ret
 
 
@@ -189,30 +186,44 @@ _DimScreenPLoop:
 	push	ebp
 
 	mov	eax,[esp+5*4]		; Get colormap
-	mov	esi,[esp+6*4]		; Get screen data pointer
-	mov	ebx,eax			; Copy colormap
+	mov	edi,[esp+6*4]		; Get screen data pointer
 	mov	ebp,[esp+9*4]		; Get height
 
-.yloop	mov	edi,[esp+7*4]		; Get width
-	 nop				; Make the following pair properly
-.xloop	xor	ecx,ecx			; Prep for last two pixels
-	 mov	al,[esi+2]		; Get pixel 3
-	mov	cl,[eax]		; Calc pixel 3
-	 mov	bl,[esi+3]		; Get pixel 4
-	mov	ch,[ebx]		; Calc pixel 4
-	 add	esi,4			; Increment screen pointer
-	xor	edx,edx			; Prep for first two pixels
-	 mov	al,[esi-4]		; Get pixel 1
-	mov	dl,[eax]		; Calc pixel 1
-	 mov	bl,[esi-3]		; Get pixel 2
-	mov	dh,[ebx]		; Calc pixel 2
-	 shl	ecx,16			; Merge all four pixels
-	or	ecx,edx
-	 sub	edi,4			; Decrement width counter
-	mov	[esi-4],ecx		; Write pixels back to screen
-	 jnz	.xloop
+	mov	ecx,0			; Clear out work registers
+	mov	edx,0
+	mov	ebx,0
 
-	add	esi,[esp+8*4]		; Add modulo to screen pointer
+.yloop	mov	esi,[esp+7*4]		; Get width
+	 nop				; Make the following pair properly
+.xloop	mov	bl,[edi]		; Get pixel 0
+	 mov	cl,[edi+4]		; Get pixel 4
+	mov	bl,[eax+ebx]		; Map pixel 0
+	 mov	dl,[edi+1]		; Get pixel 1
+	mov	cl,[eax+ecx]		; Map pixel 4
+	 mov	[edi],bl		; Put pixel 0
+	mov	dl,[eax+edx]		; Map pixel 1
+	 mov	[edi+4],cl		; Put pixel 4
+	mov	bl,[edi+2]		; Get pixel 2
+	 mov	[edi+1],dl		; Put pixel 1
+	mov	cl,[edi+5]		; Get pixel 5
+	 mov	bl,[eax+ebx]		; Map pixel 2
+	mov	cl,[eax+ecx]		; Map pixel 5
+	 mov	[edi+2],bl		; Put pixel 2
+	mov	[edi+5],cl		; Put pixel 5
+	 mov	bl,[edi+3]		; Get pixel 3
+	mov	cl,[edi+6]		; Get pixel 6
+	 mov	bl,[eax+ebx]		; Map pixel 3
+	mov	cl,[eax+ecx]		; Map pixel 6
+	 mov	dl,[edi+7]		; Get pixel 7
+	mov	[edi+6],cl		; Put pixel 6
+	 mov	dl,[eax+edx]		; Map pixel 7
+	mov	[edi+3],bl		; Put pixel 3
+	 mov	[edi+7],dl		; Put pixel 7
+	add	edi,8
+	 sub	esi,8
+	jnz	.xloop
+
+	add	edi,[esp+8*4]		; Add modulo to screen pointer
 	 dec	ebp
 	jnz	.yloop
 
@@ -236,27 +247,30 @@ GLOBAL	_PrintChar1P
 
 _PrintChar1P:
 	push	esi
-	push	edi
+	 push	edi
+	push	ebp
 
-	mov	esi,[esp+3*4]
-	xor	ecx,ecx
-	mov	edi,[esp+4*4]
-	mov	cl,8
+	 mov	ebp,[esp+6*4]
+	mov	esi,[esp+4*4]
+	 xor	ecx,ecx
+	mov	edi,[esp+5*4]
+	 mov	cl,8
 
 .loop	mov	eax,[edi]		; Get first 4 pixels
 	 mov	edx,[edi+4]		; Get last 4 pixels
 	and	eax,[esi+8]		; Mask first 4 pixels
 	 and	edx,[esi+12]		; Mask last 4 pixels
-	xor	eax,[esi]		; Draw first 4 pixels
+	db	0x33,0x46,0x00		; xor eax,[esi+0] : Draw first 4 pixels (K6 optimization)
 	 xor	edx,[esi+4]		; Draw last 4 pixels
 	mov	[edi],eax		; Save first 4 pixels
 	 mov	[edi+4],edx		; Save last 4 pixels
 
-	add	edi,[esp+5*4]
+	add	edi,ebp
 	 add	esi,16
 	dec	ecx
 	 jnz	.loop
 
+	pop	ebp
 	pop	edi
 	pop	esi
 	ret
@@ -286,8 +300,11 @@ _PrintChar2P_MMX:
 	mov	cl,8
 	add	eax,eax
 
+; Note that this doesn't pair as nicely as I thought it did.
+; Oh well. I have a K6, so I don't really care.
+
 .loop	movq		mm0,[esi+8]	; Get mask
-	 movq		mm2,[esi]	; Get conchar bits
+	 db	0x0f,0x6f,0x56,0x00	; movq mm2,[esi+0] : Get conchar bits
 	movq		mm1,mm0		; Copy mask
 	 movq		mm3,mm2		; Copy conchar bits
 	punpckhbw	mm0,mm0		; Expand last 4 pixels of mask

@@ -21,8 +21,6 @@
 //
 //-----------------------------------------------------------------------------
 
-static const char
-rcsid[] = "$Id: p_tick.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 
 #include "i_system.h"
 #include "z_zone.h"
@@ -31,8 +29,11 @@ rcsid[] = "$Id: p_tick.c,v 1.4 1997/02/03 16:47:55 b1 Exp $";
 // State.
 #include "doomstat.h"
 #include "r_state.h"
+#include "m_random.h"
 
-byte*			save_p;
+#include "v_palett.h"
+
+byte *save_p;
 
 
 // Pads save_p to a 4-byte boundary
@@ -125,8 +126,8 @@ void P_ArchiveWorld (void)
 	// do sectors
 	for (i=0, sec = sectors ; i<numsectors ; i++,sec++)
 	{
-		*put++ = sec->floorheight >> FRACBITS;
-		*put++ = sec->ceilingheight >> FRACBITS;
+		*put++ = (short)(sec->floorheight >> FRACBITS);
+		*put++ = (short)(sec->ceilingheight >> FRACBITS);
 		*put++ = sec->floorpic;
 		*put++ = sec->ceilingpic;
 		*put++ = sec->lightlevel;
@@ -148,8 +149,8 @@ void P_ArchiveWorld (void)
 			
 			si = &sides[li->sidenum[j]];
 
-			*put++ = si->textureoffset >> FRACBITS;
-			*put++ = si->rowoffset >> FRACBITS;
+			*put++ = (short)(si->textureoffset >> FRACBITS);
+			*put++ = (short)(si->rowoffset >> FRACBITS);
 			*put++ = si->toptexture;
 			*put++ = si->bottomtexture;
 			*put++ = si->midtexture;	
@@ -335,8 +336,8 @@ enum
 	tc_flash,
 	tc_strobe,
 	tc_glow,
+	tc_fireflicker,
 	tc_endspecials
-
 } specials_e;	
 
 
@@ -351,6 +352,7 @@ enum
 // T_StrobeFlash, (strobe_t: sector_t *),
 // T_Glow, (glow_t: sector_t *),
 // T_PlatRaise, (plat_t: sector_t *), - active list
+// T_FireFlicker (fireflicker_t: sector_t * swizze),	[RH] Was missed in original code
 //
 void P_ArchiveSpecials (void)
 {
@@ -384,7 +386,7 @@ void P_ArchiveSpecials (void)
 			}
 			continue;
 		}
-						
+
 		if (th->function.acp1 == (actionf_p1)T_MoveCeiling)
 		{
 			*save_p++ = tc_ceiling;
@@ -393,10 +395,8 @@ void P_ArchiveSpecials (void)
 			memcpy (ceiling, th, sizeof(*ceiling));
 			save_p += sizeof(*ceiling);
 			ceiling->sector = (sector_t *)(ceiling->sector - sectors);
-			continue;
 		}
-						
-		if (th->function.acp1 == (actionf_p1)T_VerticalDoor)
+		else if (th->function.acp1 == (actionf_p1)T_VerticalDoor)
 		{
 			*save_p++ = tc_door;
 			PADSAVEP();
@@ -404,10 +404,8 @@ void P_ArchiveSpecials (void)
 			memcpy (door, th, sizeof(*door));
 			save_p += sizeof(*door);
 			door->sector = (sector_t *)(door->sector - sectors);
-			continue;
 		}
-						
-		if (th->function.acp1 == (actionf_p1)T_MoveFloor)
+		else if (th->function.acp1 == (actionf_p1)T_MoveFloor)
 		{
 			*save_p++ = tc_floor;
 			PADSAVEP();
@@ -415,10 +413,8 @@ void P_ArchiveSpecials (void)
 			memcpy (floor, th, sizeof(*floor));
 			save_p += sizeof(*floor);
 			floor->sector = (sector_t *)(floor->sector - sectors);
-			continue;
 		}
-						
-		if (th->function.acp1 == (actionf_p1)T_PlatRaise)
+		else if (th->function.acp1 == (actionf_p1)T_PlatRaise)
 		{
 			*save_p++ = tc_plat;
 			PADSAVEP();
@@ -426,10 +422,8 @@ void P_ArchiveSpecials (void)
 			memcpy (plat, th, sizeof(*plat));
 			save_p += sizeof(*plat);
 			plat->sector = (sector_t *)(plat->sector - sectors);
-			continue;
 		}
-						
-		if (th->function.acp1 == (actionf_p1)T_LightFlash)
+		else if (th->function.acp1 == (actionf_p1)T_LightFlash)
 		{
 			*save_p++ = tc_flash;
 			PADSAVEP();
@@ -437,10 +431,8 @@ void P_ArchiveSpecials (void)
 			memcpy (flash, th, sizeof(*flash));
 			save_p += sizeof(*flash);
 			flash->sector = (sector_t *)(flash->sector - sectors);
-			continue;
 		}
-						
-		if (th->function.acp1 == (actionf_p1)T_StrobeFlash)
+		else if (th->function.acp1 == (actionf_p1)T_StrobeFlash)
 		{
 			*save_p++ = tc_strobe;
 			PADSAVEP();
@@ -448,10 +440,8 @@ void P_ArchiveSpecials (void)
 			memcpy (strobe, th, sizeof(*strobe));
 			save_p += sizeof(*strobe);
 			strobe->sector = (sector_t *)(strobe->sector - sectors);
-			continue;
 		}
-						
-		if (th->function.acp1 == (actionf_p1)T_Glow)
+		else if (th->function.acp1 == (actionf_p1)T_Glow)
 		{
 			*save_p++ = tc_glow;
 			PADSAVEP();
@@ -459,10 +449,21 @@ void P_ArchiveSpecials (void)
 			memcpy (glow, th, sizeof(*glow));
 			save_p += sizeof(*glow);
 			glow->sector = (sector_t *)(glow->sector - sectors);
-			continue;
+		}
+		else if (th->function.acp1 == (actionf_p1)T_FireFlicker)
+		{
+			fireflicker_t *flick;
+
+			// [RH] Save FireFlicker thinkers. The Linux code missed these.
+			*save_p++ = tc_fireflicker;
+			PADSAVEP();
+			flick = (fireflicker_t *)save_p;
+			memcpy (flick, th, sizeof(*flick));
+			save_p += sizeof(*flick);
+			flick->sector = (sector_t *)(flick->sector - sectors);
 		}
 	}
-		
+
 	// add a terminating marker
 	*save_p++ = tc_endspecials; 
 
@@ -482,6 +483,7 @@ void P_UnArchiveSpecials (void)
 	lightflash_t*		flash;
 	strobe_t*			strobe;
 	glow_t* 			glow;
+	fireflicker_t*		flick;
 		
 		
 	// read in saved thinkers
@@ -492,7 +494,7 @@ void P_UnArchiveSpecials (void)
 		{
 		  case tc_endspecials:
 			return; 	// end of list
-						
+
 		  case tc_ceiling:
 			PADSAVEP();
 			ceiling = Z_Malloc (sizeof(*ceiling), PU_LEVEL, NULL);
@@ -507,7 +509,7 @@ void P_UnArchiveSpecials (void)
 			P_AddThinker (&ceiling->thinker);
 			P_AddActiveCeiling(ceiling);
 			break;
-								
+
 		  case tc_door:
 			PADSAVEP();
 			door = Z_Malloc (sizeof(*door), PU_LEVEL, NULL);
@@ -518,7 +520,7 @@ void P_UnArchiveSpecials (void)
 			door->thinker.function.acp1 = (actionf_p1)T_VerticalDoor;
 			P_AddThinker (&door->thinker);
 			break;
-								
+
 		  case tc_floor:
 			PADSAVEP();
 			floor = Z_Malloc (sizeof(*floor), PU_LEVEL, NULL);
@@ -529,7 +531,7 @@ void P_UnArchiveSpecials (void)
 			floor->thinker.function.acp1 = (actionf_p1)T_MoveFloor;
 			P_AddThinker (&floor->thinker);
 			break;
-								
+
 		  case tc_plat:
 			PADSAVEP();
 			plat = Z_Malloc (sizeof(*plat), PU_LEVEL, NULL);
@@ -544,7 +546,7 @@ void P_UnArchiveSpecials (void)
 			P_AddThinker (&plat->thinker);
 			P_AddActivePlat(plat);
 			break;
-								
+
 		  case tc_flash:
 			PADSAVEP();
 			flash = Z_Malloc (sizeof(*flash), PU_LEVEL, NULL);
@@ -554,7 +556,7 @@ void P_UnArchiveSpecials (void)
 			flash->thinker.function.acp1 = (actionf_p1)T_LightFlash;
 			P_AddThinker (&flash->thinker);
 			break;
-								
+
 		  case tc_strobe:
 			PADSAVEP();
 			strobe = Z_Malloc (sizeof(*strobe), PU_LEVEL, NULL);
@@ -564,7 +566,7 @@ void P_UnArchiveSpecials (void)
 			strobe->thinker.function.acp1 = (actionf_p1)T_StrobeFlash;
 			P_AddThinker (&strobe->thinker);
 			break;
-								
+
 		  case tc_glow:
 			PADSAVEP();
 			glow = Z_Malloc (sizeof(*glow), PU_LEVEL, NULL);
@@ -574,7 +576,17 @@ void P_UnArchiveSpecials (void)
 			glow->thinker.function.acp1 = (actionf_p1)T_Glow;
 			P_AddThinker (&glow->thinker);
 			break;
-								
+
+		  case tc_fireflicker:		// [RH] Restore fireflicker thinkers
+			PADSAVEP();
+			flick = Z_Malloc (sizeof(*flick), PU_LEVEL, NULL);
+			memcpy (flick, save_p, sizeof(*flick));
+			save_p += sizeof(*flick);
+			flick->sector = &sectors[(int)flick->sector];
+			flick->thinker.function.acp1 = (actionf_p1)T_FireFlicker;
+			P_AddThinker (&flick->thinker);
+			break;
+
 		  default:
 			I_Error ("P_UnarchiveSpecials:Unknown tclass %i "
 					 "in savegame",tclass);
@@ -584,3 +596,72 @@ void P_UnArchiveSpecials (void)
 
 }
 
+// [RH] Save the state of the random number generator
+void P_ArchiveRNGState (void)
+{
+	PADSAVEP();
+	memcpy (save_p, &rng, sizeof(rng));
+	save_p += sizeof(rng);
+}
+
+// [RH] Load the state of the random number generator
+void P_UnArchiveRNGState (void)
+{
+	PADSAVEP();
+	memcpy (&rng, save_p, sizeof(rng));
+	save_p += sizeof(rng);
+}
+
+// [RH] Save level local info
+void P_ArchiveLevelLocals (void)
+{
+	PADSAVEP();
+	memcpy (save_p, &level, sizeof(level));
+	save_p += sizeof(level);
+
+	if (gamemode != commercial) {
+		// Also save list of visited levels
+		int epsd, map;
+		char name[8] = "E M ";
+		level_info_t *info;
+
+		for (epsd = '1'; epsd <= '3'; epsd++) {
+			for (map = '1'; map <= '9'; map++) {
+				name[1] = epsd;
+				name[3] = map;
+				if ( (info = FindLevelInfo (name)) ) {
+					if (info->level_name && info->flags & LEVEL_VISITED) {
+						memcpy (save_p, info->mapname, 8);
+						save_p += 8;
+					}
+				}
+			}
+		}
+	}
+	*save_p++ = 0;
+}
+
+// [RH] Restore the level local info
+void P_UnArchiveLevelLocals (void)
+{
+	level_info_t *info = level.info;
+
+	PADSAVEP();
+	memcpy (&level, save_p, sizeof(level));
+	save_p += sizeof(level);
+	level.info = info;
+
+	while (*save_p) {
+		level_info_t *info;
+
+		if ( (info = FindLevelInfo (save_p)) ) {
+			if (info->level_name)
+				info->flags |= LEVEL_VISITED;
+		}
+		save_p += 8;
+	}
+	save_p++;
+
+	// In case testfade was used, we need to rebuild the colormaps
+	RefreshPalettes();
+}

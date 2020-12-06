@@ -27,8 +27,8 @@
 
 // background and foreground screen numbers
 // different from other modules.
-#define BG						1
-#define FG						0
+#define BG						(screens[1])
+#define FG						(screens[0])
 
 // font stuff
 #define HU_CHARERASE	KEY_BACKSPACE
@@ -68,9 +68,9 @@ typedef struct
 	int 				h;				// height in lines
 	int 				cl; 			// current line number
 
-	// pointer to boolean stating whether to update window
-	boolean*			on;
-	boolean 			laston; 		// last value of *->on.
+	// pointer to BOOL stating whether to update window
+	BOOL*			on;
+	BOOL 			laston; 		// last value of *->on.
 
 } hu_stext_t;
 
@@ -85,9 +85,9 @@ typedef struct
 	 // left margin past which I am not to delete characters
 	int 				lm;
 
-	// pointer to boolean stating whether to update window
-	boolean*			on; 
-	boolean 			laston; // last value of *->on;
+	// pointer to BOOL stating whether to update window
+	BOOL*			on; 
+	BOOL 			laston; // last value of *->on;
 
 } hu_itext_t;
 
@@ -109,13 +109,13 @@ void	HUlib_clearTextLine(hu_textline_t *t);
 void	HUlib_initTextLine(hu_textline_t *t, int x, int y, patch_t **f, int sc);
 
 // returns success
-boolean HUlib_addCharToTextLine(hu_textline_t *t, char ch);
+BOOL HUlib_addCharToTextLine(hu_textline_t *t, char ch);
 
 // returns success
-boolean HUlib_delCharFromTextLine(hu_textline_t *t);
+BOOL HUlib_delCharFromTextLine(hu_textline_t *t);
 
 // draws tline
-void	HUlib_drawTextLine(hu_textline_t *l, boolean drawcursor);
+void	HUlib_drawTextLine(hu_textline_t *l, BOOL drawcursor);
 
 // erases text line
 void	HUlib_eraseTextLine(hu_textline_t *l); 
@@ -134,7 +134,7 @@ HUlib_initSText
   int			h,
   patch_t** 	font,
   int			startchar,
-  boolean*		on );
+  BOOL*		on );
 
 // add a new line
 void HUlib_addLineToSText(hu_stext_t* s);  
@@ -160,7 +160,7 @@ HUlib_initIText
   int			y,
   patch_t** 	font,
   int			startchar,
-  boolean*		on );
+  BOOL*		on );
 
 // enforces left margin
 void HUlib_delCharFromIText(hu_itext_t* it);
@@ -178,7 +178,7 @@ HUlib_addPrefixToIText
   char* 		str );
 
 // whether eaten
-boolean
+BOOL
 HUlib_keyInIText
 ( hu_itext_t*	it,
   unsigned char ch );

@@ -21,33 +21,18 @@
 //
 //-----------------------------------------------------------------------------
 
-//-----------------------------------------------------------------------------
-//
-// This file contains various levels of support 
-// for using sprites and flats directly from a PWAD as well as some minor
-// optimisations for patches. Because there are some PWADs that do arcane
-// things with sprites, it is possible that this feature may not always
-// work (at least, not until I become aware of them and support them) and
-// so this feature can be turned off from the command line if necessary.
-//
-// See the file README.sprites for details.
-//
-// Martin Howe (martin.howe@dial.pipex.com), March 4th 1998
-//
 
-static const char
-rcsid[] = "$Id: w_wad.c,v 1.5 1997/02/03 16:47:57 b1 Exp $";
-
-
+#include <stdlib.h>
 #include <io.h>
 #include <ctype.h>
 #include <sys/types.h>
 #include <string.h>
-#include <malloc.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 
+#include "m_alloc.h"
 #include "doomtype.h"
+#include "doomstat.h"
 #include "doomdef.h"
 #include "m_swap.h"
 #include "m_argv.h"
@@ -55,11 +40,11 @@ rcsid[] = "$Id: w_wad.c,v 1.5 1997/02/03 16:47:57 b1 Exp $";
 #include "z_zone.h"
 #include "cmdlib.h"
 
-#ifdef __GNUG__
-#pragma implementation "w_wad.h"
-#endif
 #include "w_wad.h"
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 //
 // GLOBALS
@@ -72,558 +57,6 @@ int				numlumps;
 void**			lumpcache;
 
 
-// Sprites, Flats, Patches
-int		sprite_lists=0;			// number of sprite begin..end sections found
-int		flat_lists=0;			// number of flat begin..end sections found
-int		patch_lists=0;			// number of patch begin..end sections found
-int		lax_list_syntax=1;		// use commonly found begin..end syntax
-int		lax_sprite_rot=0;		// disengage sprite rotation/limit checks
-int		group_sprites=0;		// enable sprite optimisations
-int		group_flats=0;			// enable sprite optimisations
-int		group_patches=0;		// enable sprite optimisations
-
-int W_IsS_START(char *name)
-//
-// Is the name a sprite list start flag?
-// If lax syntax match, fix up to standard syntax.
-//
-{
-	int result,lax;
-
-	result = ( (name[0]=='S') &&
-			   (name[1]=='_') &&
-			   (name[2]=='S') &&
-			   (name[3]=='T') &&
-			   (name[4]=='A') &&
-			   (name[5]=='R') &&
-			   (name[6]=='T') &&
-			   (name[7]== 0 ) );
-	lax    = ( (!result) &&
-			   (name[0]=='S') &&
-			   (name[1]=='S') &&
-			   (name[2]=='_') &&
-			   (name[3]=='S') &&
-			   (name[4]=='T') &&
-			   (name[5]=='A') &&
-			   (name[6]=='R') &&
-			   (name[7]=='T') );
-	if (lax) {
-		if (!lax_list_syntax)
-			I_Error("W_IsS_START: flag SS_START encountered in sprites list");
-
-		//fix up flag to standard syntax
-		result=1;
-		name[0]='S';
-		name[1]='_';
-		name[2]='S';
-		name[3]='T';
-		name[4]='A';
-		name[5]='R';
-		name[6]='T';
-		name[7]= 0 ;
-	}
-
-	return result;
-}
-
-int W_IsS_END(char *name)
-//
-// Is the name a sprite list end flag?
-// If lax syntax match, fix up to standard syntax.
-//
-{
-	int result,lax;
-
-	result = ( (name[0]=='S') &&
-			   (name[1]=='_') &&
-			   (name[2]=='E') &&
-			   (name[3]=='N') &&
-			   (name[4]=='D') &&
-			   (name[5]== 0 ) &&
-			   (name[6]== 0 ) &&
-			   (name[7]== 0 ) );
-	lax    = ( (!result) &&
-			   (name[0]=='S') &&
-			   (name[1]=='S') &&
-			   (name[2]=='_') &&
-			   (name[3]=='E') &&
-			   (name[4]=='N') &&
-			   (name[5]=='D') &&
-			   (name[6]== 0 ) &&
-			   (name[7]== 0 ) );
-	if (lax) {
-		if (!lax_list_syntax)
-			I_Error("W_IsS_END: flag SS_END encountered in sprites list");
-
-		//fix up flag to standard syntax
-		result=1;
-		name[0]='S';
-		name[1]='_';
-		name[2]='E';
-		name[3]='N';
-		name[4]='D';
-		name[5]= 0 ;
-		name[6]= 0 ;
-		name[7]= 0 ;
-	}
-
-	return result;
-}
-
-int W_IsF_START(char *name)
-//
-// Is the name a flat list start flag?
-// If lax syntax match, fix up to standard syntax.
-//
-{
-	int result,lax;
-
-	result = ( (name[0]=='F') &&
-			   (name[1]=='_') &&
-			   (name[2]=='S') &&
-			   (name[3]=='T') &&
-			   (name[4]=='A') &&
-			   (name[5]=='R') &&
-			   (name[6]=='T') &&
-			   (name[7]== 0 ) );
-	lax    =   ( (!result) &&
-			   (name[0]=='F') &&
-			   (name[1]=='F') &&
-			   (name[2]=='_') &&
-			   (name[3]=='S') &&
-			   (name[4]=='T') &&
-			   (name[5]=='A') &&
-			   (name[6]=='R') &&
-			   (name[7]=='T') );
-	if (lax) {
-		if (!lax_list_syntax)
-			I_Error("W_IsF_START: flag FF_START encountered in flats list");
-
-		//fix up flag to standard syntax
-		result=1;
-		name[0]='F';
-		name[1]='_';
-		name[2]='S';
-		name[3]='T';
-		name[4]='A';
-		name[5]='R';
-		name[6]='T';
-		name[7]= 0 ;
-	}
-
-	return result;
-}
-
-int W_IsF_END(char *name)
-//
-// Is the name a flat list end flag?
-// If lax syntax match, fix up to standard syntax.
-//
-{
-  int result,lax;
-
-	result = ( (name[0]=='F') &&
-			   (name[1]=='_') &&
-			   (name[2]=='E') &&
-			   (name[3]=='N') &&
-			   (name[4]=='D') &&
-			   (name[5]== 0 ) &&
-			   (name[6]== 0 ) &&
-			   (name[7]== 0 ) );
-	lax    = ( (!result) &&
-			   (name[0]=='F') &&
-			   (name[1]=='F') &&
-			   (name[2]=='_') &&
-			   (name[3]=='E') &&
-			   (name[4]=='N') &&
-			   (name[5]=='D') &&
-			   (name[6]== 0 ) &&
-			   (name[7]== 0 ) );
-	if (lax) {
-		if (!lax_list_syntax)
-			I_Error("W_IsF_END: flag FF_END encountered in flats list");
-
-		//fix up flag to standard syntax
-		result=1;
-		name[0]='F';
-		name[1]='_';
-		name[2]='E';
-		name[3]='N';
-		name[4]='D';
-		name[5]= 0 ;
-		name[6]= 0 ;
-		name[7]= 0 ;
-	}
-
-	return result;
-}
-
-int W_IsP_START(char *name)
-//
-// Is the name a patch list start flag?
-// If lax syntax match, fix up to standard syntax.
-//
-{
-	int result,lax;
-
-	result = ( (name[0]=='P') &&
-			   (name[1]=='_') &&
-			   (name[2]=='S') &&
-			   (name[3]=='T') &&
-			   (name[4]=='A') &&
-			   (name[5]=='R') &&
-			   (name[6]=='T') &&
-			   (name[7]== 0 ) );
-	lax    = ( (!result) &&
-			   (name[0]=='P') &&
-			   (name[1]=='P') &&
-			   (name[2]=='_') &&
-			   (name[3]=='S') &&
-			   (name[4]=='T') &&
-			   (name[5]=='A') &&
-			   (name[6]=='R') &&
-			   (name[7]=='T') );
-	if (lax) {
-		if (!lax_list_syntax)
-			I_Error("W_IsP_START: flag PP_START encountered in patches list");
-
-		//fix up flag to standard syntax
-		result=1;
-		name[0]='P';
-		name[1]='_';
-		name[2]='S';
-		name[3]='T';
-		name[4]='A';
-		name[5]='R';
-		name[6]='T';
-		name[7]= 0 ;
-	}
-
-	return result;
-}
-
-int W_IsP_END(char *name)
-//
-// Is the name a patches list end flag?
-// If lax syntax match, fix up to standard syntax.
-//
-{
-	int result,lax;
-
-	result = ( (name[0]=='P') &&
-			   (name[1]=='_') &&
-			   (name[2]=='E') &&
-			   (name[3]=='N') &&
-			   (name[4]=='D') &&
-			   (name[5]== 0 ) &&
-			   (name[6]== 0 ) &&
-			   (name[7]== 0 ) );
-	lax    = ( (!result) &&
-			   (name[0]=='P') &&
-			   (name[1]=='P') &&
-			   (name[2]=='_') &&
-			   (name[3]=='E') &&
-			   (name[4]=='N') &&
-			   (name[5]=='D') &&
-			   (name[6]== 0 ) &&
-			   (name[7]== 0 ) );
-	if (lax) {
-		if (!lax_list_syntax)
-			I_Error("W_IsP_END: flag PP_END encountered in patches list");
-
-		//fix up flag to standard syntax
-		result=1;
-		name[0]='P';
-		name[1]='_';
-		name[2]='E';
-		name[3]='N';
-		name[4]='D';
-		name[5]= 0 ;
-		name[6]= 0 ;
-		name[7]= 0 ;
-	}
-
-	return result;
-}
-
-int W_IsNullName(char *name)
-//
-// Return 1 if the name is null
-//
-{
-	return ( (name[0]==0) &&
-			 (name[1]==0) &&
-			 (name[2]==0) &&
-			 (name[3]==0) &&
-			 (name[4]==0) &&
-			 (name[5]==0) &&
-			 (name[6]==0) &&
-			 (name[7]==0) );
-}
-
-int W_IsBadSpriteFlag(char *name)
-//
-// Return 1 if the name is one of the redundant sprite list flags S1_START,
-// S1_END, S2_START or S2_END. These are oft-encountered hacks that some
-// editors need and are not recognised or needed by Doom.
-//
-{
-	return ( ((name[0]=='S') &&
-			  (name[1]=='1') &&
-			  (name[2]=='_') &&
-			  (name[3]=='S') &&
-			  (name[4]=='T') &&
-			  (name[5]=='A') &&
-			  (name[6]=='R') &&
-			  (name[7]=='T'))
-			||
-			 ((name[0]=='S') &&
-			  (name[1]=='1') &&
-			  (name[2]=='_') &&
-			  (name[3]=='E') &&
-			  (name[4]=='N') &&
-			  (name[5]=='D') &&
-			  (name[6]== 0 ) &&
-			  (name[7]== 0 ))
-			||
-			 ((name[0]=='S') &&
-			  (name[1]=='2') &&
-			  (name[2]=='_') &&
-			  (name[3]=='S') &&
-			  (name[4]=='T') &&
-			  (name[5]=='A') &&
-			  (name[6]=='R') &&
-			  (name[7]=='T'))
-			||
-			 ((name[0]=='S') &&
-			  (name[1]=='2') &&
-			  (name[2]=='_') &&
-			  (name[3]=='E') &&
-			  (name[4]=='N') &&
-			  (name[5]=='D') &&
-			  (name[6]== 0 ) &&
-			  (name[7]== 0 )) );
-}
-
-int W_IsBadFlatFlag(char *name)
-//
-// Return 1 if the name is one of the redundant flat list flags F1_START,
-// F1_END, F2_START or F2_END. These are oft-encountered hacks that some
-// editors need and are not recognised or needed by Doom.
-//
-{
-	return ( ((name[0]=='F') &&
-			  (name[1]=='1') &&
-			  (name[2]=='_') &&
-			  (name[3]=='S') &&
-			  (name[4]=='T') &&
-			  (name[5]=='A') &&
-			  (name[6]=='R') &&
-			  (name[7]=='T'))
-			||
-			 ((name[0]=='F') &&
-			  (name[1]=='1') &&
-			  (name[2]=='_') &&
-			  (name[3]=='E') &&
-			  (name[4]=='N') &&
-			  (name[5]=='D') &&
-			  (name[6]== 0 ) &&
-			  (name[7]== 0 ))
-			||
-			 ((name[0]=='F') &&
-			  (name[1]=='2') &&
-			  (name[2]=='_') &&
-			  (name[3]=='S') &&
-			  (name[4]=='T') &&
-			  (name[5]=='A') &&
-			  (name[6]=='R') &&
-			  (name[7]=='T'))
-			||
-			 ((name[0]=='F') &&
-			  (name[1]=='2') &&
-			  (name[2]=='_') &&
-			  (name[3]=='E') &&
-			  (name[4]=='N') &&
-			  (name[5]=='D') &&
-			  (name[6]== 0 ) &&
-			  (name[7]== 0 )) );
-}
-
-int W_IsBadPatchFlag(char *name)
-//
-// Return 1 if the name is one of the redundant patch list flags P1_START,
-// P1_END, P2_START or P2_END. These are oft-encountered hacks that some
-// editors need and are not recognised or needed by Doom.
-//
-{
-	return ( ((name[0]=='P') &&
-			  (name[1]=='1') &&
-			  (name[2]=='_') &&
-			  (name[3]=='S') &&
-			  (name[4]=='T') &&
-			  (name[5]=='A') &&
-			  (name[6]=='R') &&
-			  (name[7]=='T'))
-			||
-			 ((name[0]=='P') &&
-			  (name[1]=='1') &&
-			  (name[2]=='_') &&
-			  (name[3]=='E') &&
-			  (name[4]=='N') &&
-			  (name[5]=='D') &&
-			  (name[6]== 0 ) &&
-			  (name[7]== 0 ))
-			||
-			 ((name[0]=='P') &&
-			  (name[1]=='2') &&
-			  (name[2]=='_') &&
-			  (name[3]=='S') &&
-			  (name[4]=='T') &&
-			  (name[5]=='A') &&
-			  (name[6]=='R') &&
-			  (name[7]=='T'))
-			||
-			 ((name[0]=='P') &&
-			  (name[1]=='2') &&
-			  (name[2]=='_') &&
-			  (name[3]=='E') &&
-			  (name[4]=='N') &&
-			  (name[5]=='D') &&
-			  (name[6]== 0 ) &&
-			  (name[7]== 0 )) );
-}
-
-void W_FindAndDeleteLump(
-	lumpinfo_t* first,		/* first lump in list - stop when get to it */
-	lumpinfo_t* lump_p,		/* lump just after one to start at			*/
-	char *name)				/* name of lump to remove if found			*/
-//
-// Find lump by name, starting before specifed pointer.
-// Overwrite name with nulls if found. This is used to remove
-// the originals of sprite entries duplicated in a PWAD, the
-// sprite code doesn't like two sprite lumps of the same name
-// existing in the sprites list. It may also speed things up
-// slightly where flats and patches are concerned.
-//
-{
-	union {
-		char	s[9];
-		int		x[2];
-	} name8;
-
-	int			v1;
-	int			v2;
-
-	// make the name into two integers for easy compares
-	strncpy (name8.s,name,8);
-
-	// in case the name was a full 8 chars
-	name8.s[8] = 0;
-
-	v1 = name8.x[0];
-	v2 = name8.x[1];
-
-	do {
-		lump_p--;
-	} while ((lump_p != first)
-			 && ((*(int *)lump_p->name != v1)
-				 || (*(int *)&lump_p->name[4] != v2)));
-
-	if (   (*(int *)lump_p->name == v1)
-		&& (*(int *)&lump_p->name[4] == v2))
-		  memset(lump_p,0,sizeof(lumpinfo_t));
-}
-
-void W_GroupList(int (*startfunc)(char *name),
-				 int (*endfunc)(char *name),
-				 int (*badfunc)(char *name),
-				 char *listtype)
-//
-//	Group the sprite/flat/patch list of the various WADs (including the
-//	IWAD) into one. The supplied functions each specify one of the start,
-//	end and redundant (bad) flag-recognising functions defined previously.
-//
-{
-	int newnumlumps=0;
-	lumpinfo_t* lumpinfo_copy;
-	lumpinfo_t* lump_s;
-	lumpinfo_t* lump_d; /* dest, source */
-	lumpinfo_t* lump_t; /* temp */
-
-	lumpinfo_copy=malloc(numlumps*sizeof(lumpinfo_t));
-	if (!lumpinfo_copy)
-		I_Error ("Couldn't malloc lumpinfo_copy");
-
-	lump_s = lumpinfo;
-	lump_d = lumpinfo_copy;
-
-	/* skip to first s_start flag */
-	while ( (lump_s < lumpinfo+numlumps)
-		   &&
-			(!(*startfunc)(lump_s->name)) ) lump_s++;
-	/* copy the first s_start */
-	memcpy(lump_d++,lump_s,sizeof(lumpinfo_t));
-	/* prepare for loop below to skip over imaginary s_end */
-	lump_d++;
-	do
-	{ /* skip through entries */
-		if (!(*startfunc)(lump_s->name))
-		{
-			lump_s++;
-		}
-		else
-		{
-			lump_d--; /* skip back to overwrite previous s_end */
-			memset(lump_s++,0,sizeof(lumpinfo_t)); /* zap S_START, go to next */
-			/* copy rest of this sprite group, including the s_end */
-			do {
-				/* for each sprite, remove the original if it exists */
-				W_FindAndDeleteLump(lumpinfo_copy,lump_d,lump_s->name);
-				/* copy it */
-				memcpy(lump_d,lump_s,sizeof(lumpinfo_t));
-				/* zap the lump in the original list */
-				memset(lump_s++,0,sizeof(lumpinfo_t));
-			} while (!(*endfunc)((lump_d++)->name));
-		}
-	} while (lump_s < lumpinfo+numlumps);
-
-	/* now copy other, non-sprite entries */
-	lump_s = lumpinfo;
-/*	lump_d = at next free slot in lumpinfo_copy */
-	while (lump_s < lumpinfo+numlumps)  /* MAJOR CHANGE: this is now a while loop */
-	{ /* skip through entries */        /* instead of a DO loop */
-		if (!W_IsNullName(lump_s->name))
-		{
-			memcpy(lump_d++,lump_s,sizeof(lumpinfo_t));
-		}
-		lump_s++;
-	};
-
-	/* now replace original lumpinfo, squeezing out blanked sprites */
-/*	lump_d = at next "free slot" in lumpinfo_copy */
-	lump_t=lumpinfo;
-	lump_s=lumpinfo_copy;
-	while (lump_s < lump_d) /* MINOR CHANGE: condition was (lump_s != lump_d) */
-	{
-		if ((!W_IsNullName(lump_s->name)) && (!(*badfunc)(lump_s->name)) )
-		{
-			newnumlumps++;
-			memcpy(lump_t++,lump_s,sizeof(lumpinfo_t));
-		}
-		lump_s++;
-	}
-	Printf("Grouped %s: old numlumps=%d, new numlumps=%d\n",
-			listtype,numlumps,newnumlumps);
-//	getchar();
-	numlumps=newnumlumps;
-	free(lumpinfo_copy);
-	realloc(lumpinfo,numlumps*sizeof(lumpinfo_t));
-	if (!lumpinfo)
-		I_Error ("Couldn't realloc lumpinfo");
-}
-
-#define strcmpi	stricmp
-
 int W_filelength (int handle) 
 {
 	struct stat	fileinfo;
@@ -632,6 +65,18 @@ int W_filelength (int handle)
 		I_Error ("Error fstating");
 
 	return fileinfo.st_size;
+}
+
+// [RH] Copy up to 8 chars, upper-casing them in the process
+
+void uppercopy (char *to, const char *from)
+{
+	int i;
+
+	for (i = 0; i < 8 && from[i]; i++)
+		to[i] = toupper (from[i]);
+	for (; i < 8; i++)
+		to[i] = 0;
 }
 
 
@@ -649,50 +94,56 @@ int W_filelength (int handle)
 // Other files are single lumps with the base filename
 //  for the lump name.
 //
-// If filename starts with a tilde, the file is handled
-//  specially to allow map reloads.
-// But: the reload feature is a fragile hack...
-
-int				reloadlump;
-char*			reloadname;
-
+// [RH] Removed reload hack
 
 void W_AddFile (char *filename)
 {
+	char			name[256];
 	wadinfo_t		header;
 	lumpinfo_t*		lump_p;
 	unsigned		i;
 	int				handle;
 	int				length;
 	int				startlump;
-	filelump_t*		fileinfo;
+	filelump_t*		fileinfo, *fileinfo2free;
 	filelump_t		singleinfo;
-	int				storehandle;
+
+	// [RH] Automatically append .wad extension if none is specified.
+
+	FixPathSeperator (filename);
+	strcpy (name, filename);
+	DefaultExtension (name, ".wad");
 
 	// open the file and add to directory
 
-	// handle reload indicator.
-	if (filename[0] == '~')
-	{
-		filename++;
-		reloadname = filename;
-		reloadlump = numlumps;
-	}
-		
-	if ( (handle = open (filename,O_RDONLY | O_BINARY)) == -1)
+	if ((handle = open (name, O_RDONLY | O_BINARY)) == -1)
 	{
 		Printf (" couldn't open %s\n",filename);
 		return;
 	}
 
-	FixPathSeperator (filename);
 	Printf (" adding %s",filename);
 	startlump = numlumps;
 	
-	if (strcmpi (filename+strlen(filename)-3 , "wad" ) )
-	{
-		char name[256];
-		// single lump file
+	// [RH] Determine if file is a WAD based on its signature, not its name.
+	read (handle, &header, sizeof(header));
+
+	if (header.identification == IWAD_ID ||
+		header.identification == PWAD_ID) {
+		// This is a WAD file
+
+		header.numlumps = LONG(header.numlumps);
+		header.infotableofs = LONG(header.infotableofs);
+		length = header.numlumps * sizeof(filelump_t);
+		fileinfo = fileinfo2free = Z_Malloc (length, PU_STATIC, 0);
+		lseek (handle, header.infotableofs, SEEK_SET);
+		read (handle, fileinfo, length);
+		numlumps += header.numlumps;
+		Printf (" (%d lumps)", header.numlumps);
+	} else {
+		// This is just a single lump file
+
+		fileinfo2free = NULL;
 		fileinfo = &singleinfo;
 		singleinfo.filepos = 0;
 		singleinfo.size = LONG(W_filelength(handle));
@@ -700,118 +151,27 @@ void W_AddFile (char *filename)
 		strupr (name);
 		strncpy (singleinfo.name, name, 8);
 		numlumps++;
-	} else {
-		// WAD file
-		read (handle, &header, sizeof(header));
-		if (strncmp(header.identification,"IWAD",4))
-		{
-			// Homebrew levels?
-			if (strncmp(header.identification,"PWAD",4))
-			{
-			I_Error ("Wad file %s doesn't have IWAD "
-				 "or PWAD id\n", filename);
-			}
-			
-			// ???modifiedgame = true;
-		}
-		header.numlumps = LONG(header.numlumps);
-		header.infotableofs = LONG(header.infotableofs);
-		length = header.numlumps*sizeof(filelump_t);
-		fileinfo = alloca (length);
-		lseek (handle, header.infotableofs, SEEK_SET);
-		read (handle, fileinfo, length);
-		numlumps += header.numlumps;
-		Printf (" (%d lumps)", header.numlumps);
 	}
 	Printf ("\n");
 
 	// Fill in lumpinfo
-	lumpinfo = realloc (lumpinfo, numlumps*sizeof(lumpinfo_t));
-
-	if (!lumpinfo)
-		I_Error ("Couldn't realloc lumpinfo");
+	lumpinfo = Realloc (lumpinfo, numlumps*sizeof(lumpinfo_t));
 
 	lump_p = &lumpinfo[startlump];
 	
-	storehandle = reloadname ? -1 : handle;
-	
 	for (i=startlump ; i<numlumps ; i++,lump_p++, fileinfo++)
 	{
-		lump_p->handle = storehandle;
+		lump_p->handle = handle;
 		lump_p->position = LONG(fileinfo->filepos);
 		lump_p->size = LONG(fileinfo->size);
-		strncpy (lump_p->name, fileinfo->name, 8);
-		if (group_sprites)
-		{
-			sprite_lists += (W_IsS_START(lump_p->name));
-			sprite_lists += (W_IsS_END(lump_p->name));
-		}
-		if (group_flats)
-		{
-			flat_lists += (W_IsF_START(lump_p->name));
-			flat_lists += (W_IsF_END(lump_p->name));
-		}
-		if (group_patches)
-		{
-			patch_lists += (W_IsP_START(lump_p->name));
-			patch_lists += (W_IsP_END(lump_p->name));
-		}
+
+		// [RH] Convert name to uppercase during copy
+		uppercopy (lump_p->name, fileinfo->name);
 	}
-	
-	if (reloadname)
-		close (handle);
+
+	if (fileinfo2free)
+		Z_Free (fileinfo2free);
 }
-
-
-
-
-//
-// W_Reload
-// Flushes any of the reloadable lumps in memory
-//  and reloads the directory.
-//
-void W_Reload (void)
-{
-	wadinfo_t		header;
-	int				lumpcount;
-	lumpinfo_t*		lump_p;
-	unsigned		i;
-	int				handle;
-	int				length;
-	filelump_t*		fileinfo;
-	
-	if (!reloadname)
-		return;
-
-	if ( (handle = open (reloadname,O_RDONLY | O_BINARY)) == -1)
-		I_Error ("W_Reload: couldn't open %s",reloadname);
-
-	read (handle, &header, sizeof(header));
-	lumpcount = LONG(header.numlumps);
-	header.infotableofs = LONG(header.infotableofs);
-	length = lumpcount*sizeof(filelump_t);
-	fileinfo = alloca (length);
-	lseek (handle, header.infotableofs, SEEK_SET);
-	read (handle, fileinfo, length);
-
-	// Fill in lumpinfo
-	lump_p = &lumpinfo[reloadlump];
-	
-	for (i=reloadlump ;
-	 i<reloadlump+lumpcount ;
-	 i++,lump_p++, fileinfo++)
-	{
-		if (lumpcache[i])
-			Z_Free (lumpcache[i]);
-
-		lump_p->position = LONG(fileinfo->filepos);
-		lump_p->size = LONG(fileinfo->size);
-	}
-	
-	close (handle);
-}
-
-
 
 
 
@@ -830,33 +190,13 @@ void W_Reload (void)
 //
 void W_InitMultipleFiles (char** filenames)
 {
-	int		size;
-
-	// command line options for grouping sprites, flats & patches
-	if (M_CheckParm("-gfixsfp"))
-	{						//turn on basic list group options
-		group_sprites=1;
-		group_flats=1;
-		group_patches=1;
-	}
-	if (M_CheckParm("-gfixall"))
-	{
-		group_sprites=1;	//turn on ALL list group options
-		group_flats=1;
-		group_patches=1;
-		lax_sprite_rot=1;
-	}
-	group_sprites=(group_sprites || (M_CheckParm("-gfixspr")));
-	group_flats=(group_flats || (M_CheckParm("-gfixflt")));
-	group_patches=(group_patches || (M_CheckParm("-gfixpat")));
-	lax_list_syntax=(lax_list_syntax && (!M_CheckParm("-gstrict")));
-	lax_sprite_rot=(lax_sprite_rot || (M_CheckParm("-gignrot")));
+	int size;
 
 	// open all the files, load headers, and count lumps
 	numlumps = 0;
 
 	// will be realloced as lumps are added
-	lumpinfo = malloc(1);	
+	lumpinfo = NULL;		// [RH] Start out as NULL
 
 	for ( ; *filenames ; filenames++)
 		W_AddFile (*filenames);
@@ -864,31 +204,19 @@ void W_InitMultipleFiles (char** filenames)
 	if (!numlumps)
 		I_Error ("W_InitFiles: no files found");
 
-	// check for errors
-	if ((sprite_lists %2) && group_sprites)
-		I_Error("W_InitMultipleFiles: sprite begin..end flags don't match");
-	if ((flat_lists %2)   && group_flats)
-		I_Error("W_InitMultipleFiles: flat begin..end flags don't match");
-	if ((patch_lists %2)  && group_patches)
-		I_Error("W_InitMultipleFiles: patch begin..end flags don't match");
+	// [RH] Merge sprite and flat groups.
+	//		(We don't need to bother with patches, since
+	//		Doom doesn't use markers to identify them.)
 
-	//group lists
-	if ((sprite_lists >2) && group_sprites)
-		W_GroupList(&W_IsS_START,&W_IsS_END,&W_IsBadSpriteFlag,"sprites");
-	if ((flat_lists >2)   && group_flats)
-		W_GroupList(&W_IsF_START,&W_IsF_END,&W_IsBadFlatFlag,"flats");
-	if ((patch_lists >2)  && group_patches)
-		W_GroupList(&W_IsP_START,&W_IsP_END,&W_IsBadPatchFlag,"patches");
-	if (lax_sprite_rot)
-		Printf("Disengaging sprite rotation/limit checks\n");
+	W_MergeLumps ("S_START", "S_END");
+	W_MergeLumps ("F_START", "F_END");
+
+	// [RH] Set up hash table
+	W_InitHashChains ();
 
 	// set up caching
 	size = numlumps * sizeof(*lumpcache);
-	lumpcache = malloc (size);
-
-	if (!lumpcache)
-		I_FatalError ("Couldn't allocate lumpcache");
-
+	lumpcache = Malloc (size);
 	memset (lumpcache, 0, size);
 }
 
@@ -924,45 +252,23 @@ int W_NumLumps (void)
 // W_CheckNumForName
 // Returns -1 if name not found.
 //
-
-int W_CheckNumForName (char* name)
+// [RH] Changed to use hash lookup ala BOOM instead of a linear search
+//
+int W_CheckNumForName (const char *name)
 {
-	union {
-		char	s[9];
-		int		x[2];
-	} name8;
+	char uname[8];
+	int i;
 
-	int			v1;
-	int			v2;
-	lumpinfo_t*	lump_p;
+	uppercopy (uname, name);
+	i = lumpinfo[W_LumpNameHash (uname) % (unsigned)numlumps].index;
 
-	// make the name into two integers for easy compares
-	strncpy (name8.s,name,8);
-
-	// in case the name was a full 8 chars
-	name8.s[8] = 0;
-
-	// case insensitive
-	strupr (name8.s);
-
-	v1 = name8.x[0];
-	v2 = name8.x[1];
-
-
-	// scan backwards so patch lump files take precedence
-	lump_p = lumpinfo + numlumps;
-
-	while (lump_p-- != lumpinfo)
-	{
-		if ( *(int *)lump_p->name == v1
-			 && *(int *)&lump_p->name[4] == v2)
-		{
-			return lump_p - lumpinfo;
-		}
+	while (i != -1) {
+		if (!strncmp (lumpinfo[i].name, uname, 8))
+			break;
+		i = lumpinfo[i].next;
 	}
 
-	// TFB. Not found.
-	return -1;
+	return i;
 }
 
 
@@ -972,7 +278,7 @@ int W_CheckNumForName (char* name)
 // W_GetNumForName
 // Calls W_CheckNumForName, but bombs out if not found.
 //
-int W_GetNumForName (char* name)
+int W_GetNumForName (const char *name)
 {
 	int	i;
 
@@ -1004,42 +310,24 @@ int W_LumpLength (int lump)
 // Loads the lump into the given buffer,
 //  which must be >= W_LumpLength().
 //
-void
-W_ReadLump
-( int		lump,
-  void*		dest )
+// [RH] Removed reload hack
+//
+void W_ReadLump (int lump, void *dest)
 {
 	int			c;
 	lumpinfo_t*	l;
-	int			handle;
 	
 	if (lump >= numlumps)
 		I_Error ("W_ReadLump: %i >= numlumps",lump);
 
-	l = lumpinfo+lump;
+	l = lumpinfo + lump;
 	
-	// ??? I_BeginRead ();
-	
-	if (l->handle == -1)
-	{
-		// reloadable file, so use open / read / close
-		if ( (handle = open (reloadname,O_RDONLY | O_BINARY)) == -1)
-			I_Error ("W_ReadLump: couldn't open %s",reloadname);
-	}
-	else
-		handle = l->handle;
+	lseek (l->handle, l->position, SEEK_SET);
+	c = read (l->handle, dest, l->size);
 
-		lseek (handle, l->position, SEEK_SET);
-		c = read (handle, dest, l->size);
-
-		if (c < l->size)
+	if (c < l->size)
 		I_Error ("W_ReadLump: only read %i of %i on lump %i",
-			 c,l->size,lump);	
-
-		if (l->handle == -1)
-			close (handle);
-
-	// ??? I_EndRead ();
+				 c,l->size,lump);	
 }
 
 
@@ -1048,12 +336,10 @@ W_ReadLump
 //
 // W_CacheLumpNum
 //
-void*
-W_CacheLumpNum
-( int		lump,
-  int		tag )
+void *W_CacheLumpNum (int lump, int tag)
 {
-	byte*	ptr;
+	byte *ptr;
+	int lumplen;
 
 	if ((unsigned)lump >= numlumps)
 		I_Error ("W_CacheLumpNum: %i >= numlumps",lump);
@@ -1061,37 +347,161 @@ W_CacheLumpNum
 	if (!lumpcache[lump])
 	{
 		// read the lump in
-
-		//Printf ("cache miss on lump %i\n",lump);
-		ptr = Z_Malloc (W_LumpLength (lump), tag, &lumpcache[lump]);
+		// [RH] Allocate one byte more than necessary for the
+		//		lump and set the extra byte to zero so that
+		//		various text parsing routines can just call
+		//		W_CacheLumpNum() and not choke.
+		//DPrintf ("cache miss on lump %i\n", lump);
+		lumplen = W_LumpLength (lump);
+		ptr = Z_Malloc (lumplen + 1, tag, &lumpcache[lump]);
 		W_ReadLump (lump, lumpcache[lump]);
+		ptr[lumplen] = 0;
 	}
 	else
 	{
-		//Printf ("cache hit on lump %i\n",lump);
+		//DPrintf ("cache hit on lump %i\n",lump);
 		Z_ChangeTag (lumpcache[lump],tag);
 	}
 
 	return lumpcache[lump];
 }
 
+// [RH] W_CacheLumpName macro-ized
 
 
+// [RH] This is from Boom.
+//		NOTE: s should already be uppercase.
+//		This is different from the BOOM version.
 //
-// W_CacheLumpName
-//
-void*
-W_CacheLumpName
-( char*		name,
-  int		tag )
+// Hash function used for lump names.
+// Must be mod'ed with table size.
+// Can be used for any 8-character names.
+// by Lee Killough
+
+unsigned W_LumpNameHash (const char *s)
 {
-	return W_CacheLumpNum (W_GetNumForName(name), tag);
+	unsigned hash;
+
+	(void) ((hash =			 s[0], s[1]) &&
+			(hash = hash*3 + s[1], s[2]) &&
+			(hash = hash*2 + s[2], s[3]) &&
+			(hash = hash*2 + s[3], s[4]) &&
+			(hash = hash*2 + s[4], s[5]) &&
+			(hash = hash*2 + s[5], s[6]) &&
+			(hash = hash*2 + s[6],
+			 hash = hash*2 + s[7])
+			);
+	return hash;
 }
 
+// [RH] W_InitHashChains
+//
+// Prepares the lumpinfos for hashing.
+// (Hey! This looks suspiciously like something from Boom! :-)
+
+void W_InitHashChains (void)
+{
+	char name[8];
+	int i;
+	unsigned j;
+
+	// Mark all buckets as empty
+	for (i = 0; i < numlumps; i++)
+		lumpinfo[i].index = -1;
+
+	// Now set up the chains
+	for (i = 0; i < numlumps; i++) {
+		uppercopy (name, lumpinfo[i].name);
+		j = W_LumpNameHash (name) % (unsigned) numlumps;
+		lumpinfo[i].next = lumpinfo[j].index;
+		lumpinfo[j].index = i;
+	}
+}
+
+// [RH] From Boom also
+static BOOL IsMarker (const char *name, const char *marker)
+{
+	return !strncmp (name, marker, 8) || 
+			(*name == *marker && !strncmp (name + 1, marker, 7));
+}
+
+// [RH] Merge multiple tagged groups into one
+//
+// Basically from Boom, too, although I tried to write
+// it independently.
+void W_MergeLumps (const char *start, const char *end)
+{
+	char ustart[8], uend[8];
+	lumpinfo_t *newlumpinfos;
+	int newlumps, oldlumps, i;
+	BOOL insideBlock;
+	BOOL haveEndMarker;
+
+	uppercopy (ustart, start);
+	uppercopy (uend, end);
+
+	newlumpinfos = Malloc (numlumps * sizeof(lumpinfo_t));
+
+	newlumps = 0;
+	oldlumps = 0;
+	insideBlock = false;
+	haveEndMarker = false;
+
+	for (i = 0; i < numlumps; i++) {
+		if (!insideBlock) {
+			// Check if this is the start of a block
+			if (IsMarker (lumpinfo[i].name, ustart)) {
+				insideBlock = true;
+
+				// Create start marker if we haven't already
+				if (!newlumps) {
+					newlumps++;
+					strncpy (newlumpinfos[0].name, ustart, 8);
+					newlumpinfos[0].handle =
+						newlumpinfos[0].position =
+						newlumpinfos[0].size = 0;
+				}
+			} else {
+				// Copy lumpinfo down this list
+				lumpinfo[oldlumps++] = lumpinfo[i];
+			}
+		} else {
+			// Check if this is the end of a block
+			if (IsMarker (lumpinfo[i].name, uend)) {
+				// It is. We'll add the end marker once
+				// we've processed everything.
+				haveEndMarker = true;
+				insideBlock = false;
+			} else {
+				newlumpinfos[newlumps++] = lumpinfo[i];
+			}
+		}
+	}
+
+	// Now copy the merged lumps to the end of the old list
+	// and create the end marker entry.
+
+	// Only create an end marker if there was one in the original list.
+	if (haveEndMarker) {
+		strncpy (newlumpinfos[newlumps].name, uend, 8);
+		newlumpinfos[newlumps].handle =
+			newlumpinfos[newlumps].position =
+			newlumpinfos[newlumps].size = 0;
+		newlumps++;
+	}
+
+	memcpy (lumpinfo + oldlumps, newlumpinfos, sizeof(lumpinfo_t) * newlumps);
+
+	free (newlumpinfos);
+
+	numlumps = oldlumps + newlumps;
+}
 
 //
 // W_Profile
 //
+// [RH] Unused
+#if 0
 int		info[2500][10];
 int		profilecount;
 
@@ -1126,7 +536,7 @@ void W_Profile (void)
 	}
 	profilecount++;
 	
-	f = fopen ("waddump.txt","w");
+	f = fopen ("waddump.txt","wt");
 	name[8] = 0;
 
 	for (i=0 ; i<numlumps ; i++)
@@ -1142,12 +552,66 @@ void W_Profile (void)
 
 		fprintf (f,"%s ",name);
 
-		for (j=0 ; j<profilecount ; j++)
-			fprintf (f,"    %c",info[i][j]);
+//		for (j=0 ; j<profilecount ; j++)
+//			fprintf (f,"    %c",info[i][j]);
+
+		fprintf (f, "%d %d", lumpinfo[i].index, lumpinfo[i].next);
 
 		fprintf (f,"\n");
 	}
 	fclose (f);
 }
+#endif
 
 
+// [RH] Find a named lump. Specifically allows duplicates for
+//		merging of e.g. SNDINFO lumps. Sorry, this uses a linear
+//		search. (Not a big deal, since it only gets called
+//		a few times during game setup.)
+int W_FindLump (const char *name, int *lastlump)
+{
+	int lump;
+
+	union {
+		char	s[8];
+		int		x[2];
+	} name8;
+
+	int			v1;
+	int			v2;
+	lumpinfo_t* lump_p;
+
+	// make the name into two integers for easy compares
+	uppercopy (name8.s, name);
+
+	v1 = name8.x[0];
+	v2 = name8.x[1];
+
+	lump_p = lumpinfo + *lastlump;
+	while (lump_p < lumpinfo + numlumps) {
+		if ( *(int *)lump_p->name == v1 && *(int *)&lump_p->name[4] == v2)
+			break;
+		lump_p++;
+	}
+
+	lump = lump_p - lumpinfo;
+
+	if (lump < numlumps) {
+		*lastlump = lump + 1;
+		return lump;
+	} else {
+		*lastlump = numlumps;
+		return -1;
+	}
+}
+
+// [RH] Used by P_SetupLevel() to check for the presence of
+//		a BEHAVIOR lump and adjust its behavior accordingly.
+
+BOOL W_CheckLumpName (int lump, const char *name)
+{
+	if (lump >= numlumps)
+		return false;
+
+	return !strnicmp (lumpinfo[lump].name, name, 8);
+}
