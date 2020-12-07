@@ -2274,6 +2274,83 @@ void P_SpawnPlayerMissile (AActor *source, mobjtype_t type)
 	P_CheckMissileSpawn (th);
 }
 
+// [GRB] Modified P_SpawnPlayerMissile (for pipebombs)
+void P_SpawnPlayerMissileGrb (AActor *source, mobjtype_t type, short tid, int x, int y)
+{
+	angle_t an;
+	fixed_t slope;
+	fixed_t pitchslope = finetangent[FINEANGLES/4-(source->pitch>>ANGLETOFINESHIFT)];
+
+	// see which target is to be aimed at
+	an = source->angle;
+
+	if (source->player &&
+		source->player->userinfo.aimdist == 0 &&
+		!(dmflags & DF_NO_FREELOOK))
+	{
+		slope = pitchslope;
+	}
+	else
+	{
+		slope = P_AimLineAttack (source, an, 16*64*FRACUNIT);
+		
+		if (!linetarget)
+		{
+			an += 1<<26;
+			slope = P_AimLineAttack (source, an, 16*64*FRACUNIT);
+
+			if (!linetarget)
+			{
+				an -= 2<<26;
+				slope = P_AimLineAttack (source, an, 16*64*FRACUNIT);
+			}
+
+			if (!linetarget)
+			{
+				an = source->angle;
+				// [RH] Use pitch to calculate slope instead of 0.
+				slope = pitchslope;
+			}
+		}
+
+		if (linetarget && source->player)
+		{
+			if (!(dmflags & DF_NO_FREELOOK)
+				&& abs(slope - pitchslope) > source->player->userinfo.aimdist)
+			{
+				an = source->angle;
+				slope = pitchslope;
+			}
+		}
+	}
+
+	AActor *th = new AActor (source->x + x, source->y + y, source->z + 4*8*FRACUNIT, type);
+
+	th->tid = tid;
+	th->AddToHash ();
+
+	if (th->info->seesound)
+		S_Sound (th, CHAN_VOICE, th->info->seesound, 1, ATTN_NORM);
+
+	th->target = source;
+	th->angle = an;
+
+	vec3_t velocity;
+	float speed = FIXED2FLOAT (th->info->speed);
+
+	velocity[0] = FIXED2FLOAT (finecosine[an>>ANGLETOFINESHIFT]);
+	velocity[1] = FIXED2FLOAT (finesine[an>>ANGLETOFINESHIFT]);
+	velocity[2] = FIXED2FLOAT (slope);
+
+	VectorNormalize (velocity);
+
+	th->momx = FLOAT2FIXED (velocity[0] * speed);
+	th->momy = FLOAT2FIXED (velocity[1] * speed);
+	th->momz = FLOAT2FIXED (velocity[2] * speed);
+
+	P_CheckMissileSpawn (th);
+}
+
 // [RH] Throw gibs around (based on Q2 code)
 
 #if 0	// Not used right now (Note that this code considers vectors to

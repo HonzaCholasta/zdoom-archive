@@ -131,6 +131,97 @@ weaponinfo_t	weaponinfo[NUMWEAPONS] =
 		S_DSGUNFLASH1,
 		MT_SUPERSHOTGUN
 	},
+	// [GRB] Weapons
+	{
+		// Duke's kick
+		am_noammo,
+		S_DUKE_KICKUP,
+		S_DUKE_KICKDOWN,
+		S_DUKE_KICK,
+		S_DUKE_KICK1,
+		S_NULL,
+		(mobjtype_t)0
+	},
+	{
+		// Duke's pistol
+		am_clip,
+		S_DUKE_PISTOLUP,
+		S_DUKE_PISTOLDOWN,
+		S_DUKE_PISTOL,
+		S_DUKE_PISTOL1,
+		S_NULL,
+		MT_DUKE_PISTOL
+	},
+	{
+		// Duke's shotgun
+		am_shell,
+		S_DUKE_SGUNUP,
+		S_DUKE_SGUNDOWN,
+		S_DUKE_SGUN,
+		S_DUKE_SGUN1,
+		S_DUKE_SGUNFLASH1,
+		MT_DUKE_SHOTGUN
+	},
+	{
+		// Duke's chaingun cannon
+		am_clip,
+		S_DUKE_CGUNUP,
+		S_DUKE_CGUNDOWN,
+		S_DUKE_CGUN,
+		S_DUKE_CGUN1,
+		S_DUKE_CGUNFLASH1,
+		MT_DUKE_CHAINGUN
+	},
+	{
+		// Duke's rpg
+		am_misl,
+		S_DUKE_RPGUP,
+		S_DUKE_RPGDOWN,
+		S_DUKE_RPG,
+		S_DUKE_RPG1,
+		S_NULL,
+		MT_DUKE_RPG
+	},
+	{
+		// Duke's pipe bombs
+		am_misl,
+		S_DUKE_PIPEUP,
+		S_DUKE_PIPEDOWN,
+		S_DUKE_PIPE,
+		S_DUKE_PIPE1,
+		S_NULL,
+		(mobjtype_t)0
+	},
+	{
+		// Duke's pipe bomb detonator
+		am_noammo,
+		S_DUKE_DETUP,
+		S_DUKE_DETDOWN,
+		S_DUKE_DET,
+		S_DUKE_DET1,
+		S_NULL,
+		(mobjtype_t)0
+	},
+	{
+		// Duke's devastator
+		am_misl,
+		S_DUKE_DEVUP,
+		S_DUKE_DEVDOWN,
+		S_DUKE_DEV,
+		S_DUKE_DEV1,
+		S_NULL,
+		MT_DUKE_DEVASTATOR
+	},
+	{
+		// Duke's freezethrower
+		am_cell,
+		S_DUKE_FRZUP,
+		S_DUKE_FRZDOWN,
+		S_DUKE_FRZ,
+		S_DUKE_FRZ1,
+		S_NULL,
+		MT_DUKE_FREEZE
+	},
 };
 
 int num_items;

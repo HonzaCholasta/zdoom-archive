@@ -334,6 +334,9 @@ void P_FallingDamage (AActor *ent)
 //
 #define ANG5	(ANG90/18)
 
+// [GRB] Is pipebomb throwed or not?
+bool	pipethrowed;
+
 void P_DeathThink (player_t *player)
 {
 	angle_t 			angle;
@@ -536,19 +539,104 @@ void P_PlayerThink (player_t *player)
 			//	(read: not in the middle of an attack).
 			newweapon = (weapontype_t)((cmd->ucmd.buttons&BT_WEAPONMASK)>>BT_WEAPONSHIFT);
 			
-			if (newweapon == wp_fist
-				&& player->weaponowned[wp_chainsaw]
-				&& !(player->readyweapon == wp_chainsaw
-					 && player->powers[pw_strength]))
+			// [GRB] Weapon change
+			if (newweapon == wp_fist)
 			{
-				newweapon = wp_chainsaw;
+				if (player->readyweapon == wp_fist
+					&& player->weaponowned[wp_chainsaw])
+				{
+					newweapon = wp_chainsaw;
+				} else if (player->readyweapon == wp_chainsaw
+					&& player->weaponowned[wp_duke_kick])
+				{
+					newweapon = wp_duke_kick;
+				} else if (player->readyweapon == wp_duke_kick
+					&& player->weaponowned[wp_fist])
+				{
+					newweapon = wp_fist;
+				}
 			}
-			
-			if (newweapon == wp_shotgun 
-				&& player->weaponowned[wp_supershotgun]
-				&& player->readyweapon != wp_supershotgun)
+
+			if (newweapon == wp_pistol)
 			{
-				newweapon = wp_supershotgun;
+				if (player->readyweapon == wp_pistol
+					&& player->weaponowned[wp_duke_pistol])
+				{
+					newweapon = wp_duke_pistol;
+				} else if (player->readyweapon == wp_duke_pistol
+					&& player->weaponowned[wp_pistol])
+				{
+					newweapon = wp_pistol;
+				}
+			}
+
+			if (newweapon == wp_shotgun)
+			{
+				if (player->readyweapon == wp_shotgun
+					&& player->weaponowned[wp_supershotgun])
+				{
+					newweapon = wp_supershotgun;
+				} else if (player->readyweapon == wp_supershotgun
+					&& player->weaponowned[wp_duke_shotgun])
+				{
+					newweapon = wp_duke_shotgun;
+				} else if (player->readyweapon == wp_duke_shotgun
+					&& player->weaponowned[wp_shotgun])
+				{
+					newweapon = wp_shotgun;
+				}
+			}
+
+			if (newweapon == wp_chaingun)
+			{
+				if (player->readyweapon == wp_chaingun
+					&& player->weaponowned[wp_duke_chaingun])
+				{
+					newweapon = wp_duke_chaingun;
+				} else if (player->readyweapon == wp_duke_chaingun
+					&& player->weaponowned[wp_chaingun])
+				{
+					newweapon = wp_chaingun;
+				}
+			}
+
+			if (newweapon == wp_missile)
+			{
+				if (player->readyweapon == wp_missile
+					&& player->weaponowned[wp_duke_rpg])
+				{
+					newweapon = wp_duke_rpg;
+				} else if (player->readyweapon == wp_duke_rpg
+					&& player->weaponowned[wp_duke_pipe])
+				{
+					newweapon = wp_duke_pipe;
+				} else if (player->readyweapon == wp_duke_pipe
+					&& pipethrowed)
+				{
+					newweapon = wp_duke_pipe_det;
+				} else if ((player->readyweapon == wp_duke_pipe
+					|| player->readyweapon == wp_duke_pipe_det)
+					&& player->weaponowned[wp_duke_dev])
+				{
+					newweapon = wp_duke_dev;
+				} else if (player->readyweapon == wp_duke_dev
+					&& player->weaponowned[wp_missile])
+				{
+					newweapon = wp_missile;
+				}
+			}
+
+			if (newweapon == wp_plasma)
+			{
+				if (player->readyweapon == wp_plasma
+					&& player->weaponowned[wp_duke_freeze])
+				{
+					newweapon = wp_duke_freeze;
+				} else if (player->readyweapon == wp_duke_freeze
+					&& player->weaponowned[wp_plasma])
+				{
+					newweapon = wp_plasma;
+				}
 			}
 		}
 

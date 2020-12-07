@@ -160,6 +160,16 @@ typedef enum
 	wp_bfg,
 	wp_chainsaw,
 	wp_supershotgun,
+	// [GRB] Weapons
+	wp_duke_kick,
+	wp_duke_pistol,
+	wp_duke_shotgun,
+	wp_duke_chaingun,
+	wp_duke_rpg,
+	wp_duke_pipe,
+	wp_duke_pipe_det,
+	wp_duke_dev,
+	wp_duke_freeze,
 
 	NUMWEAPONS,
 	

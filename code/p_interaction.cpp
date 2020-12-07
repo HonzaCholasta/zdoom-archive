@@ -657,6 +657,42 @@ void P_TouchSpecialThing (AActor *special, AActor *toucher)
 		sound = 2;		
 		break;
 				
+	// [GRB] Special things
+	  case SPR_DNPI:
+		if (!P_GiveWeapon (player, wp_duke_pistol, special->flags & MF_DROPPED))
+			return;
+		PickupMessage (toucher, GOTCHAINGUN);
+		sound = 2;		
+		break;
+
+	  case SPR_DNSG:
+		if (!P_GiveWeapon (player, wp_duke_shotgun, special->flags & MF_DROPPED))
+			return;
+		PickupMessage (toucher, GOTSHOTGUN);
+		sound = 2;		
+		break;
+
+	  case SPR_DNCG:
+		if (!P_GiveWeapon (player, wp_duke_chaingun, special->flags & MF_DROPPED))
+			return;
+		PickupMessage (toucher, GOTSHOTGUN);
+		sound = 2;		
+		break;
+
+	  case SPR_DNRL:
+		if (!P_GiveWeapon (player, wp_duke_rpg, special->flags & MF_DROPPED))
+			return;
+		PickupMessage (toucher, GOTLAUNCHER);
+		sound = 2;		
+		break;
+
+	  case SPR_DNFT:
+		if (!P_GiveWeapon (player, wp_duke_freeze, special->flags & MF_DROPPED))
+			return;
+		PickupMessage (toucher, GOTPLASMA);
+		sound = 2;		
+		break;
+
 	  default:
 		I_Error ("P_SpecialThing: Unknown gettable thing");
 	}

@@ -317,6 +317,11 @@ BOOL P_ActivateMobj (AActor *mobj, AActor *activator)
 				level.found_secrets++;
 				mobj->Destroy ();
 				break;
+			
+			// [GRB] barrel explodes when it's activated
+			case MT_BARREL:
+				mobj->health = 0;
+				break;
 
 			default:
 				break;

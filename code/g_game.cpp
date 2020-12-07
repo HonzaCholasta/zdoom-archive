@@ -910,6 +910,8 @@ void G_PlayerReborn (int player)
 	p->readyweapon = p->pendingweapon = wp_pistol;
 	p->weaponowned[wp_fist] = true;
 	p->weaponowned[wp_pistol] = true;
+	// [GRB] Start weapons
+	p->weaponowned[wp_duke_kick] = true;
 	p->ammo[am_clip] = deh.StartBullets; // [RH] Used to be 50
 
 	for (i = 0; i < NUMAMMO; i++)

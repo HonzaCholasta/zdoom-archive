@@ -46,7 +46,9 @@ char *sprnames[NUMSPRITES] = {
 	"COL3","COL4","CAND","CBRA","COL6","TRE1","TRE2","ELEC","CEYE","FSKU",
 	"COL5","TBLU","TGRN","TRED","SMBT","SMGT","SMRT","HDB1","HDB2","HDB3",
 	"HDB4","HDB5","HDB6","POB1","POB2","BRS1","TLMP","TLP2","TNT1","GIB0",
-	"GIB1","GIB2","GIB3","GIB4","GIB5","GIB6","GIB7","UNKN","TLGL"
+	"GIB1","GIB2","GIB3","GIB4","GIB5","GIB6","GIB7","UNKN","TLGL","KICK",
+	"PIST","DNPI","DSHT","DNSG","CHGC","DNCG","RPG1","RPGR","DNRL","PIPB",
+	"PIPE","DEVS","DEVR","DNDV","FREZ","FICE","DNFT"
 };
 
 class player_s;
@@ -132,6 +134,19 @@ void A_BrainExplode(AActor*);
 void A_Ambient(AActor*);		// [RH] Play ambient sound
 
 void A_MonsterRail(AActor*);
+
+// [GRB] Attacks
+void A_Kick(player_s*, struct pspdef_s*);
+void A_FireDukePistol(player_s*, struct pspdef_s*);
+void A_FireDukeShotgun(player_s*, struct pspdef_s*);
+void A_FireCGunCannon(player_s*, struct pspdef_s*);
+void A_FireRpg(player_s*, struct pspdef_s*);
+void A_FirePipe(player_s*, struct pspdef_s*);
+void A_DetPipe(player_s*, struct pspdef_s*);
+void A_FireDevLeft(player_s*, struct pspdef_s*);
+void A_FireDevRight(player_s*, struct pspdef_s*);
+void A_FireFreeze(player_s*, struct pspdef_s*);
+void A_IceExplode(AActor*);
 
 state_t	states[NUMSTATES] = {
 	{SPR_TROO,0,-1,{NULL},S_NULL,0,0},	// S_NULL
@@ -1117,6 +1132,91 @@ state_t	states[NUMSTATES] = {
 	{SPR_TLGL,32770,4,{NULL},S_BRIDGE4,0,0},	// S_BRIDGE3
 	{SPR_TLGL,32771,4,{NULL},S_BRIDGE5,0,0},	// S_BRIDGE4
 	{SPR_TLGL,32772,4,{NULL},S_BRIDGE1,0,0},	// S_BRIDGE5
+	// [GRB] States
+	{SPR_KICK,0,1,{A_WeaponReady},S_DUKE_KICK,0,0},	// S_DUKE_KICK
+	{SPR_KICK,0,1,{A_Lower},S_DUKE_KICKDOWN,0,0},	// S_DUKE_KICKDOWN
+	{SPR_KICK,0,1,{A_Raise},S_DUKE_KICKUP,0,0},	// S_DUKE_KICKUP
+	{SPR_KICK,1,6,{NULL},S_DUKE_KICK2,0,0},		// S_DUKE_KICK1
+	{SPR_KICK,2,6,{A_Kick},S_DUKE_KICK3,0,0},	// S_DUKE_KICK2
+	{SPR_KICK,1,6,{A_ReFire},S_DUKE_KICK,0,0},		// S_DUKE_KICK3
+	{SPR_PIST,0,1,{A_WeaponReady},S_DUKE_PISTOL,0,0},// S_DUKE_PISTOL
+	{SPR_PIST,0,1,{A_Lower},S_DUKE_PISTOLDOWN,0,0},	// S_DUKE_PISTOLDOWN
+	{SPR_PIST,0,1,{A_Raise},S_DUKE_PISTOLUP,0,0},	// S_DUKE_PISTOLUP
+	{SPR_PIST,0,4,{NULL},S_DUKE_PISTOL2,0,0},	// S_DUKE_PISTOL1
+	{SPR_PIST,1,4,{A_FireDukePistol},S_DUKE_PISTOL3,0,0},// S_DUKE_PISTOL2
+	{SPR_PIST,2,4,{NULL},S_DUKE_PISTOL4,0,0},	// S_DUKE_PISTOL3
+	{SPR_PIST,1,4,{A_ReFire},S_DUKE_PISTOL,0,0},	// S_DUKE_PISTOL4
+	{SPR_DNPI,0,-1,{NULL},S_NULL,0,0},	// S_DITEM_PISTOL
+	{SPR_DSHT,0,1,{A_WeaponReady},S_DUKE_SGUN,0,0},	// S_DUKE_SGUN
+	{SPR_DSHT,0,1,{A_Lower},S_DUKE_SGUNDOWN,0,0},	// S_DUKE_SGUNDOWN
+	{SPR_DSHT,0,1,{A_Raise},S_DUKE_SGUNUP,0,0},	// S_DUKE_SGUNUP
+	{SPR_DSHT,0,3,{NULL},S_DUKE_SGUN2,0,0},	// S_DUKE_SGUN1
+	{SPR_DSHT,0,7,{A_FireDukeShotgun},S_DUKE_SGUN3,0,0},	// S_DUKE_SGUN2
+	{SPR_DSHT,3,5,{NULL},S_DUKE_SGUN4,0,0},	// S_DUKE_SGUN3
+	{SPR_DSHT,4,5,{NULL},S_DUKE_SGUN5,0,0},	// S_DUKE_SGUN4
+	{SPR_DSHT,5,4,{NULL},S_DUKE_SGUN6,0,0},	// S_DUKE_SGUN5
+	{SPR_DSHT,6,5,{NULL},S_DUKE_SGUN7,0,0},	// S_DUKE_SGUN6
+	{SPR_DSHT,5,5,{NULL},S_DUKE_SGUN8,0,0},	// S_DUKE_SGUN7
+	{SPR_DSHT,4,3,{NULL},S_DUKE_SGUN9,0,0},	// S_DUKE_SGUN8
+	{SPR_DSHT,3,7,{A_ReFire},S_DUKE_SGUN,0,0},	// S_DUKE_SGUN9
+	{SPR_DSHT,1,4,{A_Light1},S_DUKE_SGUNFLASH2,0,0},	// S_DUKE_SGUNFLASH1
+	{SPR_DSHT,2,3,{A_Light2},S_LIGHTDONE,0,0},	// S_DUKE_SGUNFLASH2
+	{SPR_DNSG,0,-1,{NULL},S_NULL,0,0},	// S_DITEM_SGUN
+	{SPR_CHGC,0,1,{A_WeaponReady},S_DUKE_CGUN,0,0},	// S_DUKE_CGUN
+	{SPR_CHGC,0,1,{A_Lower},S_DUKE_CGUNDOWN,0,0},	// S_DUKE_CGUNDOWN
+	{SPR_CHGC,0,1,{A_Raise},S_DUKE_CGUNUP,0,0},	// S_DUKE_CGUNUP
+	{SPR_CHGC,1,3,{A_FireCGunCannon},S_DUKE_CGUN2,0,0},	// S_DUKE_CGUN1
+	{SPR_CHGC,2,3,{A_FireCGunCannon},S_DUKE_CGUN3,0,0},	// S_DUKE_CGUN2
+	{SPR_CHGC,3,3,{A_FireCGunCannon},S_DUKE_CGUN4,0,0},	// S_DUKE_CGUN3
+	{SPR_CHGC,2,0,{A_ReFire},S_DUKE_CGUN,0,0},	// S_DUKE_CGUN4
+	{SPR_CHGC,4,3,{A_Light1},S_LIGHTDONE,0,0},	// S_DUKE_CGUNFLASH1
+	{SPR_CHGC,5,3,{A_Light2},S_LIGHTDONE,0,0},	// S_DUKE_CGUNFLASH2
+	{SPR_CHGC,6,3,{A_Light1},S_LIGHTDONE,0,0},	// S_DUKE_CGUNFLASH3
+	{SPR_DNCG,0,-1,{NULL},S_NULL,0,0},	// S_DITEM_CGUN
+	{SPR_RPG1,0,1,{A_WeaponReady},S_DUKE_RPG,0,0},	// S_DUKE_RPG
+	{SPR_RPG1,0,1,{A_Lower},S_DUKE_RPGDOWN,0,0},	// S_DUKE_RPGDOWN
+	{SPR_RPG1,0,1,{A_Raise},S_DUKE_RPGUP,0,0},	// S_DUKE_RPGUP
+	{SPR_RPG1,1,4,{A_Light1},S_DUKE_RPG2,0,0},	// S_DUKE_RPG1
+	{SPR_RPG1,2,4,{A_FireRpg},S_DUKE_RPG3,0,0},	// S_DUKE_RPG2
+	{SPR_RPG1,1,4,{A_Light1},S_DUKE_RPG4,0,0},	// S_DUKE_RPG3
+	{SPR_RPG1,0,0,{A_ReFire},S_DUKE_RPG,0,0},	// S_DUKE_RPG4
+	{SPR_RPGR,32768,1,{NULL},S_DUKE_RPGROCKET,0,0},	// S_DUKE_RPGROCKET
+	{SPR_DNRL,0,-1,{NULL},S_NULL,0,0},	// S_DITEM_RPG
+	{SPR_PIPB,0,1,{A_WeaponReady},S_DUKE_PIPE,0,0},	// S_DUKE_PIPE
+	{SPR_PIPB,0,1,{A_Lower},S_DUKE_PIPEDOWN,0,0},	// S_DUKE_PIPEDOWN
+	{SPR_PIPB,0,1,{A_Raise},S_DUKE_PIPEUP,0,0},	// S_DUKE_PIPEUP
+	{SPR_PIPB,1,4,{NULL},S_DUKE_PIPE2,0,0},	// S_DUKE_PIPE1
+	{SPR_PIPB,2,4,{A_FirePipe},S_DUKE_PIPE3,0,0},	// S_DUKE_PIPE2
+	{SPR_PIPB,0,0,{A_ReFire},S_DUKE_PIPE,0,0},	// S_DUKE_PIPE3
+	{SPR_PIPB,3,1,{A_WeaponReady},S_DUKE_DET,0,0},	// S_DUKE_DET
+	{SPR_PIPB,3,1,{A_Lower},S_DUKE_DETDOWN,0,0},	// S_DUKE_DETDOWN
+	{SPR_PIPB,3,1,{A_Raise},S_DUKE_DETUP,0,0},	// S_DUKE_DETUP
+	{SPR_PIPB,4,4,{NULL},S_DUKE_DET2,0,0},	// S_DUKE_DET1
+	{SPR_PIPB,5,4,{A_DetPipe},S_DUKE_DET3,0,0},	// S_DUKE_DET2
+	{SPR_PIPB,4,4,{NULL},S_DUKE_DET4,0,0},	// S_DUKE_DET3
+	{SPR_PIPB,3,0,{A_ReFire},S_DUKE_DET,0,0},	// S_DUKE_DET4
+	{SPR_PIPE,0,1,{NULL},S_DUKE_PIPEBOMB,0,0},	// S_DUKE_PIPEBOMB
+	{SPR_PIPE,0,1,{NULL},S_EXPLODE1,0,0},	// S_DUKE_PIPEBOOM
+	{SPR_DEVS,0,1,{A_WeaponReady},S_DUKE_DEV,0,0},	// S_DUKE_DEV
+	{SPR_DEVS,0,1,{A_Lower},S_DUKE_DEVDOWN,0,0},	// S_DUKE_DEVDOWN
+	{SPR_DEVS,0,1,{A_Raise},S_DUKE_DEVUP,0,0},	// S_DUKE_DEVUP
+	{SPR_DEVS,1,3,{A_FireDevRight},S_DUKE_DEV2,0,0},	// S_DUKE_DEV1
+	{SPR_DEVS,2,3,{A_FireDevLeft},S_DUKE_DEV3,0,0},	// S_DUKE_DEV2
+	{SPR_DEVS,0,0,{A_ReFire},S_DUKE_DEV,0,0},	// S_DUKE_DEV3
+	{SPR_DEVR,32768,1,{NULL},S_DUKE_DEVROCKET,0,0},	// S_DUKE_DEVROCKET
+	{SPR_DNDV,0,-1,{NULL},S_NULL,0,0},	// S_DITEM_DEV
+	{SPR_FREZ,0,1,{A_WeaponReady},S_DUKE_FRZ,0,0},	// S_DUKE_FRZ
+	{SPR_FREZ,0,1,{A_Lower},S_DUKE_FRZDOWN,0,0},	// S_DUKE_FRZDOWN
+	{SPR_FREZ,0,1,{A_Raise},S_DUKE_FRZUP,0,0},	// S_DUKE_FRZUP
+	{SPR_FREZ,1,1,{NULL},S_DUKE_FRZ2,0,0},	// S_DUKE_FRZ1
+	{SPR_FREZ,2,1,{A_FireFreeze},S_DUKE_FRZ3,0,0},	// S_DUKE_DFRZ2
+	{SPR_FREZ,3,1,{NULL},S_DUKE_FRZ4,0,0},	// S_DUKE_FRZ3
+	{SPR_FREZ,0,0,{A_ReFire},S_DUKE_FRZ,0,0},	// S_DUKE_FRZ4
+	{SPR_FICE,0,1,{NULL},S_DUKE_ICE2,0,0},	// S_DUKE_ICE1
+	{SPR_FICE,1,1,{NULL},S_DUKE_ICE3,0,0},	// S_DUKE_ICE2
+	{SPR_FICE,2,1,{NULL},S_DUKE_ICE1,0,0},	// S_DUKE_ICE3
+	{SPR_FICE,0,1,{A_IceExplode},S_NULL,0,0},	// S_DUKE_ICED
+	{SPR_DNFT,0,-1,{NULL},S_NULL,0,0},	// S_DITEM_FRZ
 };
 
 
@@ -5967,5 +6067,290 @@ mobjinfo_t mobjinfo[NUMMOBJTYPES] = {
 	S_NULL,		// raisestate
 	0x10000
 	},
+
+	//
+	// [GRB] Things
+	//
+
+	{		// MT_DUKE_PISTOL
+	-1,		// doomednum
+	S_DITEM_PISTOL,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	NULL,		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_NULL,		// deathstate
+	S_NULL,		// xdeathstate
+	NULL,		// deathsound
+	0,		// speed
+	20*FRACUNIT,		// radius
+	16*FRACUNIT,		// height
+	100,		// mass
+	0,		// damage
+	NULL,		// activesound
+	MF_SPECIAL,		// flags
+	0,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DUKE_SHOTGUN
+	-1,		// doomednum
+	S_DITEM_SGUN,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	NULL,		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_NULL,		// deathstate
+	S_NULL,		// xdeathstate
+	NULL,		// deathsound
+	0,		// speed
+	20*FRACUNIT,		// radius
+	16*FRACUNIT,		// height
+	100,		// mass
+	0,		// damage
+	NULL,		// activesound
+	MF_SPECIAL,		// flags
+	0,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DUKE_CHAINGUN
+	-1,		// doomednum
+	S_DITEM_CGUN,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	NULL,		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_NULL,		// deathstate
+	S_NULL,		// xdeathstate
+	NULL,		// deathsound
+	0,		// speed
+	20*FRACUNIT,		// radius
+	16*FRACUNIT,		// height
+	100,		// mass
+	0,		// damage
+	NULL,		// activesound
+	MF_SPECIAL,		// flags
+	0,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DPROJ_RPGROCKET
+	-1,		// doomednum
+	S_DUKE_RPGROCKET,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	"weapons/rocklf",		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_EXPLODE1,		// deathstate
+	S_NULL,		// xdeathstate
+	"weapons/rocklx",		// deathsound
+	40*FRACUNIT,		// speed
+	11*FRACUNIT,		// radius
+	8*FRACUNIT,		// height
+	100,		// mass
+	20,		// damage
+	NULL,		// activesound
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY,		// flags
+	MF2_PCROSS|MF2_IMPACT,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DUKE_RPG
+	-1,		// doomednum
+	S_DITEM_RPG,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	NULL,		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_NULL,		// deathstate
+	S_NULL,		// xdeathstate
+	NULL,		// deathsound
+	0,		// speed
+	20*FRACUNIT,		// radius
+	16*FRACUNIT,		// height
+	100,		// mass
+	0,		// damage
+	NULL,		// activesound
+	MF_SPECIAL,		// flags
+	0,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DPROJ_PIPEBOMB
+	-1,		// doomednum
+	S_DUKE_PIPEBOMB,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	"weapons/rocklf",		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_DUKE_PIPEBOMB,		// deathstate
+	S_NULL,		// xdeathstate
+	"weapons/rocklx",		// deathsound
+	30*FRACUNIT,		// speed
+	11*FRACUNIT,		// radius
+	8*FRACUNIT,		// height
+	100,		// mass
+	20,		// damage
+	NULL,		// activesound
+	MF_NOBLOCKMAP|MF_DROPOFF|MF_MISSILE,		// flags
+	MF2_PCROSS|MF2_IMPACT|MF2_FLOORBOUNCE,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DPROJ_DEVROCKET
+	-1,		// doomednum
+	S_DUKE_DEVROCKET,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	"weapons/rocklf",		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_EXPLODE1,		// deathstate
+	S_NULL,		// xdeathstate
+	"weapons/rocklx",		// deathsound
+	40*FRACUNIT,		// speed
+	11*FRACUNIT,		// radius
+	8*FRACUNIT,		// height
+	100,		// mass
+	15,		// damage
+	NULL,		// activesound
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY,		// flags
+	MF2_PCROSS|MF2_IMPACT,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DUKE_DEVASTATOR
+	-1,		// doomednum
+	S_DITEM_DEV,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	NULL,		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_NULL,		// deathstate
+	S_NULL,		// xdeathstate
+	NULL,		// deathsound
+	0,		// speed
+	20*FRACUNIT,		// radius
+	16*FRACUNIT,		// height
+	100,		// mass
+	0,		// damage
+	NULL,		// activesound
+	MF_SPECIAL,		// flags
+	0,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DPROJ_FREEZE
+	-1,		// doomednum
+	S_DUKE_ICE1,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	"weapons/rocklf",		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_DUKE_ICED,		// deathstate
+	S_NULL,		// xdeathstate
+	"weapons/rocklx",		// deathsound
+	50*FRACUNIT,		// speed
+	11*FRACUNIT,		// radius
+	8*FRACUNIT,		// height
+	100,		// mass
+	15,		// damage
+	NULL,		// activesound
+	MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY,		// flags
+	MF2_PCROSS|MF2_IMPACT,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
+	{		// MT_DUKE_FREEZE
+	-1,		// doomednum
+	S_DITEM_FRZ,		// spawnstate
+	1000,		// spawnhealth
+	S_NULL,		// seestate
+	NULL,		// seesound
+	8,		// reactiontime
+	NULL,		// attacksound
+	S_NULL,		// painstate
+	0,		// painchance
+	NULL,		// painsound
+	S_NULL,		// meleestate
+	S_NULL,		// missilestate
+	S_NULL,		// deathstate
+	S_NULL,		// xdeathstate
+	NULL,		// deathsound
+	0,		// speed
+	20*FRACUNIT,		// radius
+	16*FRACUNIT,		// height
+	100,		// mass
+	0,		// damage
+	NULL,		// activesound
+	MF_SPECIAL,		// flags
+	0,		// flags2
+	S_NULL,		// raisestate
+	0x10000
+	},
+
 };
 

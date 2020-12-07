@@ -1105,6 +1105,12 @@ void D_DoomMain (void)
 		wad = BaseFileSearch ("zvox.wad", NULL);
 		if (wad)
 			D_AddFile (wad);
+		// [GRB] Add wad
+		wad = BaseFileSearch ("grubber.wad", NULL);
+		if (wad)
+			D_AddFile(wad);
+		else
+			I_FatalError ("Cannot find grubber.wad");
 	}
 
 	I_SetTitleString (IdentifyVersion ());

@@ -912,6 +912,221 @@ void P_MovePsprites (player_t* player)
 	player->psprites[ps_flash].sy = player->psprites[ps_weapon].sy;
 }
 
+//
+// [GRB] Weapon attacks
+//
+
+//
+// A_Kick
+//
+void A_Kick (player_t *player, pspdef_t *psp)
+{
+	angle_t 	angle;
+	int 		damage;
+	int 		slope;
+	int			t;
+		
+	damage = (P_Random (pr_punch)%10+6)<<1;
+
+	if (player->powers[pw_strength])	
+		damage *= 10;
+
+	angle = player->mo->angle;
+
+	t = P_Random (pr_punch);
+	angle += (t - P_Random (pr_punch)) << 18;
+	slope = P_AimLineAttack (player->mo, angle, MELEERANGE);
+	P_LineAttack (player->mo, angle, MELEERANGE, slope, damage);
+
+	// turn to face target
+	if (linetarget)
+	{
+		S_Sound (player->mo, CHAN_WEAPON, "*fist", 1, ATTN_NORM);
+		player->mo->angle = R_PointToAngle2 (player->mo->x,
+											 player->mo->y,
+											 linetarget->x,
+											 linetarget->y);
+	}
+}
+
+
+//
+// A_FireDukePistol
+//
+void A_FireDukePistol (player_t *player, pspdef_t *psp)
+{
+	S_Sound (player->mo, CHAN_WEAPON, "weapons/pistol", 1, ATTN_NORM);
+
+	P_SetMobjState (player->mo, S_PLAY_ATK2);
+	if (!(dmflags & DF_INFINITE_AMMO))
+		player->ammo[weaponinfo[player->readyweapon].ammo]--;
+
+	P_SetPsprite (player,
+				  ps_flash,
+				  weaponinfo[player->readyweapon].flashstate);
+
+	P_BulletSlope (player->mo);
+	P_GunShot (player->mo, true);
+}
+
+
+//
+// A_FireDukeShotgun
+//
+void A_FireDukeShotgun (player_t *player, pspdef_t *psp)
+{
+	int i;
+		
+	S_Sound (player->mo, CHAN_WEAPON,  "weapons/shotgf", 1, ATTN_NORM);
+	P_SetMobjState (player->mo, S_PLAY_ATK2);
+
+	if (!(dmflags & DF_INFINITE_AMMO))
+		player->ammo[weaponinfo[player->readyweapon].ammo]--;
+
+	P_SetPsprite (player,
+				  ps_flash,
+				  weaponinfo[player->readyweapon].flashstate);
+
+	P_BulletSlope (player->mo);
+		
+	for (i=0 ; i<9 ; i++)
+		P_GunShot (player->mo, false);
+}
+
+
+//
+// A_FireCGunCannon
+//
+void A_FireCGunCannon (player_t *player, pspdef_t *psp)
+{
+	S_Sound (player->mo, CHAN_WEAPON, "weapons/chngun", 1, ATTN_NORM);
+
+	if (!player->ammo[weaponinfo[player->readyweapon].ammo])
+		return;
+				
+	P_SetMobjState (player->mo, S_PLAY_ATK2);
+	if (!(dmflags & DF_INFINITE_AMMO))
+		player->ammo[weaponinfo[player->readyweapon].ammo]--;
+
+	P_SetPsprite (player,
+				  ps_flash,
+				  (statenum_t)(weaponinfo[player->readyweapon].flashstate
+				  + psp->state
+				  - &states[S_DUKE_CGUN1]) );
+
+	P_BulletSlope (player->mo);
+		
+	P_GunShot (player->mo, !player->refire);
+}
+
+
+//
+// A_FireRpg
+//
+void P_SpawnPlayerMissileGrb (AActor *source, mobjtype_t type, short tid, int x, int y);
+
+void A_FireRpg (player_t *player, pspdef_t *psp)
+{
+	if (!(dmflags & DF_INFINITE_AMMO))
+		player->ammo[weaponinfo[player->readyweapon].ammo]--;
+
+	A_Light2 (player, psp);
+
+	P_SpawnPlayerMissileGrb (player->mo, MT_DPROJ_DEVROCKET, 0, finecosine[player->angle>>ANGLETOFINESHIFT]+12*FRACUNIT, finesine[player->angle>>ANGLETOFINESHIFT]+12*FRACUNIT);
+}
+
+
+//
+// A_FirePipe
+//
+void A_FirePipe (player_t *player, pspdef_t *psp)
+{
+	if (!(dmflags & DF_INFINITE_AMMO))
+		player->ammo[weaponinfo[player->readyweapon].ammo]--;
+
+	player->pendingweapon = wp_duke_pipe_det;
+
+	P_SpawnPlayerMissileGrb (player->mo, MT_DPROJ_PIPEBOMB, 6487, 0, 0);
+}
+
+
+//
+// A_DetPipe
+//
+extern bool pipethrowed;
+
+void A_DetPipe (player_t *player, pspdef_t *psp)
+{
+	bool	pipefinded;
+	AActor *pipe = AActor::FindByTID (NULL, 6487);
+
+	while (pipe)
+	{
+		AActor *temp = AActor::FindByTID (pipe, 6487);
+		if (pipe->type = MT_DPROJ_PIPEBOMB)
+			pipefinded = true;
+			pipe->state = &states[S_DUKE_PIPEBOOM];
+		pipe = temp;
+	}
+
+	if (pipefinded)
+	{
+		pipethrowed = false;
+		player->pendingweapon = wp_duke_pipe;
+	}
+}
+
+//
+// A_FireDevLeft
+//
+void A_FireDevLeft (player_t *player, pspdef_t *psp)
+{
+	if (!(dmflags & DF_INFINITE_AMMO))
+		player->ammo[weaponinfo[player->readyweapon].ammo]--;
+
+	P_SpawnPlayerMissileGrb (player->mo, MT_DPROJ_DEVROCKET, 0, finecosine[player->angle>>ANGLETOFINESHIFT]-12*FRACUNIT, finesine[player->angle>>ANGLETOFINESHIFT]-12*FRACUNIT);
+}
+
+
+//
+// A_FireDevRight
+//
+void A_FireDevRight (player_t *player, pspdef_t *psp)
+{
+	if (!(dmflags & DF_INFINITE_AMMO))
+		player->ammo[weaponinfo[player->readyweapon].ammo]--;
+
+	P_SpawnPlayerMissileGrb (player->mo, MT_DPROJ_DEVROCKET, 0, finecosine[player->angle>>ANGLETOFINESHIFT]+12*FRACUNIT, finesine[player->angle>>ANGLETOFINESHIFT]+12*FRACUNIT);
+}
+
+
+//
+// A_FireFreeze
+//
+void A_FireFreeze (player_t *player, pspdef_t *psp)
+{
+	if (!(dmflags & DF_INFINITE_AMMO))
+		player->ammo[weaponinfo[player->readyweapon].ammo]--;
+
+	P_SetPsprite (player,
+				  ps_flash,
+				  (statenum_t)(weaponinfo[player->readyweapon].flashstate
+				  + psp->state
+				  - &states[S_DUKE_FRZ1]) );
+
+	P_SpawnPlayerMissile (player->mo, MT_DPROJ_FREEZE);
+}
+
+
+//
+// A_IceExplode
+//
+void A_IceExplode (AActor *thing)
+{
+	P_RadiusAttack (thing, thing->target, 32, MOD_ROCKET);
+}
+
+
 
 FArchive &operator<< (FArchive &arc, pspdef_t &def)
 {
