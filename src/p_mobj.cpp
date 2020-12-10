@@ -49,6 +49,8 @@
 #include "cmdlib.h"
 #include "decallib.h"
 
+#include "p_grubber.h"	// [GRB]
+
 // MACROS ------------------------------------------------------------------
 
 #define WATER_SINK_FACTOR		3
@@ -2309,6 +2311,22 @@ void P_SpawnPlayer (mapthing2_t *mthing)
 		Spawn ("TeleportFog", mobj->x+20*finecosine[an], mobj->y+20*finesine[an], mobj->z);
 	}
 
+	// [GRB]
+	if (PosSaved)
+	{
+		mobj->x += FixedMul (finecosine[(-EndPitch) >> ANGLETOFINESHIFT], finecosine[(mobj->angle + EndAngle) >> ANGLETOFINESHIFT]) * EndDist;
+		mobj->y += FixedMul (finecosine[(-EndPitch) >> ANGLETOFINESHIFT], finesine[(mobj->angle + EndAngle) >> ANGLETOFINESHIFT]) * EndDist;
+		mobj->z += FixedMul (EndDist, finesine[(-EndPitch) >> ANGLETOFINESHIFT]);
+		mobj->angle += PlrAngle;
+		mobj->pitch = PlrPitch;
+		mobj->momx = FixedMul (PlrMomDist, finecosine[(mobj->angle + PlrMomAng) >> ANGLETOFINESHIFT]);
+		mobj->momy = FixedMul (PlrMomDist, finesine[(mobj->angle + PlrMomAng) >> ANGLETOFINESHIFT]);
+		mobj->momz = PlrMomZ;
+		for (int i = 0; i < NUMPSPRITES; i++)
+			mobj->player->psprites[i] = PlrPsp[i];
+		PosSaved = false;
+	}
+
 	// [RH] If someone is in the way, kill them
 	P_TeleportMove (mobj, mobj->x, mobj->y, mobj->z, true);
 
@@ -3141,66 +3159,6 @@ AActor *P_SpawnPlayerMissile (AActor *source, fixed_t x, fixed_t y, fixed_t z,
 	return NULL;
 }
 
-// [GRB] Modified P_SpawnPlayerMissile (for pipebombs)
-AActor *P_SpawnPlayerMissileGrb (AActor *source, const TypeInfo *type, short tid, int x, int y)
-{
-	static const int angdiff[3] = { -1<<26, 1<<26, 0 };
-	int i;
-	angle_t an;
-	angle_t pitch;
-
-	// see which target is to be aimed at
-	i = 2;
-	do
-	{
-		an = angle + angdiff[i];
-		pitch = P_AimLineAttack (source, an, 16*64*FRACUNIT);
-	} while (linetarget == NULL && --i >= 0);
-
-	i = GetDefaultByType (type)->flags3;
-
-	int z;
-	if (i & MF3_FLOORHUGGER)
-	{
-		z = ONFLOORZ;
-	}
-	else if (i & MF3_CEILINGHUGGER)
-	{
-		z = ONCEILINGZ;
-	}
-	if (z != ONFLOORZ && z != ONCEILINGZ)
-	{
-		z += 4*8*FRACUNIT - source->floorclip;
-	}
-	MissileActor = Spawn (type, source->x + x, source->y + y, source->z + z);
-
-	MissileActor->tid = tid;
-	MissileActor->AddToHash();
-
-	if (MissileActor->SeeSound)
-	{
-		S_SoundID (MissileActor, CHAN_VOICE, MissileActor->SeeSound, 1, ATTN_NORM);
-	}
-	MissileActor->target = source;
-	MissileActor->angle = an;
-
-	fixed_t vx, vy, vz, speed;
-
-	vx = FixedMul (finecosine[pitch>>ANGLETOFINESHIFT], finecosine[angle>>ANGLETOFINESHIFT]);
-	vy = FixedMul (finecosine[pitch>>ANGLETOFINESHIFT], finesine[angle>>ANGLETOFINESHIFT]);
-	vz = -finesine[pitch>>ANGLETOFINESHIFT];
-	speed = MissileActor->Speed;
-
-	MissileActor->momx = FixedMul (vx, speed);
-	MissileActor->momy = FixedMul (vy, speed);
-	MissileActor->momz = FixedMul (vz, speed);
-
-	if (P_CheckMissileSpawn (MissileActor))
-	{
-		return MissileActor;
-	}
-	return NULL;
-}
 bool AActor::IsTeammate (AActor *other)
 {
 	if (!player || !other || !other->player)
@@ -3233,6 +3191,21 @@ int AActor::DoSpecialDamage (AActor *target, int damage)
 	}
 }
 
+// [GRB] Support for using things
+bool AActor::Use (AActor *activator)
+{
+	return false;
+}
+
+bool AActor::UnUse (AActor *activator)
+{
+	return false;
+}
+
+void AActor::UseThink (AActor *activator)
+{
+}
+
 FArchive &operator<< (FArchive &arc, FSoundIndex &snd)
 {
 	if (arc.IsStoring ())
@@ -3254,3 +3227,206 @@ FArchive &operator<< (FArchive &arc, FSoundIndexWord &snd)
 	snd.Index = snd2.Index;
 	return arc;
 }
+
+// [GRB] Dll
+/*
+void AActor_Destroy ()
+{
+	AActor::Destroy ();
+}
+
+void AActor_Serialize (FArchive &arc)
+{
+	AActor::Serialize (arc);
+}
+
+static AActor *AActor_StaticSpawn (const TypeInfo *type, fixed_t x, fixed_t y, fixed_t z)
+{
+	return AActor::StaticSpawn (type, x, y, z);
+}
+
+void AActor_BeginPlay ()
+{
+	AActor::BeginPlay ();
+}
+
+void AActor_LevelSpawned ()
+{
+	AActor::LevelSpawned ();
+}
+
+void AActor_Activate (AActor *activator)
+{
+	AActor::Activate (activator);
+}
+
+void AActor_Deactivate (AActor *activator)
+{
+	AActor::Deactivate (activator);
+}
+
+void AActor_Tick ()
+{
+	AActor::Tick ();
+}
+
+angle_t AActor_AngleIncrements ()
+{
+	return AActor::AngleIncrements ();
+}
+
+int AActor_GetMOD ()
+{
+	return AActor::GetMOD ();
+}
+
+const char *AActor_GetObituary ()
+{
+	return AActo::GetObituary ();
+}
+
+const char *AActor_GetHitObituary ()
+{
+	return AActor::GetHitObituary ();
+}
+
+bool AActor_SuggestMissileAttack (fixed_t dist)
+{
+	return AActor::SuggestMissileAttack (dist);
+}
+
+void AActor_Die (AActor *source, AActor *inflictor)
+{
+	AActor::Die (source, inflictor);
+}
+
+void AActor_PreExplode ()
+{
+	AActor::PreExplode ();
+}
+
+void AActor_GetExplodeParms (int &damage, int &dist, bool &hurtSource)
+{
+	AActor::GetExplodeParms (damage, dist, hurtSource);
+}
+
+int AActor_DoSpecialDamage (AActor *target, int damage)
+{
+	return AActor::DoSpecialDamage (target, damage);
+}
+
+void AActor_Howl ()
+{
+	AActor::Howl ();
+}
+
+bool AActor_NewTarget (AActor *other)
+{
+	return AActor::NewTarget (other);
+}
+
+void AActor_NoBlockingSet ()
+{
+	AActor::NoBlockingSet ();
+}
+
+fixed_t AActor_GetSinkSpeed ()
+{
+	return AActor::GetSinkSpeed ();
+}
+
+fixed_t AActor_GetRaiseSpeed ()
+{
+	return AActor::GetRaiseSpeed ();
+}
+
+void AActor_HitFloor ()
+{
+	AActor::HitFloor ();
+}
+
+void AActor_ChangeSpecial (byte special, byte data1, byte data2, byte data3, byte data4, byte data5)
+{
+	AActor::ChangeSpecial (special, data1, data2, data3, data4, data5);
+}
+
+bool AActor_Use (AActor *activator)
+{
+	return AActor::Use (activator);
+}
+
+bool AActor_UnUse (AActor *activator)
+{
+	return AActor::UnUse (activator);
+}
+
+void AActor_UseThink (AActor *activator)
+{
+	AActor::UseThink (activator);
+}
+
+void AActor_SetShade_a (DWORD rgb)
+{
+	AActor::SetShade (rgb);
+}
+
+void AActor_SetShade_b (int r, int g, int b)
+{
+	AActor::SetShade (r, g, b);
+}
+
+bool AActor_IsTeammate (AActor *other)
+{
+	return AActor::IsTeammate (other);
+}
+
+static void AActor_ClearTIDHashes ()
+{
+	AActor::ClearTIDHashes ();
+}
+
+void AActor_AddToHash ()
+{
+	AActor::AddToHash ();
+}
+
+void AActor_RemoveFromHash ()
+{
+	AActor::RemoveFromHash ();
+}
+
+void AActor_LinkToWorld ()
+{
+	AActor::LinkToWorld ();
+}
+
+void AActor_UnlinkFromWorld ()
+{
+	AActor::UnlinkFromWorld ();
+}
+
+void AActor_AdjustFloorClip ()
+{
+	AActor::AdjustFloorClip ();
+}
+
+void AActor_SetOrigin (fixed_t x, fixed_t y, fixed_t z)
+{
+	AActor::SetOrigin (x, y, z);
+}
+
+bool AActor_SetState (FState *newstate)
+{
+	return AActor::SetState (newstate);
+}
+
+bool AActor_SetStateNF (FState *newstate)
+{
+	return AActor::SetStateNF (newstate);
+}
+
+bool AActor_UpdateWaterLevel (fixed_t oldz)
+{
+	return AActor::UpdateWaterLevel (oldz);
+}
+*/

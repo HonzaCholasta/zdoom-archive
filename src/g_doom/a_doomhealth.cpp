@@ -40,6 +40,7 @@ IMPLEMENT_ACTOR (AHealthBonus, Doom, 2014, 151)
 	PROP_RadiusFixed (20)
 	PROP_HeightFixed (16)
 	PROP_Flags (MF_SPECIAL|MF_COUNTITEM)
+	PROP_Translation (TRANSLATION_Standard,0)
 
 	PROP_SpawnState (0)
 END_DEFAULTS

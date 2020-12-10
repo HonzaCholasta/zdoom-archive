@@ -48,6 +48,15 @@
 #define FX_BLACKFOUNTAIN	0x00060000
 #define FX_WHITEFOUNTAIN	0x00070000
 
+// [GRB] Some effects
+#define	FX_GIB				0x00000080
+#define FX_CIRCLE			0x00000100
+#define FX_BEAMRED			0x00000200
+#define FX_BEAMGREEN		0x00000400
+#define FX_BEAMBLUE			0x00000800
+#define FX_BEAMYELLOW		0x00001000
+#define FX_BEAMWHITE		0x00002000
+
 struct particle_s;
 
 struct particle_s *JitterParticle (int ttl);

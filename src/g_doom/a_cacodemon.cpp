@@ -7,6 +7,8 @@
 #include "a_action.h"
 #include "s_sound.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_HeadAttack (AActor *);
 
 class ACacodemon : public AActor
@@ -144,7 +146,13 @@ void A_HeadAttack (AActor *self)
 	}
 	
 	// launch a missile
-	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ACacodemonBall));
+//	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ACacodemonBall));
+	P_MonsterFire (cl_mon_cacodemon_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
+}
+
+AActor *Grb_HeadAttack (AActor *self)	// [GRB]
+{
+	return P_SpawnMissile (self, self->target, RUNTIME_CLASS(ACacodemonBall));
 }
 
 // Dead cacodemon ----------------------------------------------------------

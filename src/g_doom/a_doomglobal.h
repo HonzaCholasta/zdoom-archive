@@ -14,7 +14,6 @@ class AExplosiveBarrel : public AActor
 	DECLARE_ACTOR (AExplosiveBarrel, AActor)
 public:
 	int GetMOD () { return MOD_BARREL; }
-	void Activate (AActor *activator);
 };
 
 class ABulletPuff : public AActor
@@ -58,6 +57,14 @@ class APlasmaBall : public AActor
 {
 	DECLARE_ACTOR (APlasmaBall, AActor)
 	int GetMOD () { return MOD_PLASMARIFLE; }
+};
+
+// [GRB]
+class ABFGBall : public AActor
+{
+	DECLARE_ACTOR (ABFGBall, AActor)
+public:
+	int GetMOD () { return MOD_BFG_BOOM; }
 };
 
 #endif //__A_DOOMGLOBAL_H__

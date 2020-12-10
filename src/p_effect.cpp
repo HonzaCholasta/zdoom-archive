@@ -47,6 +47,8 @@
 #include "r_things.h"
 #include "s_sound.h"
 
+#include "p_trace.h"	// [GRB]
+
 CVAR (Int, cl_rockettrails, 1, CVAR_ARCHIVE);
 
 #define FADEFROMTTL(a)	(255/(a))
@@ -322,6 +324,110 @@ void P_RunEffect (AActor *actor, int effects)
 					particle->velz = -particle->velz;
 					particle->accz = -particle->accz;
 				}
+			}
+		}
+	}
+	// [GRB] Effects
+	if (effects & FX_GIB)
+	{
+		// blood trail
+
+		for (i = 0; i < 8; i++)
+		{
+			particle_t *particle = JitterParticle (3 + (M_Random() & 31));
+
+			if (particle)
+			{
+				angle_t ang = M_Random () << (32-ANGLETOFINESHIFT-8);
+				particle->x = actor->x + FixedMul (i * FRACUNIT, finecosine[ang]);
+				particle->y = actor->y + FixedMul (i * FRACUNIT, finesine[ang]);
+				particle->z = actor->z + actor->height / 2;
+				particle->size = (M_Random () & 4) + 1;
+				particle->accz = M_Random () << 7;
+				particle->velz = FRACUNIT;
+				if (M_Random() & 7)
+					particle->color = red;
+				else
+					particle->color = dred;
+			}
+		}
+	}
+	if (effects & FX_CIRCLE)
+	{
+		// circle effect
+
+		for (i = 0; i < 36; i++)
+		{
+			particle_t *particle = JitterParticle (3 + (M_Random() & 31));
+
+			if (particle)
+			{
+				angle_t ang = M_Random () << (32-ANGLETOFINESHIFT-8);
+				particle->x = actor->x + FixedMul (actor->radius / 2, finecosine[ang]);
+				particle->y = actor->y + FixedMul (actor->radius / 2, finesine[ang]);
+				particle->z = actor->z + actor->height;
+				particle->size = 3;
+				particle->color = yellow;
+				particle->trans = 127;
+			}
+		}
+	}
+	if (effects & FX_BEAMRED || effects & FX_BEAMGREEN ||
+		effects & FX_BEAMBLUE || effects & FX_BEAMYELLOW ||
+		effects & FX_BEAMWHITE)
+	{
+		// beam
+
+		int beamcolors[3];
+		FTraceResults trace;
+
+		if (effects & FX_BEAMRED)
+		{
+			beamcolors[0] = red;
+			beamcolors[1] = red1;
+			beamcolors[2] = dred;
+		}
+		else if (effects & FX_BEAMGREEN)
+		{
+			beamcolors[0] = green;
+			beamcolors[1] = green1;
+			beamcolors[2] = green1;
+		}
+		else if (effects & FX_BEAMBLUE)
+		{
+			beamcolors[0] = blue;
+			beamcolors[1] = blue1;
+			beamcolors[2] = blue1;
+		}
+		else if (effects & FX_BEAMYELLOW)
+		{
+			beamcolors[0] = yellow;
+			beamcolors[1] = yellow1;
+			beamcolors[2] = yorange;
+		}
+		else if (effects & FX_BEAMWHITE)
+		{
+			beamcolors[0] = white;
+			beamcolors[1] = grey1;
+			beamcolors[2] = grey3;
+		}
+
+		Trace (actor->x, actor->y, actor->z, actor->Sector,
+			actor->goal->x, actor->goal->y, actor->goal->z,
+			MISSILERANGE, 0, 0, actor, trace, 0);
+
+		for (i = 0; i < trace.Distance; i += FRACUNIT / actor->height)
+		{
+			particle_t *particle = JitterParticle (3 + (M_Random() & 31));
+
+			if (particle)
+			{
+				particle->x = actor->x + (actor->goal->x - actor->x) / trace.Distance * i;
+				particle->y = actor->y + (actor->goal->y - actor->y) / trace.Distance * i;
+				particle->z = actor->z + (actor->goal->z - actor->z) / trace.Distance * i;
+				particle->size = (unsigned char)actor->radius;
+				particle->color = beamcolors[M_Random () & 3];
+				particle->trans = (unsigned char)actor->alpha;
 			}
 		}
 	}

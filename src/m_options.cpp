@@ -76,6 +76,8 @@
 // Data.
 #include "m_menu.h"
 
+#include "p_grubber.h"	// [GRB]
+
 //
 // defaulted values
 //
@@ -140,6 +142,7 @@ static void CustomizeControls (void);
 static void GameplayOptions (void);
 static void VideoOptions (void);
 static void GoToConsole (void);
+static void GrubberOptions (void); // [GRB]
 void Reset2Defaults (void);
 void Reset2Saved (void);
 
@@ -154,6 +157,7 @@ static menuitem_t OptionItems[] =
 	{ more,		"Gameplay Options",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)GameplayOptions} },
 	{ more,		"Display Options",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)VideoOptions} },
 	{ more,		"Set video mode",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)SetVidMode} },
+	{ more,		"Grubber Options",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)GrubberOptions} }, // [GRB]
 	{ redtext,	" ",					{NULL},					{0.0}, {0.0},	{0.0}, {NULL} },
 	{ slider,	"Mouse speed",			{&mouse_sensitivity},	{0.5}, {2.5},	{0.1}, {NULL} },
 #ifdef _WIN32
@@ -538,6 +542,494 @@ void M_FreeValues (value_t **values, int num)
 		*values = NULL;
 	}
 }
+
+/*=======================================
+ *
+ * Grubber Options Menu
+ *
+ *=======================================*/
+
+static void WeaponOptions (void);
+static void FistOptions (void);
+static void ChainsawOptions (void);
+static void PistolOptions (void);
+static void ShotgunOptions (void);
+static void SShotgunOptions (void);
+static void ChaingunOptions (void);
+static void RocketOptions (void);
+static void PlasmaOptions (void);
+static void BfgOptions (void);
+static void MonsterOptions (void);
+static void ZombiemanOptions (void);
+static void ShotgunGuyOptions (void);
+static void HeavyWeaponDudeOptions (void);
+static void ImpOptions (void);
+static void DemonOptions (void);
+static void LostSoulOptions (void);
+static void CacodemonOptions (void);
+static void HellKnightOptions (void);
+static void BaronOfHellOptions (void);
+static void ArachnotronOptions (void);
+static void PainElementalOptions (void);
+static void RevenantOptions (void);
+static void MancubusOptions (void);
+static void ArchVileOptions (void);
+static void SpiderBossOptions (void);
+static void CyberdemonOptions (void);
+static void SSOptions (void);
+
+menuitem_t GrubberItems[] = {
+	{ more,		"Weapon Options",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)WeaponOptions} },
+	{ more,		"Monster Options",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)MonsterOptions} }
+};
+
+static menu_t GrubberMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"GRUBBER OPTIONS",
+	0,
+	sizeof(GrubberItems)/sizeof(GrubberItems[0]),
+	0,
+	GrubberItems,
+};
+
+menuitem_t WeaponItems[] = {
+	{ more,		"Fist",					{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)FistOptions} },
+	{ more,		"Chainsaw",				{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)ChainsawOptions} },
+	{ more,		"Pistol",				{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)PistolOptions} },
+	{ more,		"Shotgun",				{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)ShotgunOptions} },
+	{ more,		"Super Shotgun",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)SShotgunOptions} },
+	{ more,		"Chaingun",				{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)ChaingunOptions} },
+	{ more,		"Rocket Launcher",		{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)RocketOptions} },
+	{ more,		"Plasma Rifle",			{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)PlasmaOptions} },
+	{ more,		"BFG 9000",				{NULL},					{0.0}, {0.0},	{0.0}, {(value_t *)BfgOptions} },
+	{ discrete,	"Shell Ejecting",		{&cl_shellejecting},	{2.0}, {0.0},	{0.0}, {YesNo} }
+};
+
+static menu_t WeaponMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"WEAPON OPTIONS",
+	0,
+	sizeof(WeaponItems)/sizeof(WeaponItems[0]),
+	0,
+	WeaponItems,
+};
+
+menuitem_t FistItems[] = {
+	{ discrete,	"Thrust Hited Thing",		{&cl_wpn_fist_thrust},	{2.0}, {0.0},	{0.0}, {YesNo} }
+};
+
+static menu_t FistMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"FIST OPTIONS",
+	0,
+	1,
+	0,
+	FistItems,
+};
+
+menuitem_t ChainsawItems[] = {
+	{ discrete,	"Throw Chainsaw",		{&cl_wpn_chainsaw_throw},	{2.0}, {0.0},	{0.0}, {YesNo} }
+};
+
+static menu_t ChainsawMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"CHAINSAW OPTIONS",
+	0,
+	1,
+	0,
+	ChainsawItems,
+};
+
+static value_t Spread[] = {
+	{ 0.0, "None" },
+	{ 1.0, "Only When Refire" },
+	{ 2.0, "Small" },
+	{ 3.0, "Big" }
+};
+
+menuitem_t PistolItems[] = {
+	{ discrete,	"Burst Fire",			{&cl_wpn_pistol_burst},		{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Explosive Bullets",	{&cl_wpn_pistol_expuffs},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Spread",				{&cl_wpn_pistol_spread},	{4.0}, {1.0},	{0.0}, {Spread} }
+};
+
+static menu_t PistolMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"PISTOL OPTIONS",
+	0,
+	3,
+	0,
+	PistolItems,
+};
+
+menuitem_t ShotgunItems[] = {
+	{ discrete,	"Automatic",			{&cl_wpn_shotgun_auto},		{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Explosive Shells",		{&cl_wpn_shotgun_expuffs},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Spread",				{&cl_wpn_shotgun_spread},	{4.0}, {2.0},	{0.0}, {Spread} }
+};
+
+static menu_t ShotgunMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"SHOTGUN OPTIONS",
+	0,
+	3,
+	0,
+	ShotgunItems,
+};
+
+menuitem_t SShotgunItems[] = {
+	{ discrete,	"Fire One Shell",		{&cl_wpn_sshotgun_fireone},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Automatic",			{&cl_wpn_sshotgun_auto},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Explosive Shells",		{&cl_wpn_sshotgun_expuffs},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Spread",				{&cl_wpn_sshotgun_spread},	{4.0}, {3.0},	{0.0}, {Spread} }
+};
+
+static menu_t SShotgunMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"SUPER SHOTGUN OPTIONS",
+	0,
+	4,
+	0,
+	SShotgunItems,
+};
+
+menuitem_t ChaingunItems[] = {
+	{ discrete,	"Fire Shells",			{&cl_wpn_chaingun_shell},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Explosive Bullets",	{&cl_wpn_chaingun_expuffs},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Spread",				{&cl_wpn_chaingun_spread},	{4.0}, {1.0},	{0.0}, {Spread} }
+};
+
+static menu_t ChaingunMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"CHAINGUN OPTIONS",
+	0,
+	3,
+	0,
+	ChaingunItems,
+};
+
+static value_t RocketMode[] = {
+	{ 0.0, "Rocket Launcher" },
+	{ 1.0, "Flamethrower" },
+	{ 2.0, "Napalm Launcher" },
+	{ 3.0, "Nuke Launcher" }
+};
+
+menuitem_t RocketItems[] = {
+	{ discrete,	"Mode",					{&cl_wpn_rocket_mode},		{4.0}, {0.0},	{0.0}, {RocketMode} },
+	{ discrete, "Spread Fire",			{&cl_wpn_rocket_spreadfire},{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Bounce",				{&cl_wpn_rocket_bounce},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Bobbing",				{&cl_wpn_rocket_bobbing},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Killable",				{&cl_wpn_rocket_killable},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Guide",				{&cl_wpn_rocket_guide},		{2.0}, {0.0},	{0.0}, {YesNo} }
+};
+
+static menu_t RocketMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"ROCKET LAUNCHER OPTIONS",
+	0,
+	6,
+	0,
+	RocketItems,
+};
+
+static value_t PlasmaMode[] = {
+	{ 0.0, "Normal Plasma" },
+	{ 1.0, "MIRV Plasma" },
+	{ 2.0, "Railgun" }
+};
+
+menuitem_t PlasmaItems[] = {
+	{ discrete,	"Mode",					{&cl_wpn_plasma_mode},		{3.0}, {0.0},	{0.0}, {PlasmaMode} },
+	{ discrete, "Spread Fire",			{&cl_wpn_plasma_spreadfire},{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Bounce",				{&cl_wpn_plasma_bounce},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Bobbing",				{&cl_wpn_plasma_bobbing},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Killable",				{&cl_wpn_plasma_killable},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Green Plasma",			{&cl_wpn_plasma_green},		{2.0}, {0.0},	{0.0}, {YesNo} }
+};
+
+static menu_t PlasmaMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"PLASMA RIFLE OPTIONS",
+	0,
+	6,
+	0,
+	PlasmaItems,
+};
+
+menuitem_t BfgItems[] = {
+	{ discrete, "Spread Fire",			{&cl_wpn_bfg_spreadfire},	{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Bounce",				{&cl_wpn_bfg_bounce},		{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Bobbing",				{&cl_wpn_bfg_bobbing},		{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Killable",				{&cl_wpn_bfg_killable},		{2.0}, {0.0},	{0.0}, {YesNo} },
+	{ discrete,	"Mini BFG",				{&cl_wpn_bfg_mini},			{2.0}, {0.0},	{0.0}, {YesNo} }
+};
+
+static menu_t BfgMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"BFG 9000 OPTIONS",
+	0,
+	5,
+	0,
+	BfgItems,
+};
+
+menuitem_t MonsterItems[] = {
+	{ more,		"Zombieman",			{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)ZombiemanOptions} },
+	{ more,		"Shotgun guy",			{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)ShotgunGuyOptions} },
+	{ more,		"Heavy Weapon Dude",	{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)HeavyWeaponDudeOptions} },
+	{ more,		"Imp",					{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)ImpOptions} },
+	{ more,		"Demon",				{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)DemonOptions} },
+	{ more,		"Lost Soul",			{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)LostSoulOptions} },
+	{ more,		"Cacodemon",			{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)CacodemonOptions} },
+	{ more,		"Hell Knight",			{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)HellKnightOptions} },
+	{ more,		"Baron Of Hell",		{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)BaronOfHellOptions} },
+	{ more,		"Arachnotron",			{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)ArachnotronOptions} },
+	{ more,		"Pain Elemental",		{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)PainElementalOptions} },
+	{ more,		"Revenant",				{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)RevenantOptions} },
+	{ more,		"Mancubus",				{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)MancubusOptions} },
+	{ more,		"Arch-Vile",			{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)ArchVileOptions} },
+	{ more,		"The Spider Mastermind",{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)SpiderBossOptions} },
+	{ more,		"The Cyberdemon",		{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)CyberdemonOptions} },
+	{ more,		"Wolfenstein SS",		{NULL},						{0.0}, {0.0},	{0.0}, {(value_t *)SSOptions} }
+};
+
+static menu_t MonsterMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"MONSTER OPTIONS",
+	0,
+	17,
+	0,
+	MonsterItems,
+};
+
+menuitem_t NoMonstItems[] = {
+	{ redtext,	"Under Construction",	{NULL},						{0.0}, {0.0},	{0.0}, {NULL} }
+};
+
+static menu_t NoMonstMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"MONSTER OPTIONS",
+	0,
+	1,
+	0,
+	NoMonstItems,
+};
+
+static value_t MonstFire[] = {
+	{ 0.0, "Pistol" },
+	{ 1.0, "Shotgun" },
+	{ 2.0, "Super Shotgun" },
+	{ 3.0, "Chaingun" },
+	{ 4.0, "Rocket" },
+	{ 5.0, "Plasma" },
+	{ 6.0, "BFG" },
+	{ 7.0, "Arachnotron's Plasma" },
+	{ 8.0, "Baron's Slimeball" },
+	{ 9.0, "Cacodemon's Fireball" },
+	{ 10.0, "Imp's Fireball" },
+	{ 11.0, "Mancubus' Fireball" },
+	{ 12.0, "Lost Soul" },
+	{ 13.0, "Revenant's Fireball" },
+	{ 14.0, "Railgun" },
+	{ 15.0, "Rocket spread" },
+	{ 16.0, "Lost soul kamikaze" }
+};
+
+menuitem_t ZombiemanItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_zombieman_fire},	{17.0},{0.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t ZombiemanMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"ZOMBIEMAN OPTIONS",
+	0,
+	1,
+	0,
+	ZombiemanItems,
+};
+
+menuitem_t ShotgunGuyItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_shotgunguy_fire},	{17.0},{1.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t ShotgunGuyMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"SHOTGUN GUY OPTIONS",
+	0,
+	1,
+	0,
+	ShotgunGuyItems,
+};
+
+menuitem_t HeavyWeaponDudeItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_heavyweapondude_fire},	{17.0},{3.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t HeavyWeaponDudeMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"HEAVY WEAPON DUDE OPTIONS",
+	0,
+	1,
+	0,
+	HeavyWeaponDudeItems,
+};
+
+menuitem_t ImpItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_imp_fire},			{17.0},{10.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t ImpMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"IMP OPTIONS",
+	0,
+	1,
+	0,
+	ImpItems,
+};
+
+menuitem_t LostSoulItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_lostsoul_fire},	{17.0},{16.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t LostSoulMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"LOST SOUL OPTIONS",
+	0,
+	1,
+	0,
+	LostSoulItems,
+};
+
+menuitem_t CacodemonItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_cacodemon_fire},	{17.0},{9.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t CacodemonMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"CACODEMON OPTIONS",
+	0,
+	1,
+	0,
+	CacodemonItems,
+};
+
+menuitem_t HellKnightItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_hellknight_fire},	{17.0},{8.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t HellKnightMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"HELL KNIGHT OPTIONS",
+	0,
+	1,
+	0,
+	HellKnightItems,
+};
+
+menuitem_t BaronOfHellItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_baronofhell_fire},	{17.0},{8.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t BaronOfHellMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"BARON OF HELL OPTIONS",
+	0,
+	1,
+	0,
+	BaronOfHellItems,
+};
+
+menuitem_t ArachnotronItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_arachnotron_fire},	{17.0},{7.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t ArachnotronMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"ARACHNOTRON OPTIONS",
+	0,
+	1,
+	0,
+	ArachnotronItems,
+};
+
+menuitem_t PainElementalItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_painelemental_fire},	{17.0},{12.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t PainElementalMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"PAIN ELEMENTAL OPTIONS",
+	0,
+	1,
+	0,
+	PainElementalItems,
+};
+
+menuitem_t RevenantItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_revenant_fire},	{17.0},{13.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t RevenantMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"REVENANT OPTIONS",
+	0,
+	1,
+	0,
+	RevenantItems,
+};
+
+menuitem_t MancubusItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_mancubus_fire},	{17.0},{11.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t MancubusMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"MANCUBUS OPTIONS",
+	0,
+	1,
+	0,
+	MancubusItems,
+};
+
+menuitem_t SpiderBossItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_spiderboss_fire},	{17.0},{1.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t SpiderBossMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"THE SPIDER MASTERMIND OPTIONS",
+	0,
+	1,
+	0,
+	SpiderBossItems,
+};
+
+menuitem_t CyberdemonItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_cyberdemon_fire},	{17.0},{4.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t CyberdemonMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"THE CYBERDEMON OPTIONS",
+	0,
+	1,
+	0,
+	CyberdemonItems,
+};
+
+menuitem_t SSItems[] = {
+	{ discrete,	"Fire",					{&cl_mon_ss_fire},			{17.0},{3.0},	{0.0}, {MonstFire} }
+};
+
+static menu_t SSMenu = {
+	{ 'M','_','O','P','T','T','T','L' },
+	"WOLFENSTEIN SS OPTIONS",
+	0,
+	1,
+	0,
+	SSItems,
+};
 
 //
 //		Set some stuff up for the video modes menu
@@ -1745,4 +2237,151 @@ CCMD (addmenukey)
 		CustomControlsItems[AddKeySpot++] = newItem;
 	}
 	ControlsMenu.numitems = CustomControlsItems.Size();
+}
+
+// [GRB]
+
+static void GrubberOptions (void)
+{
+	M_SwitchMenu (&GrubberMenu);
+}
+
+static void WeaponOptions (void)
+{
+	M_SwitchMenu (&WeaponMenu);
+}
+
+static void FistOptions (void)
+{
+	M_SwitchMenu (&FistMenu);
+}
+
+static void ChainsawOptions (void)
+{
+	M_SwitchMenu (&ChainsawMenu);
+}
+
+static void PistolOptions (void)
+{
+	M_SwitchMenu (&PistolMenu);
+}
+
+static void ShotgunOptions (void)
+{
+	M_SwitchMenu (&ShotgunMenu);
+}
+
+static void SShotgunOptions (void)
+{
+	M_SwitchMenu (&SShotgunMenu);
+}
+
+static void ChaingunOptions (void)
+{
+	M_SwitchMenu (&ChaingunMenu);
+}
+
+static void RocketOptions (void)
+{
+	M_SwitchMenu (&RocketMenu);
+}
+
+static void PlasmaOptions (void)
+{
+	M_SwitchMenu (&PlasmaMenu);
+}
+
+static void BfgOptions (void)
+{
+	M_SwitchMenu (&BfgMenu);
+}
+
+static void MonsterOptions (void)
+{
+	M_SwitchMenu (&MonsterMenu);
+}
+
+static void ZombiemanOptions (void)
+{
+	M_SwitchMenu (&ZombiemanMenu);
+}
+
+static void ShotgunGuyOptions (void)
+{
+	M_SwitchMenu (&ShotgunGuyMenu);
+}
+
+static void HeavyWeaponDudeOptions (void)
+{
+	M_SwitchMenu (&HeavyWeaponDudeMenu);
+}
+
+static void ImpOptions (void)
+{
+	M_SwitchMenu (&ImpMenu);
+}
+
+static void DemonOptions (void)
+{
+	M_SwitchMenu (&NoMonstMenu);
+}
+
+static void LostSoulOptions (void)
+{
+	M_SwitchMenu (&LostSoulMenu);
+}
+
+static void CacodemonOptions (void)
+{
+	M_SwitchMenu (&CacodemonMenu);
+}
+
+static void HellKnightOptions (void)
+{
+	M_SwitchMenu (&HellKnightMenu);
+}
+
+static void BaronOfHellOptions (void)
+{
+	M_SwitchMenu (&BaronOfHellMenu);
+}
+
+static void ArachnotronOptions (void)
+{
+	M_SwitchMenu (&ArachnotronMenu);
+}
+
+static void PainElementalOptions (void)
+{
+	M_SwitchMenu (&PainElementalMenu);
+}
+
+static void RevenantOptions (void)
+{
+	M_SwitchMenu (&RevenantMenu);
+}
+
+static void MancubusOptions (void)
+{
+	M_SwitchMenu (&MancubusMenu);
+}
+
+static void ArchVileOptions (void)
+{
+	M_SwitchMenu (&NoMonstMenu);
+}
+
+static void SpiderBossOptions (void)
+{
+	M_SwitchMenu (&SpiderBossMenu);
+}
+
+static void CyberdemonOptions (void)
+{
+	M_SwitchMenu (&CyberdemonMenu);
+}
+
+static void SSOptions (void)
+{
+	M_SwitchMenu (&SSMenu);
 }

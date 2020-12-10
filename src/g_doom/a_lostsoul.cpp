@@ -10,6 +10,8 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_SkullAttack (AActor *);
 
 FState ALostSoul::States[] =
@@ -90,8 +92,8 @@ void ALostSoul::Die (AActor *source, AActor *inflictor)
 void A_SkullAttack (AActor *self)
 {
 	AActor *dest;
-	angle_t an;
-	int dist;
+//	angle_t an;
+//	int dist;
 
 	if (!self->target)
 		return;
@@ -101,15 +103,26 @@ void A_SkullAttack (AActor *self)
 
 	S_SoundID (self, CHAN_VOICE, self->AttackSound, 1, ATTN_NORM);
 	A_FaceTarget (self);
-	an = self->angle >> ANGLETOFINESHIFT;
+	P_MonsterFire (cl_mon_lostsoul_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));
+}
+
+AActor *Grb_SkullAttack (AActor *self, int angle)	// [GRB]
+{
+	angle_t an = self->angle >> ANGLETOFINESHIFT;
+
+	if (self->damage == 0)
+		self->damage = 3;
+
 	self->momx = FixedMul (SKULLSPEED, finecosine[an]);
 	self->momy = FixedMul (SKULLSPEED, finesine[an]);
-	dist = P_AproxDistance (dest->x - self->x, dest->y - self->y);
+	int dist = P_AproxDistance (self->target->x - self->x, self->target->y - self->y);
 	dist = dist / SKULLSPEED;
 	
 	if (dist < 1)
 		dist = 1;
-	self->momz = (dest->z+(dest->height>>1) - self->z) / dist;
+	self->momz = (self->target->z+(self->target->height>>1) - self->z) / dist;
+
+	return self;
 }
 
 // Dead lost soul ----------------------------------------------------------

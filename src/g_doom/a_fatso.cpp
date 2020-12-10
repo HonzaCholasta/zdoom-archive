@@ -7,6 +7,8 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_FatRaise (AActor *);
 void A_FatAttack1 (AActor *);
 void A_FatAttack2 (AActor *);
@@ -171,9 +173,11 @@ void A_FatAttack1 (AActor *self)
 	A_FaceTarget (self);
 	// Change direction  to ...
 	self->angle += FATSPREAD;
-	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+//	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+	P_MonsterFire (cl_mon_mancubus_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));
 
-	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+//	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+	missile = P_MonsterFire (cl_mon_mancubus_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));
 	if (missile != NULL)
 	{
 		missile->angle += FATSPREAD;
@@ -194,9 +198,11 @@ void A_FatAttack2 (AActor *self)
 	A_FaceTarget (self);
 	// Now here choose opposite deviation.
 	self->angle -= FATSPREAD;
-	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+//	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+	P_MonsterFire (cl_mon_mancubus_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));
 
-	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+//	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+	missile = P_MonsterFire (cl_mon_mancubus_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));
 	if (missile != NULL)
 	{
 		missile->angle -= FATSPREAD*2;
@@ -216,7 +222,8 @@ void A_FatAttack3 (AActor *self)
 
 	A_FaceTarget (self);
 	
-	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+//	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+	missile = P_MonsterFire (cl_mon_mancubus_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));
 	if (missile != NULL)
 	{
 		missile->angle -= FATSPREAD/2;
@@ -225,7 +232,8 @@ void A_FatAttack3 (AActor *self)
 		missile->momy = FixedMul (missile->Speed, finesine[an]);
 	}
 
-	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+//	missile = P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
+	missile = P_MonsterFire (cl_mon_mancubus_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));
 	if (missile != NULL)
 	{
 		missile->angle += FATSPREAD/2;
@@ -233,6 +241,11 @@ void A_FatAttack3 (AActor *self)
 		missile->momx = FixedMul (missile->Speed, finecosine[an]);
 		missile->momy = FixedMul (missile->Speed, finesine[an]);
 	}
+}
+
+AActor *Grb_FatAttack (AActor *self)	// [GRB]
+{
+	return P_SpawnMissile (self, self->target, RUNTIME_CLASS(AFatShot));
 }
 
 //

@@ -7,6 +7,8 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_BspiAttack (AActor *self);
 void A_BabyMetal (AActor *self);
 void A_SpidRefire (AActor *self);
@@ -155,7 +157,13 @@ void A_BspiAttack (AActor *self)
 	A_FaceTarget (self);
 
 	// launch a missile
-	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AArachnotronPlasma));
+//	P_SpawnMissile (self, self->target, RUNTIME_CLASS(AArachnotronPlasma));
+	P_MonsterFire (cl_mon_arachnotron_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
+}
+
+AActor *Grb_BspiAttack (AActor *self)	// [GRB]
+{
+	return P_SpawnMissile (self, self->target, RUNTIME_CLASS(AArachnotronPlasma));
 }
 
 void A_BabyMetal (AActor *self)

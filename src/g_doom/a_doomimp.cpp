@@ -7,6 +7,8 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_TroopAttack (AActor *);
 
 class ADoomImp : public AActor
@@ -163,7 +165,13 @@ void A_TroopAttack (AActor *self)
 	}
 	
 	// launch a missile
-	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ADoomImpBall));
+//	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ADoomImpBall));
+	P_MonsterFire (cl_mon_imp_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
+}
+
+AActor *Grb_TroopAttack (AActor *self)	// [GRB]
+{
+	return P_SpawnMissile (self, self->target, RUNTIME_CLASS(ADoomImpBall));
 }
 
 // Dead imp ----------------------------------------------------------------

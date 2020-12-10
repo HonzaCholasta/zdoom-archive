@@ -8,7 +8,10 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_BruisAttack (AActor *);
+void A_BruisAttack2 (AActor *);	// [GRB]
 
 class ABaronOfHell : public AActor
 {
@@ -165,7 +168,7 @@ FState AHellKnight::States[] =
 #define S_BOS2_ATK (S_BOS2_RUN+8)
 	S_NORMAL (BOS2, 'E',	8, A_FaceTarget 				, &States[S_BOS2_ATK+1]),
 	S_NORMAL (BOS2, 'F',	8, A_FaceTarget 				, &States[S_BOS2_ATK+2]),
-	S_NORMAL (BOS2, 'G',	8, A_BruisAttack				, &States[S_BOS2_RUN+0]),
+	S_NORMAL (BOS2, 'G',	8, A_BruisAttack2				, &States[S_BOS2_RUN+0]),
 
 #define S_BOS2_PAIN (S_BOS2_ATK+3)
 	S_NORMAL (BOS2, 'H',	2, NULL 						, &States[S_BOS2_PAIN+1]),
@@ -243,5 +246,29 @@ void A_BruisAttack (AActor *self)
 	}
 	
 	// launch a missile
-	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ABaronBall));
+//	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ABaronBall));
+	P_MonsterFire (cl_mon_baronofhell_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
+}
+
+AActor *Grb_BruisAttack (AActor *self)	// [GRB]
+{
+	return P_SpawnMissile (self, self->target, RUNTIME_CLASS(ABaronBall));
+}
+
+void A_BruisAttack2 (AActor *self)	// [GRB]
+{
+	if (!self->target)
+		return;
+				
+	if (P_CheckMeleeRange (self))
+	{
+		int damage = (P_Random (pr_bruisattack)%8+1)*10;
+		S_Sound (self, CHAN_WEAPON, "baron/melee", 1, ATTN_NORM);
+		P_DamageMobj (self->target, self, self, damage, MOD_HIT);
+		P_TraceBleed (damage, self->target, self);
+		return;
+	}
+	
+	// launch a missile
+	P_MonsterFire (cl_mon_hellknight_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
 }

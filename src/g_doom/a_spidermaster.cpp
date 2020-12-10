@@ -8,9 +8,12 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_SpidRefire (AActor *);
 void A_Metal (AActor *);
-void A_SPosAttackUseAtkSound (AActor *);
+//void A_SPosAttackUseAtkSound (AActor *);
+void A_SpidAttack (AActor *);	// [GRB]
 
 class ASpiderMastermind : public AActor
 {
@@ -42,8 +45,8 @@ FState ASpiderMastermind::States[] =
 
 #define S_SPID_ATK (S_SPID_RUN+12)
 	S_BRIGHT (SPID, 'A',   20, A_FaceTarget 				, &States[S_SPID_ATK+1]),
-	S_BRIGHT (SPID, 'G',	4, A_SPosAttackUseAtkSound		, &States[S_SPID_ATK+2]),
-	S_BRIGHT (SPID, 'H',	4, A_SPosAttackUseAtkSound		, &States[S_SPID_ATK+3]),
+	S_BRIGHT (SPID, 'G',	4, A_SpidAttack					, &States[S_SPID_ATK+2]),
+	S_BRIGHT (SPID, 'H',	4, A_SpidAttack					, &States[S_SPID_ATK+3]),
 	S_BRIGHT (SPID, 'H',	1, A_SpidRefire 				, &States[S_SPID_ATK+1]),
 
 #define S_SPID_PAIN (S_SPID_ATK+4)
@@ -113,4 +116,21 @@ void A_Metal (AActor *self)
 {
 	S_Sound (self, CHAN_BODY, "spider/walk", 1, ATTN_IDLE);
 	A_Chase (self);
+}
+
+void A_SpidAttack (AActor *self)	// [GRB]
+{
+	int bangle;
+	int slope;
+		
+	if (!self->target)
+		return;
+
+	S_SoundID (self, CHAN_WEAPON, self->AttackSound, 1, ATTN_NORM);
+
+	A_FaceTarget (self);
+	bangle = self->angle;
+	slope = P_AimLineAttack (self, bangle, MISSILERANGE);
+
+	P_MonsterFire (cl_mon_spiderboss_fire, self, bangle, slope);
 }

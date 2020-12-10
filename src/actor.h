@@ -382,6 +382,11 @@ public:
 	virtual void ChangeSpecial (byte special, byte data1, byte data2,
 		byte data3, byte data4, byte data5);
 
+	// [GRB] Support for using things
+	virtual bool Use (AActor *activator);
+	virtual bool UnUse (AActor *activator);
+	virtual void UseThink (AActor *activator);
+
 	// Set the alphacolor field properly
 	void SetShade (DWORD rgb);
 	void SetShade (int r, int g, int b);

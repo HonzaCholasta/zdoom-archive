@@ -17,6 +17,8 @@ public:
 	int GetMOD ();
 };
 
+void A_FootStep (AActor *);
+
 FState ADoomPlayer::States[] =
 {
 #define S_PLAY 0
@@ -84,6 +86,8 @@ void ADoomPlayer::GiveDefaultInventory ()
 	player->ammo[am_clip] = deh.StartBullets; // [RH] Used to be 50
 	// [GRB] Add weapons
 	player->weaponowned[wp_duke_kick] = true;
+	player->weaponowned[wp_sw_fist] = true;
+	player->weaponowned[wp_sw_sword] = true;
 }
 
 int ADoomPlayer::GetMOD ()

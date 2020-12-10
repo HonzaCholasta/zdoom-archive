@@ -47,6 +47,8 @@
 #include "statnums.h"
 //#include "r_draw.h"
 
+#include "p_grubber.h"	// [GRB]
+
 #define FUNC(a) static bool a (line_t *ln, AActor *it, int arg0, int arg1, \
 							   int arg2, int arg3, int arg4)
 
@@ -1806,6 +1808,80 @@ FUNC(LS_ChangeSkill)
 	return true;
 }
 
+// [GRB]
+FUNC(LS_Thing_SetAnglePitch)
+// Thing_SetAnglePitch (tid, angle, pitch)
+{
+	TActorIterator<AActor> iterator (arg0);
+	AActor *self;
+
+	while ( (self = iterator.Next ()) )
+	{
+		self->angle = BYTEANGLE(arg1);
+		self->pitch = (signed int)((char)arg2) * ANGLE_1;
+		if (self->pitch <= -ANGLE_90)
+			self->pitch = -ANGLE_90 + ANGLE_1;
+		else if (self->pitch >= ANGLE_90)
+			self->pitch = ANGLE_90 - ANGLE_1;
+	}
+
+	return true;
+}
+
+FUNC(LS_Teleport_LineMap)
+// Teleport_LineMap (map, position, endspot)
+{
+	if (!TeleportSide)
+	{
+		level_info_t *info = FindLevelByNum (arg0);
+
+		if (info && CheckIfExitIsGood (it))
+		{
+			strncpy (level.nextmap, info->mapname, 8);
+			P_SavePosData (arg2);
+			G_ExitLevel (arg1);
+			return true;
+		}
+	}
+	return false;
+}
+
+FUNC(LS_Thing_GetAmmo)
+// Thing_GetAmmo (type, amount, truescript, falsescript)
+{
+	if (arg0 < NUMAMMO)
+	{
+		if (it->player->ammo[arg0] < arg1)
+		{
+			return P_StartScript (it, ln, arg3, level.mapname, TeleportSide, 0, 0, 0, 0);
+		}
+		else
+		{
+			it->player->ammo[arg0] -= arg1;
+			return P_StartScript (it, ln, arg2, level.mapname, TeleportSide, 0, 0, 0, 0);
+		}
+	}
+	return false;
+}
+
+FUNC(LS_Thing_GetArmor)
+// Thing_GetArmor (type, amount, truescript, falsescript)
+{
+	if (arg0 < NUMARMOR)
+	{
+		if (it->player->armorpoints[arg0] < arg1)
+		{
+			return P_StartScript (it, ln, arg3, level.mapname, TeleportSide, 0, 0, 0, 0);
+		}
+		else
+		{
+			it->player->armorpoints[arg0] -= arg1;
+			return P_StartScript (it, ln, arg2, level.mapname, TeleportSide, 0, 0, 0, 0);
+		}
+	}
+	return false;
+}
+
 lnSpecFunc LineSpecials[256] =
 {
 	LS_NOP,
@@ -1965,10 +2041,10 @@ lnSpecFunc LineSpecials[256] =
 	LS_NOP,		// 154 Var_Lock
 	LS_NOP,		// 155 Team_RemoveItem
 	LS_NOP,		// 156 Team_GiveItem		// [BC] End
-	LS_NOP,		// 157
-	LS_NOP,		// 158
-	LS_NOP,		// 159
-	LS_NOP,		// 160
+	LS_Thing_SetAnglePitch,		// [GRB] Start
+	LS_Teleport_LineMap,
+	LS_Thing_GetAmmo,
+	LS_Thing_GetArmor,			// [GRB] End
 	LS_NOP,		// 161
 	LS_NOP,		// 162
 	LS_NOP,		// 163

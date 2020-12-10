@@ -172,6 +172,12 @@ typedef enum {
 
 	Sector_ChangeSound = 140,
 
+// [GRB]
+	Thing_SetAnglePitch = 157,
+	Teleport_LineMap = 158,
+	Thing_GetAmmo = 159,
+	Thing_GetArmor = 160,
+
 // [RH] Begin new specials for ZDoom
 	ChangeSkill = 179,
 	Thing_SetTranslation = 180,

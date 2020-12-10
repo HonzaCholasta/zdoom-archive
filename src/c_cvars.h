@@ -266,6 +266,8 @@ public:
 	inline operator const char * () const { return Value; }
 	inline const char *operator *() const { return Value; }
 
+	void (*m_DllCallback)(char *);	// [GRB] Dll
+
 protected:
 	virtual void DoSet (UCVarValue value, ECVarType type);
 

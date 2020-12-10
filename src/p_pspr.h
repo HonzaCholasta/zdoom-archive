@@ -92,6 +92,7 @@ void P_FireWeapon (player_s *player);
 void P_DropWeapon (player_s *player);
 void P_BulletSlope (AActor *mo);
 void P_GunShot (AActor *mo, BOOL accurate);
+void P_GunShot2 (AActor *mo, int spread);	// [GRB]
 
 void A_WeaponReady (player_s *player, pspdef_t *psp);
 void A_ReFire (player_s *player, pspdef_t *psp);

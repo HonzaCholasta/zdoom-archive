@@ -428,6 +428,11 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 	if (Button_Attack.bDown)
 		cmd->ucmd.buttons |= BT_ATTACK;
 
+/*
+	if (Button_Attack2.bDown)
+		cmd->ucmd.buttons |= BT_ATTACK2;
+*/
+
 	if (Button_Use.bDown)
 		cmd->ucmd.buttons |= BT_USE;
 

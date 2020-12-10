@@ -970,6 +970,18 @@ void P_PlayerThink (player_t *player)
 	{
 		P_UseLines (player);
 	}
+	// [GRB] check for unuse
+	extern AActor *lastused;
+	if (player->oldbuttons & BT_USE && !(cmd->ucmd.buttons & BT_USE) && lastused)
+	{
+		if (lastused->UnUse (player->mo))
+			lastused = NULL;
+	}
+	else if (cmd->ucmd.buttons & BT_USE && lastused)
+	{
+		lastused->UseThink (player->mo);
+	}
+
 	// Morph counter
 	if (player->morphTics)
 	{

@@ -2532,6 +2532,7 @@ void P_AimCamera (AActor *t1)
 //
 AActor *usething;
 bool foundline;
+AActor *lastused;	// [GRB] For UnUse
 
 BOOL PTR_UseTraverse (intercept_t *in)
 {
@@ -2593,6 +2594,18 @@ BOOL PTR_NoWayTraverse (intercept_t *in)
 	);
 }
 
+// [GRB] Support for using things
+BOOL PTR_UseThingTraverse (intercept_t *in)
+{
+	if (in->d.thing)
+	{
+		if (in->d.thing->Use (usething))
+			lastused = in->d.thing;
+		return true;
+	}
+	return false;
+}
+
 /*
 ================
 =
@@ -2635,6 +2648,10 @@ void P_UseLines (player_t *player)
 			S_Sound (usething, CHAN_VOICE, "*usefail", 1, ATTN_IDLE);
 		}
 	}
+
+	// [GRB] Use things
+	if (!foundline)
+		P_PathTraverse (x1, y1, x2, y2, PT_ADDTHINGS, PTR_UseThingTraverse);
 }
 
 //==========================================================================

@@ -7,10 +7,13 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_PosAttack (AActor *);
 void A_SPosAttackUseAtkSound (AActor *);
 void A_CPosAttack (AActor *);
 void A_CPosRefire (AActor *);
+void A_SSAttack (AActor *);	// [GRB]
 
 // Zombie man --------------------------------------------------------------
 
@@ -121,9 +124,9 @@ END_DEFAULTS
 void A_PosAttack (AActor *self)
 {
 	int angle;
-	int damage;
+//	int damage;
 	int slope;
-		
+
 	if (!self->target)
 		return;
 				
@@ -132,9 +135,23 @@ void A_PosAttack (AActor *self)
 	slope = P_AimLineAttack (self, angle, MISSILERANGE);
 
 	S_Sound (self, CHAN_WEAPON, "grunt/attack", 1, ATTN_NORM);
+//	angle += PS_Random (pr_posattack) << 20;
+//	damage = ((P_Random (pr_posattack)%5)+1)*3;
+//	P_LineAttack (self, angle, MISSILERANGE, slope, damage);
+
+//	P_EjectShell (self, 1, 5);	// [GRB]
+	P_MonsterFire (cl_mon_zombieman_fire, self, angle, slope);	// [GRB]
+}
+
+AActor *Grb_PosAttack (AActor *self, int angle, int slope)	// [GRB]
+{
 	angle += PS_Random (pr_posattack) << 20;
-	damage = ((P_Random (pr_posattack)%5)+1)*3;
+	int damage = ((P_Random (pr_posattack)%5)+1)*3;
 	P_LineAttack (self, angle, MISSILERANGE, slope, damage);
+
+	P_EjectShell (self, 1, 5);
+
+	return NULL;
 }
 
 // Dead zombie man ---------------------------------------------------------
@@ -258,7 +275,7 @@ END_DEFAULTS
 
 static void A_SPosAttack2 (AActor *self)
 {
-	int i;
+//	int i;
 	int bangle;
 	int slope;
 		
@@ -266,12 +283,29 @@ static void A_SPosAttack2 (AActor *self)
 	bangle = self->angle;
 	slope = P_AimLineAttack (self, bangle, MISSILERANGE);
 
-	for (i=0 ; i<3 ; i++)
-    {
-		int angle = bangle + (PS_Random (pr_sposattack) << 20);
+//	for (i=0 ; i<3 ; i++)
+//	{
+//		int angle = bangle + (PS_Random (pr_sposattack) << 20);
+//		int damage = ((P_Random (pr_sposattack)%5)+1)*3;
+//		P_LineAttack(self, angle, MISSILERANGE, slope, damage);
+//	}
+
+//	P_EjectShell (self, 0, 5);	// [GRB]
+	P_MonsterFire (cl_mon_shotgunguy_fire, self, bangle, slope);
+}
+
+AActor *Grb_SPosAttack (AActor *self, int angle, int slope)	// [GRB]
+{
+	for (int i=0 ; i<3 ; i++)
+	{
+		int angleb = angle + (PS_Random (pr_sposattack) << 20);
 		int damage = ((P_Random (pr_sposattack)%5)+1)*3;
-		P_LineAttack(self, angle, MISSILERANGE, slope, damage);
-    }
+		P_LineAttack(self, angleb, MISSILERANGE, slope, damage);
+	}
+
+	P_EjectShell (self, 0, 5);
+
+	return NULL;
 }
 
 void A_SPosAttackUseAtkSound (AActor *self)
@@ -443,9 +477,11 @@ FState AWolfensteinSS::States[] =
 #define S_SSWV_ATK (S_SSWV_RUN+8)
 	S_NORMAL (SSWV, 'E',   10, A_FaceTarget 				, &States[S_SSWV_ATK+1]),
 	S_NORMAL (SSWV, 'F',   10, A_FaceTarget 				, &States[S_SSWV_ATK+2]),
-	S_BRIGHT (SSWV, 'G',	4, A_CPosAttack 				, &States[S_SSWV_ATK+3]),
+//	S_BRIGHT (SSWV, 'G',	4, A_CPosAttack 				, &States[S_SSWV_ATK+3]),
+	S_BRIGHT (SSWV, 'G',	4, A_SSAttack 					, &States[S_SSWV_ATK+3]),
 	S_NORMAL (SSWV, 'F',	6, A_FaceTarget 				, &States[S_SSWV_ATK+4]),
-	S_BRIGHT (SSWV, 'G',	4, A_CPosAttack 				, &States[S_SSWV_ATK+5]),
+//	S_BRIGHT (SSWV, 'G',	4, A_CPosAttack 				, &States[S_SSWV_ATK+5]),
+	S_BRIGHT (SSWV, 'G',	4, A_SSAttack 					, &States[S_SSWV_ATK+5]),
 	S_NORMAL (SSWV, 'F',	1, A_CPosRefire 				, &States[S_SSWV_ATK+1]),
 
 #define S_SSWV_PAIN (S_SSWV_ATK+6)
@@ -510,9 +546,9 @@ void AWolfensteinSS::NoBlockingSet ()
 
 void A_CPosAttack (AActor *self)
 {
-	int angle;
+//	int angle;
 	int bangle;
-	int damage;
+//	int damage;
 	int slope;
 		
 	if (!self->target)
@@ -529,9 +565,45 @@ void A_CPosAttack (AActor *self)
 	bangle = self->angle;
 	slope = P_AimLineAttack (self, bangle, MISSILERANGE);
 
-	angle = bangle + (PS_Random (pr_cposattack) << 20);
-	damage = ((P_Random (pr_cposattack)%5)+1)*3;
-	P_LineAttack (self, angle, MISSILERANGE, slope, damage);
+//	angle = bangle + (PS_Random (pr_cposattack) << 20);
+//	damage = ((P_Random (pr_cposattack)%5)+1)*3;
+//	P_LineAttack (self, angle, MISSILERANGE, slope, damage);
+
+//	P_EjectShell (self, 1, 5);	// [GRB]
+	P_MonsterFire (cl_mon_heavyweapondude_fire, self, bangle, slope);	// [GRB]
+}
+
+void A_SSAttack (AActor *self)	// [GRB]
+{
+	int bangle;
+	int slope;
+		
+	if (!self->target)
+		return;
+
+	// [RH] Andy Baker's stealth monsters
+	if (self->flags & MF_STEALTH)
+	{
+		self->visdir = 1;
+	}
+
+	S_SoundID (self, CHAN_WEAPON, self->AttackSound, 1, ATTN_NORM);
+	A_FaceTarget (self);
+	bangle = self->angle;
+	slope = P_AimLineAttack (self, bangle, MISSILERANGE);
+
+	P_MonsterFire (cl_mon_ss_fire, self, bangle, slope);	// [GRB]
+}
+
+AActor *Grb_CPosAttack (AActor *self, int angle, int slope)	// [GRB]
+{
+	int angleb = angle + (PS_Random (pr_cposattack) << 20);
+	int damage = ((P_Random (pr_cposattack)%5)+1)*3;
+	P_LineAttack (self, angleb, MISSILERANGE, slope, damage);
+
+	P_EjectShell (self, 1, 5);	// [GRB]
+
+	return NULL;
 }
 
 void A_CPosRefire (AActor *self)

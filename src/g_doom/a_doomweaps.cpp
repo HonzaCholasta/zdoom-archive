@@ -12,6 +12,10 @@
 #include "p_effect.h"
 #include "gi.h"
 
+#include "p_trace.h"
+
+#include "p_grubber.h" // [GRB]
+
 /* ammo ********************************************************************/
 
 // a big item has five clip loads.
@@ -350,7 +354,7 @@ AT_GAME_SET (Fist)
 	wpnlev1info[wp_fist] = wpnlev2info[wp_fist] = &AFist::WeaponInfo;
 	if (gameinfo.gametype == GAME_Doom)
 	{
-		WeaponSlots[1].AddWeapon (wp_fist, 1);
+		WeaponSlots[1].AddWeapon (wp_fist, 8);
 	}
 }
 
@@ -389,12 +393,20 @@ void A_Punch (player_t *player, pspdef_t *psp)
 											 player->mo->y,
 											 linetarget->x,
 											 linetarget->y);
+		// [GRB]
+		if (cl_wpn_fist_thrust)
+		{
+			linetarget->momz = damage*FRACUNIT/2;
+			linetarget->momx = FixedMul (damage*FRACUNIT, finecosine[player->mo->angle>>ANGLETOFINESHIFT]);
+			linetarget->momy = FixedMul (damage*FRACUNIT, finesine[player->mo->angle>>ANGLETOFINESHIFT]);
+		}
 	}
 }
 
 // Pistol -------------------------------------------------------------------
 
 void A_FirePistol (player_t *, pspdef_t *);
+void A_FirePistol2 (player_t *, pspdef_t *);	// [GRB]
 
 class APistol : public AWeapon
 {
@@ -418,12 +430,14 @@ FState APistol::States[] =
 	S_NORMAL (PISG, 'A',	1, A_Raise				, &States[S_PISTOLUP]),
 
 #define S_PISTOL1 (S_PISTOLUP+1)
-	S_NORMAL (PISG, 'A',	4, NULL 				, &States[S_PISTOL1+1]),
-	S_NORMAL (PISG, 'B',	6, A_FirePistol 		, &States[S_PISTOL1+2]),
-	S_NORMAL (PISG, 'C',	4, NULL 				, &States[S_PISTOL1+3]),
+	S_NORMAL (PISG, 'A',	4, NULL			 		, &States[S_PISTOL1+1]),
+	S_NORMAL (PISG, 'B',	2, A_FirePistol 		, &States[S_PISTOL1+2]),
+	S_NORMAL (PISG, 'B',	2, A_FirePistol2 		, &States[S_PISTOL1+3]),
+	S_NORMAL (PISG, 'B',	2, A_FirePistol2 		, &States[S_PISTOL1+4]),
+	S_NORMAL (PISG, 'C',	4, NULL					, &States[S_PISTOL1+5]),
 	S_NORMAL (PISG, 'B',	5, A_ReFire 			, &States[S_PISTOL]),
 
-#define S_PISTOLFLASH (S_PISTOL1+4)
+#define S_PISTOLFLASH (S_PISTOL1+6)
 	S_BRIGHT (PISF, 'A',	7, A_Light1 			, &AWeapon::States[S_LIGHTDONE])
 };
 
@@ -480,12 +494,29 @@ void A_FirePistol (player_t *player, pspdef_t *psp)
 				  wpnlev1info[player->readyweapon]->flashstate);
 
 	P_BulletSlope (player->mo);
-	P_GunShot (player->mo, !player->refire);
+	//P_GunShot (player->mo, !player->refire);
+	P_GunShot2 (player->mo, cl_wpn_pistol_spread);	// [GRB]
+	if (cl_wpn_pistol_expuffs)	// [GRB]
+		P_SpawnExplosion (player->mo);
+
+	P_EjectShell (player->mo, 1, 5);	// [GRB]
+}
+
+//
+// A_FirePistol [GRB]
+//
+void A_FirePistol2 (player_t *player, pspdef_t *psp)
+{
+	if (cl_wpn_pistol_burst && player->ammo[am_clip] > 0)
+		A_FirePistol (player, psp);
 }
 
 // Chainsaw -----------------------------------------------------------------
 
 void A_Saw (player_t *, pspdef_t *);
+// [GRB]
+void A_Explode (AActor *);
+void A_SawDie (AActor *);
 
 class AChainsaw : public AWeapon
 {
@@ -553,7 +584,7 @@ AT_GAME_SET (Chainsaw)
 	wpnlev1info[wp_chainsaw] = wpnlev2info[wp_chainsaw] = &AChainsaw::WeaponInfo;
 	if (gameinfo.gametype == GAME_Doom)
 	{
-		WeaponSlots[1].AddWeapon (wp_chainsaw, 2);
+		WeaponSlots[1].AddWeapon (wp_chainsaw, 7);
 	}
 }
 
@@ -567,6 +598,40 @@ const char *AChainsaw::PickupMessage ()
 	return GStrings(GOTCHAINSAW);
 }
 
+// [GRB]
+class AThrowSaw : public AActor
+{
+	DECLARE_ACTOR (AThrowSaw, AActor)
+public:
+	void Die (AActor *source, AActor *inflictor);
+};
+
+FState AThrowSaw::States[] =
+{
+	S_NORMAL (CSAW,	'A',	1, NULL						, &States[0]),
+	S_NORMAL (CSAW,	'A',	1, A_SawDie					, NULL)
+};
+
+IMPLEMENT_ACTOR (AThrowSaw, Doom, -1, 0)
+	PROP_RadiusFixed (13)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (25)
+	PROP_Damage (50)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+
+	PROP_SpawnState (0)
+	PROP_DeathState (1)
+
+	PROP_SeeSound ("weapons/sawfull")
+	PROP_DeathSound ("weapons/sawhit")
+END_DEFAULTS
+
+void AThrowSaw::Die (AActor *source, AActor *inflictor)
+{
+	RenderStyle = STYLE_Add;
+}
+
 //
 // A_Saw
 //
@@ -576,6 +641,14 @@ void A_Saw (player_t *player, pspdef_t *psp)
 	int 		damage;
 
 	player->UseAmmo ();
+
+	if (cl_wpn_chainsaw_throw && player->weaponowned[wp_chainsaw])
+	{
+		P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(AThrowSaw));
+		player->weaponowned[wp_chainsaw] = false;
+		player->pendingweapon = wp_fist;
+		return;
+	}
 
 	damage = 2 * (P_Random (pr_saw)%10+1);
 	angle = player->mo->angle;
@@ -612,9 +685,16 @@ void A_Saw (player_t *player, pspdef_t *psp)
 	player->mo->flags |= MF_JUSTATTACKED;
 }
 
+// [GRB]
+void A_SawDie (AActor *self)
+{
+	AActor *saw = Spawn<AChainsaw> (self->x, self->y, self->z);
+}
+
 // Shotgun ------------------------------------------------------------------
 
 void A_FireShotgun (player_t *, pspdef_t *);
+void A_AutoReFire (player_t *, pspdef_t *);
 
 class AShotgun : public AWeapon
 {
@@ -641,7 +721,7 @@ FState AShotgun::States[] =
 #define S_SGUN1 (S_SGUNUP+1)
 	S_NORMAL (SHTG, 'A',	3, NULL 				, &States[S_SGUN1+1]),
 	S_NORMAL (SHTG, 'A',	7, A_FireShotgun		, &States[S_SGUN1+2]),
-	S_NORMAL (SHTG, 'B',	5, NULL 				, &States[S_SGUN1+3]),
+	S_NORMAL (SHTG, 'B',	5, A_AutoReFire			, &States[S_SGUN1+3]),
 	S_NORMAL (SHTG, 'C',	5, NULL 				, &States[S_SGUN1+4]),
 	S_NORMAL (SHTG, 'D',	4, NULL 				, &States[S_SGUN1+5]),
 	S_NORMAL (SHTG, 'C',	5, NULL 				, &States[S_SGUN1+6]),
@@ -721,9 +801,24 @@ void A_FireShotgun (player_t *player, pspdef_t *psp)
 				  wpnlev1info[player->readyweapon]->flashstate);
 
 	P_BulletSlope (player->mo);
-		
+
 	for (i=0 ; i<7 ; i++)
-		P_GunShot (player->mo, false);
+	{
+		//P_GunShot (player->mo, false);
+		P_GunShot2 (player->mo, cl_wpn_shotgun_spread);	// [GRB]
+		if (cl_wpn_shotgun_expuffs)	// [GRB]
+			P_SpawnExplosion (player->mo);
+	}
+
+	P_EjectShell (player->mo, 0, 5);	// [GRB]
+}
+
+// [GRB]
+void A_AutoReFire (player_t *player, pspdef_t *psp)
+{
+	if ((player->readyweapon == wp_shotgun && cl_wpn_shotgun_auto) ||
+		(player->readyweapon == wp_supershotgun && cl_wpn_sshotgun_auto))
+		A_ReFire (player, psp);
 }
 
 // Super Shotgun ------------------------------------------------------------
@@ -759,7 +854,7 @@ FState ASuperShotgun::States[] =
 #define S_DSGUN1 (S_DSGUNUP+1)
 	S_NORMAL (SHT2, 'A',	3, NULL 				, &States[S_DSGUN1+1]),
 	S_NORMAL (SHT2, 'A',	7, A_FireShotgun2		, &States[S_DSGUN1+2]),
-	S_NORMAL (SHT2, 'B',	7, NULL 				, &States[S_DSGUN1+3]),
+	S_NORMAL (SHT2, 'B',	7, A_AutoReFire			, &States[S_DSGUN1+3]),
 	S_NORMAL (SHT2, 'C',	7, A_CheckReload		, &States[S_DSGUN1+4]),
 	S_NORMAL (SHT2, 'D',	7, A_OpenShotgun2		, &States[S_DSGUN1+5]),
 	S_NORMAL (SHT2, 'E',	7, NULL 				, &States[S_DSGUN1+6]),
@@ -833,13 +928,23 @@ const char *ASuperShotgun::PickupMessage ()
 //
 void A_FireShotgun2 (player_t *player, pspdef_t *psp)
 {
-	int 		i;
-	angle_t 	angle;
-	int 		damage;
+	int 		i, k;
+	//angle_t 	angle;
+	//int 		damage;
 				
 		
 	S_Sound (player->mo, CHAN_WEAPON, "weapons/sshotf", 1, ATTN_NORM);
 	player->mo->PlayAttacking2 ();
+	if (cl_wpn_sshotgun_fireone == 1)
+	{
+		wpnlev1info[wp_supershotgun]->ammouse = 1;
+		k = 10;
+	}
+	else
+	{
+		wpnlev1info[wp_supershotgun]->ammouse = 2;
+		k = 20;
+	}
 	player->UseAmmo ();
 
 	P_SetPsprite (player,
@@ -848,8 +953,9 @@ void A_FireShotgun2 (player_t *player, pspdef_t *psp)
 
 	P_BulletSlope (player->mo);
 		
-	for (i=0 ; i<20 ; i++)
+	for (i=0 ; i<k ; i++)
 	{
+		/*
 		damage = 5*(P_Random (pr_fireshotgun2)%3+1);
 		angle = player->mo->angle;
 		angle += PS_Random (pr_fireshotgun2) << 19;
@@ -857,6 +963,10 @@ void A_FireShotgun2 (player_t *player, pspdef_t *psp)
 					  angle,
 					  MISSILERANGE,
 					  bulletpitch + (PS_Random (pr_fireshotgun2) << 18), damage);
+		*/
+		P_GunShot2 (player->mo, cl_wpn_sshotgun_spread);	// [GRB]
+		if (cl_wpn_sshotgun_expuffs)	// [GRB]
+			P_SpawnExplosion (player->mo);
 	}
 }
 
@@ -868,6 +978,11 @@ void A_CheckReload (player_t *player, pspdef_t *psp)
 void A_OpenShotgun2 (player_t *player, pspdef_t *psp)
 {
 	S_Sound (player->mo, CHAN_WEAPON, "weapons/sshoto", 1, ATTN_NORM);
+
+	// [GRB]
+	P_EjectShell (player->mo, 0, 5);
+	if (!cl_wpn_sshotgun_fireone)
+		P_EjectShell (player->mo, 0, 10);
 }
 
 void A_LoadShotgun2 (player_t *player, pspdef_t *psp)
@@ -979,6 +1094,12 @@ void A_FireCGun (player_t *player, pspdef_t *psp)
 		!player->ammo[wpnlev1info[player->readyweapon]->ammo])
 		return;
 				
+	// [GRB]
+	if (cl_wpn_chaingun_shell == 1)
+		wpnlev1info[wp_chaingun]->ammo = am_shell;
+	else
+		wpnlev1info[wp_chaingun]->ammo = am_clip;
+
 	player->mo->PlayAttacking2 ();
 	player->UseAmmo ();
 
@@ -988,8 +1109,26 @@ void A_FireCGun (player_t *player, pspdef_t *psp)
 				  + (psp->state - wpnlev1info[player->readyweapon]->atkstate));
 
 	P_BulletSlope (player->mo);
-		
-	P_GunShot (player->mo, !player->refire);
+
+	// [GRB]
+	//P_GunShot (player->mo, !player->refire);
+	if (cl_wpn_chaingun_shell && player->ammo[am_shell] > 0)
+	{
+		for (int i=0; i<10; i++)
+		{
+			P_GunShot2 (player->mo, cl_wpn_chaingun_spread);
+			if (cl_wpn_chaingun_expuffs)
+				P_SpawnExplosion (player->mo);
+		}
+		P_EjectShell (player->mo, 0, 5);
+	}
+	else
+	{
+		P_GunShot2 (player->mo, cl_wpn_chaingun_spread);
+		if (cl_wpn_chaingun_expuffs)
+			P_SpawnExplosion (player->mo);
+		P_EjectShell (player->mo, 1, 5);
+	}
 }
 
 // Rocket launcher ---------------------------------------------------------
@@ -1085,7 +1224,7 @@ const char *ARocketLauncher::PickupMessage ()
 FState ARocket::States[] =
 {
 #define S_ROCKET 0
-	S_BRIGHT (MISL, 'A',	1, NULL 						, &States[S_ROCKET]),
+	S_BRIGHT (MISL, 'A',	1, A_Guide 						, &States[S_ROCKET]),
 
 #define S_EXPLODE (S_ROCKET+1)
 	S_BRIGHT (MISL, 'B',	8, A_Explode					, &States[S_EXPLODE+1]),
@@ -1114,18 +1253,221 @@ void ARocket::BeginPlay ()
 	effects |= FX_ROCKET;
 }
 
+// [GRB]
+void A_NapalmExplode (AActor *);
+
+class AFlame : public AActor
+{
+	DECLARE_ACTOR (AFlame, AActor);
+public:
+	void BeginPlay ();
+	int GetMOD () { return MOD_ROCKET; }
+};
+
+FState AFlame::States[] =
+{
+	S_BRIGHT (MISL, 'B',	8, NULL							, &States[1]),
+	S_BRIGHT (MISL, 'C',	6, A_NapalmExplode 				, &States[2]),
+	S_BRIGHT (MISL, 'D',	4, NULL 						, NULL)
+};
+
+IMPLEMENT_ACTOR (AFlame, Doom, -1, 0)
+	PROP_RadiusFixed (11)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (20)
+	PROP_Damage (15)
+	PROP_RenderStyle (STYLE_Add)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+
+	PROP_SpawnState (0)
+	PROP_DeathState (0)
+
+	PROP_SeeSound ("vile/firestrt")
+	PROP_DeathSound ("vile/firecrkl")
+END_DEFAULTS
+
+void AFlame::BeginPlay ()
+{
+	momz = 4*FRACUNIT;
+}
+
+void A_Napalm (AActor *);
+
+class ANapalm : public AActor
+{
+	DECLARE_ACTOR (ANapalm, AActor);
+public:
+	void BeginPlay ();
+	int GetMOD () { return MOD_ROCKET; }
+};
+
+FState ANapalm::States[] =
+{
+	S_BRIGHT (MISL, 'A',	5, A_Napalm 					, &States[0]),
+	S_BRIGHT (MISL, 'B',	8, A_Explode					, &States[2]),
+	S_BRIGHT (MISL, 'C',	6, NULL 						, &States[3]),
+	S_BRIGHT (MISL, 'D',	4, NULL 						, NULL)
+};
+
+IMPLEMENT_ACTOR (ANapalm, Doom, -1, 0)
+	PROP_RadiusFixed (11)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (20)
+	PROP_Damage (20)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+
+	PROP_SpawnState (0)
+	PROP_DeathState (1)
+
+	PROP_SeeSound ("weapons/rocklf")
+	PROP_DeathSound ("weapons/rocklx")
+END_DEFAULTS
+
+void ANapalm::BeginPlay ()
+{
+	Super::BeginPlay ();
+	effects |= FX_ROCKET;
+}
+
+void A_NapalmExplode (AActor *thing)
+{
+	int damage = 32;
+	int distance = 64;
+	bool hurtSource = true;
+
+	if (thing->momz < 0)
+	{
+		thing->PreExplode ();
+		thing->GetExplodeParms (damage, distance, hurtSource);
+		P_RadiusAttack (thing, thing->target, damage, distance, hurtSource, thing->GetMOD ());
+		if (thing->z <= thing->floorz + (distance<<FRACBITS))
+		{
+			P_HitFloor (thing);
+		}
+	}
+}
+
+void A_Napalm (AActor *self)
+{
+	AActor *missile = Spawn<AFlame> (self->x, self->y, self->z);
+
+	missile->momz = -missile->momz;
+}
+
+void A_Mushroom (AActor *);
+
+class ANuclearRocket : public AActor
+{
+	DECLARE_ACTOR (ANuclearRocket, AActor);
+public:
+	void BeginPlay ();
+	int GetMOD () { return MOD_ROCKET; }
+};
+
+FState ANuclearRocket::States[] =
+{
+#define S_NROCKET 0
+	S_BRIGHT (MISL, 'A',	1, A_Guide 						, &States[S_ROCKET]),
+
+#define S_NEXPLODE (S_NROCKET+1)
+	S_BRIGHT (MISL, 'B',	8, A_Mushroom					, &States[S_EXPLODE+1]),
+	S_BRIGHT (MISL, 'C',	6, NULL 						, &States[S_EXPLODE+2]),
+	S_BRIGHT (MISL, 'D',	4, NULL 						, NULL)
+};
+
+IMPLEMENT_ACTOR (ANuclearRocket, Doom, -1, 127)
+	PROP_RadiusFixed (11)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (20)
+	PROP_Damage (20)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_NROCKET)
+	PROP_DeathState (S_NEXPLODE)
+
+	PROP_SeeSound ("weapons/rocklf")
+	PROP_DeathSound ("weapons/rocklx")
+END_DEFAULTS
+
+void ANuclearRocket::BeginPlay ()
+{
+	Super::BeginPlay ();
+	effects |= FX_ROCKET;
+}
+
 //
 // A_FireMissile
 //
 void A_FireMissile (player_t *player, pspdef_t *psp)
 {
-	player->UseAmmo ();
-	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ARocket));
+	AActor *missile;	// [GRB]
+
+	for (int i = 0; i < (cl_wpn_rocket_spreadfire ? 8 : 1); i++)
+	{
+		if (cl_wpn_rocket_mode == 1)
+		{
+			wpnlev1info[wp_missile]->ammouse = 1;
+			ARocketLauncher::States[S_MISSILE1+1].Tics = 2;
+			missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(AFlame), (cl_wpn_rocket_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+		}
+		else if (cl_wpn_rocket_mode == 2)
+		{
+			wpnlev1info[wp_missile]->ammouse = 10;
+			ARocketLauncher::States[S_MISSILE1+1].Tics = 18;
+			missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ANapalm), (cl_wpn_rocket_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+		}
+		else if (cl_wpn_rocket_mode == 3)
+		{
+			wpnlev1info[wp_missile]->ammouse = 10;
+			ARocketLauncher::States[S_MISSILE1+1].Tics = 18;
+			missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ANuclearRocket), (cl_wpn_rocket_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+		}
+		else
+		{
+			wpnlev1info[wp_missile]->ammouse = 1;
+			ARocketLauncher::States[S_MISSILE1+1].Tics = 12;
+			missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ARocket), (cl_wpn_rocket_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+		}
+
+		if (!missile)
+			continue;
+
+		if (player->ammo[am_misl] < wpnlev1info[wp_missile]->ammouse)
+			return;
+
+		player->UseAmmo ();
+
+		// [GRB]
+		if (cl_wpn_rocket_spreadfire)
+		{
+			missile->momz += ((M_Random () - 128) * FRACUNIT / 50);
+		}
+		if (cl_wpn_rocket_bounce)
+		{
+			missile->flags &= ~MF_NOGRAVITY;
+			missile->flags2 |= MF2_FLOORBOUNCE;
+		}
+		if (cl_wpn_rocket_killable)
+		{
+			missile->flags |= MF_SHOOTABLE|MF_SOLID;
+			missile->health = 1;
+		}
+		if (cl_wpn_rocket_bobbing)
+		{
+			missile->flags2 |= MF2_FLOATBOB;
+		}
+	}
 }
 
 // Plasma rifle ------------------------------------------------------------
 
 void A_FirePlasma (player_t *, pspdef_t *);
+// [GRB]
+void A_FireRailgun (player_t *, pspdef_t *);
+void A_Mirv (AActor *);
 
 class APlasmaRifle : public AWeapon
 {
@@ -1240,12 +1582,178 @@ IMPLEMENT_ACTOR (APlasmaBall, Doom, -1, 51)
 	PROP_DeathSound ("weapons/plasmax")
 END_DEFAULTS
 
+// [GRB]
+class AGreenPlasma : public APlasmaBall
+{
+	DECLARE_ACTOR (AGreenPlasma, APlasmaBall)
+};
+
+FState AGreenPlasma::States[] =
+{
+#define S_GREEN_PLAZ 0
+	S_BRIGHT (APLS, 'A',	5, NULL							, &States[S_GREEN_PLAZ+1]),
+	S_BRIGHT (APLS, 'B',	5, NULL							, &States[S_GREEN_PLAZ]),
+
+#define S_GREEN_PLEX (S_GREEN_PLAZ+2)
+	S_BRIGHT (APBX, 'A',	5, NULL							, &States[S_GREEN_PLEX+1]),
+	S_BRIGHT (APBX, 'B',	5, NULL 						, &States[S_GREEN_PLEX+2]),
+	S_BRIGHT (APBX, 'C',	5, NULL 						, &States[S_GREEN_PLEX+3]),
+	S_BRIGHT (APBX, 'D',	5, NULL 						, &States[S_GREEN_PLEX+4]),
+	S_BRIGHT (APBX, 'E',	5, NULL		 					, NULL)
+};
+
+IMPLEMENT_ACTOR (AGreenPlasma, Doom, -1, 0)
+	PROP_RadiusFixed (13)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (30)
+	PROP_Damage (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_GREEN_PLAZ)
+	PROP_DeathState (S_GREEN_PLEX)
+
+	PROP_SeeSound ("baby/attack")
+	PROP_DeathSound ("baby/shotx")
+END_DEFAULTS
+
+class APlasmaMirv : public APlasmaBall
+{
+	DECLARE_ACTOR (APlasmaMirv, APlasmaBall)
+};
+
+FState APlasmaMirv::States[] =
+{
+#define S_MIRVBALL 0
+	S_BRIGHT (PLSS, 'A',	6, NULL							, &States[S_MIRVBALL+1]),
+	S_BRIGHT (PLSS, 'B',	6, NULL 						, &States[S_MIRVBALL]),
+
+#define S_MIRVEXP (S_MIRVBALL+2)
+	S_BRIGHT (PLSE, 'A',	4, A_Mirv						, &States[S_MIRVEXP+1]),
+	S_BRIGHT (PLSE, 'B',	4, NULL 						, &States[S_MIRVEXP+2]),
+	S_BRIGHT (PLSE, 'C',	4, NULL 						, &States[S_MIRVEXP+3]),
+	S_BRIGHT (PLSE, 'D',	4, NULL							, &States[S_MIRVEXP+4]),
+	S_BRIGHT (PLSE, 'E',	4, NULL 						, NULL)
+};
+
+IMPLEMENT_ACTOR (APlasmaMirv, Doom, -1, 0)
+	PROP_RadiusFixed (13)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (25)
+	PROP_Damage (5)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+	PROP_Alpha (TRANSLUC75)
+
+	PROP_SpawnState (S_PLASBALL)
+	PROP_DeathState (S_PLASEXP)
+
+	PROP_SeeSound ("weapons/plasmaf")
+	PROP_DeathSound ("weapons/plasmax")
+END_DEFAULTS
+
+class AGreenPlasmaMirv : public APlasmaBall
+{
+	DECLARE_ACTOR (AGreenPlasmaMirv, APlasmaBall)
+};
+
+FState AGreenPlasmaMirv::States[] =
+{
+#define S_GREENMIRV_PLAZ 0
+	S_BRIGHT (APLS, 'A',	5, NULL							, &States[S_GREENMIRV_PLAZ+1]),
+	S_BRIGHT (APLS, 'B',	5, NULL							, &States[S_GREENMIRV_PLAZ]),
+
+#define S_GREENMIRV_PLEX (S_GREENMIRV_PLAZ+2)
+	S_BRIGHT (APBX, 'A',	5, A_Mirv						, &States[S_GREENMIRV_PLEX+1]),
+	S_BRIGHT (APBX, 'B',	5, NULL 						, &States[S_GREENMIRV_PLEX+2]),
+	S_BRIGHT (APBX, 'C',	5, NULL 						, &States[S_GREENMIRV_PLEX+3]),
+	S_BRIGHT (APBX, 'D',	5, NULL 						, &States[S_GREENMIRV_PLEX+4]),
+	S_BRIGHT (APBX, 'E',	5, NULL		 					, NULL)
+};
+
+IMPLEMENT_ACTOR (AGreenPlasmaMirv, Doom, -1, 0)
+	PROP_RadiusFixed (13)
+	PROP_HeightFixed (8)
+	PROP_SpeedFixed (30)
+	PROP_Damage (4)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_GREENMIRV_PLAZ)
+	PROP_DeathState (S_GREENMIRV_PLEX)
+
+	PROP_SeeSound ("baby/attack")
+	PROP_DeathSound ("baby/shotx")
+END_DEFAULTS
+
+class AGreenPlasmaLaser : public APlasmaBall
+{
+	DECLARE_ACTOR (AGreenPlasmaLaser, APlasmaBall)
+};
+
+FState AGreenPlasmaLaser::States[] =
+{
+#define S_GREENLASR_PLAZ 0
+	S_BRIGHT (APLS, 'A',	5, NULL							, &States[S_GREENLASR_PLAZ+1]),
+	S_BRIGHT (APLS, 'B',	5, NULL							, NULL),
+
+#define S_GREENLASR_PLEX (S_GREENLASR_PLAZ+2)
+	S_BRIGHT (APBX, 'A',	5, A_Mirv						, &States[S_GREENLASR_PLEX+1]),
+	S_BRIGHT (APBX, 'B',	5, NULL 						, &States[S_GREENLASR_PLEX+2]),
+	S_BRIGHT (APBX, 'C',	5, NULL 						, &States[S_GREENLASR_PLEX+3]),
+	S_BRIGHT (APBX, 'D',	5, NULL 						, &States[S_GREENLASR_PLEX+4]),
+	S_BRIGHT (APBX, 'E',	5, NULL		 					, NULL)
+};
+
+IMPLEMENT_ACTOR (AGreenPlasmaLaser, Doom, -1, 0)
+	PROP_RadiusFixed (13)
+	PROP_HeightFixed (8)
+	PROP_Damage (4)
+	PROP_SpeedFixed (0)
+	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+	PROP_RenderStyle (STYLE_Add)
+
+	PROP_SpawnState (S_GREENLASR_PLAZ)
+	PROP_DeathState (S_GREENLASR_PLEX)
+
+	PROP_SeeSound ("baby/attack")
+	PROP_DeathSound ("baby/shotx")
+END_DEFAULTS
+
 //
 // A_FirePlasma
 //
 void A_FirePlasma (player_t *player, pspdef_t *psp)
 {
-	player->UseAmmo ();
+	AActor *missile;	// [GRB]
+
+	if (cl_wpn_plasma_mode == 2)
+	{
+		wpnlev1info[wp_plasma]->ammouse = 20;
+		APlasmaRifle::States[S_PLASMA1].Tics = 48;
+		A_FireRailgun (player, psp);
+		return;
+	}
+	else
+	{
+		if (cl_wpn_plasma_mode == 1)
+			wpnlev1info[wp_plasma]->ammouse = 10;
+		else
+			wpnlev1info[wp_plasma]->ammouse = 1;
+		APlasmaRifle::States[S_PLASMA1].Tics = 3;
+	}
+
+	for (int i = 0; i < (cl_wpn_plasma_spreadfire ? 8 : 1); i++)
+	{
+		if (player->ammo[am_cell] < wpnlev1info[wp_plasma]->ammouse)
+			return;
+
+		player->UseAmmo ();
+	}
 
 	if (wpnlev1info[player->readyweapon]->flashstate)
 	{
@@ -1255,7 +1763,65 @@ void A_FirePlasma (player_t *player, pspdef_t *psp)
 					   + (P_Random (pr_fireplasma)&1));
 	}
 
-	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(APlasmaBall));
+	for (i = 0; i < (cl_wpn_plasma_spreadfire ? 8 : 1); i++)
+	{
+		if (cl_wpn_plasma_green)
+			if (cl_wpn_plasma_mode == 1)
+				missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(AGreenPlasmaMirv), (cl_wpn_plasma_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+			else
+				missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(AGreenPlasma), (cl_wpn_plasma_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+		else
+			if (cl_wpn_plasma_mode == 1)
+				missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(APlasmaMirv), (cl_wpn_plasma_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+			else
+				missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(APlasmaBall), (cl_wpn_plasma_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+
+		if (!missile)
+			continue;
+
+		// [GRB]
+		if (cl_wpn_plasma_spreadfire)
+		{
+			missile->momz += ((M_Random () - 128) * FRACUNIT / 50);
+		}
+		if (cl_wpn_plasma_bounce)
+		{
+			missile->flags &= ~MF_NOGRAVITY;
+			missile->flags2 |= MF2_FLOORBOUNCE;
+		}
+		if (cl_wpn_plasma_killable)
+		{
+			missile->flags |= MF_SHOOTABLE|MF_SOLID;
+		}
+		if (cl_wpn_plasma_bobbing)
+		{
+			missile->flags2 |= MF2_FLOATBOB;
+		}
+	}
+}
+
+// [GRB]
+void A_Mirv (AActor *self)
+{
+	int i;
+	angle_t angle;
+	AActor *plasma;
+
+	for(i = 0; i < 8; i++)
+	{
+		if (cl_wpn_plasma_green)
+			plasma = Spawn<AGreenPlasma> (self->x, self->y, self->z);
+		else
+			plasma = Spawn<APlasmaBall> (self->x, self->y, self->z);
+		plasma->flags &= ~MF_NOGRAVITY;
+		angle = i*ANG45;
+		plasma->target = self->target;
+		plasma->angle = angle;
+		angle >>= ANGLETOFINESHIFT;
+		plasma->momx = FixedMul (plasma->Speed/2, finecosine[angle]);
+		plasma->momy = FixedMul (plasma->Speed/2, finesine[angle]);
+		P_CheckMissileSpawn (plasma);
+	}
 }
 
 //
@@ -1317,12 +1883,13 @@ private:
 	static FWeaponInfo WeaponInfo;
 };
 
-class ABFGBall : public AActor
-{
-	DECLARE_ACTOR (ABFGBall, AActor)
-public:
-	int GetMOD () { return MOD_BFG_BOOM; }
-};
+// [GRB] Made global
+//class ABFGBall : public AActor
+//{
+//	DECLARE_ACTOR (ABFGBall, AActor)
+//public:
+//	int GetMOD () { return MOD_BFG_BOOM; }
+//};
 
 class ABFGExtra : public AActor
 {
@@ -1408,7 +1975,11 @@ FState ABFGBall::States[] =
 	S_BRIGHT (BFS1, 'A',	4, NULL 						, &States[S_BFGSHOT+1]),
 	S_BRIGHT (BFS1, 'B',	4, NULL 						, &States[S_BFGSHOT]),
 
-#define S_BFGLAND (S_BFGSHOT+2)
+#define S_BFGMINI (S_BFGSHOT+2)
+	S_BRIGHT (APLS, 'A',	5, NULL							, &States[S_BFGMINI+1]),
+	S_BRIGHT (APLS, 'B',	5, NULL 						, &States[S_BFGMINI]),
+
+#define S_BFGLAND (S_BFGMINI+2)
 	S_BRIGHT (BFE1, 'A',	8, NULL 						, &States[S_BFGLAND+1]),
 	S_BRIGHT (BFE1, 'B',	8, NULL 						, &States[S_BFGLAND+2]),
 	S_BRIGHT (BFE1, 'C',	8, A_BFGSpray					, &States[S_BFGLAND+3]),
@@ -1455,18 +2026,73 @@ END_DEFAULTS
 
 void A_FireBFG (player_t *player, pspdef_t *psp)
 {
+	AActor *missile;	// [GRB]
+
 	// [RH] bfg can be forced to not use freeaim
 	angle_t storedpitch = player->mo->pitch;
 	int storedaimdist = player->userinfo.aimdist;
 
-	player->UseAmmo ();
+	if (cl_wpn_bfg_mini)
+	{
+		ABFG9000::States[S_BFG1].Tics = 8;
+		ABFG9000::States[S_BFG1+1].Tics = 4;
+		ABFG9000::States[S_BFG1+2].Tics = 4;
+		ABFG9000::States[S_BFG1+3].Tics = 8;
+	}
+	else
+	{
+		ABFG9000::States[S_BFG1].Tics = 20;
+		ABFG9000::States[S_BFG1+1].Tics = 10;
+		ABFG9000::States[S_BFG1+2].Tics = 10;
+		ABFG9000::States[S_BFG1+3].Tics = 20;
+	}
+
+	for (int i = 0; i < (cl_wpn_bfg_spreadfire ? 8 : 1); i++)
+	{
+		if (player->ammo[am_cell] < wpnlev1info[wp_bfg]->ammouse)
+			return;
+
+		player->UseAmmo ();
+	}
 
 	if (dmflags2 & DF2_NO_FREEAIMBFG)
 	{
 		player->mo->pitch = 0;
 		player->userinfo.aimdist = ANGLE_1*35;
 	}
-	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ABFGBall));
+
+	for (i = 0; i < (cl_wpn_bfg_spreadfire ? 8 : 1); i++)
+	{
+		missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ABFGBall), (cl_wpn_bfg_spreadfire ? player->mo->angle + (PS_Random (pr_cposattack) << 20) : player->mo->angle));
+
+		if (!missile)
+			continue;
+
+		// [GRB]
+		if (cl_wpn_bfg_spreadfire)
+		{
+			missile->momz += ((M_Random () - 128) * FRACUNIT / 50);
+		}
+		if (cl_wpn_bfg_bounce)
+		{
+			missile->flags &= ~MF_NOGRAVITY;
+			missile->flags2 |= MF2_FLOORBOUNCE;
+		}
+		if (cl_wpn_bfg_killable)
+		{
+			missile->flags |= MF_SHOOTABLE|MF_SOLID;
+			missile->health = 1;
+		}
+		if (cl_wpn_bfg_bobbing)
+		{
+			missile->flags2 |= MF2_FLOATBOB;
+		}
+		if (cl_wpn_bfg_mini)
+		{
+			missile->SetState (&ABFGBall::States[S_BFGMINI]);
+		}
+	}
+
 	player->mo->pitch = storedpitch;
 	player->userinfo.aimdist = storedaimdist;
 }
@@ -1616,12 +2242,12 @@ void A_Kick (player_t *player, pspdef_t *psp)
 	// turn to face target
 	if (linetarget)
 	{
-		S_Sound (player->mo, CHAN_WEAPON, "*fist", 1, ATTN_NORM);
 		player->mo->angle = R_PointToAngle2 (player->mo->x,
 											 player->mo->y,
 											 linetarget->x,
 											 linetarget->y);
 	}
+	S_Sound (player->mo, CHAN_WEAPON, "weapons/dnkick", 1, ATTN_NORM);
 }
 
 // Duke's Pistol -------------------------------------------------------------------
@@ -1656,7 +2282,7 @@ FState ADukePistol::States[] =
 	S_NORMAL (PIST, 'C',	4, NULL 				, &States[S_DUKE_PISTOL1+3]),
 	S_NORMAL (PIST, 'B',	4, A_ReFire 			, &States[S_DUKE_PISTOL]),
 
-#define S_DITEM_PISTOL (S_DUKE_PISTOL1+4)
+#define S_DUKE_ITMPISTOL (S_DUKE_PISTOL1+4)
 	S_NORMAL (DNPI, 'A',	-1,NULL					, NULL)
 };
 
@@ -1681,12 +2307,12 @@ FWeaponInfo ADukePistol::WeaponInfo =
 	-1
 };
 
-IMPLEMENT_ACTOR (ADukePistol, Doom, -1, 0)
+IMPLEMENT_ACTOR (ADukePistol, Doom, 500, 0)
 	PROP_RadiusFixed (20)
-	PROP_HeightFixed (16)
+	PROP_HeightFixed (20)
 	PROP_Flags (MF_SPECIAL)
 
-	PROP_SpawnState (S_DITEM_PISTOL)
+	PROP_SpawnState (S_DUKE_ITMPISTOL)
 END_DEFAULTS
 
 AT_GAME_SET (DukePistol)
@@ -1705,7 +2331,7 @@ weapontype_t ADukePistol::OldStyleID () const
 
 const char *ADukePistol::PickupMessage ()
 {
-	return GStrings(GOTCHAINGUN);
+	return GStrings(GOTSHOTGUN);
 }
 
 //
@@ -1713,14 +2339,12 @@ const char *ADukePistol::PickupMessage ()
 //
 void A_FireDukePistol (player_t *player, pspdef_t *psp)
 {
-	S_Sound (player->mo, CHAN_WEAPON, "weapons/pistol", 1, ATTN_NORM);
+	S_Sound (player->mo, CHAN_WEAPON, "weapons/dnpist", 1, ATTN_NORM);
 
 	player->mo->PlayAttacking2 ();
 	player->UseAmmo ();
 
-	P_SetPsprite (player,
-				  ps_flash,
-				  wpnlev1info[player->readyweapon]->flashstate);
+	A_Light2 (player, psp);
 
 	P_BulletSlope (player->mo);
 	P_GunShot (player->mo, true);
@@ -1767,7 +2391,7 @@ FState ADukeShotgun::States[] =
 	S_BRIGHT (DSHT, 'B',	4, A_Light1 			, &States[S_DUKE_SGUNFLASH+1]),
 	S_BRIGHT (DSHT, 'C',	3, A_Light2 			, &AWeapon::States[S_LIGHTDONE]),
 
-#define S_DITEM_SGUN (S_DUKE_SGUNFLASH+2)
+#define S_DUKE_ITMSHOTGUN (S_DUKE_SGUNFLASH+2)
 	S_NORMAL (DNSG, 'A',   -1, NULL 				, NULL)
 };
 
@@ -1792,12 +2416,12 @@ FWeaponInfo ADukeShotgun::WeaponInfo =
 	-1
 };
 
-IMPLEMENT_ACTOR (ADukeShotgun, Doom, -1, 0)
+IMPLEMENT_ACTOR (ADukeShotgun, Doom, 501, 0)
 	PROP_RadiusFixed (20)
 	PROP_HeightFixed (16)
 	PROP_Flags (MF_SPECIAL)
 
-	PROP_SpawnState (S_DITEM_SGUN)
+	PROP_SpawnState (S_DUKE_ITMSHOTGUN)
 END_DEFAULTS
 
 AT_GAME_SET (DukeShotgun)
@@ -1826,7 +2450,7 @@ void A_FireDukeShotgun (player_t *player, pspdef_t *psp)
 {
 	int i;
 		
-	S_Sound (player->mo, CHAN_WEAPON,  "weapons/shotgf", 1, ATTN_NORM);
+	S_Sound (player->mo, CHAN_WEAPON,  "weapons/dnsgun", 1, ATTN_NORM);
 	player->mo->PlayAttacking2 ();
 	player->UseAmmo ();
 
@@ -1842,7 +2466,7 @@ void A_FireDukeShotgun (player_t *player, pspdef_t *psp)
 
 // Duke's Chaingun Cannon-----------------------------------------------------------------
 
-void A_FireCGunCannon (player_t *, pspdef_t *);
+void A_FireDukeCGun (player_t *, pspdef_t *);
 
 class ADukeChaingun : public AWeapon
 {
@@ -1857,27 +2481,27 @@ private:
 
 FState ADukeChaingun::States[] =
 {
-#define S_DUKE_CGUN 0
-	S_NORMAL (CHGC, 'A',	1, A_WeaponReady		, &States[S_DUKE_CGUN]),
+#define S_DUKE_CHAIN 0
+	S_NORMAL (CHGC, 'A',	1, A_WeaponReady		, &States[S_DUKE_CHAIN]),
 
-#define S_DUKE_CGUNDOWN (S_DUKE_CGUN+1)
-	S_NORMAL (CHGC, 'A',	1, A_Lower				, &States[S_DUKE_CGUNDOWN]),
+#define S_DUKE_CHAINDOWN (S_DUKE_CHAIN+1)
+	S_NORMAL (CHGC, 'A',	1, A_Lower				, &States[S_DUKE_CHAINDOWN]),
 
-#define S_DUKE_CGUNUP (S_DUKE_CGUNDOWN+1)
-	S_NORMAL (CHGC, 'A',	1, A_Raise				, &States[S_DUKE_CGUNUP]),
+#define S_DUKE_CHAINUP (S_DUKE_CHAINDOWN+1)
+	S_NORMAL (CHGC, 'A',	1, A_Raise				, &States[S_DUKE_CHAINUP]),
 
-#define S_DUKE_CGUN1 (S_DUKE_CGUNUP+1)
-	S_NORMAL (CHGC, 'B',	3, A_FireCGunCannon			, &States[S_DUKE_CGUN1+1]),
-	S_NORMAL (CHGC, 'C',	3, A_FireCGunCannon			, &States[S_DUKE_CGUN1+2]),
-	S_NORMAL (CHGC, 'D',	3, A_FireCGunCannon			, &States[S_DUKE_CGUN1+3]),
-	S_NORMAL (CHGC, 'C',	0, A_ReFire 			, &States[S_DUKE_CGUN]),
+#define S_DUKE_CHAIN1 (S_DUKE_CHAINUP+1)
+	S_NORMAL (CHGC, 'B',	4, A_FireDukeCGun			, &States[S_DUKE_CHAIN1+1]),
+	S_NORMAL (CHGC, 'C',	4, A_FireDukeCGun			, &States[S_DUKE_CHAIN1+2]),
+	S_NORMAL (CHGC, 'D',	4, A_FireDukeCGun			, &States[S_DUKE_CHAIN1+3]),
+	S_NORMAL (CHGC, 'C',	0, A_ReFire 			, &States[S_DUKE_CHAIN]),
 
-#define S_DUKE_CGUNFLASH (S_DUKE_CGUN1+4)
-	S_BRIGHT (CHGC, 'E',	3, A_Light1 			, &AWeapon::States[S_LIGHTDONE]),
-	S_BRIGHT (CHGC, 'F',	3, A_Light2 			, &AWeapon::States[S_LIGHTDONE]),
-	S_BRIGHT (CHGC, 'G',	3, A_Light1 			, &AWeapon::States[S_LIGHTDONE]),
+#define S_DUKE_CHAINFLASH (S_DUKE_CHAIN1+4)
+	S_BRIGHT (CHGC, 'E',	5, A_Light1 			, &AWeapon::States[S_LIGHTDONE]),
+	S_BRIGHT (CHGC, 'F',	5, A_Light2 			, &AWeapon::States[S_LIGHTDONE]),
+	S_BRIGHT (CHGC, 'G',	5, A_Light1 			, &AWeapon::States[S_LIGHTDONE]),
 
-#define S_DITEM_CGUN (S_DUKE_CGUNFLASH+3)
+#define S_DUKE_ITMCHAIN (S_DUKE_CHAINFLASH+3)
 	S_NORMAL (DNCG, 'A',   -1, NULL 				, NULL)
 };
 
@@ -1887,12 +2511,12 @@ FWeaponInfo ADukeChaingun::WeaponInfo =
 	am_clip,
 	1,
 	20,
-	&States[S_DUKE_CGUNUP],
-	&States[S_DUKE_CGUNDOWN],
-	&States[S_DUKE_CGUN],
-	&States[S_DUKE_CGUN1],
-	&States[S_DUKE_CGUN1],
-	&States[S_DUKE_CGUNFLASH],
+	&States[S_DUKE_CHAINUP],
+	&States[S_DUKE_CHAINDOWN],
+	&States[S_DUKE_CHAIN],
+	&States[S_DUKE_CHAIN1],
+	&States[S_DUKE_CHAIN1],
+	&States[S_DUKE_CHAINFLASH],
 	RUNTIME_CLASS(ADukeChaingun),
 	100,
 	0,
@@ -1902,12 +2526,12 @@ FWeaponInfo ADukeChaingun::WeaponInfo =
 	-1
 };
 
-IMPLEMENT_ACTOR (ADukeChaingun, Doom, -1, 0)
+IMPLEMENT_ACTOR (ADukeChaingun, Doom, 502, 0)
 	PROP_RadiusFixed (20)
 	PROP_HeightFixed (16)
 	PROP_Flags (MF_SPECIAL)
 
-	PROP_SpawnState (S_DITEM_CGUN)
+	PROP_SpawnState (S_DUKE_ITMCHAIN)
 END_DEFAULTS
 
 AT_GAME_SET (DukeChaingun)
@@ -1926,17 +2550,18 @@ weapontype_t ADukeChaingun::OldStyleID () const
 
 const char *ADukeChaingun::PickupMessage ()
 {
-	return GStrings(GOTSHOTGUN);
+	return GStrings(GOTCHAINGUN);
 }
 
 //
-// A_FireCGunCannon
+// A_FireCGun
 //
-void A_FireCGunCannon (player_t *player, pspdef_t *psp)
+void A_FireDukeCGun (player_t *player, pspdef_t *psp)
 {
-	S_Sound (player->mo, CHAN_WEAPON, "weapons/chngun", 1, ATTN_NORM);
+	S_Sound (player->mo, CHAN_WEAPON, "weapons/dnchan", 1, ATTN_NORM);
 
-	if (!player->ammo[wpnlev1info[player->readyweapon]->ammo])
+	if (wpnlev1info[player->readyweapon]->ammo < NUMAMMO &&
+		!player->ammo[wpnlev1info[player->readyweapon]->ammo])
 		return;
 				
 	player->mo->PlayAttacking2 ();
@@ -1954,8 +2579,9 @@ void A_FireCGunCannon (player_t *player, pspdef_t *psp)
 
 // Duke's Rpg ---------------------------------------------------------
 
-void A_FireRpg (player_t *, pspdef_t *);
+void A_FireRpgMissile (player_t *, pspdef_t *);
 void A_Explode (AActor *);
+void A_Guide (AActor *);
 
 class ADukeRpg : public AWeapon
 {
@@ -1981,11 +2607,11 @@ FState ADukeRpg::States[] =
 
 #define S_DUKE_RPG1 (S_DUKE_RPGUP+1)
 	S_NORMAL (RPG1, 'B',	4, A_Light1				, &States[S_DUKE_RPG1+1]),
-	S_NORMAL (RPG1, 'C',	4, A_FireRpg		, &States[S_DUKE_RPG1+2]),
+	S_NORMAL (RPG1, 'C',	4, A_FireRpgMissile		, &States[S_DUKE_RPG1+2]),
 	S_NORMAL (RPG1, 'B',	4, A_Light1 			, &States[S_DUKE_RPG1+3]),
 	S_NORMAL (RPG1, 'A',	0, A_ReFire 			, &States[S_DUKE_RPG]),
 
-#define S_DITEM_RPG (S_DUKE_RPG1+4)
+#define S_DUKE_ITMRPG (S_DUKE_RPG1+4)
 	S_NORMAL (DNRL, 'A',   -1, NULL 				, NULL)
 };
 
@@ -2010,12 +2636,12 @@ FWeaponInfo ADukeRpg::WeaponInfo =
 	-1
 };
 
-IMPLEMENT_ACTOR (ADukeRpg, Doom, -1, 0)
+IMPLEMENT_ACTOR (ADukeRpg, Doom, 503, 0)
 	PROP_RadiusFixed (20)
 	PROP_HeightFixed (16)
 	PROP_Flags (MF_SPECIAL)
 
-	PROP_SpawnState (S_DITEM_RPG)
+	PROP_SpawnState (S_DUKE_ITMRPG)
 END_DEFAULTS
 
 AT_GAME_SET (DukeRpg)
@@ -2059,7 +2685,7 @@ FState ADukeRpgRocket::States[] =
 IMPLEMENT_ACTOR (ADukeRpgRocket, Doom, -1, 0)
 	PROP_RadiusFixed (11)
 	PROP_HeightFixed (8)
-	PROP_SpeedFixed (40)
+	PROP_SpeedFixed (30)
 	PROP_Damage (20)
 	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
 	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
@@ -2067,7 +2693,7 @@ IMPLEMENT_ACTOR (ADukeRpgRocket, Doom, -1, 0)
 	PROP_SpawnState (S_DUKE_RPGROCKET)
 	PROP_DeathState (S_DUKE_RPGROCKETX)
 
-	PROP_SeeSound ("weapons/rocklf")
+	PROP_SeeSound ("weapons/dnrpg")
 	PROP_DeathSound ("weapons/rocklx")
 END_DEFAULTS
 
@@ -2078,24 +2704,36 @@ void ADukeRpgRocket::BeginPlay ()
 }
 
 //
-// A_FireRpg
+// A_FireRpgMissile
 //
-AActor *P_SpawnPlayerMissileGrb (AActor *source, const TypeInfo *type, short tid, int x, int y);
-
-void A_FireRpg (player_t *player, pspdef_t *psp)
+void A_FireRpgMissile (player_t *player, pspdef_t *psp)
 {
+	fixed_t x, y;
+	AActor *missile;
+
 	player->UseAmmo ();
 
 	A_Light2 (player, psp);
 
-	P_SpawnPlayerMissileGrb (player->mo, RUNTIME_CLASS(ADukeRpgRocket), 0, finecosine[player->mo->angle>>ANGLETOFINESHIFT]+12*FRACUNIT, finesine[player->mo->angle>>ANGLETOFINESHIFT]+12*FRACUNIT);
+	x = FixedMul (finecosine[player->mo->angle>>ANGLETOFINESHIFT], 12*FRACUNIT);
+	y = FixedMul (finesine[player->mo->angle>>ANGLETOFINESHIFT], 12*FRACUNIT);
+
+	Printf (PRINT_HIGH, "X: %i, Y: %i\n", x / FRACUNIT, y / FRACUNIT);
+
+	missile = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ADukeRpgRocket));
+
+	missile->x += x;
+	missile->y += y;
+
+	A_Light0 (player,psp);
 }
 
 
 // Duke's Pipebombs ---------------------------------------------------------
 
-void A_FirePipe (player_t *, pspdef_t *);
-void A_DetPipe (player_t *, pspdef_t *);
+void A_FireDukePipe (player_t *, pspdef_t *);
+void A_DetDukePipe (player_t *, pspdef_t *);
+void A_CheckForScrapPipe (player_t *, pspdef_t *);
 void A_Explode (AActor *);
 
 class ADukePipe : public AWeapon
@@ -2103,6 +2741,7 @@ class ADukePipe : public AWeapon
 	DECLARE_ACTOR (ADukePipe, AWeapon)
 	AT_GAME_SET_FRIEND (DukePipe)
 protected:
+	const char *PickupMessage ();
 	weapontype_t OldStyleID () const;
 private:
 	static FWeaponInfo WeaponInfo;
@@ -2121,8 +2760,11 @@ FState ADukePipe::States[] =
 
 #define S_DUKE_PIPE1 (S_DUKE_PIPEUP+1)
 	S_NORMAL (PIPB, 'B',	4, NULL					, &States[S_DUKE_PIPE1+1]),
-	S_NORMAL (PIPB, 'C',	4, A_FirePipe		, &States[S_DUKE_PIPE1+2]),
-	S_NORMAL (PIPB, 'A',	0, A_ReFire				, &States[S_DUKE_PIPE])
+	S_NORMAL (PIPB, 'C',	4, A_FireDukePipe		, &States[S_DUKE_PIPE1+2]),
+	S_NORMAL (PIPB, 'A',	0, A_ReFire				, &States[S_DUKE_PIPE]),
+
+#define S_DUKE_ITMPIPE (S_DUKE_PIPE1+3)
+	S_NORMAL (PIPE, 'A',   -1, NULL 				, NULL)
 };
 
 FWeaponInfo ADukePipe::WeaponInfo =
@@ -2137,7 +2779,7 @@ FWeaponInfo ADukePipe::WeaponInfo =
 	&States[S_DUKE_PIPE1],
 	&States[S_DUKE_PIPE1],
 	NULL,
-	NULL,
+	RUNTIME_CLASS(ADukePipe),
 	100,
 	0,
 	NULL,
@@ -2146,7 +2788,12 @@ FWeaponInfo ADukePipe::WeaponInfo =
 	-1
 };
 
-IMPLEMENT_ACTOR (ADukePipe, Doom, -1, 0)
+IMPLEMENT_ACTOR (ADukePipe, Doom, 504, 0)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_DUKE_ITMPIPE)
 END_DEFAULTS
 
 AT_GAME_SET (DukePipe)
@@ -2164,6 +2811,11 @@ weapontype_t ADukePipe::OldStyleID () const
 	return wp_duke_pipe;
 }
 
+const char *ADukePipe::PickupMessage ()
+{
+	return GStrings(GOTLAUNCHER);
+}
+
 class ADukePipeBomb : public AActor
 {
 	DECLARE_ACTOR (ADukePipeBomb, AActor)
@@ -2177,10 +2829,9 @@ FState ADukePipeBomb::States[] =
 #define S_DUKE_PIPEBOMB 0
 	S_NORMAL (PIPE, 'A',	1, NULL 						, &States[S_DUKE_PIPEBOMB]),
 
-#define S_DUKE_PIPEBOOM (S_DUKE_PIPEBOMB+1)
-	S_NORMAL (PIPE, 'A',	1, NULL							, &States[S_DUKE_PIPEBOMB+1]),
-	S_BRIGHT (MISL, 'B',	8, A_Explode					, &States[S_DUKE_PIPEBOOM+2]),
-	S_BRIGHT (MISL, 'C',	6, NULL		 					, &States[S_DUKE_PIPEBOOM+3]),
+#define S_DUKE_PIPEBOMBX (S_DUKE_PIPEBOMB+1)
+	S_BRIGHT (MISL, 'B',	8, A_Explode					, &States[S_DUKE_PIPEBOMBX+1]),
+	S_BRIGHT (MISL, 'C',	6, NULL		 					, &States[S_DUKE_PIPEBOMBX+2]),
 	S_BRIGHT (MISL, 'D',	4, NULL 						, NULL),
 };
 
@@ -2194,9 +2845,9 @@ IMPLEMENT_ACTOR (ADukePipeBomb, Doom, -1, 0)
 
 	PROP_SpawnState (S_DUKE_PIPEBOMB)
 	PROP_DeathState (S_DUKE_PIPEBOMB)
-	PROP_XDeathState (S_DUKE_PIPEBOOM)
+	PROP_XDeathState (S_DUKE_PIPEBOMBX)
 
-	PROP_SeeSound ("weapons/rocklf")
+	PROP_SeeSound ("weapons/dnpipe")
 	PROP_DeathSound ("weapons/rocklx")
 END_DEFAULTS
 
@@ -2228,8 +2879,8 @@ FState ADukePipeDet::States[] =
 
 #define S_DUKE_DET1 (S_DUKE_DETUP+1)
 	S_NORMAL (PIPB, 'E',	4, NULL					, &States[S_DUKE_DET1+1]),
-	S_NORMAL (PIPB, 'F',	4, A_DetPipe		, &States[S_DUKE_DET1+2]),
-	S_NORMAL (PIPB, 'E',	4, NULL					, &States[S_DUKE_DET1+3]),
+	S_NORMAL (PIPB, 'F',	4, A_DetDukePipe		, &States[S_DUKE_DET1+2]),
+	S_NORMAL (PIPB, 'E',	4, A_CheckForScrapPipe	, &States[S_DUKE_DET1+3]),
 	S_NORMAL (PIPB, 'D',	0, A_ReFire				, &States[S_DUKE_DET])
 };
 
@@ -2268,39 +2919,60 @@ weapontype_t ADukePipeDet::OldStyleID () const
 }
 
 //
-// A_FirePipe
+// A_FireDukePipe
 //
-void A_FirePipe (player_t *player, pspdef_t *psp)
+AActor *pipebomb[99];
+int pipesfired;
+
+void A_FireDukePipe (player_t *player, pspdef_t *psp)
 {
 	player->UseAmmo ();
 
-	player->weaponowned[wp_duke_pipe_det] = true;
-	player->pendingweapon = wp_duke_pipe_det;
-
-	P_SpawnPlayerMissileGrb (player->mo, RUNTIME_CLASS(ADukePipeBomb), 6487, 0, 0);
+	if (pipesfired <= 100)
+	{
+		pipesfired++;
+		pipebomb[pipesfired - 1] = P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ADukePipeBomb));
+		player->weaponowned[wp_duke_pipe_det] = true;
+		player->pendingweapon = wp_duke_pipe_det;
+	}
 }
 
 //
-// A_DetPipe
+// A_DetDukePipe
 //
-void A_DetPipe (player_t *player, pspdef_t *psp)
+void A_DetDukePipe (player_t *player, pspdef_t *psp)
 {
-	bool	pipefinded;
-	AActor *pipe = AActor::FindByTID (NULL, 6487);
+	int i;
 
-	while (pipe)
+	if (pipesfired == 1)
 	{
-		AActor *temp = AActor::FindByTID (pipe, 6487);
-		if (pipe->IsA (RUNTIME_CLASS(ADukePipeBomb)))
-			pipefinded = true;
-			pipe->SetState (pipe->XDeathState);
-		pipe = temp;
+		pipebomb[0]->SetState (pipebomb[0]->XDeathState);
+	} else if (pipesfired > 1) {
+		for (i = 1; i <= pipesfired; i++)
+		{
+			pipebomb[i - 1]->SetState (pipebomb[i - 1]->XDeathState);
+		}
 	}
+	pipesfired = 0;
 
-	if (pipefinded)
+	player->pendingweapon = wp_duke_pipe;
+	player->weaponowned[wp_duke_pipe_det] = false;
+}
+
+//
+// A_CheckForScrapPipe
+//
+void A_CheckForScrapPipe (player_t *player, pspdef_t *psp)
+{
+	int i;
+
+	for (i = 0; i < 100; i++)
 	{
-		player->weaponowned[wp_duke_pipe_det] = false;
-		player->pendingweapon = wp_duke_pipe;
+		if (pipebomb[i] != NULL)
+		{
+			pipebomb[i]->Destroy ();
+			pipebomb[i] = NULL;
+		}
 	}
 }
 
@@ -2315,6 +2987,7 @@ class ADukeDev : public AWeapon
 	DECLARE_ACTOR (ADukeDev, AWeapon)
 	AT_GAME_SET_FRIEND (DukeDev)
 protected:
+	const char *PickupMessage ();
 	weapontype_t OldStyleID () const;
 private:
 	static FWeaponInfo WeaponInfo;
@@ -2336,7 +3009,7 @@ FState ADukeDev::States[] =
 	S_NORMAL (DEVS, 'C',	3, A_FireDevLeft		, &States[S_DUKE_DEV1+2]),
 	S_NORMAL (DEVS, 'B',	0, A_ReFire				, &States[S_DUKE_DEV]),
 
-#define S_DITEM_DEV (S_DUKE_DEV1+3)
+#define S_DUKE_ITMDEV (S_DUKE_DEV1+3)
 	S_NORMAL (DNDV, 'A',   -1, NULL 				, NULL)
 };
 
@@ -2361,12 +3034,12 @@ FWeaponInfo ADukeDev::WeaponInfo =
 	-1
 };
 
-IMPLEMENT_ACTOR (ADukeDev, Doom, -1, 0)
+IMPLEMENT_ACTOR (ADukeDev, Doom, 505, 0)
 	PROP_RadiusFixed (20)
 	PROP_HeightFixed (16)
 	PROP_Flags (MF_SPECIAL)
 
-	PROP_SpawnState (S_DITEM_DEV)
+	PROP_SpawnState (S_DUKE_ITMDEV)
 END_DEFAULTS
 
 AT_GAME_SET (DukeDev)
@@ -2381,6 +3054,11 @@ AT_GAME_SET (DukeDev)
 weapontype_t ADukeDev::OldStyleID () const
 {
 	return wp_duke_dev;
+}
+
+const char *ADukeDev::PickupMessage ()
+{
+	return GStrings(GOTLAUNCHER);
 }
 
 class ADukeDevRocket : public AActor
@@ -2406,14 +3084,14 @@ IMPLEMENT_ACTOR (ADukeDevRocket, Doom, -1, 0)
 	PROP_RadiusFixed (11)
 	PROP_HeightFixed (8)
 	PROP_SpeedFixed (40)
-	PROP_Damage (15)
+	PROP_Damage (20)
 	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
 	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
 
 	PROP_SpawnState (S_DUKE_DEVROCKET)
 	PROP_DeathState (S_DUKE_DEVROCKETX)
 
-	PROP_SeeSound ("weapons/rocklf")
+	PROP_SeeSound ("weapons/dnrpg")
 	PROP_DeathSound ("weapons/rocklx")
 END_DEFAULTS
 
@@ -2428,9 +3106,18 @@ void ADukeDevRocket::BeginPlay ()
 //
 void A_FireDevLeft (player_t *player, pspdef_t *psp)
 {
+	fixed_t x, y;
+
 	player->UseAmmo ();
 
-	P_SpawnPlayerMissileGrb (player->mo, RUNTIME_CLASS(ADukeRpgRocket), 0, finecosine[player->mo->angle>>ANGLETOFINESHIFT]-12*FRACUNIT, finesine[player->mo->angle>>ANGLETOFINESHIFT]-12*FRACUNIT);
+	A_Light2 (player, psp);
+
+	x = FixedMul (finecosine[player->mo->angle>>ANGLETOFINESHIFT], 12*FRACUNIT);
+	y = FixedMul (finesine[player->mo->angle>>ANGLETOFINESHIFT], 12*FRACUNIT);
+
+	Printf (PRINT_HIGH, "X: %i, Y: %i\n", x / FRACUNIT, y / FRACUNIT);
+
+	P_SpawnPlayerMissile (player->mo, player->mo->x + x, player->mo->y + y, player->mo->z, RUNTIME_CLASS(ADukeRpgRocket), player->mo->angle);
 }
 
 //
@@ -2438,15 +3125,24 @@ void A_FireDevLeft (player_t *player, pspdef_t *psp)
 //
 void A_FireDevRight (player_t *player, pspdef_t *psp)
 {
+	fixed_t x, y;
+
 	player->UseAmmo ();
 
-	P_SpawnPlayerMissileGrb (player->mo, RUNTIME_CLASS(ADukeRpgRocket), 0, finecosine[player->mo->angle>>ANGLETOFINESHIFT]+12*FRACUNIT, finesine[player->mo->angle>>ANGLETOFINESHIFT]+12*FRACUNIT);
+	A_Light2 (player, psp);
+
+	x = FixedMul (finecosine[player->mo->angle>>ANGLETOFINESHIFT], -12*FRACUNIT);
+	y = FixedMul (finesine[player->mo->angle>>ANGLETOFINESHIFT], -12*FRACUNIT);
+
+	Printf (PRINT_HIGH, "X: %i, Y: %i\n", x / FRACUNIT, y / FRACUNIT);
+
+	P_SpawnPlayerMissile (player->mo, player->mo->x + x, player->mo->y + y, player->mo->z, RUNTIME_CLASS(ADukeRpgRocket), player->mo->angle);
 }
 
 // Duke's Freezethrower ---------------------------------------------------------
 
 void A_FireFreeze (player_t *, pspdef_t *);
-void A_IceExplode (AActor *);
+void A_FreezeDie (AActor *);
 
 class ADukeFreeze : public AWeapon
 {
@@ -2474,9 +3170,9 @@ FState ADukeFreeze::States[] =
 	S_NORMAL (FREZ, 'B',	1, NULL					, &States[S_DUKE_FRZ1+1]),
 	S_NORMAL (FREZ, 'C',	1, A_FireFreeze			, &States[S_DUKE_FRZ1+2]),
 	S_NORMAL (FREZ, 'D',	1, NULL					, &States[S_DUKE_FRZ1+3]),
-	S_NORMAL (FREZ, 'A',	0, A_ReFire				, &States[S_DUKE_FRZ]),
+	S_NORMAL (FREZ, 'B',	0, A_ReFire				, &States[S_DUKE_FRZ]),
 
-#define S_DITEM_FRZ (S_DUKE_FRZ1+4)
+#define S_DUKE_ITMFRZ (S_DUKE_FRZ1+4)
 	S_NORMAL (DNFT, 'A',   -1, NULL 				, NULL)
 };
 
@@ -2501,12 +3197,12 @@ FWeaponInfo ADukeFreeze::WeaponInfo =
 	-1
 };
 
-IMPLEMENT_ACTOR (ADukeFreeze, Doom, -1, 0)
+IMPLEMENT_ACTOR (ADukeFreeze, Doom, 506, 0)
 	PROP_RadiusFixed (20)
 	PROP_HeightFixed (16)
 	PROP_Flags (MF_SPECIAL)
 
-	PROP_SpawnState (S_DITEM_FRZ)
+	PROP_SpawnState (S_DUKE_ITMFRZ)
 END_DEFAULTS
 
 AT_GAME_SET (DukeFreeze)
@@ -2525,44 +3221,43 @@ weapontype_t ADukeFreeze::OldStyleID () const
 
 const char *ADukeFreeze::PickupMessage ()
 {
-	return GStrings(GOTPLASMA);
+	return GStrings(GOTLAUNCHER);
 }
 
-class ADukeFreezeProj : public AActor
+class ADukeFreezeBlast : public AActor
 {
-	DECLARE_ACTOR (ADukeFreezeProj, AActor)
+	DECLARE_ACTOR (ADukeFreezeBlast, AActor)
 public:
 	void BeginPlay ();
 	int GetMOD () { return MOD_ROCKET; }
 };
 
-FState ADukeFreezeProj::States[] =
+FState ADukeFreezeBlast::States[] =
 {
-#define S_DUKE_ICE1 0
-	S_BRIGHT (FICE, 'A',	1, NULL 						, &States[S_DUKE_ICE1+1]),
-	S_BRIGHT (FICE, 'B',	1, NULL 						, &States[S_DUKE_ICE1+2]),
-	S_BRIGHT (FICE, 'C',	1, NULL 						, &States[S_DUKE_ICE1]),
+#define S_DUKE_FBLAST 0
+	S_BRIGHT (FICE, 'A',	1, NULL 						, &States[S_DUKE_FBLAST+1]),
+	S_BRIGHT (FICE, 'B',	1, NULL 						, &States[S_DUKE_FBLAST+2]),
+	S_BRIGHT (FICE, 'C',	1, NULL 						, &States[S_DUKE_FBLAST]),
 
-#define S_DUKE_ICED (S_DUKE_ICE1+3)
-	S_BRIGHT (FICE, 'A',	1, A_IceExplode					, NULL)
+#define S_DUKE_FBLASTX (S_DUKE_FBLAST+3)
+	S_BRIGHT (FICE, 'A',	1, A_FreezeDie					, NULL)
 };
 
-IMPLEMENT_ACTOR (ADukeFreezeProj, Doom, -1, 0)
+IMPLEMENT_ACTOR (ADukeFreezeBlast, Doom, -1, 0)
 	PROP_RadiusFixed (11)
 	PROP_HeightFixed (8)
 	PROP_SpeedFixed (50)
-	PROP_Damage (15)
+	PROP_Damage (20)
 	PROP_Flags (MF_NOBLOCKMAP|MF_MISSILE|MF_DROPOFF|MF_NOGRAVITY)
 	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
 
-	PROP_SpawnState (S_DUKE_ICE1)
-	PROP_DeathState (S_DUKE_ICED)
+	PROP_SpawnState (S_DUKE_FBLAST)
+	PROP_DeathState (S_DUKE_FBLASTX)
 
-	PROP_SeeSound ("weapons/rocklf")
-	PROP_DeathSound ("weapons/rocklx")
+	PROP_SeeSound ("weapons/dnfrez")
 END_DEFAULTS
 
-void ADukeFreezeProj::BeginPlay ()
+void ADukeFreezeBlast::BeginPlay ()
 {
 	Super::BeginPlay ();
 }
@@ -2574,28 +3269,320 @@ void A_FireFreeze (player_t *player, pspdef_t *psp)
 {
 	player->UseAmmo ();
 
-	P_SetPsprite (player,
-				  ps_flash,
-				  wpnlev1info[player->readyweapon]->flashstate
-				  + (psp->state - wpnlev1info[player->readyweapon]->atkstate));
-
-	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ADukeFreezeProj));
+	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ADukeFreezeBlast));
 }
 
 //
-// A_IceExplode
+// A_FreezeDie
 //
-void A_IceExplode (AActor *self)
+void A_FreezeDie (AActor *self)
 {
-	int damage = 32;
-	int distance = 32;
-	bool hurtSource = true;
+	if (self->target)
+		self->target->SetShade (191, 223, 255);
+}
 
-	thing->PreExplode ();
-	thing->GetExplodeParms (damage, distance, hurtSource);
-	P_RadiusAttack (thing, thing->target, damage, distance, hurtSource, thing->GetMOD ());
-	if (thing->z <= thing->floorz + (distance<<FRACBITS))
+// Wang's Fist ---------------------------------------------------------------------
+
+void A_Punch (player_t *, pspdef_t *);
+
+class ASwFist : public AWeapon
+{
+	DECLARE_ACTOR (ASwFist, AWeapon)
+	AT_GAME_SET_FRIEND (SwFist)
+protected:
+	weapontype_t OldStyleID () const;
+private:
+	static FWeaponInfo WeaponInfo;
+};
+
+FState ASwFist::States[] =
+{
+#define S_SW_FIST 0
+	S_NORMAL (SFST, 'A',	1, A_WeaponReady		, &States[S_SW_FIST]),
+	S_NORMAL (SFST, 'B',	1, A_WeaponReady		, &States[S_SW_FIST+1]),
+
+#define S_SW_FISTDOWN (S_SW_FIST+2)
+	S_NORMAL (SFST, 'B',	1, A_Lower				, &States[S_SW_FISTDOWN]),
+
+#define S_SW_FISTUP (S_SW_FISTDOWN+1)
+	S_NORMAL (SFST, 'A',	1, A_Raise				, &States[S_SW_FISTUP]),
+
+#define S_SW_FIST1 (S_SW_FISTUP+1)
+	S_NORMAL (SFST, 'C',	2, NULL 				, &States[S_SW_FIST1+1]),
+	S_NORMAL (SFST, 'D',	2, NULL					, &States[S_SW_FIST1+2]),
+	S_NORMAL (SFST, 'E',	2, A_Punch				, &States[S_SW_FIST1+3]),
+	S_NORMAL (SFST, 'D',	2, NULL		 			, &States[S_SW_FIST1+4]),
+	S_NORMAL (SFST, 'C',	2, NULL					, &States[S_SW_FIST1+5]),
+	S_NORMAL (SFST, 'F',	2, NULL 				, &States[S_SW_FIST1+6]),
+	S_NORMAL (SFST, 'G',	2, NULL					, &States[S_SW_FIST1+7]),
+	S_NORMAL (SFST, 'H',	2, A_Punch				, &States[S_SW_FIST1+8]),
+	S_NORMAL (SFST, 'G',	2, NULL		 			, &States[S_SW_FIST1+9]),
+	S_NORMAL (SFST, 'F',	2, NULL					, &States[S_SW_FIST1+10]),
+	S_NORMAL (SFST, 'F',	0, A_ReFire				, &States[S_SW_FIST+1])
+};
+
+FWeaponInfo ASwFist::WeaponInfo =
+{
+	0,
+	am_noammo,
+	0,
+	0,
+	&States[S_SW_FISTUP],
+	&States[S_SW_FISTDOWN],
+	&States[S_SW_FIST],
+	&States[S_SW_FIST1],
+	&States[S_SW_FIST1],
+	NULL,
+	NULL,
+	100,
+	0,
+	NULL,
+	NULL,
+	RUNTIME_CLASS(ASwFist),
+	-1
+};
+
+IMPLEMENT_ACTOR (ASwFist, Doom, -1, 0)
+END_DEFAULTS
+
+AT_GAME_SET (SwFist)
+{
+	wpnlev1info[wp_sw_fist] = wpnlev2info[wp_sw_fist] = &ASwFist::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
 	{
-		P_HitFloor (thing);
+		WeaponSlots[1].AddWeapon (wp_sw_fist, 5);
 	}
+}
+
+weapontype_t ASwFist::OldStyleID () const
+{
+	return wp_sw_fist;
+}
+
+// Wang's Sword ---------------------------------------------------------------------
+
+void A_SwSword (player_t *, pspdef_t *);
+
+class ASwSword : public AWeapon
+{
+	DECLARE_ACTOR (ASwSword, AWeapon)
+	AT_GAME_SET_FRIEND (SwSword)
+protected:
+	weapontype_t OldStyleID () const;
+private:
+	static FWeaponInfo WeaponInfo;
+};
+
+FState ASwSword::States[] =
+{
+#define S_SW_SWRD 0
+	S_NORMAL (SWRD, 'A',	1, A_WeaponReady		, &States[S_SW_SWRD]),
+
+#define S_SW_SWRDDOWN (S_SW_SWRD+1)
+	S_NORMAL (SWRD, 'A',	1, A_Lower				, &States[S_SW_SWRDDOWN]),
+
+#define S_SW_SWRDUP (S_SW_SWRDDOWN+1)
+	S_NORMAL (SWRD, 'A',	1, A_Raise				, &States[S_SW_SWRDUP]),
+
+#define S_SW_SWRD1 (S_SW_SWRDUP+1)
+	S_NORMAL (SWRD, 'B',	4, NULL 				, &States[S_SW_SWRD1+1]),
+	S_NORMAL (SWRD, 'C',	4, NULL					, &States[S_SW_SWRD1+2]),
+	S_NORMAL (SWRD, 'D',	4, A_SwSword			, &States[S_SW_SWRD1+3]),
+	S_NORMAL (SWRD, 'E',	4, NULL					, &States[S_SW_SWRD1+4]),
+	S_NORMAL (SWRD, 'A',	0, A_ReFire				, &States[S_SW_SWRD]),
+};
+
+FWeaponInfo ASwSword::WeaponInfo =
+{
+	0,
+	am_noammo,
+	0,
+	0,
+	&States[S_SW_SWRDUP],
+	&States[S_SW_SWRDDOWN],
+	&States[S_SW_SWRD],
+	&States[S_SW_SWRD1],
+	&States[S_SW_SWRD1],
+	NULL,
+	NULL,
+	100,
+	0,
+	NULL,
+	NULL,
+	RUNTIME_CLASS(ASwSword),
+	-1
+};
+
+IMPLEMENT_ACTOR (ASwSword, Doom, -1, 0)
+END_DEFAULTS
+
+AT_GAME_SET (SwSword)
+{
+	wpnlev1info[wp_sw_sword] = wpnlev2info[wp_sw_sword] = &ASwSword::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[1].AddWeapon (wp_sw_sword, 4);
+	}
+}
+
+weapontype_t ASwSword::OldStyleID () const
+{
+	return wp_sw_sword;
+}
+
+//
+// A_SwSword
+//
+void A_SwSword (player_t *player, pspdef_t *psp)
+{
+	angle_t 	angle;
+	int 		damage;
+
+	player->UseAmmo ();
+
+	damage = 5 * (P_Random (pr_saw)%10+1);
+	angle = player->mo->angle;
+	angle += PS_Random (pr_saw) << 18;
+	
+	// use meleerange + 1 so the puff doesn't skip the flash
+	P_LineAttack (player->mo, angle, MELEERANGE+1,
+				  P_AimLineAttack (player->mo, angle, MELEERANGE+1), damage);
+
+	if (!linetarget)
+	{
+		S_Sound (player->mo, CHAN_WEAPON, "weapons/sawfull", 1, ATTN_NORM);
+		return;
+	}
+	S_Sound (player->mo, CHAN_WEAPON, "weapons/sawhit", 1, ATTN_NORM);
+}
+
+// Wang's Shurikens ----------------------------------------------------------------
+
+void A_ThrowShuriken (player_t *, pspdef_t *);
+
+class ASwShur : public AWeapon
+{
+	DECLARE_ACTOR (ASwShur, AWeapon)
+	AT_GAME_SET_FRIEND (SwShur)
+protected:
+	const char *PickupMessage ();
+	weapontype_t OldStyleID () const;
+private:
+	static FWeaponInfo WeaponInfo;
+};
+
+FState ASwShur::States[] =
+{
+#define S_SW_SHUR 0
+	S_NORMAL (HSHR, 'A',	1, A_WeaponReady		, &States[S_SW_SHUR]),
+
+#define S_SW_SHURDOWN (S_SW_SHUR+1)
+	S_NORMAL (HSHR, 'A',	1, A_Lower				, &States[S_SW_SHURDOWN]),
+
+#define S_SW_SHURUP (S_SW_SHURDOWN+1)
+	S_NORMAL (HSHR, 'A',	1, A_Raise				, &States[S_SW_SHURUP]),
+
+#define S_SW_SHUR1 (S_SW_SHURUP+1)
+	S_NORMAL (HSHR, 'B',	1, NULL					, &States[S_SW_SHUR1+1]),
+	S_NORMAL (HSHR, 'C',	1, NULL					, &States[S_SW_SHUR1+2]),
+	S_NORMAL (HSHR, 'D',	1, A_ThrowShuriken		, &States[S_SW_SHUR1+3]),
+	S_NORMAL (HSHR, 'E',	1, NULL					, &States[S_SW_SHUR1+4]),
+	S_NORMAL (HSHR, 'F',	1, NULL					, &States[S_SW_SHUR1+5]),
+	S_NORMAL (HSHR, 'G',	1, NULL					, &States[S_SW_SHUR1+6]),
+	S_NORMAL (HSHR, 'H',	1, NULL 				, &States[S_SW_SHUR1+7]),
+	S_NORMAL (HSHR, 'H',	0, A_ReFire				, &States[S_SW_SHUR]),
+
+#define S_SW_ITMSHUR (S_SW_SHUR1+7)
+	S_NORMAL (LAUN, 'A',   -1, NULL 				, NULL)
+};
+
+FWeaponInfo ASwShur::WeaponInfo =
+{
+	WIF_NOAUTOFIRE,
+	am_clip,
+	1,
+	2,
+	&States[S_SW_SHURUP],
+	&States[S_SW_SHURDOWN],
+	&States[S_SW_SHUR],
+	&States[S_SW_SHUR1],
+	&States[S_SW_SHUR1],
+	NULL,
+	RUNTIME_CLASS(ASwShur),
+	100,
+	0,
+	NULL,
+	NULL,
+	RUNTIME_CLASS(ASwShur),
+	-1
+};
+
+IMPLEMENT_ACTOR (ASwShur, Doom, 507, 0)
+	PROP_RadiusFixed (20)
+	PROP_HeightFixed (16)
+	PROP_Flags (MF_SPECIAL)
+
+	PROP_SpawnState (S_SW_ITMSHUR)
+END_DEFAULTS
+
+AT_GAME_SET (SwShur)
+{
+	wpnlev1info[wp_sw_shur] = wpnlev2info[wp_sw_shur] = &ASwShur::WeaponInfo;
+	if (gameinfo.gametype == GAME_Doom)
+	{
+		WeaponSlots[2].AddWeapon (wp_sw_shur, 1);
+	}
+}
+
+weapontype_t ASwShur::OldStyleID () const
+{
+	return wp_sw_shur;
+}
+
+const char *ASwShur::PickupMessage ()
+{
+	return GStrings(GOTSHOTGUN);
+}
+
+class ASwShuriken : public AActor
+{
+	DECLARE_ACTOR (ASwShuriken, AActor)
+public:
+	int GetMOD () { return MOD_ROCKET; }
+};
+
+FState ASwShuriken::States[] =
+{
+#define S_SW_SHURIKEN 0
+	S_NORMAL (SHUR, 'A',	1, NULL 						, &States[S_SW_SHURIKEN+1]),
+	S_NORMAL (SHUR, 'B',	1, NULL 						, &States[S_SW_SHURIKEN+2]),
+	S_NORMAL (SHUR, 'C',	1, NULL 						, &States[S_SW_SHURIKEN+3]),
+	S_NORMAL (SHUR, 'D',	1, NULL 						, &States[S_SW_SHURIKEN]),
+
+#define S_SW_SHURIKEN_DIE (S_SW_SHURIKEN+4)
+	S_NORMAL (SHUR, 'A',	0, NULL							, NULL)
+};
+
+IMPLEMENT_ACTOR (ASwShuriken, Doom, -1, 0)
+	PROP_RadiusFixed (1)
+	PROP_HeightFixed (2)
+	PROP_SpeedFixed (40)
+	PROP_Damage (20)
+	PROP_Flags (MF_MISSILE|MF_NOGRAVITY)
+	PROP_Flags2 (MF2_PCROSS|MF2_IMPACT|MF2_NOTELEPORT)
+
+	PROP_SpawnState (S_SW_SHURIKEN)
+	PROP_DeathState (S_SW_SHURIKEN_DIE)
+
+	PROP_SeeSound ("weapons/rocklf")
+	PROP_DeathSound ("weapons/rocklx")
+END_DEFAULTS
+
+//
+// A_ThrowShuriken
+//
+void A_ThrowShuriken (player_t *player, pspdef_t *psp)
+{
+	player->UseAmmo ();
+	P_SpawnPlayerMissile (player->mo, RUNTIME_CLASS(ASwShuriken));
 }

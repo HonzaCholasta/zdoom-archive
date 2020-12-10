@@ -69,6 +69,7 @@
 
 #include "gi.h"
 
+#include "p_grubber.h"	// [GRB]
 
 EXTERN_CVAR (Float, sv_gravity)
 EXTERN_CVAR (Float, sv_aircontrol)
@@ -1268,7 +1269,11 @@ void G_DoWorldDone (void)
 	{
 		strncpy (level.mapname, wminfo.next, 8);
 	}
-	G_DoLoadLevel (startpos, true);
+	// [GRB]
+	if (PosSaved)
+		G_DoLoadLevel (startpos, false);
+	else
+		G_DoLoadLevel (startpos, true);
 	startpos = 0;
 	gameaction = ga_nothing;
 	viewactive = true; 

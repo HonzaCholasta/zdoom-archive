@@ -484,6 +484,19 @@ void A_WeaponReady(player_t *player, pspdef_t *psp)
 		}
 	}
 
+/*
+	// [GRB] Check for secondary fire.
+	if (player->cmd.ucmd.buttons & BT_ATTACK2)
+	{
+		if (!(player->oldbuttons & BT_ATTACK2) || !(weapon->flags & WIF_NOAUTOFIRE))
+		{
+			player->oldbuttons |= BT_ATTACK2;
+			P_FireWeapon2 (player);
+			return;
+		}
+	}
+*/
+
 	if (!(weapon->flags & WIF_DONTBOB))
 	{
 		// Bob the weapon based on movement speed.
@@ -504,7 +517,7 @@ void A_WeaponReady(player_t *player, pspdef_t *psp)
 
 void A_ReFire (player_t *player, pspdef_t *psp)
 {
-	if ((player->cmd.ucmd.buttons&BT_ATTACK)
+	if ((player->cmd.ucmd.buttons&BT_ATTACK/* || player->cmd.ucmd.buttons&BT_ATTACK2*/)
 		&& player->pendingweapon == wp_nochange && player->health)
 	{
 		player->refire++;
@@ -635,6 +648,40 @@ void P_GunShot (AActor *mo, BOOL accurate)
 	}
 
 	P_LineAttack (mo, angle, MISSILERANGE, bulletpitch, damage);
+}
+
+//
+// P_GunShot2 [GRB]
+//
+void P_GunShot2 (AActor *mo, int spread)
+{
+	angle_t 	angle;
+	int 		damage;
+
+	switch (spread)
+	{
+	case 0:
+		P_GunShot (mo, true);
+		break;
+	case 1:
+		if (mo->player)
+			P_GunShot (mo, !mo->player->refire);
+		else
+			P_GunShot (mo, false);
+		break;
+	case 2:
+		P_GunShot (mo, false);
+		break;
+	case 3:
+		damage = 5*(P_Random (pr_fireshotgun2)%3+1);
+		angle = mo->angle;
+		angle += PS_Random (pr_fireshotgun2) << 19;
+		P_LineAttack (mo,
+					  angle,
+					  MISSILERANGE,
+					  bulletpitch + (PS_Random (pr_fireshotgun2) << 18), damage);
+		break;
+	}
 }
 
 void A_Light0 (player_t *player, pspdef_t *psp)

@@ -84,6 +84,7 @@ typedef enum
     BT_JUMP			= 4,
     BT_DUCK			= 8,	// Unimplemented
 	BT_TURN180		= 16,
+//	BT_ATTACK2		= 32;	// [GRB] Secondary attack
 } buttoncode_t;
 
 #define IMP_WEAPONSLOT

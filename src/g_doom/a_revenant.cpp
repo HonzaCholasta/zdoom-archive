@@ -8,6 +8,8 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_SkelMissile (AActor *);
 void A_Tracer (AActor *);
 void A_SkelWhoosh (AActor *);
@@ -179,12 +181,17 @@ END_DEFAULTS
 // A_SkelMissile
 //
 void A_SkelMissile (AActor *self)
-{		
-	AActor *missile;
-		
+{
 	if (!self->target)
 		return;
 				
+	P_MonsterFire (cl_mon_revenant_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
+}
+
+AActor *Grb_SkelMissile (AActor *self)	// [GRB]
+{
+	AActor *missile;
+		
 	A_FaceTarget (self);
 	missile = P_SpawnMissileZ (self, self->z + 48*FRACUNIT,
 		self->target, RUNTIME_CLASS(ARevenantTracer));
@@ -195,6 +202,8 @@ void A_SkelMissile (AActor *self)
 		missile->y += missile->momy;
 		missile->tracer = self->target;
 	}
+
+	return missile;
 }
 
 #define TRACEANGLE (0xc000000)

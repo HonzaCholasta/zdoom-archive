@@ -86,6 +86,8 @@
 
 #include "v_text.h"
 
+#include "dll.h"	// [GRB]
+
 // MACROS ------------------------------------------------------------------
 
 // TYPES -------------------------------------------------------------------
@@ -1823,6 +1825,10 @@ void D_DoomMain (void)
 		StatusBar = new FBaseStatusBar (0);
 	}
 	StatusBar->AttachToPlayer (&players[consoleplayer]);
+
+	// [GRB]
+	Printf ("Loading game DLL.\n");
+	Dll_Init ();
 
 	// start the apropriate game based on parms
 	v = Args.CheckValue ("-record");

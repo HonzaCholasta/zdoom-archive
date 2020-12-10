@@ -195,6 +195,14 @@ SOURCE=.\decallib.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=.\dll.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\dllfunc.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=.\dobject.cpp
 # End Source File
 # Begin Source File
@@ -316,6 +324,10 @@ SOURCE=.\p_enemy.cpp
 # Begin Source File
 
 SOURCE=.\p_floor.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\p_grubber.cpp
 # End Source File
 # Begin Source File
 
@@ -599,6 +611,14 @@ SOURCE=.\decallib.h
 # End Source File
 # Begin Source File
 
+SOURCE=.\dll.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\dllfunc.h
+# End Source File
+# Begin Source File
+
 SOURCE=.\dobject.h
 # End Source File
 # Begin Source File
@@ -752,6 +772,10 @@ SOURCE=.\p_effect.h
 # Begin Source File
 
 SOURCE=.\p_enemy.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\p_grubber.h
 # End Source File
 # Begin Source File
 
@@ -1414,6 +1438,10 @@ SOURCE=.\g_doom\a_doomweaps.cpp
 # Begin Source File
 
 SOURCE=.\g_doom\a_fatso.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=.\g_doom\a_grubber.cpp
 # End Source File
 # Begin Source File
 

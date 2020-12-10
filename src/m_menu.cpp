@@ -64,6 +64,8 @@
 #include "lists.h"
 #include "gi.h"
 
+#include "p_grubber.h"	// [GRB]
+
 // MACROS ------------------------------------------------------------------
 
 #define SKULLXOFF			-32
@@ -146,6 +148,7 @@ static void M_SlidePlayerBlue (int choice);
 static void M_ChangeGender (int choice);
 static void M_ChangeSkin (int choice);
 static void M_ChangeAutoAim (int choice);
+static void M_ChangePlayerMonster (int choice);
 
 // EXTERNAL DATA DECLARATIONS ----------------------------------------------
 

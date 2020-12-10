@@ -61,7 +61,11 @@ FState AScriptedMarine::States[] =
 	S_NORMAL (PLAY, 'H',	5, NULL							, &States[S_MPLAY_RUN])
 };
 
+/*
 IMPLEMENT_ACTOR (AScriptedMarine, Doom, 9100, 151)
+[GRB] 151 is health bonus
+*/
+IMPLEMENT_ACTOR (AScriptedMarine, Doom, 9100, 152)
 	PROP_SpawnHealth (100)
 	PROP_RadiusFixed (16)
 	PROP_HeightFixed (56)

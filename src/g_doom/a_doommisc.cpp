@@ -41,13 +41,6 @@ IMPLEMENT_ACTOR (AExplosiveBarrel, Doom, 2035, 125)
 	PROP_DeathSound ("world/barrelx")
 END_DEFAULTS
 
-// [GRB] barrel explodes when it's activated
-void AExplosiveBarrel::Activate (AActor *activator)
-{
-	Super::Activate (activator);
-	health = 0;
-}
-
 void A_BarrelDestroy (AActor *actor)
 {
 	if ((dmflags2 & DF2_BARRELS_RESPAWN) &&

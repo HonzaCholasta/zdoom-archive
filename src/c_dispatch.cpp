@@ -102,7 +102,7 @@ FButtonStatus Button_Mlook, Button_Klook, Button_Use,
 	Button_Attack, Button_Speed, Button_MoveRight, Button_MoveLeft,
 	Button_Strafe, Button_LookDown, Button_LookUp, Button_Back,
 	Button_Forward, Button_Right, Button_Left, Button_MoveDown,
-	Button_MoveUp, Button_Jump, Button_ShowScores;
+	Button_MoveUp, Button_Jump, Button_ShowScores/*, Button_Attack2*/;
 
 // To add new actions, go to the console and type "key <action name>".
 // This will give you the key value to use in the first column. Then
@@ -119,10 +119,12 @@ FActionMap ActionMaps[] =
 	{ 0x47c02d3b, &Button_Attack,		"attack" },
 	{ 0x6dcec137, &Button_Back,			"back" },
 	{ 0x7a67e768, &Button_Left,			"left" },
+//	{ 0x8076f318, &Button_Crouch,		"crouch" }, // [GRB]
 	{ 0x84b8789a, &Button_MoveLeft,		"moveleft" },
 	{ 0x8fd9bf1e, &Button_ShowScores,	"showscores" },
 	{ 0x94b1cc4b, &Button_Use,			"use" },
 	{ 0xa7b30616, &Button_Jump,			"jump" },
+//	{ 0xab999704, &Button_Attack2,		"attack2" }, // [GRB]
 	{ 0xadfe4fff, &Button_Mlook,		"mlook" },
 	{ 0xb4ca7514, &Button_Right,		"right" },
 	{ 0xb563e265, &Button_LookDown,		"lookdown" },
@@ -638,6 +640,12 @@ static long ParseCommandLine (const char *args, int *argc, char **argv)
 		*argc = count;
 	}
 	return (long)buffplace;
+}
+
+// [GRB] Dll
+long Con_ParseCommandLine (const char *args, int *argc, char **argv)
+{
+	return ParseCommandLine (args, argc, argv);
 }
 
 FCommandLine::FCommandLine (const char *commandline)

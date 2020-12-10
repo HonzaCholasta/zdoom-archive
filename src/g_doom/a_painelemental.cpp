@@ -5,6 +5,8 @@
 #include "a_doomglobal.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 CVAR (Bool, limitpainelemental, false, CVAR_SERVERINFO)
 
 void A_PainAttack (AActor *);
@@ -157,13 +159,24 @@ void A_PainAttack (AActor *self)
 		return;
 
 	A_FaceTarget (self);
-	A_PainShootSkull (self, self->angle);
+//	A_PainShootSkull (self, self->angle);
+	P_MonsterFire (cl_mon_painelemental_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
+}
+
+AActor *Grb_PainAttack (AActor *self, int angle)	// [GRB]
+{
+	A_PainShootSkull (self, angle);
+
+	return NULL;
 }
 
 void A_PainDie (AActor *self)
 {
 	A_NoBlocking (self);
-	A_PainShootSkull (self, self->angle + ANG90);
-	A_PainShootSkull (self, self->angle + ANG180);
-	A_PainShootSkull (self, self->angle + ANG270);
+//	A_PainShootSkull (self, self->angle + ANG90);
+//	A_PainShootSkull (self, self->angle + ANG180);
+//	A_PainShootSkull (self, self->angle + ANG270);
+	P_MonsterFire (cl_mon_painelemental_fire, self, self->angle + ANG90, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
+	P_MonsterFire (cl_mon_painelemental_fire, self, self->angle + ANG180, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
+	P_MonsterFire (cl_mon_painelemental_fire, self, self->angle + ANG270, P_AimLineAttack (self, self->angle, MISSILERANGE));	// [GRB]
 }

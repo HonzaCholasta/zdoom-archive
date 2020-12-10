@@ -9,6 +9,8 @@
 #include "gstrings.h"
 #include "a_action.h"
 
+#include "p_grubber.h"	// [GRB]
+
 void A_CyberAttack (AActor *);
 void A_Hoof (AActor *);
 void A_Metal (AActor *);
@@ -38,12 +40,12 @@ FState ACyberdemon::States[] =
 	S_NORMAL (CYBR, 'D',	3, A_Chase						, &States[S_CYBER_RUN+0]),
 
 #define S_CYBER_ATK (S_CYBER_RUN+8)
-	S_NORMAL (CYBR, 'E',	6, A_FaceTarget 				, &States[S_CYBER_ATK+1]),
-	S_NORMAL (CYBR, 'F',   12, A_CyberAttack				, &States[S_CYBER_ATK+2]),
-	S_NORMAL (CYBR, 'E',   12, A_FaceTarget 				, &States[S_CYBER_ATK+3]),
-	S_NORMAL (CYBR, 'F',   12, A_CyberAttack				, &States[S_CYBER_ATK+4]),
-	S_NORMAL (CYBR, 'E',   12, A_FaceTarget 				, &States[S_CYBER_ATK+5]),
-	S_NORMAL (CYBR, 'F',   12, A_CyberAttack				, &States[S_CYBER_RUN+0]),
+	S_NORMAL (CYBR, 'E',	5, A_FaceTarget 				, &States[S_CYBER_ATK+1]),
+	S_NORMAL (CYBR, 'F',	5, A_CyberAttack				, &States[S_CYBER_ATK+2]),
+	S_NORMAL (CYBR, 'E',	5, A_FaceTarget 				, &States[S_CYBER_ATK+3]),
+	S_NORMAL (CYBR, 'F',	5, A_CyberAttack				, &States[S_CYBER_ATK+4]),
+	S_NORMAL (CYBR, 'E',	5, A_FaceTarget 				, &States[S_CYBER_ATK+5]),
+	S_NORMAL (CYBR, 'F',	5, A_CyberAttack				, &States[S_CYBER_RUN+0]),
 
 #define S_CYBER_PAIN (S_CYBER_ATK+6)
 	S_NORMAL (CYBR, 'G',   10, A_Pain						, &States[S_CYBER_RUN+0]),
@@ -95,7 +97,14 @@ void A_CyberAttack (AActor *self)
 		return;
 				
 	A_FaceTarget (self);
-	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ARocket));
+
+//	P_SpawnMissile (self, self->target, RUNTIME_CLASS(ARocket));
+	P_MonsterFire (cl_mon_cyberdemon_fire, self, self->angle, P_AimLineAttack (self, self->angle, MISSILERANGE));
+}
+
+AActor *Grb_CyberAttack (AActor *self)	// [GRB]
+{
+	return P_SpawnMissile (self, self->target, RUNTIME_CLASS(ARocket));
 }
 
 void A_Hoof (AActor *self)

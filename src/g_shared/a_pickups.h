@@ -119,6 +119,18 @@ typedef enum
 	wp_duke_dev,
 	wp_duke_freeze,
 
+	wp_sw_fist,
+	wp_sw_sword,
+	wp_sw_shur,
+	wp_sw_riot,
+	wp_sw_uzi,
+	wp_sw_rocket,
+	wp_sw_gren,
+	wp_sw_sgren,
+	wp_sw_rail,
+	wp_sw_head,
+	wp_sw_heart,
+
 	NUMWEAPONS,
 	
 	wp_nochange		// No pending weapon change.
@@ -163,7 +175,7 @@ enum
 	WIF_FIREDAMAGE =		0x00000010, // weapon does fire damage on impact
 };
 
-#define MAX_WEAPONS_PER_SLOT	4
+#define MAX_WEAPONS_PER_SLOT	8
 #define NUM_WEAPON_SLOTS		10
 
 class player_s;
